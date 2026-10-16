@@ -1,0 +1,12 @@
+// erro: são donos e não podem ser copiados: use for x in drain(s)
+fn conta[T owned](s &[]T) int {
+    n := 0
+    for x in s {
+        drop(x)
+        n++
+    }
+    return n
+}
+
+fn main() {
+}

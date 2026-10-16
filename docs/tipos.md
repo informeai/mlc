@@ -166,13 +166,39 @@ p := Par[int, string]{primeiro: 1, segundo: "um"}
   | `ordered` | números | o de `comparable` e `<`, `<=`, `>`, `>=` |
   | `number` | números | o de `ordered` e `+`, `-`, `*`, `/` |
   | `integer` | inteiros | o de `number` e `%` |
+  | `owned` | tipos sem posse **e** donos simples (`?*X`, `[]X`, com `X` sem donos) | mover, passar, devolver, `take`/`replace`/`drain` em `[]T`, `drop(x)`; **sem** cópia nem `==` |
 
 - **A definição é checada uma vez,** com `T` valendo só o que a restrição permite: `a < b` com `T any` é erro na própria definição, antes de qualquer uso.
 - **Cada uso com tipos concretos gera uma instância** (`maior[int]`, `Par[int, string]`): uma cópia checada com os tipos reais e compilada no C com nome próprio. Não há custo em tempo de execução. Um erro que só aparece com um tipo concreto (como `x + 300` com `T = int8`) aponta a linha da definição e diz qual instância falhou.
 - **Inferência:** os tipos são deduzidos dos argumentos; quando não dá (nenhum argumento usa `T`), escreva-os: `vazio[int]()`.
 - **`T(x)`** converte para o parâmetro de tipo: `total := T(0)`.
 - **Métodos de struct genérica** nomeiam os parâmetros no receptor: `fn (v &Vetor[T]) adiciona(x T)`.
-- Nesta versão, argumentos de tipo não podem ser donos nem empréstimos (`*No`, `[]int`, `&T`), a mesma regra dos arrays.
+- **Restrição no receptor:** `fn (v &Vec[T any]) get(i int) T` só existe nas instâncias em que `T` atende `any`. Chamar `get` num `Vec[[]byte]` é erro, com a sugestão de `take`/`put`.
+- Com as restrições comuns, argumentos de tipo não podem ser donos nem empréstimos (`*No`, `[]int`, `&T`). Para aceitar donos, use `owned`.
+
+### Donos em genéricos: `owned`
+
+```
+struct Vec[T owned] {
+    items []T
+    count int
+}
+
+fn (v &Vec[T]) push(x T) {           // x é movido para dentro
+    if v.count == len(v.items) {
+        v.grow()
+    }
+    old := replace(&v.items[v.count], x)
+    drop(old)                        // a posição depois do fim estava vazia
+    v.count++
+}
+```
+
+- Dentro do corpo, um valor do tipo `T` é tratado como um dono: atribuir, passar ou devolver **move**, usar depois de mover é erro, e todo valor precisa de destino (mover, guardar, devolver ou `drop(x)`). Copiar e comparar com `==` não valem.
+- **`drop(x)`** só existe em código genérico: libera `x` se for dono (`free`) e não faz nada se não for (com `T = int`). Fora de um genérico, use `free`.
+- `take(&s[i])`, `replace(&s[i], v)` e `for x in drain(s)` valem para `[]T`, como nos slices de donos.
+- `*X` não é aceito (não tem valor zero, e uma coleção precisa de posições vazias): use `?*X`. Structs com donos e donos dentro de donos (`?*Lista`, `[]?*No`) ainda não são aceitos.
+- **Os erros de posse aparecem na definição:** cada genérico com `owned` também é verificado com `T = []byte`. Um erro desses diz "verificado com T dono".
 
 ## Enums com dados
 

@@ -920,6 +920,13 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 	case Free:
 		o.free(e.Args[0])
 		return
+	case Drop:
+		if IsOwner(o.c.info.Types[e.Args[0]]) {
+			o.free(e.Args[0]) // drop de um dono é free
+		} else {
+			o.read(e.Args[0])
+		}
+		return
 	case Alloc:
 		o.allocValue(e)
 		return
@@ -1136,7 +1143,8 @@ func (o *ownChecker) drainBody(s *ast.ForStmt, drained ast.Expr) {
 		o.drains = append(o.drains, k)
 	}
 	o.push()
-	if l := o.c.info.ForVars[s]; l != nil {
+	if l := o.c.info.ForVars[s]; l != nil && IsOwner(l.Type) {
+		// o elemento tirado é dono (num genérico, T pode ser int: aí não há posse)
 		o.declare(l, ownValue{st: sLive | sNull | sOpaque}, s.Var.P)
 	}
 	o.stmt(s.Body)

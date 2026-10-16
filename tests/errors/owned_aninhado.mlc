@@ -1,0 +1,11 @@
+// erro: donos dentro de donos ainda não podem ser argumentos de tipo
+import "std/vec"
+
+struct L {
+    p ?*L
+}
+
+fn main() {
+    v := vec.new[?*L](1)
+    v.free()
+}

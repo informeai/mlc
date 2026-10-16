@@ -1,0 +1,5 @@
+// erro: drop só existe em código genérico, para um T owned; fora dele, use free
+fn main() {
+    p := alloc(1)
+    drop(p)
+}

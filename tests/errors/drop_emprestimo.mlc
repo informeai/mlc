@@ -1,0 +1,7 @@
+// erro: drop recebe o dono, não um empréstimo
+fn f[T owned](x &T) {
+    drop(x)
+}
+
+fn main() {
+}

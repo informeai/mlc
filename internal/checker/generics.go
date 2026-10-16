@@ -33,7 +33,7 @@ type TypeVar struct {
 
 func (t *TypeVar) String() string { return t.Name }
 
-var constraints = map[string]bool{"any": true, "comparable": true, "ordered": true, "number": true, "integer": true}
+var constraints = map[string]bool{"any": true, "comparable": true, "ordered": true, "number": true, "integer": true, "owned": true}
 
 // tvHas diz se t é um TypeVar cuja restrição permite a capacidade cap:
 // "eq" (==), "order" (<), "arith" (+ - * /) ou "mod" (%).
@@ -44,7 +44,7 @@ func tvHas(t Type, cap string) bool {
 	}
 	switch cap {
 	case "eq":
-		return true
+		return tv.Constraint != "owned"
 	case "order", "arith":
 		return tv.Constraint == "ordered" || tv.Constraint == "number" || tv.Constraint == "integer"
 	case "mod":
@@ -100,12 +100,18 @@ func anyAbstract(ts []Type) bool {
 func satisfies(t Type, c string) bool {
 	if tv, ok := t.(*TypeVar); ok {
 		switch c {
+		case "owned":
+			return true // todo tipo aceito por outra restrição é aceito por owned
 		case "any", "comparable":
-			return true
+			return tv.Constraint != "owned"
 		case "ordered", "number":
 			return tvHas(tv, "order")
 		}
 		return tv.Constraint == "integer"
+	}
+	if c == "owned" {
+		ok, _ := ownedOK(t)
+		return ok
 	}
 	if IsOwner(t) || isBorrow(t) || isResource(t) || t == Void || t == NilType || t == Invalid || isUntyped(t) {
 		return false
@@ -217,8 +223,12 @@ func (c *checker) checkTypeArgs(what string, params []*ast.TypeParam, args []Typ
 		if !c.satisfiesParam(args[i], p) {
 			reason := ""
 			switch {
+			case p.Constraint == "owned":
+				if _, why := ownedOK(args[i]); why != "" {
+					reason = " (" + why + ")"
+				}
 			case IsOwner(args[i]) || isBorrow(args[i]) || isResource(args[i]):
-				reason = " (argumentos de tipo não podem ser donos nem empréstimos nesta versão)"
+				reason = " (é dono: para aceitar donos, a restrição precisa ser owned)"
 			case !constraints[p.Constraint]:
 				c.errorf(pos, "%s não implementa %s, exigida por %s em %s (declare impl %s for %s)", args[i], p.Constraint, p.Name, what, p.Constraint, args[i])
 				ok = false
@@ -373,6 +383,7 @@ type pendingInst struct {
 }
 
 func (c *checker) queue(fn *Func, binding map[string]Type) {
+	fn.queued = true // o corpo é checado em checkInstances, com binding
 	c.info.Funcs = append(c.info.Funcs, fn)
 	c.pending = append(c.pending, pendingInst{fn, binding})
 }
@@ -385,10 +396,14 @@ func (c *checker) checkInstances() {
 		c.pending = c.pending[1:]
 		saved := c.instName
 		c.instName = p.fn.Name
+		c.muted = c.probes[p.fn] // os erros de tipo já aparecem na definição
 		c.typeParams = p.binding
 		c.checkFunc(p.fn)
 		c.typeParams = nil
-		c.instName = saved
+		if c.muted && c.mutedErrs > 0 {
+			c.probeBroken[p.fn] = true // não verifica a posse de código mal tipado
+		}
+		c.instName, c.muted, c.mutedErrs = saved, false, 0
 	}
 }
 
@@ -519,6 +534,9 @@ func unify(p, a Type, vars map[*TypeVar]bool, bound map[*TypeVar]Type) {
 // exprType lê um tipo escrito como expressão (o argumento de tipo de f[int],
 // Par[int, string]{...}).
 func (c *checker) exprType(e ast.Expr) Type {
+	if u, ok := e.(*ast.UnaryExpr); ok && (u.Op == token.MUL || u.Op == token.AMP) {
+		return c.resolveType(typeExprOf(u), ctxVar)
+	}
 	switch e := e.(type) {
 	case *ast.TypeArg:
 		return c.resolveType(e.Type, ctxVar)
@@ -565,6 +583,14 @@ func typeExprOf(e ast.Expr) *ast.TypeExpr {
 			t.Args = append(t.Args, typeExprOf(a))
 		}
 		return t
+	case *ast.UnaryExpr:
+		// *No e &T entre colchetes são lidos como expressões: f[*No](x)
+		switch e.Op {
+		case token.MUL:
+			return &ast.TypeExpr{Mod: ast.TypePointer, Elem: typeExprOf(e.X), P: e.P}
+		case token.AMP:
+			return &ast.TypeExpr{Mod: ast.TypeBorrow, Elem: typeExprOf(e.X), P: e.P}
+		}
 	}
 	return &ast.TypeExpr{Name: "?", P: e.Pos()}
 }
@@ -665,10 +691,30 @@ func (c *checker) collectGenericMethod(d *ast.FuncDecl, s *Struct, named *ast.Ty
 		return
 	}
 	s.methodDecls[d.Name] = d
+	// restrições do receptor: fn (v &Vec[T any]) get() só existe com T any
+	var cons []*ast.TypeParam
+	for _, a := range named.Args {
+		if a.Constraint == "" {
+			cons = append(cons, nil)
+			continue
+		}
+		if !constraints[a.Constraint] && c.lookupIface(a.Constraint, a.P, false) == nil {
+			c.errorf(a.P, "restrição desconhecida %q", a.Constraint)
+		}
+		cons = append(cons, &ast.TypeParam{Name: a.Name, Constraint: a.Constraint, P: a.P})
+	}
+	if s.methodConstraints == nil {
+		s.methodConstraints = map[string][]*ast.TypeParam{}
+	}
+	s.methodConstraints[d.Name] = cons
 	// checagem abstrata: uma instância de s com TypeVars no lugar dos tipos
 	var vars []Type
 	for i, a := range named.Args {
-		vars = append(vars, c.newTypeVar(a.Name, s.Params[i]))
+		p := s.Params[i]
+		if cons[i] != nil {
+			p = cons[i] // no corpo, T tem a restrição do receptor
+		}
+		vars = append(vars, c.newTypeVar(a.Name, p))
 	}
 	inst, ok := c.instStruct(s, vars, named.P).(*Struct)
 	if !ok {

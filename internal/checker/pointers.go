@@ -88,6 +88,11 @@ const (
 )
 
 func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
+	for _, a := range t.Args {
+		if a.Constraint != "" && !c.inReceiver {
+			c.errorf(a.P, "uma restrição (%s %s) só pode aparecer no receptor de um método", a.Name, a.Constraint)
+		}
+	}
 	switch t.Mod {
 	case ast.TypeFunc:
 		return c.resolveFuncType(t)
@@ -278,6 +283,8 @@ func (c *checker) builtinCall(e *ast.CallExpr, name string) (Type, bool) {
 		c.errorf(e.Lparen, "drain só pode ser usado em for x in drain(s)")
 		c.checkArgs(e)
 		return Invalid, true
+	case "drop":
+		return c.dropCall(e), true
 	case "alloc":
 		if len(e.Args) > 0 {
 			if ta, ok := e.Args[0].(*ast.TypeArg); ok {

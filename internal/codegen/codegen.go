@@ -60,7 +60,7 @@ func Generate(file string, f *ast.File, info *checker.Info) string {
 		g.raw("%s %s(%s);\n", cType(fn.Result), fn.Native, strings.Join(params, ", "))
 	}
 	for _, fn := range info.Funcs {
-		g.raw("static %s;\n", signature(fn))
+		g.raw("static MLC_MAYBE_UNUSED %s;\n", signature(fn)) // instâncias podem ficar sem uso
 	}
 	g.raw("\n")
 	for _, fn := range info.Funcs {
@@ -540,6 +540,15 @@ func (g *gen) expr(e ast.Expr) string {
 				return "mlc_free(" + g.expr(e.Args[0]) + ".ptr)"
 			}
 			return "mlc_free(" + g.expr(e.Args[0]) + ")"
+		case checker.Drop:
+			// drop(x): free se x for dono; nada se não for (T = int numa instância)
+			switch g.info.Types[e.Args[0]].(type) {
+			case *checker.Slice:
+				return "mlc_free(" + g.expr(e.Args[0]) + ".ptr)"
+			case *checker.Pointer:
+				return "mlc_free(" + g.expr(e.Args[0]) + ")"
+			}
+			return "((void)(" + g.expr(e.Args[0]) + "))"
 		case checker.Realloc:
 			return g.realloc(e, callee)
 		case checker.Take, checker.Replace:

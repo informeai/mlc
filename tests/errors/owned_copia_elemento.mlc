@@ -1,0 +1,7 @@
+// erro: um elemento dono não pode ser copiado nem movido direto: use take(&s[i])
+fn primeiro[T owned](s &[]T) T {
+    return s[0]
+}
+
+fn main() {
+}

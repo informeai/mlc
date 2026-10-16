@@ -44,7 +44,7 @@ var predeclared = map[string]bool{
 	"float32": true, "float64": true,
 	"true": true, "false": true, "nil": true,
 	"alloc": true, "free": true, "len": true, "realloc": true,
-	"take": true, "replace": true, "drain": true,
+	"take": true, "replace": true, "drain": true, "drop": true,
 }
 
 type Local struct {
@@ -74,6 +74,7 @@ type Func struct {
 	typeVars  []Type           // função genérica: os parâmetros de tipo (checagem abstrata)
 	instances map[string]*Func // função genérica: instâncias já criadas
 	recv      recvMode
+	queued    bool // instância de genérico: checada por checkInstances
 }
 
 type Builtin int
@@ -88,6 +89,7 @@ const (
 	Take              // take(&s[i])
 	Replace           // replace(&s[i], v)
 	Convert           // int(x), byte(x)
+	Drop              // drop(x): libera x se for dono (código genérico)
 )
 
 // Callee é o destino resolvido de uma chamada: uma função do usuário ou um builtin.
@@ -159,9 +161,15 @@ type checker struct {
 	impls       []*Impl                       // impl de todos os arquivos já checados
 	paramIfaces map[*ast.TypeParam]*Interface // interface de cada restrição (resolvida na declaração)
 	tvMethods   map[string]*Func
-	autos       []autoImpl           // impl auto do arquivo atual, para conferir os campos
-	funcTypes   map[string]*FuncType // métodos de interface chamados em parâmetros de tipo
-	expected    Type                 // tipo esperado de expectedFor (para Resultado.Ok sem argumentos de tipo)
+	autos       []autoImpl // impl auto do arquivo atual, para conferir os campos
+	funcTypes   map[string]*FuncType
+	probes      map[*Func]bool // instâncias de verificação de posse (T owned = []byte)
+	probing     bool           // checando uma delas
+	muted       bool           // erros silenciados (tipos de uma instância de verificação)
+	mutedErrs   int
+	probeBroken map[*Func]bool
+	inReceiver  bool // resolvendo o tipo do receptor de um método // métodos de interface chamados em parâmetros de tipo
+	expected    Type // tipo esperado de expectedFor (para Resultado.Ok sem argumentos de tipo)
 	expectedFor ast.Expr
 	litOK       bool // o próximo literal composto pode conter ponteiros donos (dentro de alloc)
 	borrows     map[Type]*Borrow
@@ -219,6 +227,8 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 
 		paramIfaces: map[*ast.TypeParam]*Interface{},
 		funcTypes:   map[string]*FuncType{},
+		probes:      map[*Func]bool{},
+		probeBroken: map[*Func]bool{},
 		tvMethods:   map[string]*Func{},
 	}
 	for i, src := range srcs {
@@ -232,8 +242,9 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 		c.collectInterfaces(src.AST)
 		c.collectFuncs(src.AST)
 		c.collectImpls(src.AST)
+		c.probeOwned(src.AST)
 		for _, fn := range c.info.Funcs {
-			if fn.mod == c.mod {
+			if fn.mod == c.mod && !fn.queued {
 				c.checkFunc(fn)
 			}
 		}
@@ -246,8 +257,16 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 	if len(c.errs) == 0 {
 		for _, fn := range c.info.Funcs {
 			c.mod = fn.mod
-			c.checkOwnership(fn)
+			c.probing = c.probes[fn]
+			c.instName = ""
+			if c.probing {
+				c.instName = fn.Name
+			}
+			if !c.probeBroken[fn] {
+				c.checkOwnership(fn)
+			}
 		}
+		c.probing, c.instName = false, ""
 	}
 	// Erros na ordem dos arquivos e, dentro de cada um, na ordem do código.
 	sort.SliceStable(c.errs, func(i, j int) bool {
@@ -317,8 +336,15 @@ func (c *checker) declare(name string, pos token.Pos, t Type, param bool) *Local
 }
 
 func (c *checker) errorf(pos token.Pos, format string, args ...any) {
+	if c.muted {
+		c.mutedErrs++
+		return
+	}
 	msg := fmt.Sprintf(format, args...)
-	if c.instName != "" {
+	switch {
+	case c.probing:
+		msg += " (verificado com T dono, como " + c.instName + ")"
+	case c.instName != "":
 		msg += " (na instância " + c.instName + ")"
 	}
 	c.errs = append(c.errs, token.Error{File: c.mod.file, Pos: pos, Msg: msg})

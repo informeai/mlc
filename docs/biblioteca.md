@@ -94,17 +94,32 @@ io.print(v.get(0), v.len(), v.cap())
 v.free()                  // libera os itens e o Vec; o verificador cobra este free
 ```
 
-| Declaração | O que faz |
-|---|---|
-| `new[T any](cap int) *Vec[T]` | aloca um vetor vazio com capacidade `cap` |
-| `push(x)` | acrescenta no fim; chama `grow` quando está cheio |
-| `grow()` | capacidade passa a `2 * cap + 1` (`realloc`) |
-| `get(i) T`, `set(i, x)` | acesso checado: fora de `0..len-1` dá panic |
-| `pop() T` | remove e devolve o último; vazio dá panic |
-| `len() int`, `cap() int`, `clear()` | tamanho, capacidade, esvazia sem liberar |
-| `free()` | libera tudo (consome o `*Vec[T]`) |
+Os elementos podem ser donos (`Vec[T owned]`: `[]byte`, `?*No`...). A posse entra e sai explicitamente:
 
-Os elementos não podem ser donos (como em todo genérico, nesta versão). Para ver os elementos como slice dentro do módulo, use `&v.items[:v.count]`.
+```
+nomes := vec.new[[]byte](8)
+nomes.push(copia)          // copia foi movida para o vetor
+nome := nomes.take(0)      // a posse volta (fica o valor zero no lugar)
+nomes.set(0, nome)         // e vai de novo para o vetor
+nomes.free()               // libera cada nome (drop) e o vetor
+```
+
+| Declaração | `T` | O que faz |
+|---|---|---|
+| `new[T owned](cap int) *Vec[T]` | qualquer | aloca um vetor vazio com capacidade `cap` |
+| `push(x T)` | qualquer | move `x` para o fim; chama `grow` quando está cheio |
+| `grow()` | qualquer | capacidade passa a `2 * cap + 1` (`realloc`) |
+| `pop() T` | qualquer | tira o último e devolve a posse; vazio dá panic |
+| `take(i) T` | qualquer | tira o elemento `i` (fica o valor zero) e devolve a posse |
+| `put(i, x T) T` | qualquer | põe `x` em `i` e devolve o elemento antigo |
+| `set(i, x T)` | qualquer | põe `x` em `i` e libera o antigo (`drop`) |
+| `swap(i, j)` | qualquer | troca dois elementos |
+| `len() int`, `cap() int` | qualquer | tamanho e capacidade |
+| `clear()` | qualquer | libera os elementos (`drop`) e deixa o vetor vazio |
+| `free()` | qualquer | libera cada elemento (`drop`) e o vetor |
+| `get(i) T` | só copiável (`any`) | devolve uma cópia |
+
+Os índices são checados: fora de `0..len-1`, panic.
 
 ### `std/rand`
 

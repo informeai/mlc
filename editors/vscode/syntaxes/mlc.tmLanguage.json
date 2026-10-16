@@ -158,7 +158,7 @@
         },
         {
           "name": "storage.type.constraint.mlc",
-          "match": "\\b(any|comparable|ordered|number|integer)\\b"
+          "match": "\\b(any|comparable|ordered|number|integer|owned)\\b"
         },
         {
           "name": "storage.type.self.mlc",
@@ -184,7 +184,7 @@
     },
     "builtins": {
       "name": "support.function.builtin.mlc",
-      "match": "\\b(alloc|free|realloc|len|take|replace|drain)(?=\\s*\\()"
+      "match": "\\b(alloc|free|realloc|len|take|replace|drain|drop)(?=\\s*\\()"
     },
     "calls": {
       "name": "entity.name.function.call.mlc",

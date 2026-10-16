@@ -1,0 +1,9 @@
+// erro: vec.Vec[[]byte].get exige T any ([]byte é dono): use take, put ou pop
+import "std/vec"
+
+fn main() {
+    v := vec.new[[]byte](1)
+    x := v.get(0)
+    free(x)
+    v.free()
+}

@@ -1,0 +1,11 @@
+// erro: *No não atende owned, exigida por T em vec.new (*T não tem valor zero e as coleções precisam de posições vazias: use ?*No)
+import "std/vec"
+
+struct No {
+    v int
+}
+
+fn main() {
+    v := vec.new[*No](1)
+    v.free()
+}

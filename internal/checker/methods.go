@@ -124,6 +124,11 @@ func (c *checker) methodCall(e *ast.CallExpr, sel *ast.SelectorExpr) (Type, bool
 	}
 	m := s.Methods[sel.Sel]
 	if m == nil && s.Origin != nil {
+		if msg := c.methodConstraintError(s, sel.Sel); msg != "" {
+			c.errorf(sel.SelPos, "%s", msg) // fn (v &Vec[T any]) get(), chamado com T dono
+			c.checkArgs(e)
+			return Invalid, true
+		}
 		m = c.instMethod(s, sel.Sel) // método de struct genérica
 	}
 	if m == nil {

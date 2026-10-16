@@ -176,6 +176,10 @@ Com essas restrições, um empréstimo nunca sobrevive ao dono, e por isso não 
 
 A linguagem não tem `append` nem coleção que cresce sozinha. Para isso existe `std/vec`, escrito em MLC: `vec.new[T](cap)` aloca, `push` chama `grow` (que faz `realloc` dobrando a capacidade) quando falta espaço, e `free()` libera. A alocação fica à vista no código da biblioteca, e o `*Vec[T]` devolvido por `new` é um dono comum, cobrado pelo verificador. Veja [biblioteca.md](biblioteca.md).
 
+## Donos em genéricos
+
+Um genérico com `[T owned]` pode guardar donos (`Vec[[]byte]`, `Vec[?*No]`). Dentro dele, um valor `T` é tratado como um `?*X`: atribuir move, usar depois de mover é erro, e todo valor precisa de destino. `drop(x)` é a forma genérica de liberar: vira `free` quando `T` é dono e não faz nada quando não é. Como em todo genérico, cada instância concreta passa pelo verificador; além disso, cada genérico com `owned` é verificado com `T = []byte`, para os erros aparecerem na definição. Coleções como `Vec` liberam os elementos no `free()`, escrito em MLC e à vista na biblioteca.
+
 ## Funções como valor
 
 Um valor `fn(T) R` é só o endereço de uma função: como não captura variáveis, não aloca nem tem dono, e pode ser copiado livremente. Uma chamada através dele segue os tipos dos parâmetros (`&T` empresta, `*T` move), e o verificador confere como numa chamada direta. O valor zero é nulo; chamá-lo dá panic, nunca comportamento indefinido.

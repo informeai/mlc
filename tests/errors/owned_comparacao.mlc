@@ -1,0 +1,7 @@
+// erro: valores de um T owned não podem ser comparados (T pode ser um dono)
+fn igual[T owned](a T, b T) bool {
+    return a == b
+}
+
+fn main() {
+}

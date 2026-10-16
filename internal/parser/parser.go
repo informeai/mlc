@@ -728,6 +728,10 @@ func (p *Parser) parsePostfix() ast.Expr {
 func (p *Parser) parsePrimary() ast.Expr {
 	t := p.tok
 	switch t.Kind {
+	case token.QUESTION, token.FN:
+		// ?*T e fn(T) R não começam expressões: são argumentos de tipo,
+		// como em vec.new[?*No](8)
+		return &ast.TypeArg{Type: p.parseType()}
 	case token.IDENT:
 		p.next()
 		return &ast.Ident{Name: t.Lit, P: t.Pos}
@@ -855,7 +859,18 @@ func (p *Parser) parseTypeArgs() []*ast.TypeExpr {
 	p.next()
 	var args []*ast.TypeExpr
 	for {
-		args = append(args, p.parseType())
+		arg := p.parseType()
+		if p.tok.Kind == token.IDENT && arg.Mod == ast.TypeNamed && arg.Module == "" && len(arg.Args) == 0 {
+			// Vec[T any] no receptor de um método: a restrição do método
+			arg.Constraint = p.tok.Lit
+			p.next()
+			if p.tok.Kind == token.PERIOD && p.peek.Kind == token.IDENT {
+				p.next()
+				arg.Constraint += "." + p.tok.Lit
+				p.next()
+			}
+		}
+		args = append(args, arg)
 		if p.tok.Kind != token.COMMA {
 			break
 		}

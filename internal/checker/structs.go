@@ -29,7 +29,10 @@ type Struct struct {
 	Args        []Type
 	instances   map[string]*Struct
 	methodDecls map[string]*ast.FuncDecl
-	mod         *module
+	// methodConstraints: restrições que o receptor de um método acrescenta
+	// (fn (v &Vec[T any]) get): uma por parâmetro de tipo, nil se nenhuma
+	methodConstraints map[string][]*ast.TypeParam
+	mod               *module
 }
 
 type Field struct {

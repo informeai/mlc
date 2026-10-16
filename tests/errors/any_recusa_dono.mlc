@@ -1,0 +1,10 @@
+// erro: []byte não atende any, exigida por T em id (é dono: para aceitar donos, a restrição precisa ser owned)
+fn id[T any](x T) T {
+    return x
+}
+
+fn main() {
+    s := alloc([]byte, 1)
+    t := id(s)
+    free(t)
+}

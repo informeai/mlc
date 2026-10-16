@@ -108,7 +108,10 @@ type TypeExpr struct {
 	Len    Expr        // tamanho de [N]T
 	Args   []*TypeExpr // argumentos de tipo: Par[int, string]
 	Params []*TypeExpr // fn(int, &T) R: os parâmetros; o retorno fica em Elem (nil: nenhum)
-	P      token.Pos
+	// Constraint: restrição escrita no receptor de um método, como o any de
+	// fn (v &Vec[T any]) get(): o método só existe quando T a atende
+	Constraint string
+	P          token.Pos
 }
 
 type TypeMod int

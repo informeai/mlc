@@ -1,0 +1,6 @@
+// erro: vazamento: x ainda é dona da memória (linha 2) no fim da função; libere com free(x) ou passe a posse adiante (verificado com T dono, como esquece[[]byte])
+fn esquece[T owned](x T) {
+}
+
+fn main() {
+}

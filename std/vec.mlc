@@ -1,28 +1,36 @@
-// Vetor que cresce. É a única parte da biblioteca que aloca, e a alocação
-// está visível aqui: new aloca, push chama grow quando falta espaço, e grow
-// dobra a capacidade com realloc. Para ver os elementos como slice, use
-// &v.items[:v.count].
+// Vetor que cresce. É a parte da biblioteca que aloca, e a alocação está
+// visível aqui: new aloca, push chama grow quando falta espaço, e grow dobra
+// a capacidade com realloc.
 //
-//     v := vec.new[int](8)
-//     v.push(1)
-//     v.free()
+// Os elementos podem ser donos (T owned: ?*X ou []X): push move o valor para
+// dentro, pop e take devolvem a posse, put troca (e devolve o antigo), set
+// põe e libera o antigo, e free libera cada elemento (drop) e o vetor. get
+// copia, então só existe quando T é copiável.
+//
+//     nomes := vec.new[[]byte](8)
+//     nomes.push(copia)          // copia foi movida para o vetor
+//     nome := nomes.take(0)      // a posse volta
+//     nomes.set(0, nome)         // e vai de novo para o vetor
+//     nomes.free()               // libera cada nome e o vetor
 
-pub struct Vec[T any] {
+pub struct Vec[T owned] {
     items []T
     count int
 }
 
 extern fn fail(msg string)
 
-pub fn new[T any](cap int) *Vec[T] {
+pub fn new[T owned](cap int) *Vec[T] {
     return alloc(Vec[T]{items: alloc([]T, cap), count: 0})
 }
 
+// push acrescenta x no fim (x é movido para o vetor).
 pub fn (v &Vec[T]) push(x T) {
     if v.count == len(v.items) {
         v.grow()
     }
-    v.items[v.count] = x
+    old := replace(&v.items[v.count], x)
+    drop(old) // a posição depois do fim estava vazia
     v.count++
 }
 
@@ -31,26 +39,40 @@ pub fn (v &Vec[T]) grow() {
     v.items = realloc(v.items, len(v.items) * 2 + 1)
 }
 
-pub fn (v &Vec[T]) get(i int) T {
-    if i < 0 || i >= v.count {
-        fail("vec.get: índice fora do vetor")
-    }
-    return v.items[i]
-}
-
-pub fn (v &Vec[T]) set(i int, x T) {
-    if i < 0 || i >= v.count {
-        fail("vec.set: índice fora do vetor")
-    }
-    v.items[i] = x
-}
-
+// pop tira o último elemento e devolve a posse dele.
 pub fn (v &Vec[T]) pop() T {
     if v.count == 0 {
         fail("vec.pop: vetor vazio")
     }
     v.count--
-    return v.items[v.count]
+    return take(&v.items[v.count])
+}
+
+// take tira o elemento i, deixando o valor zero no lugar, e devolve a posse.
+pub fn (v &Vec[T]) take(i int) T {
+    if i < 0 || i >= v.count {
+        fail("vec.take: índice fora do vetor")
+    }
+    return take(&v.items[i])
+}
+
+// put põe x na posição i e devolve o elemento que estava lá.
+pub fn (v &Vec[T]) put(i int, x T) T {
+    if i < 0 || i >= v.count {
+        fail("vec.put: índice fora do vetor")
+    }
+    return replace(&v.items[i], x)
+}
+
+// swap troca os elementos i e j.
+pub fn (v &Vec[T]) swap(i int, j int) {
+    if i < 0 || i >= v.count || j < 0 || j >= v.count {
+        fail("vec.swap: índice fora do vetor")
+    }
+    a := take(&v.items[i])
+    b := replace(&v.items[j], a)
+    old := replace(&v.items[i], b)
+    drop(old) // o zero deixado pelo take
 }
 
 pub fn (v &Vec[T]) len() int {
@@ -61,11 +83,39 @@ pub fn (v &Vec[T]) cap() int {
     return len(v.items)
 }
 
+// clear libera os elementos (drop) e deixa o vetor vazio, com a mesma
+// capacidade.
 pub fn (v &Vec[T]) clear() {
+    for i := 0; i < v.count; i++ {
+        x := take(&v.items[i])
+        drop(x)
+    }
     v.count = 0
 }
 
+// free libera cada elemento (drop) e o vetor.
 pub fn (v *Vec[T]) free() {
+    for x in drain(v.items) {
+        drop(x)
+    }
     free(v.items)
     free(v)
+}
+
+// get devolve uma cópia do elemento i (só para T copiável).
+pub fn (v &Vec[T any]) get(i int) T {
+    if i < 0 || i >= v.count {
+        fail("vec.get: índice fora do vetor")
+    }
+    return v.items[i]
+}
+
+// set põe x na posição i (x é movido) e libera o elemento antigo (drop).
+// Depois de um take(i), devolve o elemento ao lugar.
+pub fn (v &Vec[T]) set(i int, x T) {
+    if i < 0 || i >= v.count {
+        fail("vec.set: índice fora do vetor")
+    }
+    old := replace(&v.items[i], x)
+    drop(old)
 }

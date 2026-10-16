@@ -9,9 +9,9 @@ syn keyword mlcConditional if else match
 syn keyword mlcRepeat      for in
 syn keyword mlcStatement   return break continue
 syn keyword mlcType        int int8 int16 int32 int64 uint8 uint16 uint32 uint64 byte float32 float64 bool string
-syn keyword mlcConstraint  any comparable ordered number integer Self
+syn keyword mlcConstraint  any comparable ordered number integer owned Self
 syn keyword mlcConstant    true false nil
-syn keyword mlcBuiltin     alloc free realloc len take replace drain
+syn keyword mlcBuiltin     alloc free realloc len take replace drain drop
 
 syn match  mlcComment   "//.*$" contains=@Spell
 syn region mlcString    start=+"+ skip=+\\.+ end=+"\|$+ contains=mlcEscape

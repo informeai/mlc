@@ -334,6 +334,9 @@ func (c *checker) binary(e *ast.BinaryExpr) Type {
 		case isFuncType(x) || isFuncType(y):
 			c.errorf(e.OpPos, "valores fn não podem ser comparados")
 			return Invalid
+		case ownedVar(x) || ownedVar(y):
+			c.errorf(e.OpPos, "valores de um T owned não podem ser comparados (T pode ser um dono)")
+			return Invalid
 		case x != y:
 			c.errorf(e.OpPos, "comparação entre tipos diferentes: %s e %s", x, y)
 			return Invalid

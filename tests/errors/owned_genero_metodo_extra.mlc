@@ -1,0 +1,12 @@
+// erro: vec.Vec[?*No].get exige T any (?*No é dono): use take, put ou pop
+import "std/vec"
+
+struct No {
+    v int
+}
+
+fn main() {
+    v := vec.new[?*No](1)
+    p := v.get(0)
+    v.free()
+}

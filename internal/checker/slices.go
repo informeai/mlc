@@ -199,9 +199,9 @@ func (c *checker) checkForIn(s *ast.ForStmt) {
 		c.errorf(iter.Pos(), "for in percorre uma variável ou campo: guarde o slice em uma variável primeiro")
 	case drain && s.Var.Name == "_":
 		c.errorf(s.Var.P, "o elemento tirado por drain precisa de um nome, para ser liberado ou movido")
-	case drain && !IsOwner(elem):
+	case drain && !IsOwner(elem) && !c.genericContext():
 		c.errorf(iter.Pos(), "drain serve para slices de donos; para percorrer %s, use for x in s", t)
-	case !drain && IsOwner(elem):
+	case !drain && (IsOwner(elem) || ownedVar(elem)):
 		c.errorf(iter.Pos(), "os elementos de %s são donos e não podem ser copiados: use for x in drain(s) para esvaziar o slice", t)
 	}
 	if s.Var.Name != "_" {
@@ -299,7 +299,7 @@ func (c *checker) ownerElem(a ast.Expr, fn string) Type {
 	t := c.targetIndex(ix)
 	c.info.Types[ix] = t
 	c.info.Types[a] = t
-	if t != Invalid && !IsOwner(t) {
+	if t != Invalid && !IsOwner(t) && !c.genericContext() {
 		c.errorf(a.Pos(), "%s serve para elementos donos; os elementos aqui são %s (use s[i] direto)", fn, t)
 		return Invalid
 	}

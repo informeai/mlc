@@ -15,6 +15,10 @@ typedef struct {
 
 #define MLC_STR_LIT(s, n) ((mlc_str){(s), (n)})
 
+/* Funções geradas que podem não ser chamadas (instâncias de verificação de
+ * genéricos, métodos de biblioteca sem uso). */
+#define MLC_MAYBE_UNUSED __attribute__((unused))
+
 /* []byte: buffer de texto. Definido aqui porque as funções de texto do runtime
  * o recebem; o código gerado não declara de novo. */
 typedef struct {

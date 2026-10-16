@@ -1,0 +1,8 @@
+// erro: uma restrição (int any) só pode aparecer no receptor de um método
+struct B[T any] {
+    x T
+}
+
+fn main() {
+    var b B[int any]
+}

@@ -1,0 +1,9 @@
+// erro: x já foi liberada ou movida (linha 3) (verificado com T dono, como duplica[[]byte])
+fn duplica[T owned](x T) T {
+    a := x
+    drop(a)
+    return x
+}
+
+fn main() {
+}

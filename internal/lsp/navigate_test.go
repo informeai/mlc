@@ -86,7 +86,7 @@ func TestNavigation(t *testing.T) {
 		{"main", "largura: «LIMITE}", "main", 15, []string{"const LIMITE = 10"}},
 		{"main", "v.push(c.«dobro())", "main", 25, []string{"fn (c &Caixa) dobro() int"}},
 		{"main", "c := «Caixa{", "main", 11, []string{"struct Caixa {", "largura int // em cm"}},
-		{"main", "v := vec.«new[int]", "std/vec.mlc", 0, []string{"pub fn new[T any](cap int) *Vec[T]", "instância: `vec.new[int]`"}},
+		{"main", "v := vec.«new[int]", "std/vec.mlc", 0, []string{"pub fn new[T owned](cap int) *Vec[T]", "instância: `vec.new[int]`"}},
 		{"main", "v.«push(c", "std/vec.mlc", 0, []string{"push(x T)"}},
 		{"main", "p := geo.«Ponto{", "geo", 3, []string{"pub struct Ponto {"}},
 		{"main", "geo.«soma(p)", "geo", 9, []string{"pub fn soma(p Ponto) int", "soma devolve x + y."}},
