@@ -19,18 +19,18 @@ fn guarda(m &Mochila, it *Item) {
         m.itens = realloc(m.itens, len(m.itens) * 2 + 1)
     }
     velho := replace(&m.itens[m.usados], it)
-    free(velho)                 // era nil: free(nil) não faz nada
+    free(velho) // era nil: free(nil) não faz nada
     m.usados++
 }
 
 fn peso_total(m &Mochila) int {
     total := 0
     for i := 0; i < m.usados; i++ {
-        it := take(&m.itens[i])     // tira para usar...
+        it := take(&m.itens[i]) // tira para usar...
         if it != nil {
             total += it.peso
         }
-        velho := replace(&m.itens[i], it)   // ...e devolve
+        velho := replace(&m.itens[i], it) // ...e devolve
         free(velho)
     }
     return total
@@ -44,7 +44,7 @@ fn esvazia(m *Mochila) {
         io.print("tirando", it.nome)
         free(it)
     }
-    free(m.itens)               // aceito: drain tirou todos os elementos
+    free(m.itens) // aceito: drain tirou todos os elementos
     free(m)
 }
 

@@ -66,7 +66,7 @@ pub fn eq_bytes(a &[]byte, b &[]byte) bool {
 }
 
 const MIN_INT = -9223372036854775807 - 1
-const MIN_DIV_10 = -922337203685477580  // MIN_INT / 10
+const MIN_DIV_10 = -922337203685477580 // MIN_INT / 10
 
 // parse_int lê um inteiro decimal, com sinal opcional, de s inteiro. Em caso
 // de sucesso grava em out e devolve true; texto inválido ou que não cabe em

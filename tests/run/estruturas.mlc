@@ -15,20 +15,20 @@ struct Lista {
 fn push(l &Lista, v int) {
     n := alloc(No)
     n.valor = v
-    n.prox = l.cabeca      // move a cabeça para o nó novo...
-    l.cabeca = n           // ...e o nó novo vira a cabeça
+    n.prox = l.cabeca // move a cabeça para o nó novo...
+    l.cabeca = n      // ...e o nó novo vira a cabeça
     l.tamanho++
 }
 
 fn pop(l &Lista) int {
     n := l.cabeca
     if n == nil {
-        l.cabeca = nil     // o campo emprestado precisa voltar a ter valor
+        l.cabeca = nil // o campo emprestado precisa voltar a ter valor
         return -1
     }
     v := n.valor
     l.cabeca = n.prox
-    free(n)                // aceito: o único campo dono de n já foi movido
+    free(n) // aceito: o único campo dono de n já foi movido
     l.tamanho--
     return v
 }

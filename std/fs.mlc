@@ -5,9 +5,9 @@
 import "std/result"
 
 // códigos de erro (os números são os do sistema, errno)
-pub const NOT_FOUND = 2     // ENOENT
-pub const DENIED = 13       // EACCES
-pub const TOO_BIG = 1000    // o arquivo não cabe no buffer
+pub const NOT_FOUND = 2  // ENOENT
+pub const DENIED = 13    // EACCES
+pub const TOO_BIG = 1000 // o arquivo não cabe no buffer
 
 extern fn size_raw(path &[]byte) int
 extern fn read_raw(path &[]byte, dst &[]byte) int

@@ -3,8 +3,8 @@
 import "std/result"
 
 // códigos de erro de arg e getenv
-pub const NOT_FOUND = 1   // argumento ou variável que não existe
-pub const TOO_LONG = 2    // não cabe no buffer
+pub const NOT_FOUND = 1 // argumento ou variável que não existe
+pub const TOO_LONG = 2  // não cabe no buffer
 
 // arg_count devolve quantos argumentos o programa recebeu (o 0 é o nome dele).
 pub extern fn arg_count() int

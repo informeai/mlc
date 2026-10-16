@@ -51,6 +51,7 @@ const (
 	COLON      // :
 	AMP        // & (empréstimo)
 	QUESTION   // ? (em ?*T)
+	COMMENT    // // até o fim da linha (só no modo com comentários do lexer)
 
 	keywordBeg
 	IMPORT
@@ -117,6 +118,7 @@ var names = [...]string{
 	COLON:      ":",
 	AMP:        "&",
 	QUESTION:   "?",
+	COMMENT:    "comentário",
 
 	IMPORT:   "import",
 	FN:       "fn",
@@ -172,6 +174,9 @@ type Token struct {
 	Kind Kind
 	Lit  string
 	Pos  Pos
+	// Off e End delimitam o texto do token no arquivo (src[Off:End]), como
+	// foi escrito: o formatador usa isso para preservar literais.
+	Off, End int
 }
 
 // Error é um erro de compilação com posição no arquivo-fonte.

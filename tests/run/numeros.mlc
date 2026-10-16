@@ -1,11 +1,11 @@
 import "std/io"
 import "std/str"
 
-const LIMITE = 100              // sem tipo: serve para int8 e para uint64
+const LIMITE = 100 // sem tipo: serve para int8 e para uint64
 const PI float64 = 3.14159
 const TAXA float32 = 0.1
 const GRANDE uint64 = 18446744073709551615
-const MASCARA = 255 * 2 - 255   // calculado na compilação: 255
+const MASCARA = 255 * 2 - 255 // calculado na compilação: 255
 
 struct Pixel {
     r byte

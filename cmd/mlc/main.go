@@ -2,15 +2,20 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	iofs "io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"mlc/internal/driver"
+	"mlc/internal/format"
+	"mlc/internal/token"
 )
 
 const usage = `mlc — compilador da linguagem MLC (My Lang C)
@@ -18,6 +23,8 @@ const usage = `mlc — compilador da linguagem MLC (My Lang C)
 Uso:
   mlc build [-o saida] [-emit-c] arquivo.mlc   compila para um executável
   mlc run arquivo.mlc [argumentos]             compila e executa
+  mlc fmt [-l] [arquivos ou pastas]            formata no lugar (padrão: a pasta atual)
+  mlc fmt -                                    formata a entrada padrão na saída padrão
 `
 
 func main() {
@@ -30,6 +37,8 @@ func main() {
 		os.Exit(build(os.Args[2:]))
 	case "run":
 		os.Exit(run(os.Args[2:]))
+	case "fmt":
+		os.Exit(fmtCmd(os.Args[2:]))
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:
@@ -115,4 +124,80 @@ func run(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// fmtCmd formata arquivos .mlc no lugar. Com -l, só lista os que mudariam.
+func fmtCmd(args []string) int {
+	fs := flag.NewFlagSet("fmt", flag.ExitOnError)
+	list := fs.Bool("l", false, "só lista os arquivos cuja formatação é diferente, sem alterá-los")
+	fs.Parse(args)
+	paths := fs.Args()
+	if len(paths) == 1 && paths[0] == "-" {
+		src, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		out, errs := format.Source("<stdin>", src)
+		if len(errs) > 0 {
+			printErrors(errs)
+			return 1
+		}
+		os.Stdout.Write(out)
+		return 0
+	}
+	if len(paths) == 0 {
+		paths = []string{"."}
+	}
+	var files []string
+	for _, p := range paths {
+		info, err := os.Stat(p)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		if !info.IsDir() {
+			files = append(files, p)
+			continue
+		}
+		filepath.WalkDir(p, func(path string, d iofs.DirEntry, err error) error {
+			if err == nil && !d.IsDir() && filepath.Ext(path) == ".mlc" {
+				files = append(files, path)
+			}
+			return nil
+		})
+	}
+	status := 0
+	for _, file := range files {
+		src, err := readSource(file)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			status = 1
+			continue
+		}
+		out, errs := format.Source(file, src)
+		if len(errs) > 0 {
+			printErrors(errs)
+			status = 1
+			continue
+		}
+		if bytes.Equal(src, out) {
+			continue
+		}
+		if *list {
+			fmt.Println(file)
+			continue
+		}
+		if err := os.WriteFile(file, out, 0o644); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			status = 1
+		}
+	}
+	return status
+}
+
+func printErrors(errs []token.Error) {
+	for _, e := range errs {
+		fmt.Fprintln(os.Stderr, e)
+	}
 }

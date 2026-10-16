@@ -39,9 +39,15 @@ make                                     # gera o compilador em bin/mlc
 bin/mlc run exemplo.mlc                  # compila e executa
 bin/mlc build -o exemplo exemplo.mlc     # gera o executável
 bin/mlc build -emit-c exemplo.mlc        # mostra o C gerado
+bin/mlc fmt .                            # formata os .mlc da pasta (no lugar)
+bin/mlc fmt -l .                         # só lista os que mudariam
 make test                                # roda os testes
-make check                               # gofmt, go vet e testes
+make check                               # gofmt, mlc fmt -l, go vet e testes
 ```
+
+## Formatação (`mlc fmt`)
+
+`mlc fmt` reescreve os arquivos na forma canônica, como o `gofmt`: indentação de 4 espaços, um espaço em volta dos operadores binários e depois das vírgulas, nenhum depois de operador unário (`-x`, `*p`, `&s`), comentários de fim de linha alinhados. As quebras de linha, os parênteses e os comentários de quem escreveu são mantidos; linhas em branco seguidas viram uma só. Um arquivo com erro de sintaxe não é formatado. `mlc fmt -` lê da entrada padrão e escreve na saída padrão (para editores).
 
 O compilador C usado é o da variável `CC` (padrão: `cc`).
 
@@ -49,7 +55,7 @@ O compilador C usado é o da variável `CC` (padrão: `cc`).
 
 | Pasta | Papel |
 |---|---|
-| `cmd/mlc` | linha de comando (`build`, `run`) |
+| `cmd/mlc` | linha de comando (`build`, `run`, `fmt`) |
 | `internal/token` | tokens, posições e erros de compilação |
 | `internal/lexer` | tokens, com `;` automático no fim da linha |
 | `internal/parser` | parser recursive descent → AST |
@@ -57,6 +63,7 @@ O compilador C usado é o da variável `CC` (padrão: `cc`).
 | `internal/checker` | nomes e tipos |
 | `internal/codegen` | AST → C11 |
 | `internal/driver` | encadeia as fases e chama o `cc` |
+| `internal/format` | `mlc fmt`: formatador sobre os tokens, com os comentários |
 | `rt/c` | runtime em C, embutido no binário do `mlc` |
 | `std` | biblioteca padrão escrita em MLC (`import "std/io"`, `import "std/math"`), embutida no binário. Veja [docs/biblioteca.md](docs/biblioteca.md) |
 | `tests/run` | programas e saída esperada (`.out`); entrada opcional (`.in`) |
@@ -113,5 +120,5 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 - [x] **Números:** `int8`, `int16`, `int32`, `uint16`, `uint32`, `uint64`, `float32`, `float64`; constantes sem tipo; conversões checadas. Veja [docs/tipos.md](docs/tipos.md)
 - [x] **Arrays `[N]T`:** tamanho fixo, por valor, na pilha ou em structs, sem `alloc`; `&a` empresta como `&[]T`
 - [x] **Biblioteca padrão** em MLC, importada com `std/`: `io`, `str`, `result`, `math`, `sort`, `text`, `vec`, `rand`, `os`, `fs`, `time`. Nada aloca escondido; erros como `Result[T]`. Veja [docs/biblioteca.md](docs/biblioteca.md)
-- [ ] **`mlc fmt`:** formatador canônico (4 espaços), preservando comentários
+- [x] **`mlc fmt`:** formatador canônico (4 espaços), preservando comentários e quebras de linha; `-l` lista, `-` usa a entrada padrão
 - [ ] **LSP:** `mlc lsp` com diagnósticos ao digitar, cores e formatação; extensão para VS Code e configuração para Neovim

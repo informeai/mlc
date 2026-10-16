@@ -17,10 +17,21 @@ type Lexer struct {
 	col  int
 	last token.Kind
 	errs []token.Error
+
+	comments bool // devolver os comentários como tokens COMMENT
 }
 
 func New(file string, src []byte) *Lexer {
 	return &Lexer{file: file, src: src, line: 1, col: 1, last: token.EOF}
+}
+
+// NewWithComments cria um lexer que também devolve os comentários, como
+// tokens COMMENT (usado pelo formatador). Comentários não mudam a inserção
+// automática de ';'.
+func NewWithComments(file string, src []byte) *Lexer {
+	l := New(file, src)
+	l.comments = true
+	return l
 }
 
 func (l *Lexer) Errors() []token.Error { return l.errs }
@@ -28,7 +39,9 @@ func (l *Lexer) Errors() []token.Error { return l.errs }
 // Next devolve o próximo token. Depois do fim do arquivo devolve sempre EOF.
 func (l *Lexer) Next() token.Token {
 	tok := l.scan()
-	l.last = tok.Kind
+	if tok.Kind != token.COMMENT {
+		l.last = tok.Kind
+	}
 	return tok
 }
 
@@ -82,26 +95,34 @@ func (l *Lexer) scan() token.Token {
 		switch {
 		case c == '\n':
 			if insertsSemi(l.last) {
-				pos := l.pos()
+				pos, off := l.pos(), l.off
 				l.advance()
-				return token.Token{Kind: token.SEMICOLON, Lit: "\n", Pos: pos}
+				return token.Token{Kind: token.SEMICOLON, Lit: "\n", Pos: pos, Off: off, End: off}
 			}
 			l.advance()
 		case c == ' ' || c == '\t' || c == '\r':
 			l.advance()
 		case c == '/' && l.peek(1) == '/':
+			pos, start := l.pos(), l.off
 			for l.off < len(l.src) && l.src[l.off] != '\n' {
 				l.advance()
 			}
+			if l.comments {
+				text := strings.TrimRight(string(l.src[start:l.off]), " \t\r")
+				return token.Token{Kind: token.COMMENT, Lit: text, Pos: pos, Off: start, End: l.off}
+			}
 		default:
-			return l.scanToken()
+			start := l.off
+			tok := l.scanToken()
+			tok.Off, tok.End = start, l.off
+			return tok
 		}
 	}
 	pos := l.pos()
 	if insertsSemi(l.last) {
-		return token.Token{Kind: token.SEMICOLON, Lit: "\n", Pos: pos}
+		return token.Token{Kind: token.SEMICOLON, Lit: "\n", Pos: pos, Off: l.off, End: l.off}
 	}
-	return token.Token{Kind: token.EOF, Pos: pos}
+	return token.Token{Kind: token.EOF, Pos: pos, Off: l.off, End: l.off}
 }
 
 func isLetter(c byte) bool { return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }

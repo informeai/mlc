@@ -27,14 +27,14 @@ fn area(f Forma) float64 {
 
 fn divide(a int, b int) Resultado[int] {
     if b == 0 {
-        return Resultado.Erro(1)        // T deduzido do tipo de retorno
+        return Resultado.Erro(1) // T deduzido do tipo de retorno
     }
-    return Resultado.Ok(a / b)          // T deduzido do valor
+    return Resultado.Ok(a / b) // T deduzido do valor
 }
 
 fn raiz_inteira(n int) Resultado[int] {
     if n < 0 {
-        return Resultado[int].Erro(2)   // tipo explícito
+        return Resultado[int].Erro(2) // tipo explícito
     }
     r := 0
     for (r + 1) * (r + 1) <= n {
@@ -71,7 +71,7 @@ fn main() {
     fig := Figura{nome: "placa", forma: Forma.Retangulo(2.0, 0.5)}
     io.print(fig, area(fig.forma))
 
-    var vazia Forma           // valor zero: a primeira variante, zerada
+    var vazia Forma // valor zero: a primeira variante, zerada
     io.print(vazia)
 
     // match dentro de laço, com break saindo do for

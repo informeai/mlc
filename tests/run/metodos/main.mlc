@@ -16,7 +16,7 @@ fn (c &Contador) avanca() {
 
 fn (c &Contador) avanca_n(n int) {
     for i := 0; i < n; i++ {
-        c.avanca()          // método chamando método, através do empréstimo
+        c.avanca() // método chamando método, através do empréstimo
     }
 }
 
@@ -79,7 +79,7 @@ fn main() {
     h := alloc(forma.Retangulo)
     h.largura = 2
     h.altura = 5
-    h.escala(3)                // método por empréstimo, chamado num ponteiro dono
+    h.escala(3) // método por empréstimo, chamado num ponteiro dono
     io.print("no heap:", h.area())
     free(h)
 }
