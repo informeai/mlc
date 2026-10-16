@@ -22,4 +22,4 @@ A ideia do MLC é que quem programa **entenda e saiba quanto e onde está alocan
 - Toda mudança de comportamento vem com teste em `tests/` (`run`, `panic` ou `errors`). Os testes compilam o C gerado com `-Werror`, e o runtime acusa erro interno se sobrar alocação no fim do programa.
 - O verificador de posse (`internal/checker/ownership.go`) precisa continuar conservador: na dúvida, recusa o programa.
 - Ordem de avaliação: sempre da esquerda para a direita, escrita explicitamente no C gerado.
-- Antes de considerar um marco pronto: `gofmt -l .`, `go vet ./...` e `go test ./...` limpos, e `README.md`, `docs/gramatica.md` e `docs/memoria.md` atualizados.
+- Antes de considerar um marco pronto: `make check` limpo (gofmt, go vet e testes), e `README.md`, `docs/gramatica.md` e `docs/memoria.md` atualizados.

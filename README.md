@@ -35,10 +35,12 @@ fn main() {
 ```
 
 ```sh
-go build -o mlc ./cmd/mlc
-./mlc run exemplo.mlc                  # compila e executa
-./mlc build -o exemplo exemplo.mlc     # gera o executável
-./mlc build -emit-c exemplo.mlc        # mostra o C gerado
+make                                     # gera o compilador em bin/mlc
+bin/mlc run exemplo.mlc                  # compila e executa
+bin/mlc build -o exemplo exemplo.mlc     # gera o executável
+bin/mlc build -emit-c exemplo.mlc        # mostra o C gerado
+make test                                # roda os testes
+make check                               # gofmt, go vet e testes
 ```
 
 O compilador C usado é o da variável `CC` (padrão: `cc`).
