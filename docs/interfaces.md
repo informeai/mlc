@@ -81,6 +81,8 @@ impl[T Medida] Medida for []T {
 
 Um array `[N]T` usa o impl de `[]T` (através de uma visão do array, sem cópia).
 
+Implementar uma interface torna públicos os métodos dela: um tipo de um módulo pode ser chave de um `map.Map` de outro módulo mesmo sem `pub fn` nos métodos.
+
 Os métodos de um impl também podem ser chamados direto: `n.tamanho()` com `n int`, `s.tamanho()` com `s []Quadrado`.
 
 ### Regras

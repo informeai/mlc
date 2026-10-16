@@ -222,15 +222,20 @@ func (c *checker) checkTypeArgs(what string, params []*ast.TypeParam, args []Typ
 		}
 		if !c.satisfiesParam(args[i], p) {
 			reason := ""
+			builtin, iface, _ := splitConstraint(p.Constraint)
 			switch {
-			case p.Constraint == "owned":
+			case builtin == "owned" && !satisfies(args[i], "owned"):
 				if _, why := ownedOK(args[i]); why != "" {
 					reason = " (" + why + ")"
 				}
-			case IsOwner(args[i]) || isBorrow(args[i]) || isResource(args[i]):
+			case builtin != "" && builtin != "owned" && !satisfies(args[i], builtin) && (IsOwner(args[i]) || isBorrow(args[i]) || isResource(args[i])):
 				reason = " (é dono: para aceitar donos, a restrição precisa ser owned)"
-			case !constraints[p.Constraint]:
-				c.errorf(pos, "%s não implementa %s, exigida por %s em %s (declare impl %s for %s)", args[i], p.Constraint, p.Name, what, p.Constraint, args[i])
+			case iface != "" && (builtin == "" || satisfies(args[i], builtin)):
+				if IsOwner(args[i]) && builtin != "owned" {
+					c.errorf(pos, "%s é dono e não atende %s, exigida por %s em %s (para aceitar donos: %s owned + %s)", args[i], p.Constraint, p.Name, what, p.Name, iface)
+				} else {
+					c.errorf(pos, "%s não implementa %s, exigida por %s em %s (declare impl %s for %s)", args[i], iface, p.Name, what, iface, args[i])
+				}
 				ok = false
 				continue
 			}
@@ -698,10 +703,27 @@ func (c *checker) collectGenericMethod(d *ast.FuncDecl, s *Struct, named *ast.Ty
 			cons = append(cons, nil)
 			continue
 		}
-		if !constraints[a.Constraint] && c.lookupIface(a.Constraint, a.P, false) == nil {
+		b, iface, ok := splitConstraint(a.Constraint)
+		if !ok || (b == "" && c.lookupIface(iface, a.P, false) == nil) {
 			c.errorf(a.P, "restrição desconhecida %q", a.Constraint)
 		}
-		cons = append(cons, &ast.TypeParam{Name: a.Name, Constraint: a.Constraint, P: a.P})
+		// a restrição do receptor se soma à da struct: em Map[K owned + Hash],
+		// fn (m &Map[K any, V]) pede K any + Hash
+		sb, siface, _ := splitConstraint(s.Params[len(cons)].Constraint)
+		if b == "" {
+			b = sb
+		}
+		if iface == "" {
+			iface = siface
+		}
+		combined := b
+		if iface != "" {
+			if combined != "" {
+				combined += "+"
+			}
+			combined += iface
+		}
+		cons = append(cons, &ast.TypeParam{Name: a.Name, Constraint: combined, P: a.P})
 	}
 	if s.methodConstraints == nil {
 		s.methodConstraints = map[string][]*ast.TypeParam{}

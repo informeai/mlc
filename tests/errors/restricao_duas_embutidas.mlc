@@ -1,0 +1,7 @@
+// erro: combine no máximo uma restrição embutida e uma interface
+fn f[T owned + ordered](x T) {
+    drop(x)
+}
+
+fn main() {
+}

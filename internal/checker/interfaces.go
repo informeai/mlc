@@ -126,19 +126,57 @@ func (c *checker) lookupIface(name string, pos token.Pos, report bool) *Interfac
 	return i
 }
 
-// newTypeVar cria o TypeVar de um parâmetro de tipo, resolvendo a restrição
-// (uma das embutidas ou uma interface) no módulo da declaração.
-func (c *checker) newTypeVar(name string, p *ast.TypeParam) *TypeVar {
-	tv := &TypeVar{Name: name, Constraint: p.Constraint}
-	if !constraints[p.Constraint] {
-		if i, ok := c.paramIfaces[p]; ok {
-			tv.Iface = i
-		} else {
-			tv.Iface = c.lookupIface(p.Constraint, p.P, false)
-			c.paramIfaces[p] = tv.Iface
+// splitConstraint separa uma restrição combinada (owned + hash.Hash) na
+// parte embutida (owned, ordered...; "" se não houver) e no nome da interface
+// ("" se não houver). ok é false com duas embutidas ou duas interfaces.
+func splitConstraint(c string) (builtin, iface string, ok bool) {
+	for _, part := range strings.Split(c, "+") {
+		if constraints[part] {
+			if builtin != "" {
+				return "", "", false
+			}
+			builtin = part
+			continue
 		}
+		if iface != "" {
+			return "", "", false
+		}
+		iface = part
+	}
+	return builtin, iface, true
+}
+
+// paramIface resolve (uma vez, no módulo da declaração) a interface da
+// restrição de p, ou nil.
+func (c *checker) paramIface(p *ast.TypeParam) *Interface {
+	if i, ok := c.paramIfaces[p]; ok {
+		return i
+	}
+	var i *Interface
+	if _, name, ok := splitConstraint(p.Constraint); ok && name != "" {
+		i = c.lookupIface(name, p.P, false)
+	}
+	c.paramIfaces[p] = i
+	return i
+}
+
+// newTypeVar cria o TypeVar de um parâmetro de tipo, resolvendo a restrição
+// (uma embutida, uma interface ou as duas: owned + hash.Hash) no módulo da
+// declaração.
+func (c *checker) newTypeVar(name string, p *ast.TypeParam) *TypeVar {
+	builtin, iface, ok := splitConstraint(p.Constraint)
+	if !ok {
+		c.errorf(p.P, "restrição %q: combine no máximo uma restrição embutida e uma interface, como owned + hash.Hash", p.Constraint)
+		return &TypeVar{Name: name, Constraint: "any"}
+	}
+	if builtin == "" {
+		builtin = "any"
+	}
+	tv := &TypeVar{Name: name, Constraint: builtin}
+	if iface != "" {
+		tv.Iface = c.paramIface(p)
 		if tv.Iface == nil {
-			c.errorf(p.P, "restrição desconhecida %q (use any, comparable, ordered, number, integer ou uma interface)", p.Constraint)
+			c.errorf(p.P, "restrição desconhecida %q (use any, comparable, ordered, number, integer, owned ou uma interface)", iface)
 		}
 	}
 	return tv
@@ -146,23 +184,30 @@ func (c *checker) newTypeVar(name string, p *ast.TypeParam) *TypeVar {
 
 // satisfiesParam diz se t atende a restrição do parâmetro de tipo p.
 func (c *checker) satisfiesParam(t Type, p *ast.TypeParam) bool {
-	if constraints[p.Constraint] {
-		return satisfies(t, p.Constraint)
-	}
-	i, ok := c.paramIfaces[p]
+	builtin, iface, ok := splitConstraint(p.Constraint)
 	if !ok {
-		i = c.lookupIface(p.Constraint, p.P, false)
-		c.paramIfaces[p] = i
+		return false
 	}
-	return i != nil && c.implements(t, i)
+	if builtin != "" && !satisfies(t, builtin) {
+		return false
+	}
+	if iface == "" {
+		return true
+	}
+	i := c.paramIface(p)
+	return i != nil && c.implementsAs(t, i, builtin == "owned")
 }
 
 // implements diz se t implementa a interface i.
-func (c *checker) implements(t Type, i *Interface) bool {
+func (c *checker) implements(t Type, i *Interface) bool { return c.implementsAs(t, i, false) }
+
+// implementsAs é implements; com owned, donos simples também valem (a
+// restrição owned + Interface).
+func (c *checker) implementsAs(t Type, i *Interface, owned bool) bool {
 	if tv, ok := t.(*TypeVar); ok {
 		return tv.Iface == i
 	}
-	if IsOwner(t) || isBorrow(t) || isResource(t) || t == Void || t == NilType || t == Invalid || isUntyped(t) {
+	if (IsOwner(t) && !owned) || isBorrow(t) || isResource(t) || t == Void || t == NilType || t == Invalid || isUntyped(t) {
 		return false
 	}
 	if c.findImpl(i, t) != nil {
@@ -385,6 +430,7 @@ func (c *checker) implFromStruct(im *Impl, t Type) {
 			continue
 		}
 		im.Methods[md.Name] = m
+		m.Pub = true // os métodos de uma interface valem onde a interface vale
 	}
 	if ok {
 		c.impls = append(c.impls, im)

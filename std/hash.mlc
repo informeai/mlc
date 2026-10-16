@@ -40,3 +40,128 @@ pub fn mix64(x uint64) uint64 {
     x = (x ^ (x >> 27)) *% 0x94D0_49BB_1331_11EB
     return x ^ (x >> 31)
 }
+
+// ---------- Hash: chaves de tabelas (std/map) ----------
+
+// Hash é o que uma chave de map.Map precisa: um hash bem espalhado e a
+// igualdade. Dois valores iguais (eq) precisam ter o mesmo hash.
+pub interface Hash {
+    fn hash(self &Self) uint64
+    fn eq(self &Self, other &Self) bool
+}
+
+impl Hash for int {
+    fn (x &int) hash() uint64 {
+        return mix64(uint64(*x))
+    }
+    fn (x &int) eq(o &int) bool {
+        return *x == *o
+    }
+}
+
+impl Hash for int8 {
+    fn (x &int8) hash() uint64 {
+        return mix64(uint64(int(*x) +% 128))
+    }
+    fn (x &int8) eq(o &int8) bool {
+        return *x == *o
+    }
+}
+
+impl Hash for int16 {
+    fn (x &int16) hash() uint64 {
+        return mix64(uint64(int(*x) +% 32768))
+    }
+    fn (x &int16) eq(o &int16) bool {
+        return *x == *o
+    }
+}
+
+impl Hash for int32 {
+    fn (x &int32) hash() uint64 {
+        return mix64(uint64(int(*x) +% 2147483648))
+    }
+    fn (x &int32) eq(o &int32) bool {
+        return *x == *o
+    }
+}
+
+impl Hash for byte {
+    fn (x &byte) hash() uint64 {
+        return mix64(uint64(*x))
+    }
+    fn (x &byte) eq(o &byte) bool {
+        return *x == *o
+    }
+}
+
+impl Hash for uint16 {
+    fn (x &uint16) hash() uint64 {
+        return mix64(uint64(*x))
+    }
+    fn (x &uint16) eq(o &uint16) bool {
+        return *x == *o
+    }
+}
+
+impl Hash for uint32 {
+    fn (x &uint32) hash() uint64 {
+        return mix64(uint64(*x))
+    }
+    fn (x &uint32) eq(o &uint32) bool {
+        return *x == *o
+    }
+}
+
+impl Hash for uint64 {
+    fn (x &uint64) hash() uint64 {
+        return mix64(*x)
+    }
+    fn (x &uint64) eq(o &uint64) bool {
+        return *x == *o
+    }
+}
+
+impl Hash for bool {
+    fn (x &bool) hash() uint64 {
+        if *x {
+            return mix64(1)
+        }
+        return mix64(0)
+    }
+    fn (x &bool) eq(o &bool) bool {
+        return *x == *o
+    }
+}
+
+impl Hash for string {
+    fn (x &string) hash() uint64 {
+        return fnv64_str(*x)
+    }
+    fn (x &string) eq(o &string) bool {
+        return *x == *o
+    }
+}
+
+// Um slice (como []byte, o texto lido em buffers) combina o hash dos
+// elementos; dois slices são iguais se têm os mesmos elementos.
+impl[T Hash] Hash for []T {
+    fn (s &[]T) hash() uint64 {
+        var h uint64 = 0xCBF2_9CE4_8422_2325
+        for i := 0; i < len(s); i++ {
+            h = (h ^ s[i].hash()) *% 0x0000_0100_0000_01B3
+        }
+        return mix64(h ^ uint64(len(s)))
+    }
+    fn (s &[]T) eq(o &[]T) bool {
+        if len(s) != len(o) {
+            return false
+        }
+        for i := 0; i < len(s); i++ {
+            if !s[i].eq(&o[i]) {
+                return false
+            }
+        }
+        return true
+    }
+}

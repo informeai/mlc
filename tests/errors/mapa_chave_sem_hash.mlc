@@ -1,0 +1,11 @@
+// erro: P não implementa hash.Hash, exigida por K em map.new (declare impl hash.Hash for P)
+import "std/map"
+
+struct P {
+    x int
+}
+
+fn main() {
+    m := map.new[P, int](4)
+    m.free()
+}

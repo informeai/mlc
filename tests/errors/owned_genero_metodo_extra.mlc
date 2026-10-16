@@ -1,4 +1,4 @@
-// erro: vec.Vec[?*No].get exige T any (?*No é dono): use take, put ou pop
+// erro: vec.Vec[?*No].get exige T any (?*No é dono, e o método copia): use os métodos que movem a posse, como take ou put
 import "std/vec"
 
 struct No {

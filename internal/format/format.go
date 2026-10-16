@@ -297,7 +297,7 @@ func (p *printer) unary(t *token.Token) bool {
 	switch t.Kind {
 	case token.NOT, token.QUESTION:
 		return true
-	case token.SUB, token.MUL, token.ADD, token.AMP, token.XOR: // &x ou a & b, ^x ou a ^ b
+	case token.SUB, token.MUL, token.AMP, token.XOR: // &x ou a & b, ^x ou a ^ b (+ unário não existe)
 		return !p.marks.binary[t.Pos]
 	}
 	return false

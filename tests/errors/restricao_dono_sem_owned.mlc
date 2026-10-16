@@ -1,0 +1,12 @@
+// erro: []byte é dono e não atende hash.Hash, exigida por T em h (para aceitar donos: T owned + hash.Hash)
+import "std/hash"
+
+fn h[T hash.Hash](x &T) uint64 {
+    return x.hash()
+}
+
+fn main() {
+    s := alloc([]byte, 1)
+    h(&s)
+    free(s)
+}

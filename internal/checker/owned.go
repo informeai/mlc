@@ -75,15 +75,23 @@ func (c *checker) probeArgs(params []*ast.TypeParam) []Type {
 	hasOwned := false
 	var args []Type
 	for _, p := range params {
-		switch {
-		case p.Constraint == "owned":
+		builtin, _, _ := splitConstraint(p.Constraint)
+		candidates := []Type{Int}
+		if builtin == "owned" {
 			hasOwned = true
-			args = append(args, c.sliceOf(Byte))
-		case constraints[p.Constraint]:
-			args = append(args, Int)
-		default:
-			return nil
+			candidates = []Type{c.sliceOf(Byte), Int}
 		}
+		var pick Type
+		for _, cand := range candidates {
+			if c.satisfiesParam(cand, p) {
+				pick = cand
+				break
+			}
+		}
+		if pick == nil {
+			return nil // nenhum tipo simples atende (uma interface sem impl conhecido)
+		}
+		args = append(args, pick)
 	}
 	if !hasOwned {
 		return nil
@@ -146,7 +154,7 @@ func (c *checker) methodConstraintError(s *Struct, name string) string {
 		if !c.satisfiesParam(s.Args[i], p) {
 			reason := ""
 			if IsOwner(s.Args[i]) {
-				reason = " (" + s.Args[i].String() + " é dono): use take, put ou pop"
+				reason = " (" + s.Args[i].String() + " é dono, e o método copia): use os métodos que movem a posse, como take ou put"
 			}
 			return s.Name + "." + name + " exige " + p.Name + " " + p.Constraint + reason
 		}

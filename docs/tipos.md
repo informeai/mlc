@@ -198,6 +198,7 @@ fn (v &Vec[T]) push(x T) {           // x é movido para dentro
 - **`drop(x)`** só existe em código genérico: libera `x` se for dono (`free`) e não faz nada se não for (com `T = int`). Fora de um genérico, use `free`.
 - `take(&s[i])`, `replace(&s[i], v)` e `for x in drain(s)` valem para `[]T`, como nos slices de donos.
 - `*X` não é aceito (não tem valor zero, e uma coleção precisa de posições vazias): use `?*X`. Structs com donos e donos dentro de donos (`?*Lista`, `[]?*No`) ainda não são aceitos.
+- **Restrições combinadas:** uma restrição embutida e uma interface, com `+`: `[K owned + hash.Hash]` aceita donos simples que implementam `Hash` (as chaves de `map.Map`). Na restrição do receptor, a parte que falta vem da struct: em `Map[K owned + hash.Hash, V owned]`, `fn (m &Map[K any, V]) key_at` pede `K any + hash.Hash`.
 - **Os erros de posse aparecem na definição:** cada genérico com `owned` também é verificado com `T = []byte`. Um erro desses diz "verificado com T dono".
 
 ## Enums com dados

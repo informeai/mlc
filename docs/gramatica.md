@@ -15,7 +15,7 @@ variant      = ident [ "(" field_decl { "," field_decl } ")" ] ;
 (* ---------- Declarações de topo ---------- *)
 fn_decl      = "fn" [ "(" param ")" ] ident [ type_params ] "(" [ param_list ] ")" [ type ] block ;   (* com receptor: método *)
 type_params  = "[" ident constraint { "," ident constraint } "]" ;   (* [T ordered, U io.Display] *)
-constraint   = ident [ "." ident ] ;   (* any, comparable, ordered, number, integer, owned ou uma interface *)
+constraint   = ident [ "." ident ] { "+" ident [ "." ident ] } ;   (* any, comparable, ordered, number, integer, owned, uma interface, ou uma de cada: owned + hash.Hash *)
 (* no receptor de um método, um argumento de tipo pode ter restrição: fn (v &Vec[T any]) get(i int) T *)
 extern_decl  = "extern" "fn" ident "(" [ param_list ] ")" [ type ] eos ;   (* só na biblioteca padrão; sem corpo *)
 param_list   = param { "," param } ;

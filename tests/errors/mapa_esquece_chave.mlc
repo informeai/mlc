@@ -1,0 +1,11 @@
+// erro: copia já foi liberada ou movida
+import "std/map"
+import "std/io"
+
+fn main() {
+    m := map.new[[]byte, int](4)
+    copia := alloc([]byte, 2)
+    m.put(copia, 1)
+    io.print(len(copia))
+    m.free()
+}

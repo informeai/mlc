@@ -146,6 +146,38 @@ Hashes não criptográficos, em MLC, para tabelas e checagens rápidas.
 | `fnv32(s &[]byte) uint32`, `fnv64(s &[]byte) uint64` | FNV-1a de 32 e 64 bits |
 | `fnv64_str(s string) uint64` | FNV-1a de 64 bits de uma string fixa |
 | `mix64(x uint64) uint64` | espalha os bits de um inteiro (finalizador do splitmix64), para usar como chave |
+| `interface Hash { fn hash(self &Self) uint64; fn eq(self &Self, other &Self) bool }` | o que uma chave de `map.Map` precisa; dois valores iguais têm o mesmo hash |
+
+`Hash` já vem implementada para os inteiros, `bool`, `string` e slices (`[]byte`, `[]int`...). Para uma struct, escreva `hash` e `eq` e declare `impl hash.Hash for Ponto`.
+
+### `std/map`
+
+Tabela de espalhamento escrita em MLC: endereçamento aberto com sondagem linear, crescendo (o dobro, com `alloc` à vista em `grow`) quando passa de 3/4 de ocupação. As chaves e os valores podem ser donos (`Map[K owned + hash.Hash, V owned]`).
+
+```
+conta := map.new[[]byte, int](16)
+n := conta.get_or(&palavra, 0)            // palavra: &[]byte, emprestada
+if !conta.set(&palavra, n + 1) {          // set só troca o valor de uma chave que existe
+    copia := alloc([]byte, len(palavra))  // a chave nova é alocada por quem chama
+    str.copy_bytes(&copia, &palavra)
+    conta.put(copia, 1)                   // e movida para o mapa
+}
+conta.each(mostra)                        // fn mostra(k &[]byte, v &int)
+conta.free()                              // libera cada chave e o mapa
+```
+
+| Método | Tipos | O que faz |
+|---|---|---|
+| `new[K, V](cap int) *Map[K, V]` | qualquer | aloca com espaço para cerca de `cap` entradas |
+| `put(k K, v V)` | qualquer | move `k` e `v` para o mapa; se a chave já existe, troca o valor (a chave nova e o valor antigo são liberados) |
+| `set(k &K, v V) bool` | qualquer | troca o valor de uma chave existente; se não existe, libera `v` e devolve `false` |
+| `has(k &K) bool` | qualquer | a chave existe? |
+| `get_or(k &K, def V) V` | `V` copiável | cópia do valor, ou `def` |
+| `take_or(k &K, def V) V` | qualquer | tira a entrada e devolve a posse do valor (a chave é liberada), ou `def` |
+| `remove(k &K) bool` | qualquer | apaga a entrada (libera chave e valor) |
+| `len() int`, `clear()`, `free()` | qualquer | tamanho; `clear` e `free` liberam as entradas |
+| `each(f fn(&K, &V))` | qualquer | chama `f` com cada entrada |
+| `next(i) int`, `key_at(i) K`, `value_at(i) V` | `key_at`: `K` copiável; `value_at`: `V` copiável | percorrer: `for i := m.next(0); i >= 0; i = m.next(i + 1)` |
 
 ### `std/os`
 

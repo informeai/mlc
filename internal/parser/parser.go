@@ -833,13 +833,26 @@ func (p *Parser) parseTypeParams() []*ast.TypeParam {
 		if p.tok.Kind != token.IDENT {
 			p.unexpected("esperado a restrição do parâmetro de tipo (any, comparable, ordered, number, integer ou uma interface)")
 		}
-		constraint := p.tok.Lit
-		p.next()
-		if p.tok.Kind == token.PERIOD && p.peek.Kind == token.IDENT {
-			// interface de outro arquivo: T io.Display
+		constraint := ""
+		for {
+			if constraint != "" {
+				p.next() // o + entre as restrições: K owned + hash.Hash
+				if p.tok.Kind != token.IDENT {
+					p.unexpected("esperado outra restrição depois de +")
+				}
+				constraint += "+"
+			}
+			constraint += p.tok.Lit
 			p.next()
-			constraint += "." + p.tok.Lit
-			p.next()
+			if p.tok.Kind == token.PERIOD && p.peek.Kind == token.IDENT {
+				// interface de outro arquivo: T io.Display
+				p.next()
+				constraint += "." + p.tok.Lit
+				p.next()
+			}
+			if p.tok.Kind != token.ADD {
+				break
+			}
 		}
 		params = append(params, &ast.TypeParam{Name: name.Lit, Constraint: constraint, P: name.Pos})
 		if p.tok.Kind != token.COMMA {

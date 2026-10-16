@@ -1,0 +1,125 @@
+// std/map: contador de palavras com chaves []byte (alocadas à vista),
+// mapa de texto para texto e estresse contra uma tabela direta.
+import "std/io"
+import "std/str"
+import "std/text"
+import "std/map"
+import "std/rand"
+import "std/hash"
+
+fn mostra(k &[]byte, v &int) {
+    if *v > 1 {
+        io.write(k)
+        io.printf(": {}\n", *v)
+    }
+}
+
+fn conta_linha(conta &map.Map[[]byte, int], linha &[]byte) {
+    i := 0
+    for i < len(linha) {
+        fim := text.field_end(linha, ' ', i)
+        if fim > i {
+            conta_palavra(conta, &linha[i:fim])
+        }
+        i = fim + 1
+    }
+}
+
+fn conta_palavra(conta &map.Map[[]byte, int], palavra &[]byte) {
+    n := conta.get_or(palavra, 0)
+    if !conta.set(palavra, n + 1) {
+        copia := alloc([]byte, len(palavra)) // a chave nova é alocada aqui, à vista
+        str.copy_bytes(&copia, palavra)
+        conta.put(copia, 1)
+    }
+}
+
+fn main() {
+    conta := map.new[[]byte, int](4)
+    linha := alloc([]byte, 256)
+    for {
+        n := io.read_line(&linha)
+        if n < 0 {
+            break
+        }
+        conta_linha(&conta, &linha[:n])
+    }
+    io.print("palavras diferentes:", conta.len())
+    conta.each(mostra)
+    free(linha)
+    conta.free()
+
+    // texto para texto: chaves e valores donos
+    nomes := map.new[[]byte, []byte](2)
+    k := alloc([]byte, 3)
+    str.copy(&k, "ana")
+    v := alloc([]byte, 5)
+    str.copy(&v, "maria")
+    nomes.put(k, v)
+    k2 := alloc([]byte, 3)
+    str.copy(&k2, "ana")
+    v2 := alloc([]byte, 4)
+    str.copy(&v2, "lima")
+    nomes.put(k2, v2) // chave repetida: a nova chave e o valor antigo são liberados
+    busca := alloc([]byte, 3)
+    str.copy(&busca, "ana")
+    tirado := alloc([]byte, 0)
+    valor := nomes.take_or(&busca, tirado)
+    io.write_line(&valor)
+    io.print(nomes.len())
+    free(valor)
+    free(busca)
+    nomes.free()
+
+    // estresse: o mapa contra uma tabela direta
+    m := map.new[int, int](1)
+    ref := alloc([]int, 500) // ref[k] = valor + 1, ou 0 se a chave não está
+    r := rand.new(1)
+    for passo := 0; passo < 20000; passo++ {
+        chave := r.int_n(500)
+        if r.int_n(3) == 0 {
+            m.remove(&chave)
+            ref[chave] = 0
+        } else {
+            m.put(chave, passo)
+            ref[chave] = passo + 1
+        }
+    }
+    erros := 0
+    total := 0
+    for chave := 0; chave < 500; chave++ {
+        got := m.get_or(&chave, -1)
+        if got + 1 != ref[chave] {
+            erros++
+        }
+        if ref[chave] != 0 {
+            total++
+        }
+    }
+    io.print("estresse:", erros, "erros,", m.len() == total)
+    free(ref)
+    m.free()
+
+    grade := map.new[Ponto, string](4)
+    grade.put(Ponto{x: 1, y: 2}, "um-dois")
+    grade.put(Ponto{x: 2, y: 1}, "dois-um")
+    q := Ponto{x: 2, y: 1}
+    io.print(grade.get_or(&q, "?"), grade.len())
+    grade.free()
+}
+
+// chave struct: implementa hash.Hash à mão
+struct Ponto {
+    x int
+    y int
+}
+
+fn (p &Ponto) hash() uint64 {
+    return hash.mix64(uint64(p.x) *% 31 +% uint64(p.y))
+}
+
+fn (p &Ponto) eq(o &Ponto) bool {
+    return p.x == o.x && p.y == o.y
+}
+
+impl hash.Hash for Ponto
