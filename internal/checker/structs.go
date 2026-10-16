@@ -10,6 +10,9 @@ import (
 // Struct é um tipo struct declarado pelo usuário.
 type Struct struct {
 	Name   string
+	CName  string // nome no C, sem o prefixo mlc_st_
+	File   string
+	Pub    bool
 	Fields []*Field
 	Decl   *ast.StructDecl
 
@@ -45,14 +48,16 @@ func (c *checker) collectStructs(f *ast.File) {
 		case predeclared[d.Name] || modules[d.Name]:
 			c.errorf(d.P, "o nome %q é reservado", d.Name)
 			continue
-		case c.structs[d.Name] != nil:
-			c.errorf(d.P, "struct %s já declarada na linha %d", d.Name, c.structs[d.Name].Decl.P.Line)
+		case c.mod.structs[d.Name] != nil:
+			c.errorf(d.P, "struct %s já declarada na linha %d", d.Name, c.mod.structs[d.Name].Decl.P.Line)
 			continue
 		}
-		c.structs[d.Name] = &Struct{Name: d.Name, Decl: d}
+		c.mod.structs[d.Name] = &Struct{
+			Name: c.qualify(d.Name), CName: c.mod.prefix + d.Name, File: c.mod.file, Pub: d.Pub, Decl: d,
+		}
 	}
 	for _, d := range f.Structs {
-		s := c.structs[d.Name]
+		s := c.mod.structs[d.Name]
 		if s == nil || s.Decl != d {
 			continue
 		}
@@ -117,7 +122,7 @@ func (c *checker) collectStructs(f *ast.File) {
 		return ok
 	}
 	for _, d := range f.Structs {
-		if s := c.structs[d.Name]; s != nil && s.Decl == d {
+		if s := c.mod.structs[d.Name]; s != nil && s.Decl == d {
 			visit(s)
 		}
 	}
@@ -126,16 +131,32 @@ func (c *checker) collectStructs(f *ast.File) {
 // composite checa "Tipo{campo: valor, ...}". Todos os campos precisam ser
 // listados; "Tipo{}" é o valor zero escrito de forma explícita.
 func (c *checker) composite(e *ast.CompositeLit) Type {
-	s := c.structs[e.Type.Name]
-	if s == nil {
+	allowed := c.litOK
+	c.litOK = false
+	var s *Struct
+	if e.Module != nil {
+		// literal de um tipo de outro arquivo: geometria.Ponto{...}
+		if c.userModule(e.Module) == nil {
+			c.errorf(e.Module.P, "módulo %s não foi importado", e.Module.Name)
+			return Invalid
+		}
+		if t, ok := c.moduleStruct(e.Module.Name, e.Type.Name, e.Type.P).(*Struct); ok {
+			s = t
+		}
+	} else if s = c.mod.structs[e.Type.Name]; s == nil {
 		c.errorf(e.Type.P, "%s não é uma struct", e.Type.Name)
+	}
+	if s == nil {
 		for _, fi := range e.Fields {
 			c.value(fi.Value)
 		}
 		return Invalid
 	}
-	allowed := c.litOK
-	c.litOK = false
+	return c.compositeOf(e, s, allowed)
+}
+
+// compositeOf checa os campos do literal de s.
+func (c *checker) compositeOf(e *ast.CompositeLit, s *Struct, allowed bool) Type {
 	if s.Resource && !allowed {
 		c.errorf(e.Type.P, "literal de %s, que contém ponteiros donos, só pode aparecer dentro de alloc(...)", s.Name)
 	}
@@ -173,6 +194,9 @@ func (c *checker) composite(e *ast.CompositeLit) Type {
 
 // selector checa "x.campo" em leitura.
 func (c *checker) selector(e *ast.SelectorExpr) Type {
+	if m := c.userModule(e.X); m != nil {
+		return c.moduleConst(e, m)
+	}
 	if id, ok := e.X.(*ast.Ident); ok && modules[id.Name] && c.scope.lookup(id.Name) == nil {
 		c.errorf(e.SelPos, "%s.%s só pode ser usado como chamada", id.Name, e.Sel)
 		return Invalid

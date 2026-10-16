@@ -1,0 +1,5 @@
+// erro: geometria.valida não é pública (declare com pub fn)
+import "geometria"
+fn main() {
+    geometria.valida(1)
+}

@@ -22,7 +22,7 @@ func buildAndRun(t *testing.T, path string) (stdout, stderr string, code int) {
 		t.Fatal(err)
 	}
 	exe := filepath.Join(t.TempDir(), "prog")
-	if err := Build(filepath.Base(path), src, exe); err != nil {
+	if err := BuildWith(filepath.Base(path), src, exe, dirLoader(path)); err != nil {
 		t.Fatalf("build falhou:\n%v", err)
 	}
 	var out, errOut bytes.Buffer
@@ -61,9 +61,9 @@ func requireCC(t *testing.T) {
 // TestRun: cada tests/run/x.mlc precisa compilar, sair com 0 e imprimir x.out.
 func TestRun(t *testing.T) {
 	requireCC(t)
-	files, _ := filepath.Glob(filepath.Join(testsDir, "run", "*.mlc"))
+	files := programs("run")
 	for _, path := range files {
-		t.Run(filepath.Base(path), func(t *testing.T) {
+		t.Run(testName(path), func(t *testing.T) {
 			out, errOut, code := buildAndRun(t, path)
 			if code != 0 {
 				t.Fatalf("código de saída %d, stderr:\n%s", code, errOut)
@@ -79,9 +79,9 @@ func TestRun(t *testing.T) {
 // reportar o panic de x.err apontando para a linha do .mlc.
 func TestPanic(t *testing.T) {
 	requireCC(t)
-	files, _ := filepath.Glob(filepath.Join(testsDir, "panic", "*.mlc"))
+	files := programs("panic")
 	for _, path := range files {
-		t.Run(filepath.Base(path), func(t *testing.T) {
+		t.Run(testName(path), func(t *testing.T) {
 			out, errOut, code := buildAndRun(t, path)
 			base := strings.TrimSuffix(path, ".mlc")
 			if code != 2 {
@@ -100,16 +100,16 @@ func TestPanic(t *testing.T) {
 // TestErrors: cada tests/errors/x.mlc começa com "// erro: <trecho>" e
 // precisa ser rejeitado com uma mensagem que contenha o trecho.
 func TestErrors(t *testing.T) {
-	files, _ := filepath.Glob(filepath.Join(testsDir, "errors", "*.mlc"))
+	files := programs("errors")
 	for _, path := range files {
-		t.Run(filepath.Base(path), func(t *testing.T) {
+		t.Run(testName(path), func(t *testing.T) {
 			src := readExpected(t, path)
 			first, _, _ := strings.Cut(src, "\n")
 			want, ok := strings.CutPrefix(first, "// erro: ")
 			if !ok {
 				t.Fatal("a primeira linha precisa ser \"// erro: <trecho esperado>\"")
 			}
-			_, err := Compile(filepath.Base(path), []byte(src))
+			_, err := CompileWith(filepath.Base(path), []byte(src), dirLoader(path))
 			if err == nil {
 				t.Fatalf("compilou, mas deveria falhar com %q", want)
 			}
@@ -146,4 +146,31 @@ fn main() {
 			t.Errorf("C gerado não contém %q:\n%s", want, csrc)
 		}
 	}
+}
+
+// programs lista os programas de teste de tests/<kind>: cada x.mlc da pasta e,
+// para programas de vários arquivos, cada <pasta>/main.mlc (os outros
+// arquivos da pasta são os módulos que ele importa).
+func programs(kind string) []string {
+	files, _ := filepath.Glob(filepath.Join(testsDir, kind, "*.mlc"))
+	multi, _ := filepath.Glob(filepath.Join(testsDir, kind, "*", "main.mlc"))
+	return append(files, multi...)
+}
+
+// dirLoader lê os imports da pasta do programa de teste. O programa é
+// compilado pelo nome sem pasta, para as mensagens não dependerem dela.
+func dirLoader(path string) Loader {
+	dir := filepath.Dir(path)
+	return func(name string) ([]byte, error) {
+		return os.ReadFile(filepath.Join(dir, name))
+	}
+}
+
+// testName nomeia o teste pelo arquivo, ou pela pasta num programa de vários
+// arquivos (projeto/main.mlc vira projeto).
+func testName(path string) string {
+	if filepath.Base(path) == "main.mlc" {
+		return filepath.Base(filepath.Dir(path))
+	}
+	return filepath.Base(path)
 }

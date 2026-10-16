@@ -1,0 +1,4 @@
+// erro: módulo desconhecido "nada": arquivo nada.mlc não encontrado
+import "nada"
+fn main() {
+}

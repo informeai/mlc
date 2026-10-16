@@ -1,0 +1,4 @@
+// erro: o caminho não pode ter . nem ..
+import "../fora"
+fn main() {
+}

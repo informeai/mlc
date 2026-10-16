@@ -66,6 +66,7 @@ const (
 	RETURN
 	BREAK
 	CONTINUE
+	PUB
 	keywordEnd
 )
 
@@ -128,6 +129,7 @@ var names = [...]string{
 	RETURN:   "return",
 	BREAK:    "break",
 	CONTINUE: "continue",
+	PUB:      "pub",
 }
 
 func (k Kind) String() string {

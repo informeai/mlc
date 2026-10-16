@@ -13,7 +13,7 @@ import (
 // Para cada struct também são geradas mlc_eq_<Nome> (==) e mlc_print_<Nome>
 // (io.print), em ordem de dependência: uma struct só usa as já definidas.
 
-func structCType(s *checker.Struct) string { return "mlc_st_" + s.Name }
+func structCType(s *checker.Struct) string { return "mlc_st_" + s.CName }
 
 func (g *gen) structs() {
 	for _, s := range g.info.Structs {
@@ -26,6 +26,7 @@ func (g *gen) structs() {
 	// slice só precisa do nome (typedef) do tipo dos elementos.
 	g.sliceTypedefs()
 	for _, s := range g.info.Structs {
+		g.file = s.File
 		g.lineDirective(s.Decl.P)
 		g.raw("struct %s {\n", structCType(s))
 		for _, f := range s.Fields {
@@ -56,12 +57,12 @@ func (g *gen) structEq(s *checker.Struct) {
 		body = strings.Join(conds, " && ")
 	}
 	t := structCType(s)
-	g.raw("static bool mlc_eq_%s(%s a, %s b) {\n    return %s;\n}\n\n", s.Name, t, t, body)
+	g.raw("static bool mlc_eq_%s(%s a, %s b) {\n    return %s;\n}\n\n", s.CName, t, t, body)
 }
 
 // structPrint imprime no formato {campo1 campo2}, como o %v do Go.
 func (g *gen) structPrint(s *checker.Struct) {
-	g.raw("static void mlc_print_%s(%s v) {\n", s.Name, structCType(s))
+	g.raw("static void mlc_print_%s(%s v) {\n", s.CName, structCType(s))
 	g.raw("    mlc_io_print_str(MLC_STR_LIT(\"{\", 1));\n")
 	for i, f := range s.Fields {
 		if i > 0 {
@@ -76,7 +77,7 @@ func (g *gen) structPrint(s *checker.Struct) {
 func eqExpr(t checker.Type, a, b string) string {
 	switch t := t.(type) {
 	case *checker.Struct:
-		return fmt.Sprintf("mlc_eq_%s(%s, %s)", t.Name, a, b)
+		return fmt.Sprintf("mlc_eq_%s(%s, %s)", t.CName, a, b)
 	}
 	if t == checker.String {
 		return fmt.Sprintf("mlc_string_eq(%s, %s)", a, b)
@@ -90,7 +91,7 @@ func printCall(t checker.Type, v string) string {
 	case *checker.Slice:
 		return fmt.Sprintf("mlc_print_%s(%s)", sliceCType(t), v)
 	case *checker.Struct:
-		return fmt.Sprintf("mlc_print_%s(%s)", t.Name, v)
+		return fmt.Sprintf("mlc_print_%s(%s)", t.CName, v)
 	}
 	switch t {
 	case checker.Int:

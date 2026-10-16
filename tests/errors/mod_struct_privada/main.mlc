@@ -1,0 +1,5 @@
+// erro: geometria.Ponto não é pública (declare com pub struct)
+import "geometria"
+fn main() {
+    var p geometria.Ponto
+}

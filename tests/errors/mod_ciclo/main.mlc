@@ -1,0 +1,4 @@
+// erro: importação circular: a → b → a
+import "a"
+fn main() {
+}

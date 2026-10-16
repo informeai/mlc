@@ -118,10 +118,22 @@ func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 		}
 		return c.pointerTo(elem, t.Mod == ast.TypeNullPtr)
 	}
+	if t.Module != "" {
+		// tipo de outro arquivo: geometria.Ponto
+		s, ok := c.moduleStruct(t.Module, t.Name, t.P).(*Struct)
+		if !ok {
+			return Invalid
+		}
+		if s.Resource && (ctx == ctxVar || ctx == ctxParam || ctx == ctxResult) {
+			c.errorf(t.P, "%s contém ponteiros donos e só pode ser usada através de um ponteiro: use *%s, ?*%s ou &%s", s.Name, s.Name, s.Name, s.Name)
+			return Invalid
+		}
+		return s
+	}
 	if bt, ok := basicTypes[t.Name]; ok {
 		return bt
 	}
-	if s, ok := c.structs[t.Name]; ok {
+	if s, ok := c.mod.structs[t.Name]; ok {
 		if s.Resource && (ctx == ctxVar || ctx == ctxParam || ctx == ctxResult) {
 			c.errorf(t.P, "%s contém ponteiros donos e só pode ser usada através de um ponteiro: use *%s, ?*%s ou &%s", s.Name, s.Name, s.Name, s.Name)
 			return Invalid
@@ -258,11 +270,26 @@ func (c *checker) builtinCall(e *ast.CallExpr, name string) (Type, bool) {
 // allocArg resolve o argumento de alloc: um nome de tipo (memória zerada) ou
 // um valor inicial.
 func (c *checker) allocArg(a ast.Expr) (Type, bool) {
+	if sel, ok := a.(*ast.SelectorExpr); ok && c.userModule(sel.X) != nil {
+		// alloc(geometria.Ponto): struct de outro arquivo, memória zerada
+		m := c.userModule(sel.X)
+		if s := m.structs[sel.Sel]; s != nil {
+			if !s.Pub {
+				c.errorf(sel.SelPos, "%s.%s não é pública (declare com pub struct)", m.name, sel.Sel)
+				return Invalid, false
+			}
+			if field, ok := hasNonNullOwner(s); ok {
+				c.errorf(a.Pos(), "alloc(%s) zera a memória, mas %s é um ponteiro *T e não pode ser nil; use alloc(%s{...}) com todos os campos", s.Name, field, s.Name)
+				return Invalid, false
+			}
+			return s, true
+		}
+	}
 	if id, ok := a.(*ast.Ident); ok && c.scope.lookup(id.Name) == nil {
 		if t, ok := basicTypes[id.Name]; ok {
 			return t, true
 		}
-		if s, ok := c.structs[id.Name]; ok {
+		if s, ok := c.mod.structs[id.Name]; ok {
 			if field, ok := hasNonNullOwner(s); ok {
 				c.errorf(a.Pos(), "alloc(%s) zera a memória, mas %s é um ponteiro *T e não pode ser nil; use alloc(%s{...}) com todos os campos", s.Name, field, s.Name)
 				return Invalid, false

@@ -17,7 +17,7 @@ func sliceCType(s *checker.Slice) string { return "mlc_sl_" + mangle(s.Elem) }
 func mangle(t checker.Type) string {
 	switch t := t.(type) {
 	case *checker.Struct:
-		return "st_" + t.Name
+		return "st_" + t.CName
 	case *checker.Pointer:
 		return "p_" + mangle(t.Elem)
 	case *checker.Slice:

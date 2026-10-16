@@ -1,0 +1,6 @@
+// erro: geometria.MAX não é pública (declare com pub const)
+import "io"
+import "geometria"
+fn main() {
+    io.print(geometria.MAX)
+}

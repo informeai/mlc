@@ -13,12 +13,12 @@ import (
 // constante só pode usar as declaradas antes dela.
 func (c *checker) collectConsts(f *ast.File) {
 	for _, d := range f.Consts {
-		c.pendingConsts[d.Name] = true
+		c.mod.pendingConsts[d.Name] = true
 	}
 	c.cnames = map[string]int{} // constantes não geram nome no C, mas declare conta os nomes
-	c.scope = c.global
+	c.scope = c.mod.global
 	for _, d := range f.Consts {
-		delete(c.pendingConsts, d.Name)
+		delete(c.mod.pendingConsts, d.Name)
 		c.constDecl(d)
 	}
 	c.scope = nil
@@ -38,6 +38,7 @@ func (c *checker) constDecl(d *ast.ConstDecl) {
 	}
 	l := c.declare(d.Name, d.P, t, false)
 	l.IsConst = true
+	l.Pub = d.Pub
 	l.Const = v
 	l.Used = true // constante não usada não é erro
 }
@@ -68,7 +69,7 @@ func (c *checker) constValue(e ast.Expr) (any, Type) {
 		switch {
 		case e.Name == "true" || e.Name == "false":
 			return e.Name == "true", Bool
-		case c.pendingConsts[e.Name]:
+		case c.mod.pendingConsts[e.Name]:
 			c.errorf(e.P, "constante %s usada antes de ser declarada", e.Name)
 		default:
 			c.errorf(e.P, "identificador não declarado: %s", e.Name)

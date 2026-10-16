@@ -132,6 +132,8 @@ func (p *Parser) parseFile() *ast.File {
 			p.next()
 		case token.IMPORT:
 			f.Imports = append(f.Imports, p.parseImport())
+		case token.PUB:
+			p.parsePub(f)
 		case token.FN:
 			f.Funcs = append(f.Funcs, p.parseFunc())
 		case token.STRUCT:
@@ -217,6 +219,13 @@ func (p *Parser) parseType() *ast.TypeExpr {
 	case token.IDENT:
 		name := p.tok.Lit
 		p.next()
+		if p.tok.Kind == token.PERIOD && p.peek.Kind == token.IDENT {
+			// tipo de outro arquivo: geometria.Ponto
+			p.next()
+			qualified := &ast.TypeExpr{Module: name, Name: p.tok.Lit, P: pos}
+			p.next()
+			return qualified
+		}
 		return &ast.TypeExpr{Name: name, P: pos}
 	case token.LBRACK:
 		p.next()
@@ -408,6 +417,12 @@ func (p *Parser) parsePattern() *ast.Pattern {
 			pat.Lit = &ast.Ident{Name: t.Lit, P: t.Pos}
 		}
 		p.next()
+		if id, ok := pat.Lit.(*ast.Ident); ok && p.tok.Kind == token.PERIOD && p.peek.Kind == token.IDENT {
+			// constante de outro arquivo: geometria.MAX
+			p.next()
+			pat.Lit = &ast.SelectorExpr{X: id, Sel: p.tok.Lit, SelPos: p.tok.Pos}
+			p.next()
+		}
 		return pat
 	case token.SUB:
 		p.next()
@@ -474,8 +489,8 @@ func (p *Parser) parseForHeader(s *ast.ForStmt) {
 }
 
 // parseComposite lê "Tipo{campo: valor, ...}" depois do nome do tipo.
-func (p *Parser) parseComposite(typ *ast.Ident) *ast.CompositeLit {
-	lit := &ast.CompositeLit{Type: typ, Lbrace: p.expect(token.LBRACE).Pos}
+func (p *Parser) parseComposite(mod, typ *ast.Ident) *ast.CompositeLit {
+	lit := &ast.CompositeLit{Module: mod, Type: typ, Lbrace: p.expect(token.LBRACE).Pos}
 	p.withLit(true, func() {
 		for p.tok.Kind != token.RBRACE {
 			name := p.expect(token.IDENT)
@@ -567,11 +582,22 @@ func (p *Parser) parsePostfix() ast.Expr {
 			sel := p.expect(token.IDENT)
 			x = &ast.SelectorExpr{X: x, Sel: sel.Lit, SelPos: sel.Pos}
 		case token.LBRACE:
-			id, ok := x.(*ast.Ident)
-			if !ok || p.noLit {
+			if p.noLit {
 				return x
 			}
-			x = p.parseComposite(id)
+			switch t := x.(type) {
+			case *ast.Ident:
+				x = p.parseComposite(nil, t)
+			case *ast.SelectorExpr:
+				// literal de um tipo de outro arquivo: geometria.Ponto{...}
+				mod, ok := t.X.(*ast.Ident)
+				if !ok {
+					return x
+				}
+				x = p.parseComposite(mod, &ast.Ident{Name: t.Sel, P: t.SelPos})
+			default:
+				return x
+			}
 		case token.LBRACK:
 			pos := p.tok.Pos
 			p.next()
@@ -629,4 +655,25 @@ func (p *Parser) parsePrimary() ast.Expr {
 	}
 	p.unexpected("esperado expressão")
 	return nil
+}
+
+// parsePub lê uma declaração pública: pub fn, pub struct ou pub const.
+func (p *Parser) parsePub(f *ast.File) {
+	pos := p.expect(token.PUB).Pos
+	switch p.tok.Kind {
+	case token.FN:
+		fn := p.parseFunc()
+		fn.Pub = true
+		f.Funcs = append(f.Funcs, fn)
+	case token.STRUCT:
+		s := p.parseStruct()
+		s.Pub = true
+		f.Structs = append(f.Structs, s)
+	case token.CONST:
+		c := p.parseConst()
+		c.Pub = true
+		f.Consts = append(f.Consts, c)
+	default:
+		p.errorf(pos, "pub só vale antes de fn, struct ou const")
+	}
 }

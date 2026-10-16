@@ -1,0 +1,5 @@
+// erro: geometria.volume não existe
+import "geometria"
+fn main() {
+    geometria.volume()
+}

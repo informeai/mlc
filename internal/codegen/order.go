@@ -56,6 +56,9 @@ func (g *gen) isLiteral(e ast.Expr) bool {
 	switch e := e.(type) {
 	case *ast.IntLit, *ast.StringLit:
 		return true
+	case *ast.SelectorExpr:
+		_, isConst := g.info.Consts[e]
+		return isConst
 	case *ast.Ident:
 		_, isConst := g.info.Consts[e]
 		return isConst || g.info.Locals[e] == nil // constante, true ou false

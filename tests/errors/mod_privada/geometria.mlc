@@ -1,0 +1,3 @@
+fn valida(n int) bool {
+    return n > 0
+}

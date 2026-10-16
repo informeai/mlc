@@ -1,0 +1,4 @@
+// erro: fn main só pode existir no arquivo principal; outro.mlc é importado
+import "outro"
+fn main() {
+}

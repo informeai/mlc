@@ -1,4 +1,4 @@
-// erro: módulo desconhecido "texto" (disponíveis: "io", "str")
+// erro: módulo desconhecido "texto": arquivo texto.mlc não encontrado
 import "texto"
 fn main() {
 }

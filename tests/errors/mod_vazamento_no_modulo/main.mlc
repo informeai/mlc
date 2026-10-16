@@ -1,0 +1,5 @@
+// erro: lista.mlc:4:1: vazamento: n ainda é dona da memória
+import "lista"
+fn main() {
+    lista.faz()
+}

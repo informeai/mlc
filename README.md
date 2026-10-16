@@ -60,6 +60,8 @@ O compilador C usado é o da variável `CC` (padrão: `cc`).
 | `tests/panic` | programas que devem abortar (`.out` + `.err`) |
 | `tests/errors` | programas que devem ser rejeitados (`// erro: ...` na 1ª linha) |
 
+Um programa de vários arquivos fica numa pasta própria, com o principal em `main.mlc` (por exemplo `tests/run/projeto/main.mlc`) e os arquivos importados ao lado.
+
 ```sh
 go test ./...
 ```
@@ -100,3 +102,4 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 - [x] **Slices, parte 2:** `realloc(s, n)` (consome o slice e devolve outro, novos elementos zerados) e sub-slices emprestados `&s[a:b]`
 - [x] **Slices de donos:** `[]?*T` e `[][]T`, com `take(&s[i])`, `replace(&s[i], v)` e `for x in drain(s)`; `free(s)` provado seguro na compilação
 - [x] **Marco 7:** texto em buffers explícitos: tipo `byte` e literais `'a'`, conversões `int(x)`/`byte(x)`, módulo `str` (`copy`, `put_int`, `int_len`, `eq`, `parse_int`) e `io.write`/`io.read_line`, nenhum deles aloca. Veja [docs/texto.md](docs/texto.md)
+- [x] **Vários arquivos:** `import "geometria"` (caminho relativo à pasta do arquivo principal), visibilidade explícita com `pub`, nomes qualificados (`geometria.area`, `geometria.Ponto`), importação circular recusada

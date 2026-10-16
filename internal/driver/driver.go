@@ -10,7 +10,6 @@ import (
 
 	"mlc/internal/checker"
 	"mlc/internal/codegen"
-	"mlc/internal/parser"
 	"mlc/internal/token"
 	"mlc/rt"
 )
@@ -26,17 +25,23 @@ func (e Errors) Error() string {
 	return strings.Join(lines, "\n")
 }
 
-// Compile traduz o código MLC de file para C.
+// Compile traduz o programa cujo arquivo principal é file para C. Os imports
+// são lidos do disco, relativos à pasta de file.
 func Compile(file string, src []byte) (string, error) {
-	f, errs := parser.ParseFile(file, src)
+	return CompileWith(file, src, os.ReadFile)
+}
+
+// CompileWith é Compile com outra forma de ler os arquivos importados.
+func CompileWith(file string, src []byte, read Loader) (string, error) {
+	srcs, errs := load(file, src, read)
 	if len(errs) > 0 {
 		return "", Errors(errs)
 	}
-	info, errs := checker.Check(file, f)
+	info, errs := checker.CheckProgram(srcs)
 	if len(errs) > 0 {
 		return "", Errors(errs)
 	}
-	return codegen.Generate(file, f, info), nil
+	return codegen.Generate(file, srcs[len(srcs)-1].AST, info), nil
 }
 
 // extraCFlags é acrescentado à linha do compilador C. Os testes usam
@@ -46,7 +51,12 @@ var extraCFlags []string
 // Build compila src até um executável em out. O compilador C é o da
 // variável CC, ou cc.
 func Build(file string, src []byte, out string) error {
-	csrc, err := Compile(file, src)
+	return BuildWith(file, src, out, os.ReadFile)
+}
+
+// BuildWith é Build com outra forma de ler os arquivos importados.
+func BuildWith(file string, src []byte, out string, read Loader) error {
+	csrc, err := CompileWith(file, src, read)
 	if err != nil {
 		return err
 	}

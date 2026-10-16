@@ -1,0 +1,7 @@
+import "io"
+import "conta"
+
+fn main() {
+    io.print(conta.divide(10, 2))
+    io.print(conta.divide(1, 0))
+}

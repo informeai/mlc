@@ -51,10 +51,15 @@ type Local struct {
 
 	IsConst bool // constante: Const tem o valor (int64, string ou bool)
 	Const   any
+	Pub     bool // constante pública (pub const)
 }
 
 type Func struct {
 	Name   string
+	CName  string // nome no C gerado (mlc_fn_...)
+	File   string // arquivo da declaração
+	Pub    bool
+	mod    *module
 	Params []*Local
 	Result Type
 	Decl   *ast.FuncDecl // nil numa função nativa
@@ -93,7 +98,8 @@ type Info struct {
 	// string ou bool. O curinga _ não aparece.
 	Patterns map[*ast.Pattern]any
 	// Consts guarda o valor dos identificadores que se referem a constantes.
-	Consts  map[*ast.Ident]any
+	Consts  map[ast.Expr]any          // *ast.Ident ou geometria.PI (*ast.SelectorExpr)
+	Main    *Func                     // fn main do arquivo principal
 	Structs []*Struct                 // cada struct depois das que ela contém
 	Slices  []*Slice                  // tipos slice usados, para o gerador declarar
 	ForVars map[*ast.ForStmt]*Local   // a variável de cada for x in s
@@ -118,68 +124,88 @@ func (s *scope) lookup(name string) *Local {
 }
 
 type checker struct {
-	file    string
 	info    *Info
-	imports map[string]bool
-	funcs   map[string]*Func
-	structs map[string]*Struct
-	global  *scope // constantes do topo; pai do escopo de cada função
+	mod     *module            // arquivo em checagem
+	modules map[string]*module // arquivos importados, pelo caminho do import
+	order   map[string]int     // ordem de cada arquivo, para ordenar os erros
 
-	pendingConsts map[string]bool // constantes do topo ainda não avaliadas
-	pointers      map[ptrKey]*Pointer
-	litOK         bool // o próximo literal composto pode conter ponteiros donos (dentro de alloc)
-	borrows       map[Type]*Borrow
-	slices        map[Type]*Slice
-	natives       map[string]*Func
-	scope         *scope
-	fn            *Func
-	errs          []token.Error
+	pointers map[ptrKey]*Pointer
+	litOK    bool // o próximo literal composto pode conter ponteiros donos (dentro de alloc)
+	borrows  map[Type]*Borrow
+	slices   map[Type]*Slice
+	natives  map[string]*Func
+	scope    *scope
+	fn       *Func
+	errs     []token.Error
 
 	cnames map[string]int        // quantas variáveis com cada nome a função já declarou
 	loops  []*ast.ForStmt        // laços abertos, o mais interno por último
 	breaks map[*ast.ForStmt]bool // laços que têm break direto
 }
 
+// Source é um arquivo do programa, já analisado pelo parser.
+type Source struct {
+	Path string // caminho usado no import ("" para o arquivo principal)
+	File string // nome do arquivo, para mensagens e #line
+	AST  *ast.File
+}
+
+// Check checa um programa de um arquivo só.
 func Check(file string, f *ast.File) (*Info, []token.Error) {
+	return CheckProgram([]Source{{File: file, AST: f}})
+}
+
+// CheckProgram checa um programa de vários arquivos. Cada arquivo vem depois
+// dos que ele importa, e o principal (Path vazio) vem por último.
+func CheckProgram(srcs []Source) (*Info, []token.Error) {
 	c := &checker{
-		file: file,
+		modules: map[string]*module{},
+		order:   map[string]int{},
 		info: &Info{
 			Types:    map[ast.Expr]Type{},
 			Locals:   map[*ast.Ident]*Local{},
 			Decls:    map[*ast.VarDecl]*Local{},
 			Patterns: map[*ast.Pattern]any{},
-			Consts:   map[*ast.Ident]any{},
+			Consts:   map[ast.Expr]any{},
 			ForVars:  map[*ast.ForStmt]*Local{},
 			Drains:   map[*ast.ForStmt]ast.Expr{},
 			Calls:    map[*ast.CallExpr]Callee{},
 		},
-		imports: map[string]bool{},
-		funcs:   map[string]*Func{},
-		structs: map[string]*Struct{},
-		global:  &scope{names: map[string]*Local{}},
-
-		pendingConsts: map[string]bool{},
-		pointers:      map[ptrKey]*Pointer{},
-		borrows:       map[Type]*Borrow{},
-		slices:        map[Type]*Slice{},
-		natives:       map[string]*Func{},
-		breaks:        map[*ast.ForStmt]bool{},
+		pointers: map[ptrKey]*Pointer{},
+		borrows:  map[Type]*Borrow{},
+		slices:   map[Type]*Slice{},
+		natives:  map[string]*Func{},
+		breaks:   map[*ast.ForStmt]bool{},
 	}
-	c.collectImports(f)
-	c.collectStructs(f)
-	c.collectConsts(f)
-	c.collectFuncs(f)
-	for _, fn := range c.info.Funcs {
-		c.checkFunc(fn)
+	for i, src := range srcs {
+		c.order[src.File] = i
+		c.mod = c.newModule(src, i)
+		c.collectImports(src.AST)
+		c.collectStructs(src.AST)
+		c.collectConsts(src.AST)
+		c.collectFuncs(src.AST)
+		for _, fn := range c.info.Funcs {
+			if fn.mod == c.mod {
+				c.checkFunc(fn)
+			}
+		}
 	}
 	// A posse só é verificada num programa sem erros de tipo: ela depende
 	// dos tipos resolvidos.
 	if len(c.errs) == 0 {
 		for _, fn := range c.info.Funcs {
+			c.mod = fn.mod
 			c.checkOwnership(fn)
 		}
 	}
-	sort.SliceStable(c.errs, func(i, j int) bool { return c.errs[i].Pos.Before(c.errs[j].Pos) })
+	// Erros na ordem dos arquivos e, dentro de cada um, na ordem do código.
+	sort.SliceStable(c.errs, func(i, j int) bool {
+		a, b := c.errs[i], c.errs[j]
+		if a.File != b.File {
+			return c.order[a.File] < c.order[b.File]
+		}
+		return a.Pos.Before(b.Pos)
+	})
 	return c.info, c.errs
 }
 
@@ -213,7 +239,12 @@ func (c *checker) declare(name string, pos token.Pos, t Type, param bool) *Local
 		l.Used = true
 		return l
 	}
-	if c.structs[name] != nil {
+	if c.mod.uses[name] != nil {
+		c.errorf(pos, "o nome %s é um módulo importado", name)
+		l.Used = true
+		return l
+	}
+	if c.mod.structs[name] != nil {
 		c.errorf(pos, "o nome %s já é um tipo (struct)", name)
 		l.Used = true
 		return l
@@ -230,23 +261,10 @@ func (c *checker) declare(name string, pos token.Pos, t Type, param bool) *Local
 }
 
 func (c *checker) errorf(pos token.Pos, format string, args ...any) {
-	c.errs = append(c.errs, token.Error{File: c.file, Pos: pos, Msg: fmt.Sprintf(format, args...)})
+	c.errs = append(c.errs, token.Error{File: c.mod.file, Pos: pos, Msg: fmt.Sprintf(format, args...)})
 }
 
 // ---------- Declarações ----------
-
-func (c *checker) collectImports(f *ast.File) {
-	for _, imp := range f.Imports {
-		switch {
-		case !modules[imp.Path]:
-			c.errorf(imp.P, "módulo desconhecido %q (disponíveis: \"io\", \"str\")", imp.Path)
-		case c.imports[imp.Path]:
-			c.errorf(imp.P, "módulo %q importado duas vezes", imp.Path)
-		default:
-			c.imports[imp.Path] = true
-		}
-	}
-}
 
 func (c *checker) collectFuncs(f *ast.File) {
 	for _, d := range f.Funcs {
@@ -254,15 +272,18 @@ func (c *checker) collectFuncs(f *ast.File) {
 			c.errorf(d.P, "o nome %q é reservado", d.Name)
 			continue
 		}
-		if c.structs[d.Name] != nil || c.global.names[d.Name] != nil {
+		if c.mod.structs[d.Name] != nil || c.mod.global.names[d.Name] != nil {
 			c.errorf(d.P, "o nome %s já é usado por uma struct ou constante", d.Name)
 			continue
 		}
-		if prev, ok := c.funcs[d.Name]; ok {
+		if prev, ok := c.mod.funcs[d.Name]; ok {
 			c.errorf(d.P, "função %s já declarada na linha %d", d.Name, prev.Decl.P.Line)
 			continue
 		}
-		fn := &Func{Name: d.Name, Result: Void, Decl: d}
+		fn := &Func{
+			Name: c.qualify(d.Name), Result: Void, Decl: d,
+			CName: "mlc_fn_" + c.mod.prefix + d.Name, File: c.mod.file, Pub: d.Pub, mod: c.mod,
+		}
 		seen := map[string]bool{}
 		for _, p := range d.Params {
 			switch {
@@ -279,16 +300,21 @@ func (c *checker) collectFuncs(f *ast.File) {
 		if d.Result != nil {
 			fn.Result = c.resolveType(d.Result, ctxResult)
 		}
-		c.funcs[d.Name] = fn
+		c.mod.funcs[d.Name] = fn
 		c.info.Funcs = append(c.info.Funcs, fn)
 	}
 
-	main := c.funcs["main"]
+	main := c.mod.funcs["main"]
 	switch {
+	case !c.entry() && main != nil:
+		c.errorf(main.Decl.P, "fn main só pode existir no arquivo principal; %s é importado", c.mod.file)
+	case !c.entry():
 	case main == nil:
 		c.errorf(token.Pos{Line: 1, Col: 1}, "função main não declarada")
 	case len(main.Params) > 0 || main.Result != Void:
 		c.errorf(main.Decl.P, "main não recebe parâmetros nem retorna valor")
+	default:
+		c.info.Main = main
 	}
 }
 
@@ -296,7 +322,8 @@ func (c *checker) collectFuncs(f *ast.File) {
 
 func (c *checker) checkFunc(fn *Func) {
 	c.fn = fn
-	c.scope = c.global
+	c.mod = fn.mod
+	c.scope = c.mod.global
 	c.cnames = map[string]int{}
 	c.pushScope()
 	for _, p := range fn.Params {
@@ -544,6 +571,15 @@ func (c *checker) patternValue(p *ast.Pattern) (any, Type) {
 		return lit.Value, String
 	case *ast.CharLit:
 		return int64(lit.Value), Byte
+	case *ast.SelectorExpr:
+		if m := c.userModule(lit.X); m != nil {
+			t := c.moduleConst(lit, m)
+			if v, ok := c.info.Consts[lit]; ok {
+				return v, t
+			}
+			return nil, Invalid
+		}
+		c.errorf(p.P, "padrão precisa ser um literal, uma constante ou _")
 	case *ast.Ident:
 		if l := c.scope.lookup(lit.Name); l != nil {
 			if !l.IsConst {
@@ -637,7 +673,7 @@ func (c *checker) targetVar(id *ast.Ident) Type {
 	case l != nil:
 		c.info.Locals[id] = l
 		return l.Type
-	case c.funcs[id.Name] != nil || c.structs[id.Name] != nil || predeclared[id.Name] || modules[id.Name]:
+	case c.mod.funcs[id.Name] != nil || c.mod.structs[id.Name] != nil || predeclared[id.Name] || modules[id.Name]:
 		c.errorf(id.P, "não é possível atribuir a %s", id.Name)
 	default:
 		c.errorf(id.P, "identificador não declarado: %s", id.Name)
@@ -723,13 +759,15 @@ func (c *checker) ident(e *ast.Ident) Type {
 		return Invalid
 	}
 	switch {
-	case c.funcs[e.Name] != nil:
+	case c.mod.funcs[e.Name] != nil:
 		c.errorf(e.P, "função %s usada como valor (faltou chamar?)", e.Name)
+	case c.mod.uses[e.Name] != nil:
+		c.errorf(e.P, "módulo %s usado como valor", e.Name)
 	case modules[e.Name]:
 		c.errorf(e.P, "módulo %s usado como valor", e.Name)
 	case basicTypes[e.Name] != nil:
 		c.errorf(e.P, "tipo %s usado como valor", e.Name)
-	case c.structs[e.Name] != nil:
+	case c.mod.structs[e.Name] != nil:
 		c.errorf(e.P, "tipo %s usado como valor (para criar um valor: %s{...}; no cabeçalho de if, for ou match, entre parênteses)", e.Name, e.Name)
 	default:
 		c.errorf(e.P, "identificador não declarado: %s", e.Name)
@@ -826,11 +864,14 @@ func (c *checker) binary(e *ast.BinaryExpr) Type {
 func (c *checker) call(e *ast.CallExpr) Type {
 	switch fun := e.Fun.(type) {
 	case *ast.SelectorExpr:
+		if m := c.userModule(fun.X); m != nil {
+			return c.moduleCall(e, m, fun)
+		}
 		id, ok := fun.X.(*ast.Ident)
 		if !ok || !modules[id.Name] || c.scope.lookup(id.Name) != nil {
 			break
 		}
-		if !c.imports[id.Name] {
+		if !c.mod.imports[id.Name] {
 			c.errorf(id.P, "módulo %s não foi importado (adicione: import %q)", id.Name, id.Name)
 			c.checkArgs(e)
 			return Invalid
@@ -865,7 +906,7 @@ func (c *checker) call(e *ast.CallExpr) Type {
 		if bt, ok := basicTypes[fun.Name]; ok && c.scope.lookup(fun.Name) == nil {
 			return c.conversion(e, bt)
 		}
-		fn := c.funcs[fun.Name]
+		fn := c.mod.funcs[fun.Name]
 		if fn == nil || c.scope.lookup(fun.Name) != nil {
 			break
 		}

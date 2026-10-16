@@ -1,0 +1,4 @@
+// erro: import "geometria.mlc": escreva sem a extensão: import "geometria"
+import "geometria.mlc"
+fn main() {
+}

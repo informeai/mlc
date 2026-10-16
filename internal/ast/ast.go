@@ -16,6 +16,7 @@ type File struct {
 
 type StructDecl struct {
 	Name   string
+	Pub    bool
 	Fields []*FieldDecl
 	P      token.Pos
 }
@@ -29,6 +30,7 @@ type FieldDecl struct {
 // ConstDecl é "const N T = v", no topo do arquivo ou dentro de um bloco.
 type ConstDecl struct {
 	Name  string
+	Pub   bool
 	Type  *TypeExpr // opcional
 	Value Expr
 	P     token.Pos // posição do nome
@@ -47,6 +49,7 @@ type Import struct {
 
 type FuncDecl struct {
 	Name   string
+	Pub    bool // visível para quem importa o arquivo
 	Params []*Param
 	Result *TypeExpr // nil quando a função não retorna valor
 	Body   *Block
@@ -62,10 +65,11 @@ type Param struct {
 // TypeExpr é um tipo escrito no código: um nome (int, Ponto) ou um
 // modificador aplicado a Elem: []T, *T, ?*T ou &T.
 type TypeExpr struct {
-	Name string
-	Mod  TypeMod
-	Elem *TypeExpr // não nil quando Mod != TypeNamed
-	P    token.Pos
+	Name   string
+	Module string // qualificador: "geometria" em geometria.Ponto
+	Mod    TypeMod
+	Elem   *TypeExpr // não nil quando Mod != TypeNamed
+	P      token.Pos
 }
 
 type TypeMod int
@@ -282,6 +286,7 @@ func (*IndexExpr) exprNode()    {}
 // CompositeLit é "Ponto{x: 1, y: 2}". Fields vazio significa o valor zero.
 type CompositeLit struct {
 	Type   *Ident
+	Module *Ident // qualificador: geometria em geometria.Ponto{...}
 	Fields []*FieldInit
 	Lbrace token.Pos
 }

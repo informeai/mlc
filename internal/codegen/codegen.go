@@ -1,7 +1,8 @@
 // Package codegen traduz um programa já checado para C11.
 //
 // Convenções do C gerado:
-//   - funções do usuário viram mlc_fn_<nome>; variáveis viram l_<nome> (ou
+//   - funções do usuário viram mlc_fn_<nome> (com o prefixo do arquivo, se
+//     vier de um import); variáveis viram l_<nome> (ou
 //     lN_<nome> quando o nome é redeclarado na função), o que evita colisão
 //     com palavras reservadas e com a biblioteca do C;
 //   - cada comando é precedido de #line, para que erros e panics do runtime
@@ -56,7 +57,7 @@ func Generate(file string, f *ast.File, info *checker.Info) string {
 	for _, fn := range info.Funcs {
 		g.function(fn)
 	}
-	g.raw("int main(void) {\n    mlc_fn_main();\n    mlc_check_allocs();\n    return 0;\n}\n")
+	g.raw("int main(void) {\n    %s();\n    mlc_check_allocs();\n    return 0;\n}\n", info.Main.CName)
 	return g.buf.String()
 }
 
@@ -113,10 +114,11 @@ func signature(fn *checker.Func) string {
 	if len(params) > 0 {
 		list = strings.Join(params, ", ")
 	}
-	return fmt.Sprintf("%s mlc_fn_%s(%s)", cType(fn.Result), fn.Name, list)
+	return fmt.Sprintf("%s %s(%s)", cType(fn.Result), fn.CName, list)
 }
 
 func (g *gen) function(fn *checker.Func) {
+	g.file = fn.File // cada função aponta para o arquivo dela (vale também para o corpo)
 	// O corpo é gerado antes, num buffer à parte, para saber quais
 	// temporárias declarar no começo da função.
 	g.temps = nil
@@ -497,6 +499,9 @@ func (g *gen) expr(e ast.Expr) string {
 	case *ast.IndexExpr:
 		return g.index(e)
 	case *ast.SelectorExpr:
+		if v, ok := g.info.Consts[e]; ok {
+			return constLit(v) // geometria.PI
+		}
 		if isPointer(g.info.Types[e.X]) {
 			return g.expr(e.X) + "->f_" + e.Sel
 		}
@@ -531,7 +536,7 @@ func (g *gen) expr(e ast.Expr) string {
 			args = append(args, "__FILE__", "__LINE__")
 			return sequence(pre, fmt.Sprintf("%s(%s)", callee.Func.Native, strings.Join(args, ", ")))
 		}
-		return sequence(pre, fmt.Sprintf("mlc_fn_%s(%s)", callee.Func.Name, strings.Join(args, ", ")))
+		return sequence(pre, fmt.Sprintf("%s(%s)", callee.Func.CName, strings.Join(args, ", ")))
 	}
 	panic(fmt.Sprintf("codegen: expressão desconhecida %T", e))
 }

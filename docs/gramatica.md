@@ -5,8 +5,8 @@ Notação EBNF: `=` define, `|` alterna, `[ ]` é opcional, `{ }` repete zero ou
 ```ebnf
 (* ---------- Programa ---------- *)
 program      = { import_decl | top_decl } ;
-import_decl  = "import" string_lit eos ;
-top_decl     = fn_decl | struct_decl | const_decl ;
+import_decl  = "import" string_lit eos ;           (* "io", "str" ou o caminho de um arquivo, sem .mlc *)
+top_decl     = [ "pub" ] ( fn_decl | struct_decl | const_decl ) ;
 
 (* ---------- Declarações de topo ---------- *)
 fn_decl      = "fn" ident "(" [ param_list ] ")" [ type ] block ;
@@ -19,7 +19,7 @@ field_decl   = ident type ;
 const_decl   = "const" ident [ type ] "=" expr eos ;
 
 (* ---------- Tipos ---------- *)
-type         = ident | "[" "]" type | "*" type | "?" "*" type | "&" type ;
+type         = [ ident "." ] ident | "[" "]" type | "*" type | "?" "*" type | "&" type ;   (* geometria.Ponto *)
 
 (* ---------- Blocos e comandos ---------- *)
 block        = "{" { statement } "}" ;
@@ -107,6 +107,7 @@ eos          = ";" | (* inserido pelo lexer no fim da linha *) ;
 - **`for x in s`:** `s` precisa ser uma variável ou campo slice; `x` recebe uma cópia de cada elemento. O nome `_` descarta o elemento.
 - **Índice:** `s[i]` em slice dá o elemento; em string, o byte como `int`. Fora dos limites, panic.
 - **`for x in drain(s)`:** só para slices de donos; cada elemento sai do slice para `x`, que precisa ser liberado ou movido na volta. `drain` só existe nessa forma.
+- **Arquivos:** `import "geometria"` carrega `geometria.mlc`; o caminho é relativo à pasta do arquivo principal (`import "util/texto"` carrega `util/texto.mlc`, e o módulo se chama `texto`). O que o arquivo declara com `pub` é usado com o nome do módulo na frente: `geometria.area(r)`, `geometria.Ponto{...}`, `geometria.PI`, inclusive em tipos e em padrões de `match`. Importação circular é erro, e `fn main` só existe no arquivo principal.
 - **Conversões:** `int(x)` e `byte(x)` têm a forma de chamada; `byte(n)` dá panic fora de 0 a 255.
 - **Sub-slice:** `s[a:b]`, com `a` e `b` opcionais, só existe emprestado como argumento de chamada: `f(&s[a:b])`.
 - **Structs** podem ser declaradas em qualquer ordem, mas não podem conter a si mesmas por valor, nem por um caminho indireto.

@@ -1,0 +1,10 @@
+pub fn dobro(n int) int {
+    return n * 2
+}
+
+pub fn maior(a int, b int) int {
+    if a > b {
+        return a
+    }
+    return b
+}

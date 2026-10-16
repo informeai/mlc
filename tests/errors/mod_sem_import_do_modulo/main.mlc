@@ -1,0 +1,4 @@
+// erro: módulo geometria não foi importado
+fn main() {
+    var p geometria.Ponto
+}

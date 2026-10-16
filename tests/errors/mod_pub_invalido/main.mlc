@@ -1,0 +1,4 @@
+// erro: pub só vale antes de fn, struct ou const
+pub var x = 1
+fn main() {
+}
