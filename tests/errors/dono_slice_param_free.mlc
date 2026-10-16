@@ -1,0 +1,7 @@
+// erro: free(s): os elementos de s podem ainda ser donos de memória
+struct Item { peso int }
+fn f(s []?*Item) {
+    free(s)
+}
+fn main() {
+}

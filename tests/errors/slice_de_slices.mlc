@@ -1,5 +1,6 @@
-// erro: slices de slices ainda não são suportados
-fn f(s [][]int) {
+// erro: slices de slices de donos ainda não são suportados
+struct No { x int }
+fn f(s [][]?*No) {
 }
 fn main() {
 }

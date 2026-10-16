@@ -1,0 +1,9 @@
+// erro: s pode já ter sido liberada ou movida (linha 7), dependendo do caminho
+struct Item { peso int }
+fn main() {
+    s := alloc([]?*Item, 2)
+    for x in drain(s) {
+        free(x)
+        free(s)
+    }
+}

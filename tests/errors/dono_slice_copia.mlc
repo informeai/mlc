@@ -1,0 +1,8 @@
+// erro: um elemento dono não pode ser copiado nem movido direto: use take(&s[i])
+struct Item { peso int }
+fn main() {
+    s := alloc([]?*Item, 2)
+    x := s[0]
+    free(x)
+    free(s)
+}

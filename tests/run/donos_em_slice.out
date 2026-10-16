@@ -1,0 +1,9 @@
+itens: 3 capacidade: 3 peso: 10
+tirei corda
+vazio agora: true
+peso: 8
+tirando faca
+tirando lanterna
+tirando água
+[0 1 2] [3 100 5] [6 7 8] 3
+soma: 132

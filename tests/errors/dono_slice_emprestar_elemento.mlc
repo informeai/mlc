@@ -1,0 +1,9 @@
+// erro: s[i] pode ser nil e não pode ser emprestado direto
+struct Item { peso int }
+fn ve(it &Item) {
+}
+fn main() {
+    s := alloc([]?*Item, 2)
+    ve(&s[0])
+    free(s)
+}

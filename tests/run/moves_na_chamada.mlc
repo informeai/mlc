@@ -1,0 +1,12 @@
+import "io"
+
+fn consome(s []int, n int) int {
+    free(s)
+    return n
+}
+
+fn main() {
+    s := alloc([]int, 4)
+    // len(s) é lido antes de s ser passada adiante
+    io.print(consome(s, len(s)))
+}

@@ -1,4 +1,4 @@
-// erro: slices de ponteiros ainda não são suportados
+// erro: elementos de slice começam zerados (nil), então não podem ser *T: use []?*T
 struct No { x int }
 fn f(s []*No) {
 }

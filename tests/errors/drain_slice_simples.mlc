@@ -1,0 +1,7 @@
+// erro: drain serve para slices de donos; para percorrer []int, use for x in s
+fn main() {
+    s := alloc([]int, 2)
+    for x in drain(s) {
+    }
+    free(s)
+}

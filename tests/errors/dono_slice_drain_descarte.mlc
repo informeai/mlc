@@ -1,0 +1,8 @@
+// erro: o elemento tirado por drain precisa de um nome
+struct Item { peso int }
+fn main() {
+    s := alloc([]?*Item, 2)
+    for _ in drain(s) {
+    }
+    free(s)
+}

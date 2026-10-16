@@ -1,0 +1,11 @@
+// erro: vazamento: x ainda é dona da memória (linha 5) no fim da volta do for (o elemento tirado por drain)
+struct Item { peso int }
+fn main() {
+    s := alloc([]?*Item, 2)
+    for x in drain(s) {
+        if x == nil {
+            continue
+        }
+    }
+    free(s)
+}

@@ -18,6 +18,10 @@ func mangle(t checker.Type) string {
 	switch t := t.(type) {
 	case *checker.Struct:
 		return "st_" + t.Name
+	case *checker.Pointer:
+		return "p_" + mangle(t.Elem)
+	case *checker.Slice:
+		return "sl_" + mangle(t.Elem)
 	}
 	switch t {
 	case checker.Int:
@@ -42,6 +46,9 @@ func (g *gen) sliceTypedefs() {
 // slicePrints gera a impressão de cada tipo slice: [a b c].
 func (g *gen) slicePrints() {
 	for _, s := range g.info.Slices {
+		if _, ptrs := s.Elem.(*checker.Pointer); ptrs {
+			continue // slices de ponteiros não são impressos
+		}
 		g.raw("static void mlc_print_%s(%s v) {\n", sliceCType(s), sliceCType(s))
 		g.raw("    mlc_io_print_str(MLC_STR_LIT(\"[\", 1));\n")
 		g.raw("    for (int64_t i = 0; i < v.len; i++) {\n")
@@ -66,6 +73,13 @@ func (g *gen) index(e *ast.IndexExpr) string {
 	if !ok {
 		i = g.expr(e.Index)
 	}
+	if st, isSl := g.info.Types[e.X].(*checker.Slice); isSl && hasCall(e.X) {
+		// m[f()][j]: o slice de dentro aparece duas vezes no C (.ptr e .len);
+		// guardar o endereço dele numa temporária chama f uma vez só, e o
+		// resultado continua podendo receber atribuição.
+		p := g.temp(&checker.Borrow{Elem: st})
+		return fmt.Sprintf("(*(%s = &%s, &(*%s).ptr[MLC_INDEX(%s, (*%s).len)]))", p, s, p, i, p)
+	}
 	elem := fmt.Sprintf("%s.ptr[MLC_INDEX(%s, %s.len)]", s, i, s)
 	if g.info.Types[e.X] == checker.String {
 		return "((int64_t)(unsigned char)" + elem + ")"
@@ -86,13 +100,25 @@ func (g *gen) allocSlice(e *ast.CallExpr, callee checker.Callee) string {
 // sempre uma variável ou um campo), e x recebe uma cópia do elemento.
 func (g *gen) forIn(s *ast.ForStmt) {
 	i := g.newName("mlc_i")
-	sl := g.sliceVal(s.Iter)
-	g.line("for (int64_t %s = 0; %s < %s.len; %s++) {", i, i, sl, i)
-	if l := g.info.ForVars[s]; l != nil {
-		g.indent++
-		g.line("%s %s = %s.ptr[%s];", cType(l.Type), l.CName, sl, i)
-		g.indent--
+	iter, drain := s.Iter, false
+	if d := g.info.Drains[s]; d != nil {
+		iter, drain = d, true
 	}
+	sl := g.sliceVal(iter)
+	g.line("for (int64_t %s = 0; %s < %s.len; %s++) {", i, i, sl, i)
+	g.indent++
+	if l := g.info.ForVars[s]; l != nil {
+		g.line("%s %s = %s.ptr[%s];", cType(l.Type), l.CName, sl, i)
+	}
+	if drain {
+		// o elemento sai do slice: o lugar fica vazio
+		st, _ := g.info.Types[iter].(*checker.Slice)
+		if b, ok := g.info.Types[iter].(*checker.Borrow); ok {
+			st = b.Elem.(*checker.Slice)
+		}
+		g.line("%s.ptr[%s] = %s;", sl, i, zeroValue(st.Elem))
+	}
+	g.indent--
 }
 
 // hoistIndex trata o destino s[i] de uma atribuição: se o índice tem efeito
@@ -125,8 +151,16 @@ func (g *gen) realloc(e *ast.CallExpr, callee checker.Callee) string {
 	old := g.temp(s)
 	n := g.temp(checker.Int)
 	elem := cType(s.Elem)
-	return fmt.Sprintf("(%s = %s, %s = %s, ((%s){(%s *)mlc_realloc_array(%s.ptr, %s.len, %s, sizeof(%s), __FILE__, __LINE__), %s}))",
-		old, g.expr(e.Args[0]), n, g.expr(e.Args[1]), sliceCType(s), elem, old, old, n, elem, n)
+	// Slice de donos só pode crescer: encolher descartaria elementos que
+	// podem ter memória (o runtime dá panic).
+	growOnly := 0
+	if _, ok := s.Elem.(*checker.Pointer); ok {
+		growOnly = 1
+	} else if _, ok := s.Elem.(*checker.Slice); ok {
+		growOnly = 1
+	}
+	return fmt.Sprintf("(%s = %s, %s = %s, ((%s){(%s *)mlc_realloc_array(%s.ptr, %s.len, %s, sizeof(%s), %d, __FILE__, __LINE__), %s}))",
+		old, g.expr(e.Args[0]), n, g.expr(e.Args[1]), sliceCType(s), elem, old, old, n, elem, growOnly, n)
 }
 
 // subSlice traduz &s[a:b]: um slice temporário (literal composto do C, que
@@ -152,4 +186,42 @@ func (g *gen) subSlice(e *ast.SliceExpr) string {
 	// slice vazio fica com ptr NULL.
 	return fmt.Sprintf("(%s = %s, %s = %s, mlc_check_slice(%s, %s, %s.len, __FILE__, __LINE__), &(%s){%s.ptr == NULL ? NULL : %s.ptr + %s, %s - %s})",
 		lo, low, hi, high, lo, hi, sv, sliceCType(s), sv, sv, lo, hi, lo)
+}
+
+// hasCall diz se avaliar e chama alguma função.
+func hasCall(e ast.Expr) bool {
+	switch e := e.(type) {
+	case *ast.CallExpr:
+		return true
+	case *ast.IndexExpr:
+		return hasCall(e.X) || hasCall(e.Index)
+	case *ast.SelectorExpr:
+		return hasCall(e.X)
+	case *ast.UnaryExpr:
+		return hasCall(e.X)
+	case *ast.BinaryExpr:
+		return hasCall(e.X) || hasCall(e.Y)
+	}
+	return false
+}
+
+// takeReplace traduz take(&s[i]) e replace(&s[i], v): o índice é checado
+// uma vez, o elemento antigo vai para uma temporária, e o lugar recebe o
+// valor zero (take) ou v (replace).
+func (g *gen) takeReplace(e *ast.CallExpr, callee checker.Callee) string {
+	ix := e.Args[0].(*ast.UnaryExpr).X.(*ast.IndexExpr)
+	s := g.sliceVal(ix.X)
+	ti := g.temp(checker.Int)
+	old := g.temp(callee.Elem)
+	parts := []string{fmt.Sprintf("%s = MLC_INDEX(%s, %s.len)", ti, g.expr(ix.Index), s)}
+	put := zeroValue(callee.Elem)
+	if callee.Builtin == checker.Replace {
+		nv := g.temp(callee.Elem)
+		parts = append(parts, fmt.Sprintf("%s = %s", nv, g.expr(e.Args[1])))
+		put = nv
+	}
+	parts = append(parts,
+		fmt.Sprintf("%s = %s.ptr[%s]", old, s, ti),
+		fmt.Sprintf("%s.ptr[%s] = %s", s, ti, put))
+	return sequence(parts, old)
 }

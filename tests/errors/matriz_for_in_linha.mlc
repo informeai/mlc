@@ -1,0 +1,12 @@
+// erro: for in percorre uma variável ou campo
+import "io"
+fn main() {
+    m := alloc([][]int, 2)
+    for x in m[0] {
+        io.print(x)
+    }
+    for l in drain(m) {
+        free(l)
+    }
+    free(m)
+}

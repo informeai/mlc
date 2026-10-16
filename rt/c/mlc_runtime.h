@@ -52,8 +52,9 @@ static inline int64_t mlc_index(int64_t i, int64_t len, const char *file, int li
 #define MLC_INDEX(i, len) mlc_index((i), (len), __FILE__, __LINE__)
 
 /* realloc(s, n): copia os elementos antigos e zera os novos. Com n == 0, libera
- * e devolve NULL (slice vazio). */
-void *mlc_realloc_array(void *old, int64_t old_len, int64_t n, size_t size, const char *file, int line);
+ * e devolve NULL (slice vazio). Com grow_only (slice de donos), n menor que o
+ * tamanho atual dá panic: encolher descartaria elementos que podem ter memória. */
+void *mlc_realloc_array(void *old, int64_t old_len, int64_t n, size_t size, int grow_only, const char *file, int line);
 
 /* Sub-slice s[a:b]: exige 0 <= a <= b <= len. */
 void mlc_check_slice(int64_t lo, int64_t hi, int64_t len, const char *file, int line);

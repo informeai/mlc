@@ -229,6 +229,8 @@ type ownChecker struct {
 	borrows  []*Local              // parâmetros &T
 	origin   map[pathKey]token.Pos // onde o caminho recebeu a memória atual
 	gone     map[pathKey]token.Pos // onde o caminho foi liberado ou movido
+	drains   []pathKey             // slices sendo esvaziados por for in drain(s)
+	pending  *[]pendingMove        // moves dos argumentos da chamada em avaliação
 	reported map[pathKey]bool      // erros de uso já reportados
 	muted    int                   // maior que zero: erros silenciados (laço estabilizando)
 }
@@ -250,8 +252,8 @@ func (c *checker) checkOwnership(fn *Func) {
 			o.declare(p, ownValue{st: s}, p.Pos)
 		case *Slice:
 			// Um slice recebido é dono: precisa ser liberado ou passado
-			// adiante (free de um slice vazio não faz nada).
-			o.declare(p, ownValue{st: sLive}, p.Pos)
+			// adiante. sOpaque: se os elementos são donos, podem ter memória.
+			o.declare(p, ownValue{st: sLive | sOpaque}, p.Pos)
 		case *Borrow:
 			// Um empréstimo nunca é nil nem liberado aqui; o que interessa
 			// são os campos do objeto emprestado.
@@ -405,6 +407,12 @@ func (o *ownChecker) stmt(s ast.Stmt) {
 		o.declare(l, v, pos)
 	case *ast.ConstDecl:
 	case *ast.AssignStmt:
+		if ix, isIndex := s.Lhs.(*ast.IndexExpr); isIndex && IsOwner(info.Types[s.Lhs]) {
+			o.errorf(ix.Lbrack, "um elemento dono não pode ser sobrescrito direto (o valor antigo vazaria): use velho := replace(&s[i], v)")
+			o.consume(s.Rhs, nil, "")
+			o.target(s.Lhs)
+			return
+		}
 		if s.Op == token.ASSIGN {
 			if k, ok := o.pathOf(s.Lhs); ok && IsOwner(pathType(k)) {
 				o.assignOwner(k, s)
@@ -536,7 +544,12 @@ func (o *ownChecker) forStmt(s *ast.ForStmt) {
 		out = o.st
 	case s.Iter != nil:
 		o.st = entry.clone() // os elementos acabaram
-		o.sliceAccess(s.Iter)
+		iter := o.iterOf(s)
+		o.sliceAccess(iter)
+		if k, ok := o.pathOf(iter); ok && o.c.info.Drains[s] != nil && o.st.get(k) != 0 {
+			// drain completo: todos os elementos saíram do slice
+			o.st[k] = o.st.get(k) &^ sOpaque
+		}
 		out = o.st
 	}
 	for _, ex := range loop.exits {
@@ -556,9 +569,13 @@ func (o *ownChecker) loopBody(s *ast.ForStmt, loop *ownLoop, entry ownFlow) ownF
 		o.apply(o.facts(s.Cond, true))
 	}
 	if s.Iter != nil {
-		o.sliceAccess(s.Iter) // cada volta lê o slice de novo
+		o.sliceAccess(o.iterOf(s)) // cada volta lê o slice de novo
 	}
-	o.stmt(s.Body)
+	if drained := o.c.info.Drains[s]; drained != nil && o.st != nil {
+		o.drainBody(s, drained)
+	} else {
+		o.stmt(s.Body)
+	}
 	if o.st != nil && s.Post != nil {
 		o.stmt(s.Post)
 	}
@@ -705,6 +722,13 @@ func (o *ownChecker) reach(k pathKey, pos token.Pos) {
 // deref checa que o conteúdo de e (um ponteiro ou empréstimo) pode ser usado.
 func (o *ownChecker) deref(e ast.Expr) {
 	k, ok := o.pathOf(e)
+	if ix, isIndex := e.(*ast.IndexExpr); !ok && isIndex && IsOwner(o.c.info.Types[e]) {
+		// O índice só é conhecido em tempo de execução: o verificador não
+		// sabe se s[i] é nil. O elemento precisa sair do slice para ser usado.
+		o.errorf(ix.Lbrack, "s[i] pode ser nil e não pode ser usado direto: tire com take(&s[i]) e devolva com replace(&s[i], v)")
+		o.read(e)
+		return
+	}
 	if !ok {
 		o.lostTemporary(e)
 		o.read(e)
@@ -772,7 +796,8 @@ func (o *ownChecker) read(e ast.Expr) {
 
 // lostTemporary reporta *f() ou f().campo com f devolvendo um dono.
 func (o *ownChecker) lostTemporary(base ast.Expr) {
-	if IsOwner(o.c.info.Types[base]) {
+	// Só chamadas produzem donos temporários; s[i] e p.campo são lugares.
+	if _, isCall := base.(*ast.CallExpr); isCall && IsOwner(o.c.info.Types[base]) {
 		o.errorf(base.Pos(), "vazamento: o ponteiro dono temporário é perdido aqui; guarde em uma variável primeiro")
 	}
 }
@@ -808,14 +833,28 @@ func (o *ownChecker) consume(e ast.Expr, dest Type, what string) ownValue {
 			o.complete(k, e.Pos(), "movida")
 			v = o.extract(k)
 			v.st &^= sDead
-			o.kill(k, e.Pos())
+			o.move(k, e.Pos())
 			if p, ok := dest.(*Pointer); ok && !p.Nullable && v.st&sNull != 0 {
 				o.errorf(e.Pos(), "%s pode ser nil aqui, mas %s espera %s; verifique com if %s != nil antes", k, what, dest, k)
 			}
 			return v
 		}
+		if ix, isIndex := e.(*ast.IndexExpr); isIndex {
+			o.errorf(ix.Lbrack, "um elemento dono não pode ser copiado nem movido direto: use take(&s[i]) (deixa vazio no lugar)")
+			o.read(e)
+			return ownValue{st: sLive | sNull | sOpaque}
+		}
 		if call, ok := e.(*ast.CallExpr); ok && o.c.info.Calls[call].Builtin == Alloc {
 			return o.allocValue(call)
+		}
+		if call, ok := e.(*ast.CallExpr); ok && o.c.info.Calls[call].Builtin == Realloc {
+			// realloc mantém os elementos: o slice novo herda o que se sabe deles
+			var old ownValue
+			o.deferMoves(func() {
+				old = o.consume(call.Args[0], o.c.info.Calls[call].Elem, "realloc")
+				o.read(call.Args[1])
+			})
+			return ownValue{st: sLive | old.st&sOpaque}
 		}
 		o.read(e)
 		v = ownValue{st: sLive | sOpaque}
@@ -880,8 +919,13 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 		return
 	case Realloc:
 		// o slice antigo é consumido; o resultado é um dono novo
-		o.consume(e.Args[0], callee.Elem, "realloc")
-		o.read(e.Args[1])
+		o.deferMoves(func() {
+			o.consume(e.Args[0], callee.Elem, "realloc")
+			o.read(e.Args[1])
+		})
+		return
+	case Take, Replace:
+		o.deferMoves(func() { o.takeReplace(e, callee) })
 		return
 	case IoPrint, Len:
 		for _, a := range e.Args {
@@ -893,6 +937,20 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 	// Numa mesma chamada, um objeto não pode ser emprestado e movido.
 	borrowedRoots := map[*Local]bool{}
 	var touched []pathKey // objetos emprestados: a função pode mudar os campos
+	o.deferMoves(func() { o.userArgs(e, callee, borrowedRoots, &touched) })
+	// Depois da chamada, os campos dos objetos emprestados podem ter mudado
+	// (a função manteve o objeto inteiro, mas não se sabe como).
+	for _, obj := range touched {
+		if o.st.get(obj) != 0 {
+			o.dropUnder(obj)
+			o.st[obj] = o.st.get(obj) | sOpaque
+		}
+	}
+}
+
+// userArgs avalia os argumentos de uma chamada de função do usuário, da
+// esquerda para a direita. Os moves só valem depois de todos (deferMoves).
+func (o *ownChecker) userArgs(e *ast.CallExpr, callee Callee, borrowedRoots map[*Local]bool, touched *[]pathKey) {
 	for i, a := range e.Args {
 		context := "o argumento " + itoa(i+1) + " de " + callee.Func.Name
 		pt := callee.Func.Params[i].Type
@@ -906,19 +964,14 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 			o.consume(a, pt, context)
 		case isBorrow(pt):
 			if obj, ok := o.borrowArg(a); ok {
+				if o.movingRoot(obj.root) {
+					o.errorf(a.Pos(), "%s é emprestada e movida na mesma chamada", obj.root.Name)
+				}
 				borrowedRoots[obj.root] = true
-				touched = append(touched, obj)
+				*touched = append(*touched, obj)
 			}
 		default:
 			o.read(a)
-		}
-	}
-	// Depois da chamada, os campos dos objetos emprestados podem ter mudado
-	// (a função manteve o objeto inteiro, mas não se sabe como).
-	for _, obj := range touched {
-		if o.st.get(obj) != 0 {
-			o.dropUnder(obj)
-			o.st[obj] = o.st.get(obj) | sOpaque
 		}
 	}
 }
@@ -932,6 +985,7 @@ func (o *ownChecker) borrowArg(a ast.Expr) (pathKey, bool) {
 		k, ok := o.pathOf(a)
 		if ok {
 			o.complete(k, a.Pos(), "emprestada")
+			o.notDraining(k, a.Pos())
 		}
 		o.read(a)
 		return k, ok
@@ -948,6 +1002,9 @@ func (o *ownChecker) borrowArg(a ast.Expr) (pathKey, bool) {
 	}
 	if ix, isIndex := u.X.(*ast.IndexExpr); isIndex {
 		// &s[i] empresta um elemento: conta como emprestar o slice
+		if _, isPtr := o.c.info.Types[ix].(*Pointer); isPtr {
+			o.errorf(ix.Lbrack, "s[i] pode ser nil e não pode ser emprestado direto: tire com take(&s[i]) e devolva com replace(&s[i], v)")
+		}
 		o.sliceAccess(ix.X)
 		o.read(ix.Index)
 		return o.pathOf(ix.X)
@@ -968,6 +1025,7 @@ func (o *ownChecker) borrowArg(a ast.Expr) (pathKey, bool) {
 		o.reach(k, u.X.Pos())
 		obj = objectOf(k)
 	}
+	o.notDraining(obj, u.X.Pos())
 	o.complete(obj, u.X.Pos(), "emprestada")
 	return obj, true
 }
@@ -978,6 +1036,9 @@ func (o *ownChecker) free(arg ast.Expr) {
 	k, ok := o.pathOf(arg)
 	if !ok || !IsOwner(pathType(k)) {
 		v := o.consume(arg, nil, "free")
+		if v.st&sOpaque != 0 && isOwnerSlice(o.c.info.Types[arg]) {
+			o.errorf(arg.Pos(), "free de um slice temporário cujos elementos podem ser donos: guarde em uma variável e esvazie com for x in drain(s)")
+		}
 		if v.st&sOpaque != 0 && len(ownerFields(elemOf(o.c.info.Types[arg]), "")) > 0 {
 			o.errorf(arg.Pos(), "free de um objeto temporário com campos donos: guarde em uma variável e libere os campos antes")
 		}
@@ -992,6 +1053,9 @@ func (o *ownChecker) free(arg ast.Expr) {
 		o.errorf(arg.Pos(), "%s liberada duas vezes: já foi liberada ou movida%s (linha %d)", k, maybe, o.gone[k].Line)
 		o.kill(k, arg.Pos())
 		return
+	}
+	if s := o.st.get(k); s&sLive != 0 && s&sOpaque != 0 && isOwnerSlice(pathType(k)) {
+		o.errorf(arg.Pos(), "free(%s): os elementos de %s podem ainda ser donos de memória; esvazie antes com for x in drain(%s)", k, k, k)
 	}
 	if o.st.get(k)&sLive != 0 {
 		for _, rel := range ownerFields(elemOf(pathType(k)), "") {
@@ -1030,4 +1094,115 @@ func (o *ownChecker) sliceAccess(e ast.Expr) {
 	}
 	o.reach(k, e.Pos())
 	o.check(k, e.Pos(), true)
+}
+
+func isOwnerSlice(t Type) bool {
+	e, ok := sliceElem(t)
+	return ok && IsOwner(e)
+}
+
+// iterOf devolve o slice percorrido por um for in: s, em "for x in s" ou em
+// "for x in drain(s)".
+func (o *ownChecker) iterOf(s *ast.ForStmt) ast.Expr {
+	if d := o.c.info.Drains[s]; d != nil {
+		return d
+	}
+	return s.Iter
+}
+
+// drainBody analisa uma volta de "for x in drain(s)": x recebe o elemento,
+// que sai do slice, e precisa ser liberado ou movido antes do fim da volta.
+func (o *ownChecker) drainBody(s *ast.ForStmt, drained ast.Expr) {
+	k, ok := o.pathOf(drained)
+	if ok {
+		o.drains = append(o.drains, k)
+	}
+	o.push()
+	if l := o.c.info.ForVars[s]; l != nil {
+		o.declare(l, ownValue{st: sLive | sNull | sOpaque}, s.Var.P)
+	}
+	o.stmt(s.Body)
+	o.pop(s.Body.End, "no fim da volta do for (o elemento tirado por drain)")
+	if ok {
+		o.drains = o.drains[:len(o.drains)-1]
+	}
+}
+
+// notDraining recusa emprestar ou pôr elementos num slice que um
+// for in drain está esvaziando: os elementos já tirados voltariam.
+func (o *ownChecker) notDraining(k pathKey, pos token.Pos) {
+	for _, d := range o.drains {
+		if d == k {
+			o.errorf(pos, "%s está sendo esvaziada por um for in drain(%s) e não pode ser emprestada nem receber elementos", k, k)
+			return
+		}
+	}
+}
+
+// takeReplace trata take(&s[i]) e replace(&s[i], v). O elemento antigo sai
+// como um dono comum. Pôr um dono com replace faz o slice voltar a "pode ter
+// elementos donos".
+func (o *ownChecker) takeReplace(e *ast.CallExpr, callee Callee) {
+	ix := e.Args[0].(*ast.UnaryExpr).X.(*ast.IndexExpr)
+	o.sliceAccess(ix.X)
+	o.read(ix.Index)
+	if callee.Builtin != Replace {
+		return
+	}
+	v := o.consume(e.Args[1], callee.Elem, "o valor de replace")
+	if k, ok := o.pathOf(ix.X); ok {
+		o.notDraining(k, ix.X.Pos())
+		if s := o.st.get(k); s != 0 && v.st&sLive != 0 {
+			o.st[k] = s | sOpaque
+		}
+	}
+}
+
+// pendingMove é um move feito por um argumento: só vale quando a chamada
+// acontece, depois de todos os argumentos. Assim f(s, len(s)) lê s antes de
+// passá-la adiante, como no C gerado.
+type pendingMove struct {
+	k   pathKey
+	pos token.Pos
+}
+
+// deferMoves avalia f guardando os moves para o fim.
+func (o *ownChecker) deferMoves(f func()) {
+	saved := o.pending
+	var list []pendingMove
+	o.pending = &list
+	f()
+	o.pending = saved
+	for _, m := range list {
+		o.move(m.k, m.pos)
+	}
+}
+
+// move tira a posse de k: na hora, ou no fim dos argumentos da chamada em
+// avaliação. Mover a mesma coisa duas vezes na chamada é erro.
+func (o *ownChecker) move(k pathKey, pos token.Pos) {
+	if o.pending == nil {
+		o.kill(k, pos)
+		return
+	}
+	for _, m := range *o.pending {
+		if m.k == k || k.under(m.k) || m.k.under(k) {
+			o.errorf(pos, "%s é movida duas vezes na mesma chamada", k)
+			return
+		}
+	}
+	*o.pending = append(*o.pending, pendingMove{k, pos})
+}
+
+// movingRoot diz se algum argumento já avaliado da chamada move algo de root.
+func (o *ownChecker) movingRoot(root *Local) bool {
+	if o.pending == nil {
+		return false
+	}
+	for _, m := range *o.pending {
+		if m.k.root == root {
+			return true
+		}
+	}
+	return false
 }

@@ -1,0 +1,12 @@
+// erro: free(s): os elementos de s podem ainda ser donos de memória
+struct Item { peso int }
+fn main() {
+    s := alloc([]?*Item, 2)
+    velho := replace(&s[1], alloc(Item))
+    free(velho)
+    for x in drain(s) {
+        free(x)
+        break
+    }
+    free(s)
+}

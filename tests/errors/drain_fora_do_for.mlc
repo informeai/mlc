@@ -1,0 +1,6 @@
+// erro: drain só pode ser usado em for x in drain(s)
+fn main() {
+    s := alloc([]int, 2)
+    drain(s)
+    free(s)
+}

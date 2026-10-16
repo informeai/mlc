@@ -62,8 +62,13 @@ void mlc_panic_index(int64_t i, int64_t len, const char *file, int line) {
     mlc_panic(file, line, msg);
 }
 
-void *mlc_realloc_array(void *old, int64_t old_len, int64_t n, size_t size, const char *file, int line) {
+void *mlc_realloc_array(void *old, int64_t old_len, int64_t n, size_t size, int grow_only, const char *file, int line) {
     if (n < 0) mlc_panic(file, line, "tamanho negativo em realloc");
+    if (grow_only && n < old_len) {
+        char msg[160];
+        snprintf(msg, sizeof msg, "realloc de slice de donos só pode crescer (de %" PRId64 " para %" PRId64 "); tire os elementos com take ou drain antes", old_len, n);
+        mlc_panic(file, line, msg);
+    }
     if (n == 0) {
         mlc_free(old); /* slice vazio: não conta como alocação */
         return NULL;

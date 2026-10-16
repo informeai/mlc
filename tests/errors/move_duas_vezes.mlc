@@ -1,0 +1,9 @@
+// erro: s é movida duas vezes na mesma chamada
+fn f(a []int, b []int) {
+    free(a)
+    free(b)
+}
+fn main() {
+    s := alloc([]int, 1)
+    f(s, s)
+}

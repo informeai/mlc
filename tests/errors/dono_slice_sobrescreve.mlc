@@ -1,0 +1,10 @@
+// erro: um elemento dono não pode ser sobrescrito direto (o valor antigo vazaria): use velho := replace(&s[i], v)
+struct Item { peso int }
+fn main() {
+    s := alloc([]?*Item, 2)
+    s[0] = alloc(Item)
+    for x in drain(s) {
+        free(x)
+    }
+    free(s)
+}

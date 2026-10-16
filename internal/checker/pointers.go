@@ -92,8 +92,11 @@ func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 		return c.resolveSlice(t, ctx)
 	case ast.TypePointer, ast.TypeNullPtr, ast.TypeBorrow:
 		switch {
-		case ctx == ctxSliceElem:
-			c.errorf(t.P, "slices de ponteiros ainda não são suportados: os elementos não podem ser donos nem empréstimos")
+		case ctx == ctxSliceElem && t.Mod == ast.TypePointer:
+			c.errorf(t.P, "elementos de slice começam zerados (nil), então não podem ser *T: use []?*T")
+			return Invalid
+		case ctx == ctxSliceElem && t.Mod == ast.TypeBorrow:
+			c.errorf(t.P, "&T só pode ser tipo de parâmetro: um empréstimo não pode ser guardado num slice")
 			return Invalid
 		case ctx == ctxElem || ctx == ctxBorrowElem:
 			c.errorf(t.P, "ponteiro para ponteiro não é suportado")
@@ -206,6 +209,14 @@ func (c *checker) builtinCall(e *ast.CallExpr, name string) (Type, bool) {
 		return c.lenCall(e), true
 	case "realloc":
 		return c.reallocCall(e), true
+	case "take":
+		return c.takeCall(e), true
+	case "replace":
+		return c.replaceCall(e), true
+	case "drain":
+		c.errorf(e.Lparen, "drain só pode ser usado em for x in drain(s)")
+		c.checkArgs(e)
+		return Invalid, true
 	case "alloc":
 		if len(e.Args) > 0 {
 			if ta, ok := e.Args[0].(*ast.TypeArg); ok {

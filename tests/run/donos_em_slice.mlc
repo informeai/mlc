@@ -1,0 +1,101 @@
+import "io"
+
+struct Item {
+    nome string
+    peso int
+}
+
+struct Mochila {
+    itens []?*Item
+    usados int
+}
+
+fn novo_item(nome string, peso int) *Item {
+    return alloc(Item{nome: nome, peso: peso})
+}
+
+fn guarda(m &Mochila, it *Item) {
+    if m.usados == len(m.itens) {
+        m.itens = realloc(m.itens, len(m.itens) * 2 + 1)
+    }
+    velho := replace(&m.itens[m.usados], it)
+    free(velho)                 // era nil: free(nil) não faz nada
+    m.usados++
+}
+
+fn peso_total(m &Mochila) int {
+    total := 0
+    for i := 0; i < m.usados; i++ {
+        it := take(&m.itens[i])     // tira para usar...
+        if it != nil {
+            total += it.peso
+        }
+        velho := replace(&m.itens[i], it)   // ...e devolve
+        free(velho)
+    }
+    return total
+}
+
+fn esvazia(m *Mochila) {
+    for it in drain(m.itens) {
+        if it == nil {
+            continue
+        }
+        io.print("tirando", it.nome)
+        free(it)
+    }
+    free(m.itens)               // aceito: drain tirou todos os elementos
+    free(m)
+}
+
+fn matriz(n int) [][]int {
+    m := alloc([][]int, n)
+    for i := 0; i < n; i++ {
+        linha := alloc([]int, n)
+        for j := 0; j < n; j++ {
+            linha[j] = i * n + j
+        }
+        velho := replace(&m[i], linha)
+        free(velho)
+    }
+    return m
+}
+
+fn main() {
+    m := alloc(Mochila)
+    guarda(&m, novo_item("corda", 3))
+    guarda(&m, novo_item("lanterna", 2))
+    guarda(&m, novo_item("água", 5))
+    io.print("itens:", m.usados, "capacidade:", len(m.itens), "peso:", peso_total(&m))
+
+    // tira um do meio e põe outro no lugar
+    corda := take(&m.itens[0])
+    if corda != nil {
+        io.print("tirei", corda.nome)
+        free(corda)
+    }
+    io.print("vazio agora:", m.itens[0] == nil)
+    velho := replace(&m.itens[0], novo_item("faca", 1))
+    free(velho)
+    io.print("peso:", peso_total(&m))
+    esvazia(m)
+
+    t := matriz(3)
+    t[1][1] = 100
+    io.print(t[0], t[1], t[2], len(t[2]))
+    soma := 0
+    for i := 0; i < len(t); i++ {
+        for j := 0; j < len(t[i]); j++ {
+            soma += t[i][j]
+        }
+    }
+    io.print("soma:", soma)
+    for linha in drain(t) {
+        free(linha)
+    }
+    free(t)
+
+    // slice de donos recém-alocado: todos nil, pode liberar direto
+    vazio := alloc([]?*Item, 4)
+    free(vazio)
+}

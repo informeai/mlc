@@ -1,0 +1,6 @@
+// erro: take serve para elementos donos; os elementos aqui são int (use s[i] direto)
+fn main() {
+    s := alloc([]int, 2)
+    x := take(&s[0])
+    free(s)
+}

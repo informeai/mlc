@@ -1,0 +1,8 @@
+// erro: os elementos de []?*Item são donos e não podem ser copiados: use for x in drain(s)
+struct Item { peso int }
+fn main() {
+    s := alloc([]?*Item, 2)
+    for x in s {
+    }
+    free(s)
+}

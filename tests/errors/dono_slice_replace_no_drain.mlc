@@ -1,0 +1,11 @@
+// erro: s está sendo esvaziada por um for in drain(s) e não pode ser emprestada nem receber elementos
+struct Item { peso int }
+fn main() {
+    s := alloc([]?*Item, 2)
+    for x in drain(s) {
+        free(x)
+        velho := replace(&s[0], alloc(Item))
+        free(velho)
+    }
+    free(s)
+}

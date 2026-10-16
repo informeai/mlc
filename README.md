@@ -98,5 +98,5 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 - [x] **Marco 5b:** ponteiros dentro de structs (listas, árvores), com posse rastreada por campo; checagem de `nil` pelo fluxo (`if`, `for`, `&&`, `||`); laços analisados até o ponto fixo
 - [x] **Marco 6:** slices `[]T` donos (`alloc([]T, n)`, `free`), checagem de limites, `len`, `for x in s`, `&[]T`; `len` e índice em strings
 - [x] **Slices, parte 2:** `realloc(s, n)` (consome o slice e devolve outro, novos elementos zerados) e sub-slices emprestados `&s[a:b]`
-- [ ] Slices de donos (`[]?*No`, `[][]int`) com `take`/`replace`
+- [x] **Slices de donos:** `[]?*T` e `[][]T`, com `take(&s[i])`, `replace(&s[i], v)` e `for x in drain(s)`; `free(s)` provado seguro na compilação
 - [ ] **Marco 7:** strings alocadas (concatenação, conversões)

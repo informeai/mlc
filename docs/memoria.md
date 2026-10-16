@@ -44,6 +44,36 @@ fn soma(s &[]int) int      // empréstimo: lê e escreve elementos, não libera
 var vazio []int            // valor zero: slice vazio, sem obrigação de free
 ```
 
+### Slices de donos
+
+```
+nos := alloc([]?*No, n)          // elementos começam nil (por isso ?*T, e não *T)
+velho := replace(&nos[i], novo)  // põe novo no lugar e devolve o antigo
+n := take(&nos[i])               // tira o elemento e deixa nil no lugar
+for n in drain(nos) {            // cada elemento sai do slice para n...
+    free(n)                      // ...e precisa ser liberado ou movido na volta
+}
+free(nos)                        // aceito na compilação: drain tirou todos
+
+m := alloc([][]int, 3)           // matriz: linhas começam como slice vazio
+m[1][2] = 5                      // indexar não move nada
+```
+
+O verificador não acompanha elemento por elemento (o índice só existe em tempo de execução). Ele sabe, para cada slice de donos, se os elementos estão **todos vazios** ou se **podem ter donos**:
+
+- logo depois de `alloc([]?*T, n)`, estão todos vazios;
+- depois de `replace` com um dono, podem ter donos;
+- depois de um `for x in drain(s)` completo (sem `break`), estão todos vazios;
+- um slice recebido por parâmetro ou devolvido por função pode ter donos.
+
+`free(s)` só é aceito com os elementos todos vazios, então vazamento de elemento é **erro de compilação**. Para manter a contabilidade certa:
+
+- não se copia nem se sobrescreve um elemento dono direto (`x := s[i]`, `s[i] = x`): use `take` e `replace`;
+- não se usa o conteúdo de `s[i]` direto, porque ele pode ser `nil` e o índice é dinâmico: tire com `take`, use, devolva com `replace`;
+- dentro de um `for x in drain(s)`, `s` não recebe elementos nem é emprestado.
+
+`realloc` num slice de donos só pode crescer: encolher descartaria elementos que podem ter memória, e isso dá panic em tempo de execução. É uma precondição, como a checagem de limites; vazamento continua sendo sempre erro de compilação.
+
 ### Crescer e emprestar parte
 
 ```
@@ -56,7 +86,7 @@ soma(&s[2:])                 // do 2 até o fim
 
 Um sub-slice `&s[a:b]` não é dono de nada: é um empréstimo dos elementos de `a` até `b-1` e segue as regras dos empréstimos (só como argumento de chamada). Os limites são checados em tempo de execução: `0 <= a <= b <= len(s)`. `a` e `b` podem ser omitidos (`&s[:b]`, `&s[a:]`, `&s[:]`).
 
-Um slice é dono, como `*T`, e segue as mesmas regras de posse: move ao ser atribuído ou passado para um parâmetro `[]T`, e precisa de `free` em todos os caminhos. Liberar um slice dentro do `for in` que o percorre é erro. `s[i]` num slice vazio não precisa de checagem de `nil`: a checagem de limites dá panic. Nesta versão os elementos não podem ser donos (`[]*No`, `[][]int`).
+Um slice é dono, como `*T`, e segue as mesmas regras de posse: move ao ser atribuído ou passado para um parâmetro `[]T`, e precisa de `free` em todos os caminhos. Liberar um slice dentro do `for in` que o percorre é erro. `s[i]` num slice vazio não precisa de checagem de `nil`: a checagem de limites dá panic. Os elementos podem ser donos; veja a seção seguinte.
 
 ## Posse (ownership)
 
@@ -173,4 +203,5 @@ O runtime conta as alocações vivas. No fim do `main`, se sobrou alguma, o prog
 - **Falta de memória:** `alloc` encerra o programa, não se recupera.
 - **Concorrência:** não há threads na linguagem por enquanto, então data races ficam fora do escopo.
 - **Código C externo:** quando houver FFI, o que acontece do lado do C não é verificado.
+- **Moves numa chamada** valem quando a chamada acontece, depois de todos os argumentos: `f(s, len(s))` é aceito, mas mover duas vezes (`f(s, s)`) ou mover e emprestar (`f(s, &s)`) na mesma chamada é erro.
 - **Estruturas compartilhadas:** com um único dono por objeto, grafos com ciclos ou nós com dois pais (lista duplamente ligada) não são expressáveis com ponteiros donos. Isso exigiria outro mecanismo, como índices num slice ou contagem de referências explícita.

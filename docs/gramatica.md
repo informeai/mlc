@@ -106,6 +106,7 @@ eos          = ";" | (* inserido pelo lexer no fim da linha *) ;
 - **`const`:** o valor é avaliado na compilação e só pode usar literais, outras constantes e operadores. No topo do arquivo, uma constante só usa as declaradas antes dela. Constantes podem ser usadas como padrão de `match`.
 - **`for x in s`:** `s` precisa ser uma variável ou campo slice; `x` recebe uma cópia de cada elemento. O nome `_` descarta o elemento.
 - **Índice:** `s[i]` em slice dá o elemento; em string, o byte como `int`. Fora dos limites, panic.
+- **`for x in drain(s)`:** só para slices de donos; cada elemento sai do slice para `x`, que precisa ser liberado ou movido na volta. `drain` só existe nessa forma.
 - **Sub-slice:** `s[a:b]`, com `a` e `b` opcionais, só existe emprestado como argumento de chamada: `f(&s[a:b])`.
 - **Structs** podem ser declaradas em qualquer ordem, mas não podem conter a si mesmas por valor, nem por um caminho indireto.
 - **`_`** não é palavra reservada: é um identificador especial, válido só como padrão de `match` (e, depois, como descarte em atribuições).

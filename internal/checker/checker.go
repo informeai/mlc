@@ -34,6 +34,7 @@ var predeclared = map[string]bool{
 	"int": true, "bool": true, "string": true,
 	"true": true, "false": true, "nil": true,
 	"alloc": true, "free": true, "len": true, "realloc": true,
+	"take": true, "replace": true, "drain": true,
 }
 
 // modules são os módulos que podem ser importados.
@@ -67,6 +68,8 @@ const (
 	Free              // free(p)
 	Len               // len(s)
 	Realloc           // realloc(s, n)
+	Take              // take(&s[i])
+	Replace           // replace(&s[i], v)
 )
 
 // Callee é o destino resolvido de uma chamada: uma função do usuário ou um builtin.
@@ -88,9 +91,10 @@ type Info struct {
 	Patterns map[*ast.Pattern]any
 	// Consts guarda o valor dos identificadores que se referem a constantes.
 	Consts  map[*ast.Ident]any
-	Structs []*Struct               // cada struct depois das que ela contém
-	Slices  []*Slice                // tipos slice usados, para o gerador declarar
-	ForVars map[*ast.ForStmt]*Local // a variável de cada for x in s
+	Structs []*Struct                 // cada struct depois das que ela contém
+	Slices  []*Slice                  // tipos slice usados, para o gerador declarar
+	ForVars map[*ast.ForStmt]*Local   // a variável de cada for x in s
+	Drains  map[*ast.ForStmt]ast.Expr // for x in drain(s): o slice esvaziado
 	Calls   map[*ast.CallExpr]Callee
 	Funcs   []*Func // na ordem de declaração
 }
@@ -142,6 +146,7 @@ func Check(file string, f *ast.File) (*Info, []token.Error) {
 			Patterns: map[*ast.Pattern]any{},
 			Consts:   map[*ast.Ident]any{},
 			ForVars:  map[*ast.ForStmt]*Local{},
+			Drains:   map[*ast.ForStmt]ast.Expr{},
 			Calls:    map[*ast.CallExpr]Callee{},
 		},
 		imports: map[string]bool{},
@@ -704,7 +709,7 @@ func (c *checker) ident(e *ast.Ident) Type {
 		return Bool
 	case "nil":
 		return NilType
-	case "alloc", "free", "len", "realloc":
+	case "alloc", "free", "len", "realloc", "take", "replace":
 		c.errorf(e.P, "%s precisa ser chamada: %s(...)", e.Name, e.Name)
 		return Invalid
 	}
@@ -823,9 +828,14 @@ func (c *checker) call(e *ast.CallExpr) Type {
 		}
 		if id.Name == "io" && fun.Sel == "print" {
 			for _, a := range e.Args {
-				if t := c.value(a); isPointerType(t) || t == NilType {
+				t := c.value(a)
+				elem, isSl := sliceElem(t)
+				switch {
+				case isPointerType(t) || t == NilType:
 					c.errorf(a.Pos(), "io.print não imprime ponteiros (%s); imprima o conteúdo: *p ou p.campo", t)
-				} else {
+				case isSl && (isPointerType(elem) || isSlicePtrElem(elem)):
+					c.errorf(a.Pos(), "io.print não imprime %s: os elementos são ponteiros", t)
+				default:
 					c.noCopy(t, a.Pos())
 				}
 			}

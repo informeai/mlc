@@ -509,6 +509,8 @@ func (g *gen) expr(e ast.Expr) string {
 			return "mlc_free(" + g.expr(e.Args[0]) + ")"
 		case checker.Realloc:
 			return g.realloc(e, callee)
+		case checker.Take, checker.Replace:
+			return g.takeReplace(e, callee)
 		case checker.Len:
 			return g.sliceVal(e.Args[0]) + ".len"
 		}
