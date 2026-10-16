@@ -23,35 +23,74 @@ func Diagnose(target string, read Loader) []token.Error {
 	if err != nil {
 		return []token.Error{{File: target, Pos: token.Pos{Line: 1, Col: 1}, Msg: err.Error()}}
 	}
-	f, errs := parser.ParseFile(target, src)
-	if len(errs) > 0 {
+	if _, errs := parser.ParseFile(target, src); len(errs) > 0 {
 		return errs
 	}
-	hasMain := false
-	for _, fn := range f.Funcs {
-		if fn.Name == "main" && fn.Recv == nil {
-			hasMain = true
-		}
-	}
-	if hasMain {
-		return programErrors(target, src, read, target)
-	}
-	if main := findMain(filepath.Dir(target), read); main != "" {
-		mainSrc, err := read(main)
-		if err == nil {
-			if srcs, errs := load(main, mainSrc, read); loads(srcs, target) || loadErrorsIn(errs, target) {
-				return programErrors(main, mainSrc, read, target)
-			}
-		}
-	}
-	// módulo solto: checado como se fosse o principal, sem exigir main
+	file, fileSrc, loose := entryFor(target, src, read)
 	var out []token.Error
-	for _, e := range programErrors(target, src, read, target) {
-		if e.Msg != "função main não declarada" {
+	for _, e := range programErrors(file, fileSrc, read, target) {
+		// módulo solto: checado como se fosse o principal, sem exigir main
+		if !loose || e.Msg != "função main não declarada" {
 			out = append(out, e)
 		}
 	}
 	return out
+}
+
+// entryFor escolhe o arquivo principal do programa pelo qual target é
+// checado: o próprio target se tiver fn main, senão o main.mlc mais próximo
+// que o importa. loose diz que target é um módulo solto, checado sozinho.
+func entryFor(target string, src []byte, read Loader) (file string, fileSrc []byte, loose bool) {
+	if f, errs := parser.ParseFile(target, src); len(errs) == 0 {
+		for _, fn := range f.Funcs {
+			if fn.Name == "main" && fn.Recv == nil {
+				return target, src, false
+			}
+		}
+	}
+	if main := findMain(filepath.Dir(target), read); main != "" && main != target {
+		if mainSrc, err := read(main); err == nil {
+			if srcs, errs := load(main, mainSrc, read); loads(srcs, target) || loadErrorsIn(errs, target) {
+				return main, mainSrc, false
+			}
+		}
+	}
+	return target, src, true
+}
+
+// Program é um programa checado, para navegação no editor (hover, ir para a
+// definição): os arquivos com as ASTs e o resultado do checker, que vem
+// preenchido até onde a checagem conseguiu ir, mesmo com erros.
+type Program struct {
+	Srcs   []checker.Source
+	Info   *checker.Info
+	Target *checker.Source // o arquivo pedido, dentro de Srcs
+}
+
+// Analyze checa o programa de target como Diagnose, mas devolve as ASTs e o
+// resultado do checker. Com erro de sintaxe ou de import, devolve nil.
+func Analyze(target string, read Loader) *Program {
+	target = filepath.Clean(target)
+	src, err := read(target)
+	if err != nil {
+		return nil
+	}
+	file, fileSrc, _ := entryFor(target, src, read)
+	srcs, errs := load(file, fileSrc, read)
+	if len(errs) > 0 {
+		return nil
+	}
+	info, _ := checker.CheckProgram(srcs)
+	p := &Program{Srcs: srcs, Info: info}
+	for i := range srcs {
+		if filepath.Clean(srcs[i].File) == target {
+			p.Target = &p.Srcs[i]
+		}
+	}
+	if p.Target == nil {
+		return nil
+	}
+	return p
 }
 
 // programErrors checa o programa de file e devolve os erros de target. Um

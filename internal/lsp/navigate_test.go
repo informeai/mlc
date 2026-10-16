@@ -1,0 +1,201 @@
+package lsp
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"mlc/internal/driver"
+	"mlc/internal/lexer"
+	"mlc/internal/token"
+)
+
+const navMain = `import "std/io"
+import "std/vec"
+import "geo"
+
+// Forma do desenho
+enum Forma {
+    Circulo(raio float64)
+    Vazio
+}
+
+struct Caixa {
+    largura int // em cm
+}
+
+const LIMITE = 10
+
+// area calcula a área
+fn area(f Forma) float64 {
+    match f {
+        Circulo(r) => return r * r
+        Vazio => return 0.0
+    }
+}
+
+fn (c &Caixa) dobro() int {
+    return c.largura * 2
+}
+
+fn main() {
+    c := Caixa{largura: LIMITE}
+    v := vec.new[int](2)
+    v.push(c.dobro())
+    p := geo.Ponto{x: 1, y: 2}
+    io.print(area(Forma.Circulo(1.5)), geo.soma(p), v.len(), len("ab"))
+    v.free()
+}
+`
+
+const navGeo = `// Geometria plana.
+
+pub struct Ponto {
+    x int
+    y int
+}
+
+// soma devolve x + y.
+pub fn soma(p Ponto) int {
+    return p.x + p.y
+}
+`
+
+func TestNavigation(t *testing.T) {
+	dir := t.TempDir()
+	mainPath, geoPath := filepath.Join(dir, "main.mlc"), filepath.Join(dir, "geo.mlc")
+	os.WriteFile(mainPath, []byte(navMain), 0o644)
+	os.WriteFile(geoPath, []byte(navGeo), 0o644)
+	read := driver.Overlay(nil)
+
+	cases := []struct {
+		file    string
+		at      string // o cursor fica no começo do trecho marcado com « »
+		defFile string // "main", "geo", "std/x.mlc" ou "" (sem definição)
+		defLine int
+		hover   []string
+	}{
+		{"main", "io.print(«area(Forma", "main", 18, []string{"fn area(f Forma) float64", "area calcula a área"}},
+		{"main", "area(Forma.«Circulo(1.5)", "main", 7, []string{"Circulo(raio float64)", "variante de `Forma`"}},
+		{"main", "area(«Forma.Circulo", "main", 6, []string{"enum Forma {", "Vazio", "Forma do desenho"}},
+		{"main", "return «r * r", "main", 20, []string{"var r float64"}},
+		{"main", "        «Circulo(r) =>", "main", 7, []string{"variante de `Forma`"}},
+		{"main", "return c.«largura * 2", "main", 12, []string{"largura int", "campo de `Caixa`"}},
+		{"main", "Caixa{«largura: LIMITE", "main", 12, []string{"largura int"}},
+		{"main", "largura: «LIMITE}", "main", 15, []string{"const LIMITE = 10"}},
+		{"main", "v.push(c.«dobro())", "main", 25, []string{"fn (c &Caixa) dobro() int"}},
+		{"main", "c := «Caixa{", "main", 11, []string{"struct Caixa {", "largura int // em cm"}},
+		{"main", "v := vec.«new[int]", "std/vec.mlc", 0, []string{"pub fn new[T any](cap int) *Vec[T]", "instância: `vec.new[int]`"}},
+		{"main", "v.«push(c", "std/vec.mlc", 0, []string{"push(x T)"}},
+		{"main", "p := geo.«Ponto{", "geo", 3, []string{"pub struct Ponto {"}},
+		{"main", "geo.«soma(p)", "geo", 9, []string{"pub fn soma(p Ponto) int", "soma devolve x + y."}},
+		{"main", "geo.soma(«p)", "main", 33, []string{"var p geo.Ponto"}},
+		{"main", "p := «geo.Ponto", "geo", 1, []string{`import "geo"`, "Geometria plana."}},
+		{"main", `import «"std/io"`, "std/io.mlc", 1, []string{`import "std/io"`, "Entrada e saída padrão"}},
+		{"main", "«io.print(area", "std/io.mlc", 1, []string{`import "std/io"`}},
+		{"main", "io.«print(area", "std/io.mlc", 1, []string{"io.print(a, b, ...)", "embutido no compilador"}},
+		{"main", "v.len(), «len(\"ab\")", "", 0, []string{"len(s) int"}},
+		{"main", "vec.new[«int](2)", "", 0, []string{"Inteiro com sinal de 64 bits"}},
+		{"main", "fn «area(f Forma)", "main", 18, []string{"fn area(f Forma) float64"}},
+		{"main", "fn area(«f Forma)", "main", 18, []string{"f Forma", "parâmetro"}},
+		{"geo", "return p.«x + p.y", "geo", 4, []string{"x int", "campo de `geo.Ponto`"}},
+		{"geo", "pub fn soma(p «Ponto)", "geo", 3, []string{"pub struct Ponto {"}},
+	}
+	for _, tc := range cases {
+		path, src := mainPath, navMain
+		if tc.file == "geo" {
+			path, src = geoPath, navGeo
+		}
+		mark := strings.Index(tc.at, "«")
+		needle := strings.Replace(tc.at, "«", "", 1)
+		pos := strings.Index(src, needle)
+		if pos < 0 {
+			t.Fatalf("trecho não encontrado: %q", needle)
+		}
+		off := pos + mark
+		prog := driver.Analyze(path, read)
+		if prog == nil {
+			t.Fatalf("%s: não analisou", path)
+		}
+		nav := newNavigator(prog, read, []byte(src))
+		sym, _ := nav.resolve(off)
+		if sym == nil {
+			t.Errorf("%q: nada encontrado", tc.at)
+			continue
+		}
+		hover := sym.code + "\n" + sym.doc
+		for _, h := range tc.hover {
+			if !strings.Contains(hover, h) {
+				t.Errorf("%q: o hover não tem %q:\n%s", tc.at, h, hover)
+			}
+		}
+		switch tc.defFile {
+		case "":
+			if !sym.noDef {
+				t.Errorf("%q: não deveria ter definição (%s:%d)", tc.at, sym.file, sym.pos.Line)
+			}
+			continue
+		case "main":
+			tc.defFile = mainPath
+		case "geo":
+			tc.defFile = geoPath
+		}
+		// linha 1: o começo do arquivo (posição zero ou a primeira linha)
+		if sym.file != tc.defFile || (tc.defLine > 1 && sym.pos.Line != tc.defLine) || (tc.defLine == 1 && sym.pos.Line > 1) {
+			t.Errorf("%q: definição em %s:%d, esperado %s:%d", tc.at, sym.file, sym.pos.Line, tc.defFile, tc.defLine)
+		}
+	}
+}
+
+func TestStdPath(t *testing.T) {
+	p := stdPath("std/vec.mlc")
+	b, err := os.ReadFile(p)
+	if err != nil || !strings.Contains(string(b), "pub struct Vec") {
+		t.Fatalf("std/vec.mlc não foi gravado em %s: %v", p, err)
+	}
+}
+
+// TestNavigationEverywhere resolve cada identificador dos programas do
+// projeto (e de versões com erro de tipo): nada pode dar panic, e quase
+// todos os nomes precisam levar a alguma declaração.
+func TestNavigationEverywhere(t *testing.T) {
+	var files []string
+	for _, pattern := range []string{"../../tests/run/*.mlc", "../../tests/run/*/*.mlc", "../../std/*.mlc"} {
+		m, _ := filepath.Glob(pattern)
+		files = append(files, m...)
+	}
+	total, found := 0, 0
+	for _, file := range files {
+		abs, _ := filepath.Abs(file)
+		src, _ := os.ReadFile(abs)
+		for _, text := range []string{string(src), strings.Replace(string(src), "\n}\n", "\n    x := \"a\" + 1\n}\n", 1)} {
+			read := driver.Overlay(map[string][]byte{abs: []byte(text)})
+			prog := driver.Analyze(abs, read)
+			if prog == nil {
+				continue
+			}
+			nav := newNavigator(prog, read, []byte(text))
+			lx := lexer.New("", []byte(text))
+			for {
+				tk := lx.Next()
+				if tk.Kind == token.EOF {
+					break
+				}
+				if tk.Kind != token.IDENT || tk.Lit == "_" {
+					continue
+				}
+				total++
+				if sym, _ := nav.resolve(tk.Off); sym != nil {
+					found++
+				} else if testing.Verbose() {
+					t.Logf("sem declaração: %s:%d %s", filepath.Base(file), tk.Pos.Line, tk.Lit)
+				}
+			}
+		}
+	}
+	t.Logf("%d de %d identificadores resolvidos", found, total)
+	if total == 0 || found*100/total < 99 {
+		t.Fatalf("poucos nomes resolvidos: %d de %d", found, total)
+	}
+}

@@ -51,7 +51,7 @@ make check                               # gofmt, mlc fmt -l, go vet e testes
 
 ## Editores
 
-`mlc lsp` é um servidor Language Server Protocol (via entrada e saída padrão). Ele marca os erros na linha enquanto você digita, sem precisar salvar: sintaxe, tipos e posse de memória, os mesmos do `mlc build`. Também dá cores semânticas (palavras reservadas, tipos, funções, constantes, literais, comentários) e formata pelo `mlc fmt`. Um módulo sem `fn main` é checado pelo `main.mlc` mais próximo que o importa, para os imports resolverem como num build.
+`mlc lsp` é um servidor Language Server Protocol (via entrada e saída padrão). Ele marca os erros na linha enquanto você digita, sem precisar salvar: sintaxe, tipos e posse de memória, os mesmos do `mlc build`. Também dá cores semânticas (palavras reservadas, tipos, funções, constantes, literais, comentários) e formata pelo `mlc fmt`. O **hover** mostra a declaração de qualquer nome (variável, parâmetro, constante, função, método, campo, tipo, variante, módulo, função embutida) com o tipo e os comentários `//` logo acima dela. **Ir para a definição** leva à declaração, inclusive em outros arquivos e na biblioteca padrão (copiada para a pasta de cache do sistema, para o editor abrir). Um módulo sem `fn main` é checado pelo `main.mlc` mais próximo que o importa, para os imports resolverem como num build.
 
 **VS Code** (`editors/vscode`): extensão com gramática TextMate (cores imediatas) e cliente LSP.
 
@@ -149,4 +149,4 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 - [x] **Arrays `[N]T`:** tamanho fixo, por valor, na pilha ou em structs, sem `alloc`; `&a` empresta como `&[]T`
 - [x] **Biblioteca padrão** em MLC, importada com `std/`: `io`, `str`, `result`, `math`, `sort`, `text`, `vec`, `rand`, `os`, `fs`, `time`. Nada aloca escondido; erros como `Result[T]`. Veja [docs/biblioteca.md](docs/biblioteca.md)
 - [x] **`mlc fmt`:** formatador canônico (4 espaços), preservando comentários e quebras de linha; `-l` lista, `-` usa a entrada padrão
-- [x] **LSP:** `mlc lsp` com diagnósticos ao digitar, cores e formatação; extensão para VS Code e configuração para Neovim. Veja [Editores](#editores)
+- [x] **LSP:** `mlc lsp` com diagnósticos ao digitar, cores, formatação, hover e ir para a definição; extensão para VS Code e configuração para Neovim. Veja [Editores](#editores)

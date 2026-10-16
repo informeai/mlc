@@ -176,7 +176,7 @@ func TestSession(t *testing.T) {
 	}
 
 	// método desconhecido devolve erro; shutdown e exit encerram com 0
-	if m := c.request("textDocument/hover", map[string]any{}); m.Error == nil || m.Error.Code != codeMethodNotFound {
+	if m := c.request("textDocument/references", map[string]any{}); m.Error == nil || m.Error.Code != codeMethodNotFound {
 		t.Fatalf("esperado MethodNotFound: %+v", m)
 	}
 	c.request("shutdown", nil)

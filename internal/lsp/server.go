@@ -60,6 +60,8 @@ func (s *server) handle(m *message) {
 					"save":      false,
 				},
 				"documentFormattingProvider": true,
+				"hoverProvider":              true,
+				"definitionProvider":         true,
 				"semanticTokensProvider": map[string]any{
 					"legend": map[string]any{
 						"tokenTypes":     tokenTypes,
@@ -100,6 +102,10 @@ func (s *server) handle(m *message) {
 			return
 		}
 		s.formatting(m, p.TextDocument.URI)
+	case "textDocument/hover":
+		s.hover(m)
+	case "textDocument/definition":
+		s.definition(m)
 	case "textDocument/semanticTokens/full":
 		var p docParams
 		if json.Unmarshal(m.Params, &p) != nil {
@@ -128,16 +134,91 @@ func uriPath(uri string) string {
 	return filepath.Clean(filepath.FromSlash(u.Path))
 }
 
-// diagnoseAll checa de novo todos os documentos abertos (uma mudança num
-// módulo pode criar ou resolver erros em quem o importa) e publica os erros.
-func (s *server) diagnoseAll() {
+// loader lê os arquivos do programa, com o texto ainda não salvo dos
+// documentos abertos no lugar do que está no disco.
+func (s *server) loader() driver.Loader {
 	overlay := map[string][]byte{}
 	for uri, text := range s.docs {
 		if p := uriPath(uri); p != "" {
 			overlay[p] = []byte(text)
 		}
 	}
-	read := driver.Overlay(overlay)
+	return driver.Overlay(overlay)
+}
+
+// navigate prepara a navegação no documento e converte a posição do cursor.
+func (s *server) navigate(params json.RawMessage) (*navigator, int, bool) {
+	var p struct {
+		TextDocument docID    `json:"textDocument"`
+		Position     position `json:"position"`
+	}
+	if json.Unmarshal(params, &p) != nil {
+		return nil, 0, false
+	}
+	text, ok := s.docs[p.TextDocument.URI]
+	path := uriPath(p.TextDocument.URI)
+	if !ok || path == "" {
+		return nil, 0, false
+	}
+	read := s.loader()
+	prog := driver.Analyze(path, read)
+	if prog == nil {
+		return nil, 0, false
+	}
+	src := []byte(text)
+	return newNavigator(prog, read, src), newLineIndex(src).offsetOf(src, p.Position), true
+}
+
+func (s *server) hover(m *message) {
+	nav, off, ok := s.navigate(m.Params)
+	if !ok {
+		s.conn.reply(m.ID, nil)
+		return
+	}
+	sym, tok := nav.resolve(off)
+	if sym == nil || sym.code == "" {
+		s.conn.reply(m.ID, nil)
+		return
+	}
+	value := "```mlc\n" + sym.code + "\n```"
+	if sym.doc != "" {
+		value += "\n\n" + sym.doc
+	}
+	lines := newLineIndex(nav.text)
+	s.conn.reply(m.ID, map[string]any{
+		"contents": map[string]any{"kind": "markdown", "value": value},
+		"range":    lspRange{Start: lines.position(nav.text, tok.Off), End: lines.position(nav.text, tok.End)},
+	})
+}
+
+func (s *server) definition(m *message) {
+	nav, off, ok := s.navigate(m.Params)
+	if !ok {
+		s.conn.reply(m.ID, nil)
+		return
+	}
+	sym, _ := nav.resolve(off)
+	if sym == nil || sym.noDef || sym.file == "" {
+		s.conn.reply(m.ID, nil)
+		return
+	}
+	path := sym.file
+	if nav.isStd(sym.file) {
+		path = stdPath(sym.file)
+	}
+	text := nav.fileText(sym.file)
+	var start position
+	if sym.pos.Line > 0 {
+		start = newLineIndex(text).position(text, newLineIndex(text).offset(text, sym.pos))
+	}
+	uri := (&url.URL{Scheme: "file", Path: filepath.ToSlash(path)}).String()
+	s.conn.reply(m.ID, map[string]any{"uri": uri, "range": lspRange{Start: start, End: start}})
+}
+
+// diagnoseAll checa de novo todos os documentos abertos (uma mudança num
+// módulo pode criar ou resolver erros em quem o importa) e publica os erros.
+func (s *server) diagnoseAll() {
+	read := s.loader()
 	uris := make([]string, 0, len(s.docs))
 	for uri := range s.docs {
 		uris = append(uris, uri)
@@ -225,6 +306,28 @@ func (l lineIndex) position(src []byte, off int) position {
 }
 
 func (l lineIndex) end(src []byte) position { return l.position(src, len(src)) }
+
+// offsetOf converte uma posição do LSP (coluna em UTF-16) num deslocamento
+// em bytes.
+func (l lineIndex) offsetOf(src []byte, p position) int {
+	if p.Line < 0 {
+		return 0
+	}
+	if p.Line >= len(l) {
+		return len(src)
+	}
+	off, units := l[p.Line], 0
+	for off < len(src) && src[off] != '\n' && units < p.Character {
+		r, size := utf8.DecodeRune(src[off:])
+		if r >= 0x10000 {
+			units += 2
+		} else {
+			units++
+		}
+		off += size
+	}
+	return off
+}
 
 // errorRange marca, a partir da posição do erro, a palavra ou o símbolo que
 // está ali (pelo menos um caractere, sem passar do fim da linha).
