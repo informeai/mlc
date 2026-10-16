@@ -15,6 +15,7 @@ import (
 
 	"mlc/internal/driver"
 	"mlc/internal/format"
+	"mlc/internal/lsp"
 	"mlc/internal/token"
 )
 
@@ -25,6 +26,7 @@ Uso:
   mlc run arquivo.mlc [argumentos]             compila e executa
   mlc fmt [-l] [arquivos ou pastas]            formata no lugar (padrão: a pasta atual)
   mlc fmt -                                    formata a entrada padrão na saída padrão
+  mlc lsp                                      servidor de linguagem (LSP) para editores
 `
 
 func main() {
@@ -39,6 +41,8 @@ func main() {
 		os.Exit(run(os.Args[2:]))
 	case "fmt":
 		os.Exit(fmtCmd(os.Args[2:]))
+	case "lsp":
+		os.Exit(lsp.Run(os.Stdin, os.Stdout))
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:

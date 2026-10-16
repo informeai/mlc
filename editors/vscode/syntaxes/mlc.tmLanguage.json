@@ -1,0 +1,100 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "MLC",
+  "scopeName": "source.mlc",
+  "fileTypes": ["mlc"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#chars" },
+    { "include": "#numbers" },
+    { "include": "#declarations" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#constants" },
+    { "include": "#builtins" },
+    { "include": "#calls" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [{ "name": "comment.line.double-slash.mlc", "match": "//.*$" }]
+    },
+    "strings": {
+      "name": "string.quoted.double.mlc",
+      "begin": "\"",
+      "end": "\"|$",
+      "patterns": [
+        { "name": "constant.character.escape.mlc", "match": "\\\\[ntr0\\\\\"']" },
+        { "name": "invalid.illegal.escape.mlc", "match": "\\\\." }
+      ]
+    },
+    "chars": {
+      "name": "string.quoted.single.mlc",
+      "match": "'(\\\\[ntr0\\\\\"']|[^'\\\\])'",
+      "captures": { "1": { "patterns": [{ "name": "constant.character.escape.mlc", "match": "\\\\." }] } }
+    },
+    "numbers": {
+      "patterns": [
+        { "name": "constant.numeric.float.mlc", "match": "\\b\\d+(\\.\\d+)?[eE][+-]?\\d+\\b|\\b\\d+\\.\\d+\\b" },
+        { "name": "constant.numeric.integer.mlc", "match": "\\b\\d+\\b" }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "\\b(fn)\\s*(\\([^)]*\\))?\\s*([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.function.mlc" },
+            "2": { "patterns": [{ "include": "#types" }, { "include": "#operators" }] },
+            "3": { "name": "entity.name.function.mlc" }
+          }
+        },
+        {
+          "match": "\\b(struct|enum)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.type.mlc" },
+            "2": { "name": "entity.name.type.mlc" }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        { "name": "keyword.control.mlc", "match": "\\b(if|else|for|in|match|return|break|continue)\\b" },
+        { "name": "keyword.other.mlc", "match": "\\b(import|fn|struct|enum|const|var|pub|extern)\\b" }
+      ]
+    },
+    "types": {
+      "patterns": [
+        { "name": "storage.type.builtin.mlc", "match": "\\b(int|int8|int16|int32|int64|uint8|uint16|uint32|uint64|byte|float32|float64|bool|string)\\b" },
+        { "name": "storage.type.constraint.mlc", "match": "\\b(any|comparable|ordered|number|integer)\\b" },
+        { "name": "entity.name.type.mlc", "match": "\\b[A-Z][a-z0-9_][A-Za-z0-9_]*\\b" }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        { "name": "constant.language.mlc", "match": "\\b(true|false|nil)\\b" },
+        { "name": "constant.other.mlc", "match": "\\b[A-Z][A-Z0-9_]+\\b" }
+      ]
+    },
+    "builtins": {
+      "name": "support.function.builtin.mlc",
+      "match": "\\b(alloc|free|realloc|len|take|replace|drain)(?=\\s*\\()"
+    },
+    "calls": {
+      "name": "entity.name.function.call.mlc",
+      "match": "\\b[a-z_][A-Za-z0-9_]*(?=\\s*\\()"
+    },
+    "operators": {
+      "patterns": [
+        { "name": "keyword.operator.arrow.mlc", "match": "=>" },
+        { "name": "keyword.operator.assignment.mlc", "match": ":=|[-+*/%]?=(?!=)" },
+        { "name": "keyword.operator.comparison.mlc", "match": "==|!=|<=|>=|<|>" },
+        { "name": "keyword.operator.logical.mlc", "match": "&&|\\|\\||!" },
+        { "name": "keyword.operator.borrow.mlc", "match": "&|\\?\\*|\\*" },
+        { "name": "keyword.operator.arithmetic.mlc", "match": "\\+\\+|--|[-+/%]" }
+      ]
+    }
+  }
+}

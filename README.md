@@ -49,13 +49,39 @@ make check                               # gofmt, mlc fmt -l, go vet e testes
 
 `mlc fmt` reescreve os arquivos na forma canônica, como o `gofmt`: indentação de 4 espaços, um espaço em volta dos operadores binários e depois das vírgulas, nenhum depois de operador unário (`-x`, `*p`, `&s`), comentários de fim de linha alinhados. As quebras de linha, os parênteses e os comentários de quem escreveu são mantidos; linhas em branco seguidas viram uma só. Um arquivo com erro de sintaxe não é formatado. `mlc fmt -` lê da entrada padrão e escreve na saída padrão (para editores).
 
+## Editores
+
+`mlc lsp` é um servidor Language Server Protocol (via entrada e saída padrão). Ele marca os erros na linha enquanto você digita, sem precisar salvar: sintaxe, tipos e posse de memória, os mesmos do `mlc build`. Também dá cores semânticas (palavras reservadas, tipos, funções, constantes, literais, comentários) e formata pelo `mlc fmt`. Um módulo sem `fn main` é checado pelo `main.mlc` mais próximo que o importa, para os imports resolverem como num build.
+
+**VS Code** (`editors/vscode`): extensão com gramática TextMate (cores imediatas) e cliente LSP.
+
+```sh
+cd editors/vscode
+npm install --omit=dev
+npx @vscode/vsce package --allow-missing-repository --skip-license
+code --install-extension mlc-0.1.0.vsix
+```
+
+O `mlc` precisa estar no `PATH`, ou configurado em `mlc.path`.
+
+**Neovim 0.11+** (`editors/nvim`): tipo de arquivo, sintaxe, indentação de 4 espaços e o LSP via `vim.lsp.config`/`vim.lsp.enable`, sem nvim-lspconfig. Com lazy.nvim (LazyVim):
+
+```lua
+-- ~/.config/nvim/lua/plugins/mlc.lua
+return {
+  { dir = "~/Projects/mlc/editors/nvim", lazy = false },
+}
+```
+
+Para outro caminho do executável: `vim.lsp.config("mlc", { cmd = { "/caminho/mlc", "lsp" } })`. Os erros aparecem pelo `vim.diagnostic` e a formatação por `vim.lsp.buf.format()` (o LazyVim já formata ao salvar).
+
 O compilador C usado é o da variável `CC` (padrão: `cc`).
 
 ## Estrutura
 
 | Pasta | Papel |
 |---|---|
-| `cmd/mlc` | linha de comando (`build`, `run`, `fmt`) |
+| `cmd/mlc` | linha de comando (`build`, `run`, `fmt`, `lsp`) |
 | `internal/token` | tokens, posições e erros de compilação |
 | `internal/lexer` | tokens, com `;` automático no fim da linha |
 | `internal/parser` | parser recursive descent → AST |
@@ -64,6 +90,8 @@ O compilador C usado é o da variável `CC` (padrão: `cc`).
 | `internal/codegen` | AST → C11 |
 | `internal/driver` | encadeia as fases e chama o `cc` |
 | `internal/format` | `mlc fmt`: formatador sobre os tokens, com os comentários |
+| `internal/lsp` | `mlc lsp`: diagnósticos, cores semânticas e formatação para editores |
+| `editors/` | extensão do VS Code e plugin do Neovim |
 | `rt/c` | runtime em C, embutido no binário do `mlc` |
 | `std` | biblioteca padrão escrita em MLC (`import "std/io"`, `import "std/math"`), embutida no binário. Veja [docs/biblioteca.md](docs/biblioteca.md) |
 | `tests/run` | programas e saída esperada (`.out`); entrada opcional (`.in`) |
@@ -121,4 +149,4 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 - [x] **Arrays `[N]T`:** tamanho fixo, por valor, na pilha ou em structs, sem `alloc`; `&a` empresta como `&[]T`
 - [x] **Biblioteca padrão** em MLC, importada com `std/`: `io`, `str`, `result`, `math`, `sort`, `text`, `vec`, `rand`, `os`, `fs`, `time`. Nada aloca escondido; erros como `Result[T]`. Veja [docs/biblioteca.md](docs/biblioteca.md)
 - [x] **`mlc fmt`:** formatador canônico (4 espaços), preservando comentários e quebras de linha; `-l` lista, `-` usa a entrada padrão
-- [ ] **LSP:** `mlc lsp` com diagnósticos ao digitar, cores e formatação; extensão para VS Code e configuração para Neovim
+- [x] **LSP:** `mlc lsp` com diagnósticos ao digitar, cores e formatação; extensão para VS Code e configuração para Neovim. Veja [Editores](#editores)
