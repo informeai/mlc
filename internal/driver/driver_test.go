@@ -28,6 +28,10 @@ func buildAndRun(t *testing.T, path string) (stdout, stderr string, code int) {
 	var out, errOut bytes.Buffer
 	cmd := exec.Command(exe)
 	cmd.Stdout, cmd.Stderr = &out, &errOut
+	// x.in, se existir, vira a entrada padrão do programa
+	if in, err := os.ReadFile(strings.TrimSuffix(path, ".mlc") + ".in"); err == nil {
+		cmd.Stdin = bytes.NewReader(in)
+	}
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if !errors.As(err, &exitErr) {

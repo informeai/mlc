@@ -11,7 +11,8 @@ A ideia do MLC é que quem programa **entenda e saiba quanto e onde está alocan
 
 ## Convenções
 
-- Funções de runtime e de biblioteca expostas na linguagem são sempre em inglês (`io.print`, `alloc`, `free`, `realloc`, `len`).
+- Funções de runtime e de biblioteca expostas na linguagem são sempre em inglês (`io.print`, `alloc`, `free`, `realloc`, `len`, `str.copy`).
+- Funções de biblioteca não alocam: escrevem em buffers emprestados por quem chama (veja `docs/texto.md`).
 - Mensagens do compilador são em português.
 - Identificadores do código do compilador (Go) e do runtime (C) são em inglês; comentários e documentação, em português.
 - Commits sem linha de co-autoria.

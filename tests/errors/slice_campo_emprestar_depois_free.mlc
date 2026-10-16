@@ -1,0 +1,12 @@
+// erro: p.itens já foi liberada ou movida (linha 9)
+struct Pilha { itens []int }
+fn soma(s &[]int) int {
+    return len(s)
+}
+fn main() {
+    p := alloc(Pilha)
+    p.itens = alloc([]int, 2)
+    free(p.itens)
+    soma(&p.itens)
+    free(p)
+}

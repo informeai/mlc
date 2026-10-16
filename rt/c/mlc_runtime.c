@@ -87,3 +87,108 @@ void mlc_check_slice(int64_t lo, int64_t hi, int64_t len, const char *file, int 
     snprintf(msg, sizeof msg, "sub-slice [%" PRId64 ":%" PRId64 "] fora dos limites (tamanho %" PRId64 ")", lo, hi, len);
     mlc_panic(file, line, msg);
 }
+
+void mlc_panic_byte(int64_t v, const char *file, int line) {
+    char msg[96];
+    snprintf(msg, sizeof msg, "valor %" PRId64 " não cabe em byte (0 a 255)", v);
+    mlc_panic(file, line, msg);
+}
+
+/* Copia n bytes para o começo de dst, ou dá panic se não couber. */
+static int64_t mlc_put_bytes(mlc_sl_byte *dst, const void *src, int64_t n, const char *what,
+                             const char *file, int line) {
+    if (n > dst->len) {
+        char msg[160];
+        snprintf(msg, sizeof msg, "%s: o texto (%" PRId64 " bytes) não cabe no destino (%" PRId64 " bytes)",
+                 what, n, dst->len);
+        mlc_panic(file, line, msg);
+    }
+    if (n > 0) memmove(dst->ptr, src, (size_t)n); /* memmove: origem e destino podem se sobrepor */
+    return n;
+}
+
+int64_t mlc_str_copy(mlc_sl_byte *dst, mlc_str src, const char *file, int line) {
+    return mlc_put_bytes(dst, src.ptr, src.len, "str.copy", file, line);
+}
+
+int64_t mlc_str_copy_bytes(mlc_sl_byte *dst, mlc_sl_byte *src, const char *file, int line) {
+    return mlc_put_bytes(dst, src->ptr, src->len, "str.copy_bytes", file, line);
+}
+
+int64_t mlc_str_put_int(mlc_sl_byte *dst, int64_t n, const char *file, int line) {
+    char tmp[24];
+    int len = snprintf(tmp, sizeof tmp, "%" PRId64, n);
+    return mlc_put_bytes(dst, tmp, len, "str.put_int", file, line);
+}
+
+int64_t mlc_str_int_len(int64_t n, const char *file, int line) {
+    (void)file;
+    (void)line;
+    char tmp[24];
+    return snprintf(tmp, sizeof tmp, "%" PRId64, n);
+}
+
+static bool mlc_bytes_eq(const void *a, int64_t alen, const void *b, int64_t blen) {
+    return alen == blen && (alen == 0 || memcmp(a, b, (size_t)alen) == 0);
+}
+
+bool mlc_str_eq(mlc_sl_byte *a, mlc_str b, const char *file, int line) {
+    (void)file;
+    (void)line;
+    return mlc_bytes_eq(a->ptr, a->len, b.ptr, b.len);
+}
+
+bool mlc_str_eq_bytes(mlc_sl_byte *a, mlc_sl_byte *b, const char *file, int line) {
+    (void)file;
+    (void)line;
+    return mlc_bytes_eq(a->ptr, a->len, b->ptr, b->len);
+}
+
+bool mlc_str_parse_int(mlc_sl_byte *s, int64_t *out, const char *file, int line) {
+    (void)file;
+    (void)line;
+    int64_t i = 0, v = 0;
+    bool neg = false;
+    if (i < s->len && (s->ptr[i] == '-' || s->ptr[i] == '+')) {
+        neg = s->ptr[i] == '-';
+        i++;
+    }
+    if (i == s->len) return false;
+    for (; i < s->len; i++) {
+        uint8_t c = s->ptr[i];
+        if (c < '0' || c > '9') return false;
+        /* acumula negativo para alcançar INT64_MIN sem estourar */
+        if (__builtin_mul_overflow(v, 10, &v) || __builtin_sub_overflow(v, (int64_t)(c - '0'), &v)) return false;
+    }
+    if (!neg) {
+        if (v == INT64_MIN) return false;
+        v = -v;
+    }
+    *out = v;
+    return true;
+}
+
+void mlc_io_write(mlc_sl_byte *s, const char *file, int line) {
+    (void)file;
+    (void)line;
+    if (s->len > 0) fwrite(s->ptr, 1, (size_t)s->len, stdout);
+}
+
+void mlc_io_write_line(mlc_sl_byte *s, const char *file, int line) {
+    mlc_io_write(s, file, line);
+    putchar('\n');
+}
+
+int64_t mlc_io_read_line(mlc_sl_byte *dst, const char *file, int line) {
+    (void)file;
+    (void)line;
+    fflush(stdout); /* quem lê costuma ter acabado de perguntar algo */
+    int64_t n = 0;
+    while (n < dst->len) {
+        int c = getchar();
+        if (c == EOF) return n == 0 ? -1 : n;
+        if (c == '\n') return n;
+        dst->ptr[n++] = (uint8_t)c;
+    }
+    return n;
+}

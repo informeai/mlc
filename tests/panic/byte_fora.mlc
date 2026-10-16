@@ -1,0 +1,7 @@
+import "io"
+
+fn main() {
+    n := 200
+    io.print(byte(n))
+    io.print(byte(n + 100))
+}

@@ -1,0 +1,8 @@
+// erro: padrão do tipo int em match sobre byte
+fn main() {
+    c := 'x'
+    match c {
+        120 => {}
+        _ => {}
+    }
+}

@@ -113,7 +113,7 @@ func (c *checker) index(e *ast.IndexExpr) Type {
 	}
 	switch bt {
 	case String:
-		return Int
+		return Byte
 	case Invalid:
 		return Invalid
 	}

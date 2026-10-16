@@ -86,7 +86,7 @@ field_init_list = field_init { "," field_init } [ "," ] ;
 field_init   = ident ":" expr ;
 
 primary      = ident | literal | "(" expr ")" ;
-literal      = int_lit | string_lit | float_lit ;
+literal      = int_lit | string_lit | float_lit | char_lit ;   (* char_lit: 'a', um byte *)
 
 (* ---------- Terminador de comando ---------- *)
 eos          = ";" | (* inserido pelo lexer no fim da linha *) ;
@@ -107,6 +107,7 @@ eos          = ";" | (* inserido pelo lexer no fim da linha *) ;
 - **`for x in s`:** `s` precisa ser uma variável ou campo slice; `x` recebe uma cópia de cada elemento. O nome `_` descarta o elemento.
 - **Índice:** `s[i]` em slice dá o elemento; em string, o byte como `int`. Fora dos limites, panic.
 - **`for x in drain(s)`:** só para slices de donos; cada elemento sai do slice para `x`, que precisa ser liberado ou movido na volta. `drain` só existe nessa forma.
+- **Conversões:** `int(x)` e `byte(x)` têm a forma de chamada; `byte(n)` dá panic fora de 0 a 255.
 - **Sub-slice:** `s[a:b]`, com `a` e `b` opcionais, só existe emprestado como argumento de chamada: `f(&s[a:b])`.
 - **Structs** podem ser declaradas em qualquer ordem, mas não podem conter a si mesmas por valor, nem por um caminho indireto.
 - **`_`** não é palavra reservada: é um identificador especial, válido só como padrão de `match` (e, depois, como descarte em atribuições).

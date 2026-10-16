@@ -1,0 +1,8 @@
+import "str"
+
+fn main() {
+    buf := alloc([]byte, 4)
+    str.copy(&buf, "abc")
+    str.copy(&buf[2:], "abc")
+    free(buf)
+}

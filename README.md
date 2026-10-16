@@ -56,7 +56,7 @@ O compilador C usado é o da variável `CC` (padrão: `cc`).
 | `internal/codegen` | AST → C11 |
 | `internal/driver` | encadeia as fases e chama o `cc` |
 | `rt/c` | runtime em C, embutido no binário do `mlc` |
-| `tests/run` | programas e saída esperada (`.out`) |
+| `tests/run` | programas e saída esperada (`.out`); entrada opcional (`.in`) |
 | `tests/panic` | programas que devem abortar (`.out` + `.err`) |
 | `tests/errors` | programas que devem ser rejeitados (`// erro: ...` na 1ª linha) |
 
@@ -99,4 +99,4 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 - [x] **Marco 6:** slices `[]T` donos (`alloc([]T, n)`, `free`), checagem de limites, `len`, `for x in s`, `&[]T`; `len` e índice em strings
 - [x] **Slices, parte 2:** `realloc(s, n)` (consome o slice e devolve outro, novos elementos zerados) e sub-slices emprestados `&s[a:b]`
 - [x] **Slices de donos:** `[]?*T` e `[][]T`, com `take(&s[i])`, `replace(&s[i], v)` e `for x in drain(s)`; `free(s)` provado seguro na compilação
-- [ ] **Marco 7:** strings alocadas (concatenação, conversões)
+- [x] **Marco 7:** texto em buffers explícitos: tipo `byte` e literais `'a'`, conversões `int(x)`/`byte(x)`, módulo `str` (`copy`, `put_int`, `int_len`, `eq`, `parse_int`) e `io.write`/`io.read_line`, nenhum deles aloca. Veja [docs/texto.md](docs/texto.md)

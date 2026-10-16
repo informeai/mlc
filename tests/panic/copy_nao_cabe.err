@@ -1,0 +1,1 @@
+panic: copy_nao_cabe.mlc:6: str.copy: o texto (3 bytes) não cabe no destino (2 bytes)

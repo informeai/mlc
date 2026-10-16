@@ -1,0 +1,6 @@
+// erro: operador + não se aplica a byte e byte (converta com int(b) para fazer contas)
+import "io"
+fn main() {
+    a := 'a'
+    io.print(a + 'b')
+}

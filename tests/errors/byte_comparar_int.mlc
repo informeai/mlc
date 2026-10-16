@@ -1,0 +1,6 @@
+// erro: comparação entre tipos diferentes: byte e int
+import "io"
+fn main() {
+    s := "abc"
+    io.print(s[0] == 97)
+}

@@ -1,0 +1,10 @@
+// erro: s já foi liberada ou movida (linha 7)
+fn soma(s &[]int) int {
+    return len(s)
+}
+fn main() {
+    s := alloc([]int, 3)
+    t := s
+    soma(&s)
+    free(t)
+}

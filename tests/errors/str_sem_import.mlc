@@ -1,0 +1,6 @@
+// erro: módulo str não foi importado (adicione: import "str")
+fn main() {
+    buf := alloc([]byte, 4)
+    str.copy(&buf, "a")
+    free(buf)
+}

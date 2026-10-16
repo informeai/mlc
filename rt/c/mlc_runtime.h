@@ -15,7 +15,14 @@ typedef struct {
 
 #define MLC_STR_LIT(s, n) ((mlc_str){(s), (n)})
 
-static inline bool mlc_str_eq(mlc_str a, mlc_str b) {
+/* []byte: buffer de texto. Definido aqui porque as funções de texto do runtime
+ * o recebem; o código gerado não declara de novo. */
+typedef struct {
+    uint8_t *ptr;
+    int64_t len;
+} mlc_sl_byte;
+
+static inline bool mlc_string_eq(mlc_str a, mlc_str b) {
     return a.len == b.len && (a.len == 0 || memcmp(a.ptr, b.ptr, (size_t)a.len) == 0);
 }
 
@@ -104,5 +111,30 @@ static inline int64_t mlc_neg(int64_t a, const char *file, int line) {
 #define MLC_DIV(a, b) mlc_div((a), (b), __FILE__, __LINE__)
 #define MLC_MOD(a, b) mlc_mod((a), (b), __FILE__, __LINE__)
 #define MLC_NEG(a) mlc_neg((a), __FILE__, __LINE__)
+
+/* byte(n): dá panic fora de 0..255. */
+void mlc_panic_byte(int64_t v, const char *file, int line);
+
+static inline uint8_t mlc_to_byte(int64_t v, const char *file, int line) {
+    if (v < 0 || v > 255) mlc_panic_byte(v, file, line);
+    return (uint8_t)v;
+}
+
+/* Texto. Nenhuma destas funções aloca: elas escrevem no buffer recebido,
+ * devolvem quantos bytes usaram e dão panic se o texto não couber. */
+int64_t mlc_str_copy(mlc_sl_byte *dst, mlc_str src, const char *file, int line);
+int64_t mlc_str_copy_bytes(mlc_sl_byte *dst, mlc_sl_byte *src, const char *file, int line);
+int64_t mlc_str_put_int(mlc_sl_byte *dst, int64_t n, const char *file, int line);
+int64_t mlc_str_int_len(int64_t n, const char *file, int line);
+bool mlc_str_eq(mlc_sl_byte *a, mlc_str b, const char *file, int line);
+bool mlc_str_eq_bytes(mlc_sl_byte *a, mlc_sl_byte *b, const char *file, int line);
+bool mlc_str_parse_int(mlc_sl_byte *s, int64_t *out, const char *file, int line);
+
+/* Entrada e saída de bytes. read_line lê uma linha (sem o \n) até encher o
+ * buffer; o que não coube fica para a próxima chamada. Devolve -1 no fim da
+ * entrada. */
+void mlc_io_write(mlc_sl_byte *s, const char *file, int line);
+void mlc_io_write_line(mlc_sl_byte *s, const char *file, int line);
+int64_t mlc_io_read_line(mlc_sl_byte *dst, const char *file, int line);
 
 #endif

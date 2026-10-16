@@ -1,0 +1,1 @@
+panic: byte_fora.mlc:6: valor 300 não cabe em byte (0 a 255)

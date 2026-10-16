@@ -314,3 +314,13 @@ type SliceExpr struct {
 func (n *SliceExpr) Pos() token.Pos { return n.X.Pos() }
 
 func (*SliceExpr) exprNode() {}
+
+// CharLit é um literal de byte: 'a'.
+type CharLit struct {
+	Value byte
+	P     token.Pos
+}
+
+func (n *CharLit) Pos() token.Pos { return n.P }
+
+func (*CharLit) exprNode() {}

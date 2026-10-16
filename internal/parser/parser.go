@@ -417,7 +417,7 @@ func (p *Parser) parsePattern() *ast.Pattern {
 		pat.Neg = true
 	}
 	switch p.tok.Kind {
-	case token.INT, token.FLOAT, token.STRING:
+	case token.INT, token.FLOAT, token.STRING, token.CHAR:
 		pat.Lit = p.parsePrimary()
 		return pat
 	}
@@ -617,6 +617,9 @@ func (p *Parser) parsePrimary() ast.Expr {
 	case token.STRING:
 		p.next()
 		return &ast.StringLit{Value: t.Lit, P: t.Pos}
+	case token.CHAR:
+		p.next()
+		return &ast.CharLit{Value: t.Lit[0], P: t.Pos}
 	case token.LPAREN:
 		p.next()
 		var x ast.Expr

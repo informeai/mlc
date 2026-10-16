@@ -1,0 +1,4 @@
+// erro: módulo desconhecido "texto" (disponíveis: "io", "str")
+import "texto"
+fn main() {
+}

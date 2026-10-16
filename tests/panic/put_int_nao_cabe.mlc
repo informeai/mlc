@@ -1,0 +1,7 @@
+import "str"
+
+fn main() {
+    buf := alloc([]byte, 3)
+    str.put_int(&buf, -12345)
+    free(buf)
+}

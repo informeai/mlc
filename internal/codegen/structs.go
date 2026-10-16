@@ -79,7 +79,7 @@ func eqExpr(t checker.Type, a, b string) string {
 		return fmt.Sprintf("mlc_eq_%s(%s, %s)", t.Name, a, b)
 	}
 	if t == checker.String {
-		return fmt.Sprintf("mlc_str_eq(%s, %s)", a, b)
+		return fmt.Sprintf("mlc_string_eq(%s, %s)", a, b)
 	}
 	return fmt.Sprintf("%s == %s", a, b)
 }
@@ -95,6 +95,8 @@ func printCall(t checker.Type, v string) string {
 	switch t {
 	case checker.Int:
 		return "mlc_io_print_int(" + v + ")"
+	case checker.Byte:
+		return "mlc_io_print_int((int64_t)(" + v + "))"
 	case checker.Bool:
 		return "mlc_io_print_bool(" + v + ")"
 	case checker.String:

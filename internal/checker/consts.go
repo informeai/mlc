@@ -29,8 +29,8 @@ func (c *checker) constDecl(d *ast.ConstDecl) {
 	v, t := c.constValue(d.Value)
 	if d.Type != nil {
 		want := c.resolveType(d.Type, ctxVar)
-		if want != Int && want != Bool && want != String && want != Invalid {
-			c.errorf(d.Type.P, "constantes só podem ser int, bool ou string")
+		if want != Int && want != Bool && want != String && want != Byte && want != Invalid {
+			c.errorf(d.Type.P, "constantes só podem ser int, byte, bool ou string")
 			want = Invalid
 		}
 		c.assignable(t, want, d.Value.Pos(), "constante "+d.Name)
@@ -55,6 +55,8 @@ func (c *checker) constValue(e ast.Expr) (any, Type) {
 		return v, Int
 	case *ast.StringLit:
 		return e.Value, String
+	case *ast.CharLit:
+		return int64(e.Value), Byte
 	case *ast.Ident:
 		if l := c.scope.lookup(e.Name); l != nil {
 			if !l.IsConst {

@@ -13,6 +13,7 @@ const (
 	INT
 	FLOAT
 	STRING
+	CHAR // literal de byte: 'a'
 
 	ADD        // +
 	SUB        // -
@@ -75,6 +76,7 @@ var names = [...]string{
 	INT:     "INT",
 	FLOAT:   "FLOAT",
 	STRING:  "STRING",
+	CHAR:    "CHAR",
 
 	ADD:        "+",
 	SUB:        "-",

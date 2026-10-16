@@ -1,0 +1,4 @@
+// erro: literal de byte vazio
+fn main() {
+    c := ''
+}

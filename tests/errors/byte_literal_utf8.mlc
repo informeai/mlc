@@ -1,0 +1,4 @@
+// erro: um literal de byte vale um byte só
+fn main() {
+    c := 'á'
+}

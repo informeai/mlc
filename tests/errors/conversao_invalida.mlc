@@ -1,0 +1,5 @@
+// erro: não é possível converter string em int
+import "io"
+fn main() {
+    io.print(int("42"))
+}

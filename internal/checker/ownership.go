@@ -927,6 +927,9 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 	case Take, Replace:
 		o.deferMoves(func() { o.takeReplace(e, callee) })
 		return
+	case Convert:
+		o.read(e.Args[0])
+		return
 	case IoPrint, Len:
 		for _, a := range e.Args {
 			o.read(a)
@@ -1015,8 +1018,9 @@ func (o *ownChecker) borrowArg(a ast.Expr) (pathKey, bool) {
 		return pathKey{}, false
 	}
 	var obj pathKey
-	if isPointerType(pathType(k)) {
-		// &p empresta o objeto apontado por p
+	if isPointerType(pathType(k)) || isSlice(pathType(k)) {
+		// &p empresta o objeto apontado por p; &s, o slice s (que não pode
+		// ter sido liberado)
 		o.reach(k, u.X.Pos())
 		o.check(k, u.X.Pos(), true)
 		obj = k

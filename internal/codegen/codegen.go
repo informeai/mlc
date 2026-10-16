@@ -77,6 +77,10 @@ func (g *gen) lineDirective(pos token.Pos) {
 
 func cType(t checker.Type) string {
 	switch t := t.(type) {
+	case *checker.Basic:
+		if t == checker.Byte {
+			return "uint8_t"
+		}
 	case *checker.Slice:
 		return sliceCType(t)
 	case *checker.Pointer:
@@ -184,7 +188,7 @@ func (g *gen) stmt(s ast.Stmt) {
 		}
 	case *ast.MatchStmt:
 		g.lineDirective(s.P)
-		if g.info.Types[s.Subject] == checker.Int {
+		if t := g.info.Types[s.Subject]; t == checker.Int || t == checker.Byte {
 			g.matchSwitch(s)
 		} else {
 			g.matchIfChain(s)
@@ -295,7 +299,7 @@ func (g *gen) matchIfChain(s *ast.MatchStmt) {
 			}
 			switch v := g.info.Patterns[p].(type) {
 			case string:
-				conds = append(conds, fmt.Sprintf("mlc_str_eq(%s, MLC_STR_LIT(%s, %d))", tmp, cString(v), len(v)))
+				conds = append(conds, fmt.Sprintf("mlc_string_eq(%s, MLC_STR_LIT(%s, %d))", tmp, cString(v), len(v)))
 			case bool:
 				if v {
 					conds = append(conds, tmp)
@@ -386,6 +390,9 @@ var assignOps = map[token.Kind]token.Kind{
 }
 
 func zeroValue(t checker.Type) string {
+	if t == checker.Byte {
+		return "((uint8_t)0)"
+	}
 	if s, ok := t.(*checker.Slice); ok {
 		return "((" + sliceCType(s) + "){0})" // slice vazio
 	}
@@ -462,6 +469,8 @@ func (g *gen) expr(e ast.Expr) string {
 		return "INT64_C(" + e.Value + ")"
 	case *ast.StringLit:
 		return fmt.Sprintf("MLC_STR_LIT(%s, %d)", cString(e.Value), len(e.Value))
+	case *ast.CharLit:
+		return fmt.Sprintf("((uint8_t)%d)", e.Value)
 	case *ast.Ident:
 		if v, ok := g.info.Consts[e]; ok {
 			return constLit(v)
@@ -511,10 +520,17 @@ func (g *gen) expr(e ast.Expr) string {
 			return g.realloc(e, callee)
 		case checker.Take, checker.Replace:
 			return g.takeReplace(e, callee)
+		case checker.Convert:
+			return g.convert(e, callee)
 		case checker.Len:
 			return g.sliceVal(e.Args[0]) + ".len"
 		}
 		pre, args := g.operands(e.Args)
+		if callee.Func.Native != "" {
+			// função do runtime: recebe arquivo e linha para os panics
+			args = append(args, "__FILE__", "__LINE__")
+			return sequence(pre, fmt.Sprintf("%s(%s)", callee.Func.Native, strings.Join(args, ", ")))
+		}
 		return sequence(pre, fmt.Sprintf("mlc_fn_%s(%s)", callee.Func.Name, strings.Join(args, ", ")))
 	}
 	panic(fmt.Sprintf("codegen: expressão desconhecida %T", e))

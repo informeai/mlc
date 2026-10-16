@@ -52,7 +52,7 @@ fn primeiro_par(s &[]int) int {
     return -1
 }
 
-fn conta(texto string, c int) int {
+fn conta(texto string, c byte) int {
     n := 0
     for i := 0; i < len(texto); i++ {
         if texto[i] == c {
@@ -112,7 +112,7 @@ fn main() {
     io.print(nomes, n, nomes[2][0])
     free(nomes)
 
-    io.print(len("olá"), conta("banana", "a"[0]))
+    io.print(len("olá"), conta("banana", 'a'))
 
     // o índice com efeito é calculado uma vez só
     c := alloc([]int, 3)

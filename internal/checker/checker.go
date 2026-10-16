@@ -25,20 +25,21 @@ var (
 	Int     = &Basic{"int"}
 	Bool    = &Basic{"bool"}
 	String  = &Basic{"string"}
+	Byte    = &Basic{"byte"}
 )
 
-var basicTypes = map[string]Type{"int": Int, "bool": Bool, "string": String}
+var basicTypes = map[string]Type{"int": Int, "bool": Bool, "string": String, "byte": Byte}
 
 // predeclared são nomes que o usuário não pode redeclarar.
 var predeclared = map[string]bool{
-	"int": true, "bool": true, "string": true,
+	"int": true, "bool": true, "string": true, "byte": true,
 	"true": true, "false": true, "nil": true,
 	"alloc": true, "free": true, "len": true, "realloc": true,
 	"take": true, "replace": true, "drain": true,
 }
 
 // modules são os módulos que podem ser importados.
-var modules = map[string]bool{"io": true}
+var modules = map[string]bool{"io": true, "str": true}
 
 type Local struct {
 	Name  string
@@ -56,7 +57,8 @@ type Func struct {
 	Name   string
 	Params []*Local
 	Result Type
-	Decl   *ast.FuncDecl
+	Decl   *ast.FuncDecl // nil numa função nativa
+	Native string        // nome no runtime C, numa função nativa (str.copy)
 }
 
 type Builtin int
@@ -70,6 +72,7 @@ const (
 	Realloc           // realloc(s, n)
 	Take              // take(&s[i])
 	Replace           // replace(&s[i], v)
+	Convert           // int(x), byte(x)
 )
 
 // Callee é o destino resolvido de uma chamada: uma função do usuário ou um builtin.
@@ -127,6 +130,7 @@ type checker struct {
 	litOK         bool // o próximo literal composto pode conter ponteiros donos (dentro de alloc)
 	borrows       map[Type]*Borrow
 	slices        map[Type]*Slice
+	natives       map[string]*Func
 	scope         *scope
 	fn            *Func
 	errs          []token.Error
@@ -158,6 +162,7 @@ func Check(file string, f *ast.File) (*Info, []token.Error) {
 		pointers:      map[ptrKey]*Pointer{},
 		borrows:       map[Type]*Borrow{},
 		slices:        map[Type]*Slice{},
+		natives:       map[string]*Func{},
 		breaks:        map[*ast.ForStmt]bool{},
 	}
 	c.collectImports(f)
@@ -234,7 +239,7 @@ func (c *checker) collectImports(f *ast.File) {
 	for _, imp := range f.Imports {
 		switch {
 		case !modules[imp.Path]:
-			c.errorf(imp.P, "módulo desconhecido %q (disponível: \"io\")", imp.Path)
+			c.errorf(imp.P, "módulo desconhecido %q (disponíveis: \"io\", \"str\")", imp.Path)
 		case c.imports[imp.Path]:
 			c.errorf(imp.P, "módulo %q importado duas vezes", imp.Path)
 		default:
@@ -469,8 +474,8 @@ func (c *checker) checkStmt(s ast.Stmt) {
 // braços inalcançáveis e cobertura de todos os valores.
 func (c *checker) checkMatch(s *ast.MatchStmt) {
 	t := c.value(s.Subject)
-	if t != Int && t != Bool && t != String && t != Invalid {
-		c.errorf(s.Subject.Pos(), "match não se aplica a %s (só int, bool e string)", t)
+	if t != Int && t != Bool && t != String && t != Byte && t != Invalid {
+		c.errorf(s.Subject.Pos(), "match não se aplica a %s (só int, byte, bool e string)", t)
 		t = Invalid
 	}
 	seen := map[any]token.Pos{}
@@ -537,6 +542,8 @@ func (c *checker) patternValue(p *ast.Pattern) (any, Type) {
 		return v, Int
 	case *ast.StringLit:
 		return lit.Value, String
+	case *ast.CharLit:
+		return int64(lit.Value), Byte
 	case *ast.Ident:
 		if l := c.scope.lookup(lit.Name); l != nil {
 			if !l.IsConst {
@@ -669,6 +676,8 @@ func (c *checker) expr0(e ast.Expr) Type {
 		return Invalid
 	case *ast.StringLit:
 		return String
+	case *ast.CharLit:
+		return Byte
 	case *ast.Ident:
 		return c.ident(e)
 	case *ast.UnaryExpr:
@@ -767,7 +776,7 @@ func (c *checker) binary(e *ast.BinaryExpr) Type {
 		return Invalid
 	}
 	mismatch := func() Type {
-		c.errorf(e.OpPos, "operador %s não se aplica a %s e %s", e.Op, x, y)
+		c.errorf(e.OpPos, "operador %s não se aplica a %s e %s%s", e.Op, x, y, byteHint(x, y))
 		return Invalid
 	}
 	switch e.Op {
@@ -781,7 +790,7 @@ func (c *checker) binary(e *ast.BinaryExpr) Type {
 		}
 		return Int
 	case token.LSS, token.LEQ, token.GTR, token.GEQ:
-		if x != Int || y != Int {
+		if x != y || (x != Int && x != Byte) {
 			return mismatch()
 		}
 		return Bool
@@ -842,6 +851,9 @@ func (c *checker) call(e *ast.CallExpr) Type {
 			c.info.Calls[e] = Callee{Builtin: IoPrint}
 			return Void
 		}
+		if t, ok := c.moduleFunc(e, id.Name, fun.Sel); ok {
+			return t
+		}
 		c.errorf(fun.SelPos, "%s.%s não existe", id.Name, fun.Sel)
 		c.checkArgs(e)
 		return Invalid
@@ -850,28 +862,14 @@ func (c *checker) call(e *ast.CallExpr) Type {
 		if t, ok := c.builtinCall(e, fun.Name); ok {
 			return t
 		}
+		if bt, ok := basicTypes[fun.Name]; ok && c.scope.lookup(fun.Name) == nil {
+			return c.conversion(e, bt)
+		}
 		fn := c.funcs[fun.Name]
 		if fn == nil || c.scope.lookup(fun.Name) != nil {
 			break
 		}
-		if len(e.Args) != len(fn.Params) {
-			c.errorf(e.Lparen, "%s espera %d argumento(s), recebeu %d", fn.Name, len(fn.Params), len(e.Args))
-		}
-		for i, a := range e.Args {
-			context := fmt.Sprintf("argumento %d de %s", i+1, fn.Name)
-			if i < len(fn.Params) {
-				if b, ok := fn.Params[i].Type.(*Borrow); ok {
-					c.borrowArg(a, b, context)
-					continue
-				}
-			}
-			t := c.value(a)
-			if i < len(fn.Params) {
-				c.assignable(t, fn.Params[i].Type, a.Pos(), context)
-			}
-		}
-		c.info.Calls[e] = Callee{Func: fn}
-		return fn.Result
+		return c.userCall(e, fn)
 	}
 
 	if t := c.expr(e.Fun); t != Invalid {
@@ -887,4 +885,26 @@ func (c *checker) checkArgs(e *ast.CallExpr) {
 	for _, a := range e.Args {
 		c.value(a)
 	}
+}
+
+// userCall checa uma chamada a uma função do usuário ou nativa.
+func (c *checker) userCall(e *ast.CallExpr, fn *Func) Type {
+	if len(e.Args) != len(fn.Params) {
+		c.errorf(e.Lparen, "%s espera %d argumento(s), recebeu %d", fn.Name, len(fn.Params), len(e.Args))
+	}
+	for i, a := range e.Args {
+		context := fmt.Sprintf("argumento %d de %s", i+1, fn.Name)
+		if i < len(fn.Params) {
+			if b, ok := fn.Params[i].Type.(*Borrow); ok {
+				c.borrowArg(a, b, context)
+				continue
+			}
+		}
+		t := c.value(a)
+		if i < len(fn.Params) {
+			c.assignable(t, fn.Params[i].Type, a.Pos(), context)
+		}
+	}
+	c.info.Calls[e] = Callee{Func: fn}
+	return fn.Result
 }

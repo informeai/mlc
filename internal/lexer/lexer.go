@@ -35,7 +35,7 @@ func (l *Lexer) Next() token.Token {
 // insertsSemi diz se uma quebra de linha depois de k termina o comando.
 func insertsSemi(k token.Kind) bool {
 	switch k {
-	case token.IDENT, token.INT, token.FLOAT, token.STRING,
+	case token.IDENT, token.INT, token.FLOAT, token.STRING, token.CHAR,
 		token.RPAREN, token.RBRACK, token.RBRACE,
 		token.INC, token.DEC,
 		token.BREAK, token.CONTINUE, token.RETURN:
@@ -118,6 +118,8 @@ func (l *Lexer) scanToken() token.Token {
 		return l.scanNumber(pos)
 	case c == '"':
 		return l.scanString(pos)
+	case c == '\'':
+		return l.scanChar(pos)
 	}
 
 	l.advance()
@@ -264,4 +266,53 @@ func (l *Lexer) scanString(pos token.Pos) token.Token {
 		l.advance()
 	}
 	return token.Token{Kind: token.STRING, Lit: sb.String(), Pos: pos}
+}
+
+// scanChar lê um literal de byte: 'a', '\n', '\”. Um literal vale um byte só,
+// então letras que ocupam mais de um byte em UTF-8 (como 'á') não cabem.
+func (l *Lexer) scanChar(pos token.Pos) token.Token {
+	l.advance() // aspas de abertura
+	var b []byte
+	for l.off < len(l.src) && l.src[l.off] != '\'' && l.src[l.off] != '\n' {
+		c := l.src[l.off]
+		l.advance()
+		if c != '\\' {
+			b = append(b, c)
+			continue
+		}
+		if l.off >= len(l.src) {
+			break
+		}
+		escPos := l.pos()
+		e := l.src[l.off]
+		l.advance()
+		switch e {
+		case 'n':
+			b = append(b, '\n')
+		case 't':
+			b = append(b, '\t')
+		case 'r':
+			b = append(b, '\r')
+		case '0':
+			b = append(b, 0)
+		case '\\', '\'', '"':
+			b = append(b, e)
+		default:
+			l.errorf(escPos, "escape inválido \\%c", e)
+		}
+	}
+	if l.off >= len(l.src) || l.src[l.off] != '\'' {
+		l.errorf(pos, "literal de byte não terminado")
+		return token.Token{Kind: token.CHAR, Lit: "\x00", Pos: pos}
+	}
+	l.advance()
+	switch {
+	case len(b) == 0:
+		l.errorf(pos, "literal de byte vazio")
+		b = []byte{0}
+	case len(b) > 1:
+		l.errorf(pos, "um literal de byte vale um byte só ('%s' ocupa %d bytes em UTF-8); use uma string", b, len(b))
+		b = b[:1]
+	}
+	return token.Token{Kind: token.CHAR, Lit: string(b), Pos: pos}
 }

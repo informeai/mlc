@@ -85,3 +85,27 @@ func TestPositions(t *testing.T) {
 		t.Errorf("got %v em %v", tok.Kind, tok.Pos)
 	}
 }
+
+func TestCharLiterals(t *testing.T) {
+	tests := []struct {
+		src  string
+		want byte
+	}{
+		{`'a'`, 'a'}, {`'\n'`, '\n'}, {`'\''`, '\''}, {`'\\'`, '\\'}, {`'\0'`, 0},
+	}
+	for _, tt := range tests {
+		l := New("t.mlc", []byte(tt.src))
+		tok := l.Next()
+		if tok.Kind != token.CHAR || tok.Lit[0] != tt.want || len(l.Errors()) > 0 {
+			t.Errorf("%s: got %v %q, erros %v", tt.src, tok.Kind, tok.Lit, l.Errors())
+		}
+	}
+	for _, src := range []string{`''`, `'ab'`, `'á'`, `'a`} {
+		l := New("t.mlc", []byte(src))
+		for l.Next().Kind != token.EOF {
+		}
+		if len(l.Errors()) == 0 {
+			t.Errorf("%s: esperado erro", src)
+		}
+	}
+}

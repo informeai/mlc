@@ -26,6 +26,8 @@ func mangle(t checker.Type) string {
 	switch t {
 	case checker.Int:
 		return "int"
+	case checker.Byte:
+		return "byte"
 	case checker.Bool:
 		return "bool"
 	case checker.String:
@@ -36,6 +38,9 @@ func mangle(t checker.Type) string {
 
 func (g *gen) sliceTypedefs() {
 	for _, s := range g.info.Slices {
+		if s.Elem == checker.Byte {
+			continue // mlc_sl_byte vem do runtime, que também o usa
+		}
 		g.raw("typedef struct { %s *ptr; int64_t len; } %s;\n", cType(s.Elem), sliceCType(s))
 	}
 	if len(g.info.Slices) > 0 {
@@ -82,7 +87,7 @@ func (g *gen) index(e *ast.IndexExpr) string {
 	}
 	elem := fmt.Sprintf("%s.ptr[MLC_INDEX(%s, %s.len)]", s, i, s)
 	if g.info.Types[e.X] == checker.String {
-		return "((int64_t)(unsigned char)" + elem + ")"
+		return "((uint8_t)" + elem + ")"
 	}
 	return elem
 }
@@ -224,4 +229,17 @@ func (g *gen) takeReplace(e *ast.CallExpr, callee checker.Callee) string {
 		fmt.Sprintf("%s = %s.ptr[%s]", old, s, ti),
 		fmt.Sprintf("%s.ptr[%s] = %s", s, ti, put))
 	return sequence(parts, old)
+}
+
+// convert traduz int(x) e byte(x). byte(n) checa a faixa 0..255.
+func (g *gen) convert(e *ast.CallExpr, callee checker.Callee) string {
+	x := g.expr(e.Args[0])
+	from := g.info.Types[e.Args[0]]
+	switch {
+	case from == callee.Elem:
+		return x
+	case callee.Elem == checker.Byte:
+		return "mlc_to_byte(" + x + ", __FILE__, __LINE__)"
+	}
+	return "((int64_t)(" + x + "))"
 }
