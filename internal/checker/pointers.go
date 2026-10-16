@@ -114,8 +114,8 @@ func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 		case ctx == ctxElem || ctx == ctxBorrowElem:
 			c.errorf(t.P, "ponteiro para ponteiro não é suportado")
 			return Invalid
-		case t.Mod == ast.TypeBorrow && ctx != ctxParam:
-			c.errorf(t.P, "&T só pode ser tipo de parâmetro: um empréstimo não pode ser guardado nem devolvido")
+		case t.Mod == ast.TypeBorrow && ctx != ctxParam && ctx != ctxResult && ctx != ctxVar:
+			c.errorf(t.P, "um empréstimo (&T) não pode ser guardado em campos, slices ou arrays: só em parâmetros, variáveis e retornos")
 			return Invalid
 		}
 		elemCtx := ctxElem

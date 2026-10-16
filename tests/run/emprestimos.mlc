@@ -1,0 +1,57 @@
+// Empréstimos devolvidos e guardados: v.at(i), m.get(&k), funções que
+// devolvem parte do que receberam, e x := &a[i].
+import "std/io"
+import "std/str"
+import "std/vec"
+import "std/map"
+
+struct Ponto {
+    x int
+    y int
+}
+
+impl auto io.Display for Ponto
+
+// devolve o maior campo, emprestado do ponto recebido
+fn maior_campo(p &Ponto) &int {
+    if p.x > p.y {
+        return &p.x
+    }
+    return &p.y
+}
+
+fn main() {
+    pts := vec.new[Ponto](2)
+    pts.push(Ponto{x: 1, y: 2})
+    pts.push(Ponto{x: 5, y: 3})
+    q := pts.at(1)
+    q.y = 30
+    io.print(*q, q.x)
+    io.print(*pts.at(0), pts.at(1).y, pts.len())
+    m := maior_campo(pts.last())
+    *m += 100
+    io.print(*pts.last())
+    pts.free()
+
+    conta := map.new[[]byte, int](4)
+    k := alloc([]byte, 3)
+    str.copy(&k, "abc")
+    busca := alloc([]byte, 3)
+    str.copy(&busca, "abc")
+    conta.put(k, 1)
+    n := conta.get(&busca)
+    *n += 41
+    io.print(*conta.get(&busca))
+    for i := conta.next(0); i >= 0; i = conta.next(i + 1) {
+        chave := conta.key_ref(i)
+        io.write(chave)
+        io.print(":", *conta.value_ref(i))
+    }
+    free(busca)
+    conta.free()
+
+    var a [3]int = [3]int{1, 2, 3}
+    r := &a[1]
+    *r = 20
+    io.print(a)
+}

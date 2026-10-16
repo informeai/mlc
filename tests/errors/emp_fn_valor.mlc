@@ -1,0 +1,15 @@
+// erro: devolve um empréstimo e não pode ser usada como valor
+import "std/io"
+import "std/vec"
+
+struct P {
+    x int
+}
+
+fn pega(p &P) &P {
+    return p
+}
+
+fn main() {
+    f := pega
+}

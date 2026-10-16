@@ -1,0 +1,17 @@
+// erro: x.cabeca foi movida para fora do empréstimo (linha 12) e precisa receber um valor antes do fim do escopo de x
+struct No {
+    v int
+}
+
+struct Lista {
+    cabeca ?*No
+}
+
+fn esquece(l &Lista) {
+    x := l
+    c := x.cabeca
+    free(c)
+}
+
+fn main() {
+}

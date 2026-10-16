@@ -1,0 +1,7 @@
+// erro: não dá para devolver um sub-slice
+fn sub(s &[]int) &[]int {
+    return &s[1:2]
+}
+
+fn main() {
+}

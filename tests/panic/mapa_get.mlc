@@ -1,0 +1,9 @@
+import "std/io"
+import "std/map"
+
+fn main() {
+    m := map.new[int, int](4)
+    k := 1
+    io.print(*m.get(&k))
+    m.free()
+}

@@ -1,1 +1,1 @@
-panic: std/vec.mlc:108: vec.get: índice fora do vetor
+panic: std/vec.mlc:128: vec.get: índice fora do vetor

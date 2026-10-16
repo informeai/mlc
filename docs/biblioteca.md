@@ -118,6 +118,7 @@ nomes.free()               // libera cada nome (drop) e o vetor
 | `clear()` | qualquer | libera os elementos (`drop`) e deixa o vetor vazio |
 | `free()` | qualquer | libera cada elemento (`drop`) e o vetor |
 | `get(i) T` | só copiável (`any`) | devolve uma cópia |
+| `at(i) &T`, `last() &T` | qualquer | empresta o elemento sem tirá-lo; o vetor fica congelado enquanto o empréstimo é usado |
 
 Os índices são checados: fora de `0..len-1`, panic.
 
@@ -172,6 +173,8 @@ conta.free()                              // libera cada chave e o mapa
 | `put(k K, v V)` | qualquer | move `k` e `v` para o mapa; se a chave já existe, troca o valor (a chave nova e o valor antigo são liberados) |
 | `set(k &K, v V) bool` | qualquer | troca o valor de uma chave existente; se não existe, libera `v` e devolve `false` |
 | `has(k &K) bool` | qualquer | a chave existe? |
+| `get(k &K) &V` | qualquer | empresta o valor sem tirá-lo (panic se a chave não existe) |
+| `index(k &K) int`, `key_ref(i) &K`, `value_ref(i) &V` | qualquer | posição de uma chave, e empréstimos por posição (também para percorrer com `next`) |
 | `get_or(k &K, def V) V` | `V` copiável | cópia do valor, ou `def` |
 | `take_or(k &K, def V) V` | qualquer | tira a entrada e devolve a posse do valor (a chave é liberada), ou `def` |
 | `remove(k &K) bool` | qualquer | apaga a entrada (libera chave e valor) |

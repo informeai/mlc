@@ -1,4 +1,4 @@
-// erro: &T só pode ser tipo de parâmetro
+// erro: um empréstimo (&T) não pode ser guardado em campos, slices ou arrays
 struct No {
     valor int
     prox &No

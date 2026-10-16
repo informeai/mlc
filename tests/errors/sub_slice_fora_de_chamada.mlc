@@ -1,6 +1,8 @@
-// erro: & só pode aparecer como argumento de chamada
+// erro: s está emprestada a t (linha 5) até a linha 7: use t, ou termine de usar t antes
+import "std/io"
 fn main() {
     s := alloc([]int, 3)
     t := &s[0:2]
     free(s)
+    io.print(t[0])
 }

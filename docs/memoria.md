@@ -165,12 +165,29 @@ fn push(l &Lista, v int) {
 
 Para manter a análise simples e correta, os empréstimos são restritos:
 
-- `&x` só aparece como **argumento de chamada**. `&T` só existe como tipo de parâmetro: não pode ser guardado em variável, em campo, nem devolvido.
+- `&x` aparece como **argumento de chamada**, como valor de uma variável (`x := &a.campo`) ou num `return`. `&T` não pode ser guardado em campos, slices ou arrays.
 - Um empréstimo recebido pode ser repassado direto a outro parâmetro `&T`, sem `&`.
 - Na mesma chamada, não se pode emprestar e mover partes do mesmo objeto: `f(&p, p)` e `f(&p, p.prox)` são erros.
 - Quem recebe um empréstimo não pode liberá-lo nem reatribuí-lo.
 
-Com essas restrições, um empréstimo nunca sobrevive ao dono, e por isso não existe ponteiro pendente. A consequência é que percorrer uma estrutura só para ler é feito com recursão (`soma(&n.prox)`), e não com uma variável que aponta para o nó atual. Empréstimos guardados em variáveis, com análise de tempo de vida, podem vir depois, se fizerem falta.
+### Devolver e guardar empréstimos
+
+```
+fn (v &Vec[T]) at(i int) &T {
+    return &v.items[i]          // o resultado vem do receptor
+}
+
+x := v.at(0)                    // x: &T, guardado numa variável
+x.campo = 3
+io.print(*v.at(1), v.len())     // lido na hora: o valor é copiado ali
+```
+
+- **De onde vem o empréstimo devolvido:** do receptor `&`, num método, ou do único parâmetro `&`, numa função. O `return` é conferido: `&v.items[i]` vale; `&local` (sumiria no fim da função), um sub-slice (a visão é criada na hora) ou uma origem ambígua (dois parâmetros `&`) são erros.
+- **Congelamento:** enquanto uma variável emprestada é usada (da declaração até o último uso; num laço, até o fim do laço), a origem não pode ser mencionada a não ser através dela. Não dá para crescer, liberar, mover ou passar de novo a origem enquanto um pedaço dela está emprestado. Dois parâmetros `&` podem apontar para o mesmo objeto, então emprestar de um congela os dois.
+- **Na mesma instrução:** uma chamada que devolve um empréstimo de `m` não pode dividir a instrução com outra menção de `m`, a não ser que o empréstimo seja só lido na hora (`*m.get(&k)`, `m.at(0).campo`).
+- **Donos dentro de um empréstimo guardado** podem sair e precisam voltar antes do fim do escopo da variável, como num parâmetro `&T`.
+
+Com essas regras, um empréstimo nunca sobrevive ao dono nem enxerga memória que mudou de lugar, e por isso não existe ponteiro pendente.
 
 ## Coleções que crescem
 

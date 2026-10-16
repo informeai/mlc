@@ -432,3 +432,8 @@ void mlc_shift_panic(int64_t n, int bits, const char *file, int line) {
 void mlc_null_fn(const char *file, int line) {
     mlc_panic(file, line, "chamada de um valor fn nulo (o valor zero de um fn: a variável ou o campo não recebeu uma função)");
 }
+
+/* std/map */
+void mlc_std_map_fail(mlc_str msg, const char *file, int line) {
+    mlc_std_vec_fail(msg, file, line);
+}

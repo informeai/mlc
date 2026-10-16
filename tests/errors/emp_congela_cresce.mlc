@@ -1,0 +1,16 @@
+// erro: v está emprestada a a (linha 12) até a linha 14
+import "std/io"
+import "std/vec"
+
+struct P {
+    x int
+}
+
+fn main() {
+    v := vec.new[P](1)
+    v.push(P{x: 1})
+    a := v.at(0)
+    v.push(P{x: 2})
+    io.print(a.x)
+    v.free()
+}

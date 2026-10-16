@@ -51,6 +51,7 @@ func (c *checker) signature(fn *Func, d *ast.FuncDecl, recv *Local) {
 	if d.Result != nil {
 		fn.Result = c.resolveType(d.Result, ctxResult)
 	}
+	c.setBorrowFrom(fn, d)
 }
 
 func (c *checker) collectMethod(d *ast.FuncDecl) {

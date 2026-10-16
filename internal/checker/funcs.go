@@ -75,6 +75,10 @@ func (c *checker) resolveFuncType(t *ast.TypeExpr) Type {
 		if result == Invalid {
 			return Invalid
 		}
+		if isBorrow(result) {
+			c.errorf(t.Elem.P, "um tipo fn não pode devolver empréstimo nesta versão")
+			return Invalid
+		}
 	}
 	return c.funcType(params, result)
 }
@@ -84,6 +88,10 @@ func (c *checker) resolveFuncType(t *ast.TypeExpr) Type {
 func (c *checker) funcRef(e ast.Expr, fn *Func) Type {
 	if fn.Native != "" {
 		c.errorf(e.Pos(), "extern fn não pode ser usada como valor; envolva-a numa fn comum")
+		return Invalid
+	}
+	if fn.borrowParam() >= 0 {
+		c.errorf(e.Pos(), "%s devolve um empréstimo e não pode ser usada como valor nesta versão", fn.Name)
 		return Invalid
 	}
 	var params []Type

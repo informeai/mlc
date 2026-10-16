@@ -2,5 +2,5 @@
 struct Ponto { x int; y int }
 fn main() {
     s := Ponto{}
-    x := &s
+    var ok bool = &s == &s
 }

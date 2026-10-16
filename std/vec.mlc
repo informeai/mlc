@@ -75,6 +75,26 @@ pub fn (v &Vec[T]) swap(i int, j int) {
     drop(old) // o zero deixado pelo take
 }
 
+// at empresta o elemento i, sem tirá-lo do vetor. Enquanto o empréstimo é
+// usado, o vetor fica congelado (não cresce, não é liberado).
+//
+//     x := v.at(0)
+//     x.campo = 3
+pub fn (v &Vec[T]) at(i int) &T {
+    if i < 0 || i >= v.count {
+        fail("vec.at: índice fora do vetor")
+    }
+    return &v.items[i]
+}
+
+// last empresta o último elemento.
+pub fn (v &Vec[T]) last() &T {
+    if v.count == 0 {
+        fail("vec.last: vetor vazio")
+    }
+    return &v.items[v.count - 1]
+}
+
 pub fn (v &Vec[T]) len() int {
     return v.count
 }

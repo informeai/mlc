@@ -89,6 +89,8 @@ func (c *checker) collectInterfaces(f *ast.File) {
 				c.errorf(m.P, "método %s repetido na interface %s", m.Name, d.Name)
 			case m.Recv != nil || len(m.TypeParams) > 0:
 				c.errorf(m.P, "um método de interface é escrito fn nome(self &Self, ...), sem receptor nem parâmetros de tipo")
+			case m.Result != nil && m.Result.Mod == ast.TypeBorrow:
+				c.errorf(m.P, "um método de interface não pode devolver empréstimo nesta versão")
 			case len(m.Params) == 0 || !isSelfBorrow(m.Params[0].Type):
 				c.errorf(m.P, "o primeiro parâmetro de %s.%s precisa ser self &Self (nesta versão o receptor é sempre emprestado)", d.Name, m.Name)
 			}

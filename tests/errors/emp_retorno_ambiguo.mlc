@@ -1,0 +1,14 @@
+// erro: dois devolve &P e recebe mais de um empréstimo
+import "std/io"
+import "std/vec"
+
+struct P {
+    x int
+}
+
+fn dois(a &P, b &P) &P {
+    return a
+}
+
+fn main() {
+}

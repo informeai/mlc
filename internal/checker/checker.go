@@ -75,6 +75,9 @@ type Func struct {
 	instances map[string]*Func // função genérica: instâncias já criadas
 	recv      recvMode
 	queued    bool // instância de genérico: checada por checkInstances
+	// BorrowFrom: numa função que devolve &T, o parâmetro (1 + índice) de onde
+	// o empréstimo vem; 0 se não devolve empréstimo
+	BorrowFrom int
 }
 
 type Builtin int
@@ -127,6 +130,9 @@ type Info struct {
 	Calls        map[*ast.CallExpr]Callee
 	Prints       map[*ast.CallExpr]*PrintPlan // io.print e io.printf reescritos
 	FuncRefs     map[ast.Expr]*Func           // funções usadas como valor
+	BorrowSrc    map[*Local]*Local            // variável emprestada → a origem (raiz)
+	BorrowView   map[*Local]bool              // a variável emprestada é uma visão (sub-slice)
+	BorrowParent map[*Local]*Local            // variável emprestada derivada de outra
 	FuncTypes    []*FuncType                  // tipos fn concretos, para o gerador declarar
 	Funcs        []*Func                      // na ordem de declaração
 }
@@ -217,6 +223,9 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 			Calls:        map[*ast.CallExpr]Callee{},
 			Prints:       map[*ast.CallExpr]*PrintPlan{},
 			FuncRefs:     map[ast.Expr]*Func{},
+			BorrowSrc:    map[*Local]*Local{},
+			BorrowView:   map[*Local]bool{},
+			BorrowParent: map[*Local]*Local{},
 		},
 		pointers: map[ptrKey]*Pointer{},
 		borrows:  map[Type]*Borrow{},
@@ -263,6 +272,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 				c.instName = fn.Name
 			}
 			if !c.probeBroken[fn] {
+				c.checkBorrowLifetimes(fn)
 				c.checkOwnership(fn)
 			}
 		}
@@ -476,16 +486,25 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		if s.Value != nil {
 			// O valor é checado antes de declarar: em "x := x + 1" o x da
 			// direita é o de fora.
-			if t == nil {
+			u, isAmp := s.Value.(*ast.UnaryExpr)
+			isAmp = isAmp && u.Op == token.AMP
+			switch b, isB := t.(*Borrow); {
+			case isB:
+				c.borrowExpr(s.Value, b, "declaração de "+s.Name)
+			case t == nil && isAmp:
+				t = c.borrowExpr(s.Value, nil, "declaração de "+s.Name) // x := &a.campo
+			case t == nil:
 				t = c.valueDefault(s.Value) // x := 5 é int; x := 2.5 é float64
-			} else {
+			default:
 				c.valueAs(s.Value, t, "declaração de "+s.Name)
 			}
 		}
 		switch tt := t.(type) {
 		case *Borrow:
-			c.errorf(s.P, "empréstimos (%s) não podem ser guardados em variáveis", tt)
-			t = Invalid
+			if s.Value == nil {
+				c.errorf(s.P, "var %s %s precisa de valor inicial: um empréstimo sempre aponta para algo", s.Name, tt)
+				t = Invalid
+			}
 		case *Pointer:
 			if s.Value == nil && !tt.Nullable {
 				c.errorf(s.P, "var %s %s precisa de valor inicial: um ponteiro *T nunca é nil (use ?*%s para começar com nil)", s.Name, tt, tt.Elem)
@@ -499,6 +518,9 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			c.noCopy(t, s.P)
 		}
 		c.info.Decls[s] = c.declare(s.Name, s.P, t, false)
+		if isBorrow(t) && s.Value != nil {
+			c.declareBorrow(c.info.Decls[s], s.Value)
+		}
 	case *ast.AssignStmt:
 		lt := c.target(s.Lhs)
 		if s.Op == token.ASSIGN {
@@ -608,6 +630,10 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		if c.fn.Result == Void {
 			c.value(s.Value)
 			c.errorf(s.Value.Pos(), "função %s não retorna valor", c.fn.Name)
+			return
+		}
+		if b, ok := c.fn.Result.(*Borrow); ok {
+			c.checkBorrowReturn(s, b) // return &v.items[i]: de onde vem o empréstimo
 			return
 		}
 		c.valueAs(s.Value, c.fn.Result, "return")

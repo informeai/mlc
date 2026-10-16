@@ -1,0 +1,17 @@
+// erro: v aparece de novo na instrução em que v.at empresta parte dela
+import "std/io"
+import "std/vec"
+
+struct P {
+    x int
+}
+
+fn usa(p &P, w &vec.Vec[P]) {
+}
+
+fn main() {
+    v := vec.new[P](1)
+    v.push(P{x: 1})
+    usa(v.at(0), &v)
+    v.free()
+}

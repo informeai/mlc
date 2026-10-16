@@ -24,6 +24,8 @@ pub struct Map[K owned + hash.Hash, V owned] {
     used int     // posições FULL ou DELETED (decidem quando crescer)
 }
 
+extern fn fail(msg string)
+
 const EMPTY = 0
 const FULL = 1
 const DELETED = 2 // apagada: a sondagem continua por ela
@@ -117,6 +119,41 @@ pub fn (m &Map[K, V]) set(k &K, v V) bool {
 
 pub fn (m &Map[K, V]) has(k &K) bool {
     return m.find(k) >= 0
+}
+
+// get empresta o valor de k, sem tirá-lo do mapa (panic se a chave não
+// existe: confira antes com has, ou use index). Enquanto o empréstimo é
+// usado, o mapa fica congelado.
+//
+//     n := conta.get(&palavra)
+//     *n += 1
+pub fn (m &Map[K, V]) get(k &K) &V {
+    i := m.find(k)
+    if i < 0 {
+        fail("map.get: a chave não existe (confira com has, ou use index)")
+    }
+    return &m.vals[i]
+}
+
+// index devolve a posição de k (para value_ref e key_ref), ou -1.
+pub fn (m &Map[K, V]) index(k &K) int {
+    return m.find(k)
+}
+
+// value_ref empresta o valor na posição i (de index ou next).
+pub fn (m &Map[K, V]) value_ref(i int) &V {
+    if i < 0 || i >= len(m.state) || m.state[i] != FULL {
+        fail("map.value_ref: posição vazia")
+    }
+    return &m.vals[i]
+}
+
+// key_ref empresta a chave na posição i (de index ou next).
+pub fn (m &Map[K, V]) key_ref(i int) &K {
+    if i < 0 || i >= len(m.state) || m.state[i] != FULL {
+        fail("map.key_ref: posição vazia")
+    }
+    return &m.keys[i]
 }
 
 // get_or devolve uma cópia do valor de k, ou def se não existe (só para V

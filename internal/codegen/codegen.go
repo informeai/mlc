@@ -364,9 +364,11 @@ func (g *gen) simple(s ast.Stmt) string {
 		return g.expr(s.X)
 	case *ast.VarDecl:
 		l := g.info.Decls[s]
-		value := zeroValue(l.Type)
+		var value string
 		if s.Value != nil {
 			value = g.expr(s.Value)
+		} else {
+			value = zeroValue(l.Type)
 		}
 		return fmt.Sprintf("%s %s = %s", cType(l.Type), l.CName, value)
 	case *ast.AssignStmt:

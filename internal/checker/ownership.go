@@ -339,6 +339,10 @@ func (o *ownChecker) leaks(ls []*Local, pos token.Pos, where string) {
 	}
 	for _, l := range ls {
 		k := pathKey{l, ""}
+		if isBorrow(l.Type) {
+			o.borrowedFieldsBack(l, pos)
+			continue
+		}
 		s := o.st.get(k) & sObligation
 		if s&sLive == 0 {
 			continue
@@ -364,6 +368,32 @@ func (o *ownChecker) leaksFrom(depth int, pos token.Pos, where string) {
 
 // borrowsComplete exige que nenhum campo de objeto emprestado fique sem
 // valor ao sair da função: quem emprestou espera o objeto inteiro de volta.
+// borrowedFieldsBack confere, no fim do escopo de uma variável emprestada,
+// que os campos movidos para fora através dela voltaram.
+func (o *ownChecker) borrowedFieldsBack(l *Local, pos token.Pos) {
+	for k := range o.st {
+		if k.root == l && !k.isRoot() && o.st.get(k)&sDead != 0 {
+			o.errorf(pos, "%s foi movida para fora do empréstimo (linha %d) e precisa receber um valor antes do fim do escopo de %s",
+				k, o.gone[k].Line, l.Name)
+			if o.muted == 0 {
+				o.st[k] = sNull
+			}
+		}
+	}
+}
+
+// borrowValue avalia o valor de x := <empréstimo>: &lugar confere o lugar
+// (como um argumento emprestado); o resto é lido.
+func (o *ownChecker) borrowValue(e ast.Expr) {
+	if u, ok := e.(*ast.UnaryExpr); ok && u.Op == token.AMP {
+		if obj, ok := o.borrowArg(e); ok {
+			_ = obj
+		}
+		return
+	}
+	o.read(e)
+}
+
 func (o *ownChecker) borrowsComplete(pos token.Pos) {
 	for k := range o.st {
 		for _, b := range o.borrows {
@@ -394,6 +424,16 @@ func (o *ownChecker) stmt(s ast.Stmt) {
 		o.pop(s.End, "no fim do bloco")
 	case *ast.VarDecl:
 		l := info.Decls[s]
+		if isBorrow(l.Type) {
+			// x := v.at(0): como um parâmetro &T, nunca nil nem liberado; os
+			// campos donos podem sair e voltar antes do fim do escopo
+			if s.Value != nil {
+				o.borrowValue(s.Value)
+			}
+			o.st[pathKey{l, ""}] = sLive | sOpaque
+			o.scopes[len(o.scopes)-1] = append(o.scopes[len(o.scopes)-1], l)
+			return
+		}
 		if !IsOwner(l.Type) {
 			if s.Value != nil {
 				o.read(s.Value)

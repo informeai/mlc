@@ -1,8 +1,9 @@
-// erro: empréstimos (&Ponto) não podem ser guardados em variáveis
+// erro: o empréstimo q não pode ser reatribuído
 import "std/io"
 struct Ponto { x int; y int }
-fn f(p &Ponto) {
+fn f(p &Ponto, r &Ponto) {
     q := p
+    q = r
     io.print(q.x)
 }
 fn main() {

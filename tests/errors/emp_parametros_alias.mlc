@@ -1,0 +1,16 @@
+// erro: b está emprestada a x
+import "std/io"
+import "std/vec"
+
+struct P {
+    x int
+}
+
+fn f(a &P, b &P) {
+    x := a
+    b.x = 3
+    io.print(x.x)
+}
+
+fn main() {
+}

@@ -1,0 +1,12 @@
+// erro: a guardaria um empréstimo de um valor temporário
+import "std/io"
+import "std/vec"
+
+struct P {
+    x int
+}
+
+fn main() {
+    a := vec.new[P](1).at(0)
+    io.print(a.x)
+}

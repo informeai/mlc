@@ -1,7 +1,8 @@
-// erro: &T só pode ser tipo de parâmetro
+// erro: o empréstimo devolvido vem de p, que deixa de existir no fim da função; ele precisa vir de q
 struct Ponto { x int; y int }
-fn f(p &Ponto) &Ponto {
-    return p
+fn f(q &Ponto) &Ponto {
+    p := Ponto{x: q.x, y: 0}
+    return &p
 }
 fn main() {
 }
