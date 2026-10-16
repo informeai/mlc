@@ -1,0 +1,26 @@
+import "io"
+
+fn fib(n int) int {
+    if n < 2 {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}
+
+fn fib_iter(n int) int {
+    a := 0
+    b := 1
+    for i := 0; i < n; i++ {
+        next := a + b
+        a = b
+        b = next
+    }
+    return a
+}
+
+fn main() {
+    for i := 0; i <= 10; i++ {
+        io.print(i, fib(i), fib_iter(i))
+    }
+    io.print(fib_iter(90))
+}

@@ -1,0 +1,12 @@
+// erro: vazamento: p pode ainda ser dona da memória (linha 4) no fim da função, dependendo do caminho
+struct Ponto { x int; y int }
+fn f(n int) {
+    p := alloc(Ponto)
+    match n {
+        0 => free(p)
+        _ => {}
+    }
+}
+fn main() {
+    f(0)
+}

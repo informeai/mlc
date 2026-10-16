@@ -1,0 +1,7 @@
+// erro: constante -9223372036854775809 não cabe em int
+fn main() {
+    match 1 {
+        -9223372036854775809 => {}
+        _ => {}
+    }
+}

@@ -1,0 +1,7 @@
+// erro: concatenação de strings exige alocação explícita
+import "io"
+fn main() {
+    s := "a"
+    s += "b"
+    io.print(s)
+}

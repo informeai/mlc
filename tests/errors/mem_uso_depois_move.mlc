@@ -1,0 +1,8 @@
+// erro: p já foi liberada ou movida (linha 5)
+struct Ponto { x int; y int }
+fn main() {
+    p := alloc(Ponto)
+    q := p
+    p.x = 1
+    free(q)
+}

@@ -1,0 +1,6 @@
+// erro: o nome Ponto já é usado por uma struct ou constante
+struct Ponto { x int }
+fn Ponto() {
+}
+fn main() {
+}

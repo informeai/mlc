@@ -1,0 +1,4 @@
+// erro: expressão calculada mas não usada
+fn main() {
+    1 + 2
+}

@@ -1,0 +1,4 @@
+// erro: estouro de inteiro na constante
+const N = 9223372036854775807 + 1
+fn main() {
+}

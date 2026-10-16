@@ -1,0 +1,5 @@
+// erro: x declarada e não usada
+fn main() {
+    x := 1
+    x = 2
+}

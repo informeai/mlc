@@ -1,0 +1,7 @@
+// erro: campo b não inicializado
+struct B { x int }
+struct A { b *B; n int }
+fn main() {
+    a := alloc(A{n: 1})
+    free(a)
+}

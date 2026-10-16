@@ -1,0 +1,5 @@
+// erro: concatenação de strings exige alocação explícita
+import "io"
+fn main() {
+    io.print("a" + "b")
+}

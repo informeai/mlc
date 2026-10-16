@@ -1,0 +1,4 @@
+// erro: identificador não declarado: y
+fn main() {
+    y = 1
+}

@@ -1,0 +1,6 @@
+// erro: match sobre bool precisa cobrir true e false ou ter um braço _
+fn main() {
+    match true {
+        true => {}
+    }
+}

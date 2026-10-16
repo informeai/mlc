@@ -1,0 +1,10 @@
+// erro: l.prox foi movida para fora do empréstimo (linha 7) e precisa receber um valor antes de sair da função
+struct No {
+    valor int
+    prox ?*No
+}
+fn rouba(l &No) ?*No {
+    return l.prox
+}
+fn main() {
+}

@@ -1,0 +1,11 @@
+// erro: vazamento: p.prox ainda é dona da memória (linha 8) e seria sobrescrita
+struct No {
+    valor int
+    prox ?*No
+}
+fn main() {
+    p := alloc(No)
+    p.prox = alloc(No)
+    p.prox = alloc(No)
+    free(p)
+}

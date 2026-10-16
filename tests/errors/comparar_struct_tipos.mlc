@@ -1,0 +1,7 @@
+// erro: comparação entre tipos diferentes: A e B
+import "io"
+struct A { x int }
+struct B { x int }
+fn main() {
+    io.print(A{} == B{})
+}

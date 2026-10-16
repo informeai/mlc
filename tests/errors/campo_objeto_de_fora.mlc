@@ -1,0 +1,10 @@
+// erro: free(p): p.prox ainda pode ser dona de memória
+struct No {
+    valor int
+    prox ?*No
+}
+fn destroi(p *No) {
+    free(p)
+}
+fn main() {
+}

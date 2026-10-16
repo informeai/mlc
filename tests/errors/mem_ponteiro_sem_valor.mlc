@@ -1,0 +1,5 @@
+// erro: var p *Ponto precisa de valor inicial: um ponteiro *T nunca é nil
+struct Ponto { x int; y int }
+fn main() {
+    var p *Ponto
+}

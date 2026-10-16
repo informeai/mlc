@@ -1,0 +1,6 @@
+// erro: operador * só se aplica a ponteiros e empréstimos, não a int
+import "io"
+fn main() {
+    x := 1
+    io.print(*x)
+}

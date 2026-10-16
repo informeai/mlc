@@ -1,0 +1,14 @@
+// erro: p é emprestada e movida na mesma chamada
+struct No {
+    valor int
+    prox ?*No
+}
+fn f(a &No, b ?*No) {
+    free(b)
+}
+fn main() {
+    p := alloc(No)
+    p.prox = alloc(No)
+    f(&p, p.prox)
+    free(p)
+}

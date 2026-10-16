@@ -1,0 +1,7 @@
+// erro: o valor de uma const precisa ser uma expressão constante
+fn f() int {
+    return 1
+}
+const N = f()
+fn main() {
+}

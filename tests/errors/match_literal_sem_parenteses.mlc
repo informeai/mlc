@@ -1,0 +1,7 @@
+// erro: literal de struct no cabeçalho de if, for ou match precisa de parênteses
+struct Ponto { x int }
+fn main() {
+    match Ponto{} {
+        _ => {}
+    }
+}

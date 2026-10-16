@@ -1,0 +1,3 @@
+// erro: função main não declarada
+fn outra() {
+}

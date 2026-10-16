@@ -1,0 +1,7 @@
+// erro: operador ++ não se aplica a bool
+import "io"
+fn main() {
+    b := true
+    b++
+    io.print(b)
+}

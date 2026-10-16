@@ -1,0 +1,5 @@
+// erro: ponteiro para ponteiro não é suportado
+fn f(p **int) {
+}
+fn main() {
+}

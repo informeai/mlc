@@ -1,0 +1,12 @@
+// erro: p.prox liberada duas vezes
+struct No {
+    valor int
+    prox ?*No
+}
+fn main() {
+    p := alloc(No)
+    p.prox = alloc(No)
+    free(p.prox)
+    free(p.prox)
+    free(p)
+}

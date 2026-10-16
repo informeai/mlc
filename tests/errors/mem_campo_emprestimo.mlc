@@ -1,0 +1,7 @@
+// erro: &T só pode ser tipo de parâmetro
+struct No {
+    valor int
+    prox &No
+}
+fn main() {
+}

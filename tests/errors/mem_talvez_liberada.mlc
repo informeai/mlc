@@ -1,0 +1,13 @@
+// erro: p pode já ter sido liberada ou movida (linha 6), dependendo do caminho
+struct Ponto { x int; y int }
+fn f(c bool) {
+    p := alloc(Ponto)
+    if c {
+        free(p)
+    }
+    p.x = 1
+    free(p)
+}
+fn main() {
+    f(true)
+}

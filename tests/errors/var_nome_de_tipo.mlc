@@ -1,0 +1,7 @@
+// erro: o nome Ponto já é um tipo (struct)
+import "io"
+struct Ponto { x int }
+fn main() {
+    Ponto := 1
+    io.print(Ponto)
+}

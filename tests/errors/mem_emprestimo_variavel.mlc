@@ -1,0 +1,9 @@
+// erro: empréstimos (&Ponto) não podem ser guardados em variáveis
+import "io"
+struct Ponto { x int; y int }
+fn f(p &Ponto) {
+    q := p
+    io.print(q.x)
+}
+fn main() {
+}

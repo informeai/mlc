@@ -1,0 +1,4 @@
+// erro: tipo desconhecido Foo
+struct Ponto { x Foo }
+fn main() {
+}

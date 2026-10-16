@@ -1,0 +1,17 @@
+// erro: p não pode ser movida: p.prox foi movida para fora (linha 14) e não recebeu valor novo
+struct No {
+    valor int
+    prox ?*No
+}
+fn destroi(p *No) {
+    x := p.prox
+    free(x)
+    free(p)
+}
+fn main() {
+    p := alloc(No)
+    p.prox = alloc(No)
+    x := p.prox
+    destroi(p)
+    free(x)
+}

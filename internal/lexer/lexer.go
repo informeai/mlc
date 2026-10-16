@@ -1,0 +1,267 @@
+// Package lexer transforma código MLC em tokens, inserindo ';' no fim das
+// linhas com a mesma regra do Go.
+package lexer
+
+import (
+	"fmt"
+	"strings"
+
+	"mlc/internal/token"
+)
+
+type Lexer struct {
+	file string
+	src  []byte
+	off  int
+	line int
+	col  int
+	last token.Kind
+	errs []token.Error
+}
+
+func New(file string, src []byte) *Lexer {
+	return &Lexer{file: file, src: src, line: 1, col: 1, last: token.EOF}
+}
+
+func (l *Lexer) Errors() []token.Error { return l.errs }
+
+// Next devolve o próximo token. Depois do fim do arquivo devolve sempre EOF.
+func (l *Lexer) Next() token.Token {
+	tok := l.scan()
+	l.last = tok.Kind
+	return tok
+}
+
+// insertsSemi diz se uma quebra de linha depois de k termina o comando.
+func insertsSemi(k token.Kind) bool {
+	switch k {
+	case token.IDENT, token.INT, token.FLOAT, token.STRING,
+		token.RPAREN, token.RBRACK, token.RBRACE,
+		token.INC, token.DEC,
+		token.BREAK, token.CONTINUE, token.RETURN:
+		return true
+	}
+	return false
+}
+
+func (l *Lexer) pos() token.Pos { return token.Pos{Line: l.line, Col: l.col} }
+
+func (l *Lexer) peek(n int) byte {
+	if l.off+n < len(l.src) {
+		return l.src[l.off+n]
+	}
+	return 0
+}
+
+func (l *Lexer) advance() {
+	if l.src[l.off] == '\n' {
+		l.line++
+		l.col = 1
+	} else {
+		l.col++
+	}
+	l.off++
+}
+
+// match consome o próximo byte se ele for c.
+func (l *Lexer) match(c byte) bool {
+	if l.off < len(l.src) && l.src[l.off] == c {
+		l.advance()
+		return true
+	}
+	return false
+}
+
+func (l *Lexer) errorf(pos token.Pos, format string, args ...any) {
+	l.errs = append(l.errs, token.Error{File: l.file, Pos: pos, Msg: fmt.Sprintf(format, args...)})
+}
+
+func (l *Lexer) scan() token.Token {
+	for l.off < len(l.src) {
+		c := l.src[l.off]
+		switch {
+		case c == '\n':
+			if insertsSemi(l.last) {
+				pos := l.pos()
+				l.advance()
+				return token.Token{Kind: token.SEMICOLON, Lit: "\n", Pos: pos}
+			}
+			l.advance()
+		case c == ' ' || c == '\t' || c == '\r':
+			l.advance()
+		case c == '/' && l.peek(1) == '/':
+			for l.off < len(l.src) && l.src[l.off] != '\n' {
+				l.advance()
+			}
+		default:
+			return l.scanToken()
+		}
+	}
+	pos := l.pos()
+	if insertsSemi(l.last) {
+		return token.Token{Kind: token.SEMICOLON, Lit: "\n", Pos: pos}
+	}
+	return token.Token{Kind: token.EOF, Pos: pos}
+}
+
+func isLetter(c byte) bool { return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }
+func isDigit(c byte) bool  { return c >= '0' && c <= '9' }
+
+func (l *Lexer) scanToken() token.Token {
+	pos := l.pos()
+	start := l.off
+	c := l.src[l.off]
+	switch {
+	case isLetter(c):
+		return l.scanIdent(pos)
+	case isDigit(c):
+		return l.scanNumber(pos)
+	case c == '"':
+		return l.scanString(pos)
+	}
+
+	l.advance()
+	k := token.ILLEGAL
+	switch c {
+	case '+':
+		k = l.pick(token.ADD, alt{'+', token.INC}, alt{'=', token.ADD_ASSIGN})
+	case '-':
+		k = l.pick(token.SUB, alt{'-', token.DEC}, alt{'=', token.SUB_ASSIGN})
+	case '*':
+		k = l.pick(token.MUL, alt{'=', token.MUL_ASSIGN})
+	case '/':
+		k = l.pick(token.QUO, alt{'=', token.QUO_ASSIGN})
+	case '%':
+		k = l.pick(token.REM, alt{'=', token.REM_ASSIGN})
+	case '=':
+		k = l.pick(token.ASSIGN, alt{'=', token.EQL}, alt{'>', token.ARROW})
+	case '!':
+		k = l.pick(token.NOT, alt{'=', token.NEQ})
+	case '<':
+		k = l.pick(token.LSS, alt{'=', token.LEQ})
+	case '>':
+		k = l.pick(token.GTR, alt{'=', token.GEQ})
+	case ':':
+		k = l.pick(token.COLON, alt{'=', token.DEFINE})
+	case '&':
+		k = l.pick(token.AMP, alt{'&', token.LAND})
+	case '|':
+		k = l.pick(token.ILLEGAL, alt{'|', token.LOR})
+	case '(':
+		k = token.LPAREN
+	case ')':
+		k = token.RPAREN
+	case '[':
+		k = token.LBRACK
+	case ']':
+		k = token.RBRACK
+	case '{':
+		k = token.LBRACE
+	case '}':
+		k = token.RBRACE
+	case ',':
+		k = token.COMMA
+	case ';':
+		k = token.SEMICOLON
+	case '.':
+		k = token.PERIOD
+	case '?':
+		k = token.QUESTION
+	}
+	lit := string(l.src[start:l.off])
+	if k == token.ILLEGAL {
+		l.errorf(pos, "caractere inesperado %q", lit)
+	}
+	return token.Token{Kind: k, Lit: lit, Pos: pos}
+}
+
+// alt é uma variante de dois caracteres: se o próximo byte for next, o token é kind.
+type alt struct {
+	next byte
+	kind token.Kind
+}
+
+// pick escolhe entre o token simples def e as variantes de dois caracteres.
+func (l *Lexer) pick(def token.Kind, alts ...alt) token.Kind {
+	for _, a := range alts {
+		if l.match(a.next) {
+			return a.kind
+		}
+	}
+	return def
+}
+
+func (l *Lexer) scanIdent(pos token.Pos) token.Token {
+	start := l.off
+	for l.off < len(l.src) && (isLetter(l.src[l.off]) || isDigit(l.src[l.off])) {
+		l.advance()
+	}
+	lit := string(l.src[start:l.off])
+	return token.Token{Kind: token.Lookup(lit), Lit: lit, Pos: pos}
+}
+
+func (l *Lexer) scanNumber(pos token.Pos) token.Token {
+	start := l.off
+	kind := token.INT
+	for l.off < len(l.src) && isDigit(l.src[l.off]) {
+		l.advance()
+	}
+	if l.peek(0) == '.' && isDigit(l.peek(1)) {
+		kind = token.FLOAT
+		l.advance()
+		for l.off < len(l.src) && isDigit(l.src[l.off]) {
+			l.advance()
+		}
+	}
+	if l.off < len(l.src) && isLetter(l.src[l.off]) {
+		l.errorf(l.pos(), "número malformado: letra logo após %q", string(l.src[start:l.off]))
+		for l.off < len(l.src) && (isLetter(l.src[l.off]) || isDigit(l.src[l.off])) {
+			l.advance()
+		}
+	}
+	return token.Token{Kind: kind, Lit: string(l.src[start:l.off]), Pos: pos}
+}
+
+// scanString lê um literal entre aspas e devolve o valor já sem escapes.
+func (l *Lexer) scanString(pos token.Pos) token.Token {
+	l.advance() // aspas de abertura
+	var sb strings.Builder
+	for {
+		if l.off >= len(l.src) || l.src[l.off] == '\n' {
+			l.errorf(pos, "string não terminada")
+			break
+		}
+		c := l.src[l.off]
+		if c == '"' {
+			l.advance()
+			break
+		}
+		if c == '\\' {
+			l.advance()
+			if l.off >= len(l.src) {
+				continue
+			}
+			escPos := l.pos()
+			e := l.src[l.off]
+			l.advance()
+			switch e {
+			case 'n':
+				sb.WriteByte('\n')
+			case 't':
+				sb.WriteByte('\t')
+			case 'r':
+				sb.WriteByte('\r')
+			case '0':
+				sb.WriteByte(0)
+			case '\\', '"':
+				sb.WriteByte(e)
+			default:
+				l.errorf(escPos, "escape inválido \\%c", e)
+			}
+			continue
+		}
+		sb.WriteByte(c)
+		l.advance()
+	}
+	return token.Token{Kind: token.STRING, Lit: sb.String(), Pos: pos}
+}

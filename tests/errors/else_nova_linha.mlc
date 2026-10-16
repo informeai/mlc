@@ -1,0 +1,7 @@
+// erro: else precisa ficar na mesma linha do '}' que fecha o if
+fn main() {
+    if true {
+    }
+    else {
+    }
+}

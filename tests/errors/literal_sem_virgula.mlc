@@ -1,0 +1,10 @@
+// erro: falta ',' depois do campo y
+import "io"
+struct Ponto { x int; y int }
+fn main() {
+    p := Ponto{
+        x: 1,
+        y: 2
+    }
+    io.print(p)
+}

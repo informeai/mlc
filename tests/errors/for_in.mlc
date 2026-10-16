@@ -1,0 +1,5 @@
+// erro: for ... in ainda não é suportado
+fn main() {
+    for x in lista {
+    }
+}

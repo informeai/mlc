@@ -1,0 +1,9 @@
+// erro: vazamento: q ainda é dona da memória (linha 6) (em algum caminho) e seria sobrescrita
+struct Ponto { x int; y int }
+fn main() {
+    var q ?*Ponto = nil
+    for i := 0; i < 3; i++ {
+        q = alloc(Ponto)
+    }
+    free(q)
+}

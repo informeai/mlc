@@ -1,0 +1,7 @@
+// erro: break fora de um for
+fn main() {
+    match 1 {
+        1 => break
+        _ => {}
+    }
+}

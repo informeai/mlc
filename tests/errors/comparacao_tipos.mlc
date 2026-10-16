@@ -1,0 +1,5 @@
+// erro: comparação entre tipos diferentes: string e int
+import "io"
+fn main() {
+    io.print("a" == 1)
+}

@@ -1,0 +1,6 @@
+// erro: match sobre string precisa de um braço _
+fn main() {
+    match "a" {
+        "a" => {}
+    }
+}

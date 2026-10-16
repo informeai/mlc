@@ -1,0 +1,8 @@
+// erro: função f precisa terminar com return
+fn f() int {
+    for {
+        break
+    }
+}
+fn main() {
+}

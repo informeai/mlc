@@ -1,0 +1,4 @@
+// erro: módulo io não foi importado
+fn main() {
+    io.print(1)
+}

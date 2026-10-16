@@ -1,0 +1,11 @@
+// erro: q pode ser nil aqui: verifique com if q != nil antes de usar o conteúdo
+import "io"
+struct Ponto { x int; y int }
+fn talvez() ?*Ponto {
+    return nil
+}
+fn main() {
+    q := talvez()
+    io.print(q.x)
+    free(q)
+}

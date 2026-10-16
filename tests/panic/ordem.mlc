@@ -1,0 +1,15 @@
+import "io"
+
+fn marca(nome string, v int) int {
+    io.print(nome)
+    return v
+}
+
+fn soma(x int, y int) int {
+    return x + y
+}
+
+fn main() {
+    zero := marca("antes", 0)
+    io.print(soma(10 / zero, marca("depois", 1)))
+}

@@ -1,0 +1,8 @@
+// erro: não é possível atribuir a esta expressão
+struct Ponto { x int }
+fn f() Ponto {
+    return Ponto{}
+}
+fn main() {
+    f().x = 1
+}

@@ -1,0 +1,93 @@
+import "io"
+
+const LIMITE = 3
+const SAUDACAO string = "olá"
+const GRANDE = 1000 * 1000
+const NEGATIVO = -LIMITE * 2
+const ATIVO = LIMITE > 2 && !false
+
+struct Ponto {
+    x int
+    y int
+}
+
+// a ordem de declaração não importa: Retangulo usa Ponto, declarado antes,
+// e Linha usa Ponto também
+struct Linha { a Ponto; b Ponto }
+
+struct Retangulo {
+    canto Ponto
+    largura int
+    altura int
+    nome string
+}
+
+struct Vazio {}
+
+struct Palavras {
+    default int
+    char string
+}
+
+fn area(r Retangulo) int {
+    return r.largura * r.altura
+}
+
+fn move(p Ponto, dx int, dy int) Ponto {
+    p.x += dx
+    p.y += dy
+    return p
+}
+
+fn categoria(n int) string {
+    match n {
+        LIMITE => return "limite"
+        0 => return "zero"
+        _ => return "outro"
+    }
+}
+
+fn main() {
+    p := Ponto{x: 1, y: 2}
+    io.print(p.x, p.y, p)
+
+    q := move(p, 10, 20)
+    io.print(p, q)
+
+    r := Retangulo{
+        canto: Ponto{x: 0, y: 0},
+        largura: 4,
+        altura: LIMITE,
+        nome: "quadro",
+    }
+    r.canto.x = 7
+    r.canto.y++
+    io.print(area(r), r.canto, r.nome)
+    io.print(r)
+
+    var z Retangulo
+    io.print(z, z.nome == "")
+
+    io.print(p == Ponto{x: 1, y: 2}, p != q)
+    if (p == Ponto{x: 1, y: 2}) {
+        io.print("igual")
+    }
+
+    const local = LIMITE + 1
+    io.print(local, SAUDACAO, GRANDE, NEGATIVO, ATIVO)
+    io.print(categoria(3), categoria(0), categoria(9))
+
+    v := Vazio{}
+    io.print(v, v == Vazio{})
+
+    l := Linha{a: Ponto{}, b: move(Ponto{}, 1, 1)}
+    io.print(l, l.b.x + l.b.y)
+
+    kw := Palavras{default: 1, char: "c"}
+    io.print(kw)
+
+    for i := 0; i < LIMITE; i++ {
+        r.largura += i
+    }
+    io.print(r.largura)
+}

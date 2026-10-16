@@ -1,0 +1,8 @@
+// erro: x não é constante: padrão precisa ser um literal, uma constante ou _
+fn main() {
+    x := 1
+    match 1 {
+        x => {}
+        _ => {}
+    }
+}

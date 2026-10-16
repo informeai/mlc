@@ -1,0 +1,10 @@
+// erro: p já foi liberada ou movida (linha 8)
+struct Ponto { x int; y int }
+fn destroi(p *Ponto) {
+    free(p)
+}
+fn main() {
+    p := alloc(Ponto)
+    destroi(p)
+    destroi(p)
+}

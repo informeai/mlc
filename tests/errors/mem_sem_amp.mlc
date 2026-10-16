@@ -1,0 +1,10 @@
+// erro: argumento 1 de soma: esperado &Ponto; para emprestar, escreva &p
+struct Ponto { x int; y int }
+fn soma(p &Ponto) int {
+    return p.x + p.y
+}
+fn main() {
+    p := alloc(Ponto)
+    soma(p)
+    free(p)
+}

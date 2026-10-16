@@ -1,0 +1,14 @@
+// erro: p.prox já foi liberada ou movida (linha 10)
+import "io"
+struct No {
+    valor int
+    prox ?*No
+}
+fn main() {
+    p := alloc(No)
+    p.prox = alloc(No)
+    x := p.prox
+    io.print(p.prox.valor)
+    free(x)
+    free(p)
+}

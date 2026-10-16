@@ -1,0 +1,9 @@
+// erro: função f precisa terminar com return
+fn f(n int) int {
+    match n {
+        0 => return 1
+        _ => {}
+    }
+}
+fn main() {
+}

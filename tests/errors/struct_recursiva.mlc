@@ -1,0 +1,5 @@
+// erro: struct A contém a si mesma por valor (A → B → A)
+struct A { b B }
+struct B { a A }
+fn main() {
+}

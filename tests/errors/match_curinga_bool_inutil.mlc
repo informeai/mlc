@@ -1,0 +1,8 @@
+// erro: braço _ nunca é executado: true e false já foram cobertos
+fn main() {
+    match true {
+        true => {}
+        false => {}
+        _ => {}
+    }
+}

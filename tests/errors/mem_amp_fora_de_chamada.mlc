@@ -1,0 +1,6 @@
+// erro: & só pode aparecer como argumento de chamada
+struct Ponto { x int; y int }
+fn main() {
+    s := Ponto{}
+    x := &s
+}

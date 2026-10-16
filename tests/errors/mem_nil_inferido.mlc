@@ -1,0 +1,4 @@
+// erro: não dá para deduzir o tipo de nil
+fn main() {
+    x := nil
+}

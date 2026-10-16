@@ -1,0 +1,7 @@
+// erro: alloc(A) zera a memória, mas A.b é um ponteiro *T e não pode ser nil
+struct B { x int }
+struct A { b *B }
+fn main() {
+    a := alloc(A)
+    free(a)
+}

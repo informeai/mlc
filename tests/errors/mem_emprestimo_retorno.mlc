@@ -1,0 +1,7 @@
+// erro: &T só pode ser tipo de parâmetro
+struct Ponto { x int; y int }
+fn f(p &Ponto) &Ponto {
+    return p
+}
+fn main() {
+}

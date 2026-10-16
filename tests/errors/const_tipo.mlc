@@ -1,0 +1,4 @@
+// erro: constante N: esperado string, encontrado int
+const N string = 1
+fn main() {
+}

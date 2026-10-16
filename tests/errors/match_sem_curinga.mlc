@@ -1,0 +1,6 @@
+// erro: match sobre int precisa de um braço _
+fn main() {
+    match 1 {
+        1 => {}
+    }
+}

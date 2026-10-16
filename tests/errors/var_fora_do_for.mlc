@@ -1,0 +1,7 @@
+// erro: identificador não declarado: i
+import "io"
+fn main() {
+    for i := 0; i < 3; i++ {
+    }
+    io.print(i)
+}

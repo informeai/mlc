@@ -1,0 +1,8 @@
+// erro: No contém ponteiros donos e só pode ser usada através de um ponteiro
+struct No {
+    valor int
+    prox ?*No
+}
+fn main() {
+    var n No
+}

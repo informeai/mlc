@@ -1,0 +1,7 @@
+// erro: padrão "a" repetido
+fn main() {
+    match "x" {
+        "a", "a" => {}
+        _ => {}
+    }
+}

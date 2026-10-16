@@ -1,0 +1,7 @@
+// erro: não é possível liberar um empréstimo (&Ponto): só o dono libera
+struct Ponto { x int; y int }
+fn f(p &Ponto) {
+    free(p)
+}
+fn main() {
+}

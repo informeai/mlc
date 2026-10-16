@@ -1,0 +1,8 @@
+// erro: valor do tipo *Ponto nunca é nil
+import "io"
+struct Ponto { x int; y int }
+fn main() {
+    p := alloc(Ponto)
+    io.print(p == nil)
+    free(p)
+}

@@ -1,0 +1,6 @@
+// erro: tipo Ponto usado como valor
+import "io"
+struct Ponto { x int }
+fn main() {
+    io.print(Ponto)
+}

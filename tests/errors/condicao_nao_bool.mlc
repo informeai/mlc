@@ -1,0 +1,5 @@
+// erro: a condição do if precisa ser bool, encontrado int
+fn main() {
+    if 1 {
+    }
+}

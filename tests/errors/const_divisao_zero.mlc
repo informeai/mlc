@@ -1,0 +1,4 @@
+// erro: divisão por zero na constante
+const N = 10 / (5 - 5)
+fn main() {
+}

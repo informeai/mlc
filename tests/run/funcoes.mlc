@@ -1,0 +1,22 @@
+import "io"
+
+fn soma(a int, b int) int {
+    return a + b
+}
+
+fn positivo(n int) bool {
+    return n > 0
+}
+
+fn saudacao() string {
+    return "olá, \"mundo\"?"
+}
+
+fn main() {
+    io.print("soma:", soma(40, 2))
+    io.print(2 + 3 * 4, (2 + 3) * 4, -7 / 2, -7 % 2)
+    io.print(1 < 2, 1 == 2 || !false, positivo(-1))
+    io.print(saudacao())
+    io.print()
+    io.print(9223372036854775807)
+}

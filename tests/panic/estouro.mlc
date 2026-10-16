@@ -1,0 +1,10 @@
+import "io"
+
+fn dobra(n int) int {
+    return n * 2
+}
+
+fn main() {
+    io.print("antes")
+    io.print(dobra(9223372036854775807))
+}

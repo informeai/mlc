@@ -1,0 +1,9 @@
+// erro: vazamento: o ponteiro dono temporário é perdido aqui
+import "io"
+struct Ponto { x int; y int }
+fn novo() *Ponto {
+    return alloc(Ponto)
+}
+fn main() {
+    io.print(novo().x)
+}

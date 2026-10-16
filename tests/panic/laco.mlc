@@ -1,0 +1,9 @@
+import "io"
+
+fn main() {
+    x := 1
+    for {
+        x *= 2
+        io.print(x)
+    }
+}

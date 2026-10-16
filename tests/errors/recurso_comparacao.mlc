@@ -1,0 +1,13 @@
+// erro: structs que contêm ponteiros donos não podem ser comparadas com ==
+import "io"
+struct No {
+    valor int
+    prox ?*No
+}
+fn main() {
+    p := alloc(No)
+    q := alloc(No)
+    io.print(*p == *q)
+    free(p)
+    free(q)
+}

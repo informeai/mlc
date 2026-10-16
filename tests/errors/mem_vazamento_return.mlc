@@ -1,0 +1,9 @@
+// erro: vazamento: p ainda é dona da memória (linha 4) no return
+struct Ponto { x int; y int }
+fn f() int {
+    p := alloc(Ponto)
+    return p.x
+}
+fn main() {
+    f()
+}

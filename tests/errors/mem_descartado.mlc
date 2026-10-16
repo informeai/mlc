@@ -1,0 +1,8 @@
+// erro: vazamento: o ponteiro dono devolvido aqui é descartado
+struct Ponto { x int; y int }
+fn novo() *Ponto {
+    return alloc(Ponto)
+}
+fn main() {
+    novo()
+}

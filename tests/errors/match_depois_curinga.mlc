@@ -1,0 +1,7 @@
+// erro: braço depois de _ nunca é executado
+fn main() {
+    match 1 {
+        _ => {}
+        1 => {}
+    }
+}

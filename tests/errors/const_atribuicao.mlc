@@ -1,0 +1,5 @@
+// erro: não é possível atribuir à constante N
+const N = 1
+fn main() {
+    N = 2
+}

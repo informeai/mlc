@@ -1,0 +1,11 @@
+// erro: q pode ser nil aqui: verifique com if q != nil antes de usar o conteúdo
+import "io"
+struct Ponto { x int; y int }
+fn main() {
+    var q ?*Ponto = alloc(Ponto)
+    if q != nil {
+        free(q)
+        q = nil
+        io.print(q.x)
+    }
+}

@@ -1,0 +1,11 @@
+// erro: literal de No, que contém ponteiros donos, só pode aparecer dentro de alloc(...)
+struct No {
+    valor int
+    prox ?*No
+}
+fn main() {
+    p := alloc(No)
+    p.prox = nil
+    n := No{valor: 1, prox: nil}
+    free(p)
+}

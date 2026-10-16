@@ -1,0 +1,9 @@
+// erro: p é emprestada e movida na mesma chamada
+struct Ponto { x int; y int }
+fn f(a &Ponto, b *Ponto) {
+    free(b)
+}
+fn main() {
+    p := alloc(Ponto)
+    f(&p, p)
+}

@@ -1,0 +1,7 @@
+// erro: vazamento: p ainda é dona da memória (linha 3) no fim da função
+struct Ponto { x int; y int }
+fn f(p *Ponto) {
+}
+fn main() {
+    f(alloc(Ponto))
+}

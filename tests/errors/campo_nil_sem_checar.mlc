@@ -1,0 +1,11 @@
+// erro: p.prox pode ser nil aqui: verifique com if p.prox != nil antes de usar o conteúdo
+import "io"
+struct No {
+    valor int
+    prox ?*No
+}
+fn mostra(p &No) {
+    io.print(p.prox.valor)
+}
+fn main() {
+}

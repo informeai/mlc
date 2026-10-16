@@ -1,0 +1,7 @@
+// erro: match não se aplica a Ponto (só int, bool e string)
+struct Ponto { x int }
+fn main() {
+    match (Ponto{}) {
+        _ => {}
+    }
+}

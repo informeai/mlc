@@ -1,0 +1,6 @@
+// erro: _ precisa estar sozinho no braço
+fn main() {
+    match 1 {
+        1, _ => {}
+    }
+}

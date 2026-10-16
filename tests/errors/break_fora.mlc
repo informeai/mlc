@@ -1,0 +1,4 @@
+// erro: break fora de um for
+fn main() {
+    break
+}

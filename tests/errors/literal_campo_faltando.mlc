@@ -1,0 +1,6 @@
+// erro: campo y não inicializado (liste todos os campos, ou use Ponto{} para o valor zero)
+import "io"
+struct Ponto { x int; y int }
+fn main() {
+    io.print(Ponto{x: 1})
+}

@@ -1,0 +1,10 @@
+// erro: p já foi liberada ou movida (linha 9)
+struct Ponto { x int; y int }
+fn pega(p *Ponto) int {
+    free(p)
+    return 1
+}
+fn main() {
+    p := alloc(Ponto)
+    p.x = pega(p)
+}

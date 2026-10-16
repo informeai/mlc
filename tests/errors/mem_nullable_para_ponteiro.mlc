@@ -1,0 +1,9 @@
+// erro: q pode ser nil aqui, mas o argumento 1 de destroi espera *Ponto; verifique com if q != nil antes
+struct Ponto { x int; y int }
+fn destroi(p *Ponto) {
+    free(p)
+}
+fn main() {
+    var q ?*Ponto = nil
+    destroi(q)
+}

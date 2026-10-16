@@ -1,0 +1,5 @@
+// erro: função f precisa terminar com return
+fn f() int {
+}
+fn main() {
+}

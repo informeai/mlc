@@ -1,0 +1,7 @@
+// erro: o empréstimo p não pode ser reatribuído
+struct Ponto { x int; y int }
+fn f(p &Ponto, q &Ponto) {
+    p = q
+}
+fn main() {
+}

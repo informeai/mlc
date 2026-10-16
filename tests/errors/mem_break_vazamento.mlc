@@ -1,0 +1,10 @@
+// erro: vazamento: p ainda é dona da memória (linha 6) no break
+import "io"
+struct Ponto { x int; y int }
+fn main() {
+    for {
+        p := alloc(Ponto)
+        io.print(p.x)
+        break
+    }
+}

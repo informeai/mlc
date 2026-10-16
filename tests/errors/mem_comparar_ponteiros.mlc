@@ -1,0 +1,10 @@
+// erro: ponteiros só podem ser comparados com nil
+import "io"
+struct Ponto { x int; y int }
+fn main() {
+    p := alloc(Ponto)
+    q := alloc(Ponto)
+    io.print(p == q)
+    free(p)
+    free(q)
+}

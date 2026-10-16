@@ -1,0 +1,7 @@
+// erro: vazamento: p ainda é dona da memória (linha 4) e seria sobrescrita
+struct Ponto { x int; y int }
+fn main() {
+    p := alloc(Ponto)
+    p = alloc(Ponto)
+    free(p)
+}

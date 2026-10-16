@@ -1,0 +1,5 @@
+// erro: match sem braços
+fn main() {
+    match 1 {
+    }
+}

@@ -1,0 +1,4 @@
+// erro: var x precisa de tipo ou valor inicial
+fn main() {
+    var x
+}

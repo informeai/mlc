@@ -1,0 +1,5 @@
+// erro: identificador não declarado: x
+import "io"
+fn main() {
+    io.print(x)
+}

@@ -1,0 +1,4 @@
+// erro: free espera um ponteiro dono, encontrado int
+fn main() {
+    free(1)
+}

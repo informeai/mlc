@@ -1,0 +1,10 @@
+// erro: valor do tipo No contém ponteiros donos e não pode ser copiado
+struct No {
+    valor int
+    prox ?*No
+}
+fn main() {
+    p := alloc(No)
+    copia := *p
+    free(p)
+}

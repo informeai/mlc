@@ -1,0 +1,7 @@
+// erro: padrão do tipo string em match sobre int
+fn main() {
+    match 1 {
+        "a" => {}
+        _ => {}
+    }
+}

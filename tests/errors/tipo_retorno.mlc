@@ -1,0 +1,6 @@
+// erro: return: esperado int, encontrado bool
+fn f() int {
+    return true
+}
+fn main() {
+}

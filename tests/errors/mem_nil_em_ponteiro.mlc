@@ -1,0 +1,5 @@
+// erro: nil só cabe em ?*Ponto, não em *Ponto
+struct Ponto { x int; y int }
+fn main() {
+    var p *Ponto = nil
+}
