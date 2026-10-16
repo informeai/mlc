@@ -15,6 +15,9 @@ import (
 func sliceCType(s *checker.Slice) string { return "mlc_sl_" + mangle(s.Elem) }
 
 func mangle(t checker.Type) string {
+	if en, ok := t.(*checker.Enum); ok {
+		return "en_" + en.CName
+	}
 	if a, ok := t.(*checker.Array); ok {
 		return fmt.Sprintf("%d_%s", a.Len, mangle(a.Elem))
 	}

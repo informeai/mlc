@@ -1,0 +1,6 @@
+// erro: Ponto não tem método voa
+struct Ponto { x int; y int }
+fn main() {
+    p := Ponto{x: 1, y: 2}
+    p.voa()
+}

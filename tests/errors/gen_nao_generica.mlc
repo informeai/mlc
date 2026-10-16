@@ -1,0 +1,5 @@
+// erro: Ponto não é genérica
+struct Ponto { x int }
+fn main() {
+    var p Ponto[int]
+}

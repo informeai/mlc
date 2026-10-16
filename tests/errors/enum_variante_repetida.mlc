@@ -1,0 +1,14 @@
+// erro: variante Vazio repetida (já aparece na linha 8)
+enum Forma {
+    Circulo(raio float64)
+    Vazio
+}
+fn f(x Forma) {
+    match x {
+        Vazio => {}
+        Circulo(_) => {}
+        Vazio => {}
+    }
+}
+fn main() {
+}

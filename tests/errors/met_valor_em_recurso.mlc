@@ -1,0 +1,7 @@
+// erro: No contém ponteiros donos e não pode ser copiada: use o receptor &No ou *No
+struct No { prox ?*No }
+fn (n No) vazio() bool {
+    return true
+}
+fn main() {
+}

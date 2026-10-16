@@ -1,0 +1,6 @@
+// erro: o método forma.Q.segredo não é público (declare com pub fn)
+import "forma"
+fn main() {
+    q := forma.Q{n: 1}
+    q.segredo()
+}

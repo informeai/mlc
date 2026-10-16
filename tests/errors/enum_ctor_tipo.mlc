@@ -1,0 +1,8 @@
+// erro: campo raio de Circulo: esperado float64, encontrado string
+enum Forma {
+    Circulo(raio float64)
+    Vazio
+}
+fn main() {
+    x := Forma.Circulo("um")
+}

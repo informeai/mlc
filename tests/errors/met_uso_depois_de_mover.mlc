@@ -1,0 +1,11 @@
+// erro: p já foi liberada ou movida (linha 9)
+import "io"
+struct Ponto { x int; y int }
+fn (p *Ponto) destroi() {
+    free(p)
+}
+fn main() {
+    p := alloc(Ponto)
+    p.destroi()
+    io.print(p.x)
+}

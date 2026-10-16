@@ -1,0 +1,13 @@
+// erro: Circulo tem 1 campo(s): escreva Circulo(...) dando um nome a cada um (ou _)
+enum Forma {
+    Circulo(raio float64)
+    Vazio
+}
+fn f(x Forma) {
+    match x {
+        Circulo => {}
+        Vazio => {}
+    }
+}
+fn main() {
+}

@@ -1,0 +1,8 @@
+// erro: struct Caixa[int] contém a si mesma por valor; use um ponteiro
+struct Caixa[T any] {
+    v T
+    dentro Caixa[T]
+}
+fn main() {
+    var c Caixa[int]
+}

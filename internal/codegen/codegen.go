@@ -78,6 +78,8 @@ func (g *gen) lineDirective(pos token.Pos) {
 
 func cType(t checker.Type) string {
 	switch t := t.(type) {
+	case *checker.Enum:
+		return enumCType(t)
 	case *checker.Array:
 		return arrayCType(t)
 	case *checker.Basic:
@@ -192,7 +194,9 @@ func (g *gen) stmt(s ast.Stmt) {
 		}
 	case *ast.MatchStmt:
 		g.lineDirective(s.P)
-		if checker.IsInteger(g.typeOf(s.Subject)) {
+		if isEnum(g.typeOf(s.Subject)) {
+			g.matchEnum(s)
+		} else if checker.IsInteger(g.typeOf(s.Subject)) {
 			g.matchSwitch(s)
 		} else {
 			g.matchIfChain(s)
@@ -388,6 +392,9 @@ var assignOps = map[token.Kind]token.Kind{
 }
 
 func zeroValue(t checker.Type) string {
+	if en, ok := t.(*checker.Enum); ok {
+		return "((" + enumCType(en) + "){0})" // primeira variante, campos zerados
+	}
 	if a, ok := t.(*checker.Array); ok {
 		return "((" + arrayCType(a) + "){0})"
 	}
@@ -462,6 +469,9 @@ func (g *gen) expr(e ast.Expr) string {
 	if v, ok := g.info.Values[e]; ok {
 		return constant(v, g.typeOf(e))
 	}
+	if v, ok := g.info.EnumCtors[e]; ok {
+		return g.enumCtor(e, v)
+	}
 	switch e := e.(type) {
 	case *ast.Ident:
 		if l := g.info.Locals[e]; l != nil {
@@ -524,7 +534,7 @@ func (g *gen) expr(e ast.Expr) string {
 			}
 			return g.sliceVal(e.Args[0]) + ".len"
 		}
-		pre, args := g.operands(e.Args)
+		pre, args := g.operands(g.info.CallArgs(e)) // num método, o receptor vem primeiro
 		if callee.Func.Native != "" {
 			// função do runtime: recebe arquivo e linha para os panics
 			args = append(args, "__FILE__", "__LINE__")

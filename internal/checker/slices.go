@@ -28,7 +28,9 @@ func (c *checker) sliceOf(elem Type) *Slice {
 	}
 	s := &Slice{Elem: elem}
 	c.slices[elem] = s
-	c.info.Slices = append(c.info.Slices, s)
+	if !abstract(elem) { // []T da definição genérica não vai para o C
+		c.info.Slices = append(c.info.Slices, s)
+	}
 	return s
 }
 

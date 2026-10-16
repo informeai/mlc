@@ -1,0 +1,13 @@
+// erro: r declarada e não usada
+enum Forma {
+    Circulo(raio float64)
+    Vazio
+}
+fn f(x Forma) {
+    match x {
+        Circulo(r) => {}
+        Vazio => {}
+    }
+}
+fn main() {
+}

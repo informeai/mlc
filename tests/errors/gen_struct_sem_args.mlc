@@ -1,0 +1,5 @@
+// erro: Par é genérica: escreva os argumentos de tipo, como Par[int]
+struct Par[A any, B any] { a A; b B }
+fn main() {
+    var p Par
+}

@@ -1,0 +1,9 @@
+// erro: o método Ponto.destroi recebe a posse do receptor (*Ponto): chame num ponteiro dono
+struct Ponto { x int; y int }
+fn (p *Ponto) destroi() {
+    free(p)
+}
+fn main() {
+    p := Ponto{x: 1, y: 2}
+    p.destroi()
+}

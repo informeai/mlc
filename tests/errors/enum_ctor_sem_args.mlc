@@ -1,0 +1,8 @@
+// erro: Forma.Circulo tem 1 campo(s): escreva Forma.Circulo(...)
+enum Forma {
+    Circulo(raio float64)
+    Vazio
+}
+fn main() {
+    x := Forma.Circulo
+}

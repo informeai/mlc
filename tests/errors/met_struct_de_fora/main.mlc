@@ -1,0 +1,7 @@
+// erro: métodos só podem ser declarados no arquivo da struct
+import "forma"
+fn (q forma.Q) dobro() int {
+    return 2
+}
+fn main() {
+}

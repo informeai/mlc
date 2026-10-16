@@ -1,0 +1,9 @@
+// erro: tipo Forma usado como valor (para criar um valor: Forma.Variante)
+import "io"
+enum Forma {
+    Circulo(raio float64)
+    Vazio
+}
+fn main() {
+    io.print(Forma)
+}

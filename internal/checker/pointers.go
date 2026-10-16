@@ -124,30 +124,64 @@ func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 		}
 		return c.pointerTo(elem, t.Mod == ast.TypeNullPtr)
 	}
-	if t.Module != "" {
+	var s *Struct
+	switch {
+	case t.Module != "":
 		// tipo de outro arquivo: geometria.Ponto
-		s, ok := c.moduleStruct(t.Module, t.Name, t.P).(*Struct)
+		if m := c.mod.uses[t.Module]; m != nil && m.enums[t.Name] != nil {
+			en := m.enums[t.Name]
+			if !en.Pub {
+				c.errorf(t.P, "%s.%s não é público (declare com pub enum)", t.Module, t.Name)
+				return Invalid
+			}
+			return c.resolveEnum(en, t)
+		}
+		st, ok := c.moduleStruct(t.Module, t.Name, t.P).(*Struct)
 		if !ok {
 			return Invalid
 		}
-		if s.Resource && (ctx == ctxVar || ctx == ctxParam || ctx == ctxResult) {
-			c.errorf(t.P, "%s contém ponteiros donos e só pode ser usada através de um ponteiro: use *%s, ?*%s ou &%s", s.Name, s.Name, s.Name, s.Name)
+		s = st
+	case c.typeParams[t.Name] != nil:
+		if len(t.Args) > 0 {
+			c.errorf(t.P, "%s é um parâmetro de tipo e não recebe argumentos", t.Name)
+		}
+		return c.typeParams[t.Name]
+	case basicTypes[t.Name] != nil:
+		if len(t.Args) > 0 {
+			c.errorf(t.P, "%s não é genérico", t.Name)
+		}
+		return basicTypes[t.Name]
+	case c.mod.structs[t.Name] != nil:
+		s = c.mod.structs[t.Name]
+	case c.mod.enums[t.Name] != nil:
+		return c.resolveEnum(c.mod.enums[t.Name], t)
+	default:
+		c.errorf(t.P, "tipo desconhecido %s", t.Name)
+		return Invalid
+	}
+	switch {
+	case s.Params != nil && len(t.Args) == 0:
+		c.errorf(t.P, "%s é genérica: escreva os argumentos de tipo, como %s[int]", s.Name, s.Name)
+		return Invalid
+	case s.Params == nil && len(t.Args) > 0:
+		c.errorf(t.P, "%s não é genérica", s.Name)
+		return Invalid
+	case s.Params != nil:
+		var args []Type
+		for _, a := range t.Args {
+			args = append(args, c.resolveType(a, ctxVar))
+		}
+		inst, ok := c.instStruct(s, args, t.P).(*Struct)
+		if !ok {
 			return Invalid
 		}
-		return s
+		s = inst
 	}
-	if bt, ok := basicTypes[t.Name]; ok {
-		return bt
+	if s.Resource && (ctx == ctxVar || ctx == ctxParam || ctx == ctxResult) {
+		c.errorf(t.P, "%s contém ponteiros donos e só pode ser usada através de um ponteiro: use *%s, ?*%s ou &%s", s.Name, s.Name, s.Name, s.Name)
+		return Invalid
 	}
-	if s, ok := c.mod.structs[t.Name]; ok {
-		if s.Resource && (ctx == ctxVar || ctx == ctxParam || ctx == ctxResult) {
-			c.errorf(t.P, "%s contém ponteiros donos e só pode ser usada através de um ponteiro: use *%s, ?*%s ou &%s", s.Name, s.Name, s.Name, s.Name)
-			return Invalid
-		}
-		return s
-	}
-	c.errorf(t.P, "tipo desconhecido %s", t.Name)
-	return Invalid
+	return s
 }
 
 // assignable checa se um valor do tipo got pode ir para um lugar do tipo want.
@@ -276,6 +310,21 @@ func (c *checker) builtinCall(e *ast.CallExpr, name string) (Type, bool) {
 // allocArg resolve o argumento de alloc: um nome de tipo (memória zerada) ou
 // um valor inicial.
 func (c *checker) allocArg(a ast.Expr) (Type, bool) {
+	switch a.(type) {
+	case *ast.IndexExpr, *ast.IndexListExpr:
+		// alloc(Par[int, string]): struct genérica, memória zerada
+		if base, _ := splitIndex(a); c.namesType(base) {
+			t := c.exprType(a)
+			if s, ok := t.(*Struct); ok {
+				if field, ok := hasNonNullOwner(s); ok {
+					c.errorf(a.Pos(), "alloc(%s) zera a memória, mas %s é um ponteiro *T e não pode ser nil; use alloc(%s{...}) com todos os campos", s.Name, field, s.Name)
+					return Invalid, false
+				}
+				return s, true
+			}
+			return Invalid, false
+		}
+	}
 	if sel, ok := a.(*ast.SelectorExpr); ok && c.userModule(sel.X) != nil {
 		// alloc(geometria.Ponto): struct de outro arquivo, memória zerada
 		m := c.userModule(sel.X)

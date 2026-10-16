@@ -1,0 +1,5 @@
+// erro: Par espera 2 argumento(s) de tipo, recebeu 1
+struct Par[A any, B any] { a A; b B }
+fn main() {
+    var p Par[int]
+}

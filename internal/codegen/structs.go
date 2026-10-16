@@ -22,7 +22,10 @@ func (g *gen) structs() {
 	for _, a := range g.info.Arrays {
 		g.raw("typedef struct %s %s;\n", arrayCType(a), arrayCType(a))
 	}
-	if len(g.info.Structs)+len(g.info.Arrays) > 0 {
+	for _, e := range g.info.Enums {
+		g.raw("typedef struct %s %s;\n", enumCType(e), enumCType(e))
+	}
+	if len(g.info.Structs)+len(g.info.Arrays)+len(g.info.Enums) > 0 {
 		g.raw("\n")
 	}
 	// Os slices vêm antes das structs e dos arrays: uma struct pode ter campo
@@ -37,6 +40,9 @@ func (g *gen) structs() {
 	for _, a := range g.info.Arrays {
 		g.valueType(a, done)
 	}
+	for _, e := range g.info.Enums {
+		g.valueType(e, done)
+	}
 	g.slicePrints()
 }
 
@@ -50,16 +56,25 @@ func (g *gen) valueType(t checker.Type, done map[checker.Type]bool) {
 	switch t := t.(type) {
 	case *checker.Struct:
 		for _, f := range t.Fields {
-			if isStruct(f.Type) || isArray(f.Type) {
+			if isValueType(f.Type) {
 				g.valueType(f.Type, done)
 			}
 		}
 		g.structDef(t)
 	case *checker.Array:
-		if isStruct(t.Elem) || isArray(t.Elem) {
+		if isValueType(t.Elem) {
 			g.valueType(t.Elem, done)
 		}
 		g.arrayDef(t)
+	case *checker.Enum:
+		for _, v := range t.Variants {
+			for _, f := range v.Fields {
+				if isValueType(f.Type) {
+					g.valueType(f.Type, done)
+				}
+			}
+		}
+		g.enumDef(t)
 	}
 }
 
@@ -111,6 +126,9 @@ func (g *gen) structPrint(s *checker.Struct) {
 
 // eqExpr compara dois valores do tipo t em C.
 func eqExpr(t checker.Type, a, b string) string {
+	if en, ok := t.(*checker.Enum); ok {
+		return fmt.Sprintf("mlc_eq_%s(%s, %s)", mangle(en), a, b)
+	}
 	if arr, ok := t.(*checker.Array); ok {
 		return fmt.Sprintf("mlc_eq_%s(%s, %s)", mangle(arr), a, b)
 	}
@@ -126,6 +144,9 @@ func eqExpr(t checker.Type, a, b string) string {
 
 // printCall imprime um valor do tipo t, sem separador nem quebra de linha.
 func printCall(t checker.Type, v string) string {
+	if en, ok := t.(*checker.Enum); ok {
+		return fmt.Sprintf("mlc_print_%s(%s)", mangle(en), v)
+	}
 	if a, ok := t.(*checker.Array); ok {
 		return fmt.Sprintf("mlc_print_%s(%s)", mangle(a), v)
 	}

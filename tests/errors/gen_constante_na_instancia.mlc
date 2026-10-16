@@ -1,0 +1,9 @@
+// erro: constante 300 não cabe em int8 (-128 a 127) (na instância mais[int8])
+import "io"
+fn mais[T number](x T) T {
+    return x + 300
+}
+fn main() {
+    var a int8 = 1
+    io.print(mais(a))
+}

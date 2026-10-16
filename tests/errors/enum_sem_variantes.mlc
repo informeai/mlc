@@ -1,0 +1,5 @@
+// erro: o enum Nada precisa de pelo menos uma variante
+enum Nada {
+}
+fn main() {
+}

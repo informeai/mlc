@@ -1,0 +1,13 @@
+// erro: Circulo tem 1 campo(s), o padrão nomeia 2
+enum Forma {
+    Circulo(raio float64)
+    Vazio
+}
+fn f(x Forma) {
+    match x {
+        Circulo(a, b) => {}
+        Vazio => {}
+    }
+}
+fn main() {
+}

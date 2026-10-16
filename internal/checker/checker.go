@@ -63,15 +63,19 @@ type Local struct {
 }
 
 type Func struct {
-	Name   string
-	CName  string // nome no C gerado (mlc_fn_...)
-	File   string // arquivo da declaração
-	Pub    bool
-	mod    *module
-	Params []*Local
-	Result Type
-	Decl   *ast.FuncDecl // nil numa função nativa
-	Native string        // nome no runtime C, numa função nativa (str.copy)
+	Name      string
+	CName     string // nome no C gerado (mlc_fn_...)
+	File      string // arquivo da declaração
+	Pub       bool
+	mod       *module
+	Params    []*Local
+	Result    Type
+	Decl      *ast.FuncDecl    // nil numa função nativa
+	Native    string           // nome no runtime C, numa função nativa (str.copy)
+	Method    bool             // método: Params[0] é o receptor
+	typeVars  []Type           // função genérica: os parâmetros de tipo (checagem abstrata)
+	instances map[string]*Func // função genérica: instâncias já criadas
+	recv      recvMode
 }
 
 type Builtin int
@@ -107,15 +111,19 @@ type Info struct {
 	Patterns map[*ast.Pattern]any
 	// Values guarda o valor das expressões constantes (literais, constantes,
 	// contas só com constantes): *big.Int, float64, string ou bool.
-	Values  map[ast.Expr]any
-	Main    *Func                     // fn main do arquivo principal
-	Structs []*Struct                 // cada struct depois das que ela contém
-	Slices  []*Slice                  // tipos slice usados, para o gerador declarar
-	Arrays  []*Array                  // tipos array usados, para o gerador declarar
-	ForVars map[*ast.ForStmt]*Local   // a variável de cada for x in s
-	Drains  map[*ast.ForStmt]ast.Expr // for x in drain(s): o slice esvaziado
-	Calls   map[*ast.CallExpr]Callee
-	Funcs   []*Func // na ordem de declaração
+	Values       map[ast.Expr]any
+	Main         *Func                      // fn main do arquivo principal
+	Structs      []*Struct                  // cada struct depois das que ela contém
+	Slices       []*Slice                   // tipos slice usados, para o gerador declarar
+	Arrays       []*Array                   // tipos array usados, para o gerador declarar
+	ForVars      map[*ast.ForStmt]*Local    // a variável de cada for x in s
+	Recv         map[*ast.CallExpr]ast.Expr // receptor de cada chamada de método (x, *x ou &x)
+	EnumCtors    map[ast.Expr]*Variant      // Forma.Circulo(...) e Forma.Vazio
+	PatternBinds map[*ast.Pattern][]*Local  // nomes dados aos campos em Circulo(r)
+	Enums        []*Enum                    // enums concretos, para o gerador declarar
+	Drains       map[*ast.ForStmt]ast.Expr  // for x in drain(s): o slice esvaziado
+	Calls        map[*ast.CallExpr]Callee
+	Funcs        []*Func // na ordem de declaração
 }
 
 type scope struct {
@@ -139,15 +147,22 @@ type checker struct {
 	modules map[string]*module // arquivos importados, pelo caminho do import
 	order   map[string]int     // ordem de cada arquivo, para ordenar os erros
 
-	pointers map[ptrKey]*Pointer
-	litOK    bool // o próximo literal composto pode conter ponteiros donos (dentro de alloc)
-	borrows  map[Type]*Borrow
-	slices   map[Type]*Slice
-	arrays   map[arrKey]*Array
-	natives  map[string]*Func
-	scope    *scope
-	fn       *Func
-	errs     []token.Error
+	pointers    map[ptrKey]*Pointer
+	typeParams  map[string]Type // parâmetros de tipo visíveis (TypeVars na definição, tipos na instância)
+	building    map[*Struct]bool
+	pending     []pendingInst
+	instName    string // instância genérica em checagem, para as mensagens
+	abstracts   []abstractCheck
+	expected    Type // tipo esperado de expectedFor (para Resultado.Ok sem argumentos de tipo)
+	expectedFor ast.Expr
+	litOK       bool // o próximo literal composto pode conter ponteiros donos (dentro de alloc)
+	borrows     map[Type]*Borrow
+	slices      map[Type]*Slice
+	arrays      map[arrKey]*Array
+	natives     map[string]*Func
+	scope       *scope
+	fn          *Func
+	errs        []token.Error
 
 	cnames map[string]int        // quantas variáveis com cada nome a função já declarou
 	loops  []*ast.ForStmt        // laços abertos, o mais interno por último
@@ -173,19 +188,23 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 		modules: map[string]*module{},
 		order:   map[string]int{},
 		info: &Info{
-			Types:    map[ast.Expr]Type{},
-			Locals:   map[*ast.Ident]*Local{},
-			Decls:    map[*ast.VarDecl]*Local{},
-			Patterns: map[*ast.Pattern]any{},
-			Values:   map[ast.Expr]any{},
-			ForVars:  map[*ast.ForStmt]*Local{},
-			Drains:   map[*ast.ForStmt]ast.Expr{},
-			Calls:    map[*ast.CallExpr]Callee{},
+			Types:        map[ast.Expr]Type{},
+			Locals:       map[*ast.Ident]*Local{},
+			Decls:        map[*ast.VarDecl]*Local{},
+			Patterns:     map[*ast.Pattern]any{},
+			Values:       map[ast.Expr]any{},
+			ForVars:      map[*ast.ForStmt]*Local{},
+			Recv:         map[*ast.CallExpr]ast.Expr{},
+			EnumCtors:    map[ast.Expr]*Variant{},
+			PatternBinds: map[*ast.Pattern][]*Local{},
+			Drains:       map[*ast.ForStmt]ast.Expr{},
+			Calls:        map[*ast.CallExpr]Callee{},
 		},
 		pointers: map[ptrKey]*Pointer{},
 		borrows:  map[Type]*Borrow{},
 		slices:   map[Type]*Slice{},
 		arrays:   map[arrKey]*Array{},
+		building: map[*Struct]bool{},
 		natives:  map[string]*Func{},
 		breaks:   map[*ast.ForStmt]bool{},
 	}
@@ -194,14 +213,19 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 		c.mod = c.newModule(src, i)
 		c.collectImports(src.AST)
 		c.collectConsts(src.AST) // antes das structs: [N]T usa constantes
+		c.collectEnumNames(src.AST)
 		c.collectStructs(src.AST)
+		c.collectEnumVariants(src.AST)
 		c.collectFuncs(src.AST)
 		for _, fn := range c.info.Funcs {
 			if fn.mod == c.mod {
 				c.checkFunc(fn)
 			}
 		}
+		c.checkAbstracts()
 	}
+	// Corpo das instâncias de genéricos criadas pelos usos.
+	c.checkInstances()
 	// A posse só é verificada num programa sem erros de tipo: ela depende
 	// dos tipos resolvidos.
 	if len(c.errs) == 0 {
@@ -256,6 +280,11 @@ func (c *checker) declare(name string, pos token.Pos, t Type, param bool) *Local
 		l.Used = true
 		return l
 	}
+	if c.mod.enums[name] != nil {
+		c.errorf(pos, "o nome %s já é um tipo (enum)", name)
+		l.Used = true
+		return l
+	}
 	if c.mod.structs[name] != nil {
 		c.errorf(pos, "o nome %s já é um tipo (struct)", name)
 		l.Used = true
@@ -273,13 +302,21 @@ func (c *checker) declare(name string, pos token.Pos, t Type, param bool) *Local
 }
 
 func (c *checker) errorf(pos token.Pos, format string, args ...any) {
-	c.errs = append(c.errs, token.Error{File: c.mod.file, Pos: pos, Msg: fmt.Sprintf(format, args...)})
+	msg := fmt.Sprintf(format, args...)
+	if c.instName != "" {
+		msg += " (na instância " + c.instName + ")"
+	}
+	c.errs = append(c.errs, token.Error{File: c.mod.file, Pos: pos, Msg: msg})
 }
 
 // ---------- Declarações ----------
 
 func (c *checker) collectFuncs(f *ast.File) {
 	for _, d := range f.Funcs {
+		if d.Recv != nil {
+			c.collectMethod(d)
+			continue
+		}
 		if predeclared[d.Name] || modules[d.Name] {
 			c.errorf(d.P, "o nome %q é reservado", d.Name)
 			continue
@@ -288,30 +325,23 @@ func (c *checker) collectFuncs(f *ast.File) {
 			c.errorf(d.P, "o nome %s já é usado por uma struct ou constante", d.Name)
 			continue
 		}
+		if prev, ok := c.mod.generics[d.Name]; ok {
+			c.errorf(d.P, "função %s já declarada na linha %d", d.Name, prev.Decl.P.Line)
+			continue
+		}
 		if prev, ok := c.mod.funcs[d.Name]; ok {
 			c.errorf(d.P, "função %s já declarada na linha %d", d.Name, prev.Decl.P.Line)
+			continue
+		}
+		if len(d.TypeParams) > 0 {
+			c.collectGeneric(d)
 			continue
 		}
 		fn := &Func{
 			Name: c.qualify(d.Name), Result: Void, Decl: d,
 			CName: "mlc_fn_" + c.mod.prefix + d.Name, File: c.mod.file, Pub: d.Pub, mod: c.mod,
 		}
-		seen := map[string]bool{}
-		for _, p := range d.Params {
-			switch {
-			case predeclared[p.Name] || modules[p.Name]:
-				c.errorf(p.P, "o nome %q é reservado", p.Name)
-			case seen[p.Name]:
-				c.errorf(p.P, "parâmetro %s repetido", p.Name)
-			}
-			seen[p.Name] = true
-			fn.Params = append(fn.Params, &Local{
-				Name: p.Name, CName: "l_" + p.Name, Type: c.resolveType(p.Type, ctxParam), Pos: p.P, Param: true,
-			})
-		}
-		if d.Result != nil {
-			fn.Result = c.resolveType(d.Result, ctxResult)
-		}
+		c.signature(fn, d, nil)
 		c.mod.funcs[d.Name] = fn
 		c.info.Funcs = append(c.info.Funcs, fn)
 	}
@@ -431,15 +461,15 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			return
 		}
 		rt := c.value(s.Rhs)
-		if isUntyped(rt) && isNumeric(lt) {
+		if isUntyped(rt) && numLike(lt) {
 			c.convertUntyped(s.Rhs, lt)
 			rt = lt
 		}
 		switch {
 		case lt == Invalid || rt == Invalid:
-		case lt != rt || !isNumeric(lt):
+		case lt != rt || !numLike(lt):
 			c.errorf(s.OpPos, "operador %s não se aplica a %s e %s", s.Op, lt, rt)
-		case s.Op == token.REM_ASSIGN && isFloat(lt):
+		case s.Op == token.REM_ASSIGN && (isFloat(lt) || (abstract(lt) && !tvHas(lt, "mod"))):
 			c.errorf(s.OpPos, "operador %%= não se aplica a %s (só a inteiros)", lt)
 		}
 	case *ast.IncDecStmt:
@@ -520,6 +550,10 @@ func (c *checker) checkStmt(s ast.Stmt) {
 // braços inalcançáveis e cobertura de todos os valores.
 func (c *checker) checkMatch(s *ast.MatchStmt) {
 	t := c.valueDefault(s.Subject)
+	if en, ok := t.(*Enum); ok {
+		c.checkEnumMatch(s, en)
+		return
+	}
 	if !isInteger(t) && t != Bool && t != String && t != Invalid {
 		c.errorf(s.Subject.Pos(), "match não se aplica a %s (só inteiros, bool e string)", t)
 		t = Invalid
@@ -787,12 +821,18 @@ func (c *checker) ident(e *ast.Ident) Type {
 		c.errorf(e.P, "constante %s usada antes de ser declarada", e.Name)
 	case c.mod.funcs[e.Name] != nil:
 		c.errorf(e.P, "função %s usada como valor (faltou chamar?)", e.Name)
+	case c.mod.generics[e.Name] != nil:
+		c.errorf(e.P, "função %s usada como valor (faltou chamar?)", e.Name)
+	case c.typeParams[e.Name] != nil:
+		c.errorf(e.P, "tipo %s usado como valor (para converter: %s(x))", e.Name, e.Name)
 	case c.mod.uses[e.Name] != nil:
 		c.errorf(e.P, "módulo %s usado como valor", e.Name)
 	case modules[e.Name]:
 		c.errorf(e.P, "módulo %s usado como valor", e.Name)
 	case basicTypes[e.Name] != nil:
 		c.errorf(e.P, "tipo %s usado como valor", e.Name)
+	case c.mod.enums[e.Name] != nil:
+		c.errorf(e.P, "tipo %s usado como valor (para criar um valor: %s.Variante)", e.Name, e.Name)
 	case c.mod.structs[e.Name] != nil:
 		c.errorf(e.P, "tipo %s usado como valor (para criar um valor: %s{...}; no cabeçalho de if, for ou match, entre parênteses)", e.Name, e.Name)
 	default:
@@ -804,8 +844,19 @@ func (c *checker) ident(e *ast.Ident) Type {
 func (c *checker) call(e *ast.CallExpr) Type {
 	switch fun := e.Fun.(type) {
 	case *ast.SelectorExpr:
+		if en := c.enumNamed(fun.X); en != nil {
+			return c.enumCtor(e, e, en, fun) // Forma.Circulo(...)
+		}
+		if g := c.genericFuncOf(fun); g != nil {
+			return c.genericCall(e, g, nil) // mod.f(args), genérica
+		}
 		if m := c.userModule(fun.X); m != nil {
 			return c.moduleCall(e, m, fun)
+		}
+		if id, isID := fun.X.(*ast.Ident); !isID || !modules[id.Name] || c.scope.lookup(id.Name) != nil {
+			if t, ok := c.methodCall(e, fun); ok {
+				return t
+			}
 		}
 		id, ok := fun.X.(*ast.Ident)
 		if !ok || !modules[id.Name] || c.scope.lookup(id.Name) != nil {
@@ -843,6 +894,12 @@ func (c *checker) call(e *ast.CallExpr) Type {
 		if t, ok := c.builtinCall(e, fun.Name); ok {
 			return t
 		}
+		if tp := c.typeParams[fun.Name]; tp != nil && c.scope.lookup(fun.Name) == nil {
+			return c.conversion(e, tp) // T(x), com T parâmetro de tipo
+		}
+		if g := c.genericFuncOf(fun); g != nil {
+			return c.genericCall(e, g, nil)
+		}
 		if bt, ok := basicTypes[fun.Name]; ok && c.scope.lookup(fun.Name) == nil {
 			return c.conversion(e, bt)
 		}
@@ -851,6 +908,12 @@ func (c *checker) call(e *ast.CallExpr) Type {
 			break
 		}
 		return c.userCall(e, fn)
+	case *ast.IndexExpr, *ast.IndexListExpr:
+		// f[int](args): argumentos de tipo explícitos
+		base, targs := splitIndex(fun)
+		if g := c.genericFuncOf(base); g != nil {
+			return c.genericCall(e, g, targs)
+		}
 	}
 
 	if t := c.expr(e.Fun); t != Invalid {
@@ -870,23 +933,7 @@ func (c *checker) checkArgs(e *ast.CallExpr) {
 
 // userCall checa uma chamada a uma função do usuário ou nativa.
 func (c *checker) userCall(e *ast.CallExpr, fn *Func) Type {
-	if len(e.Args) != len(fn.Params) {
-		c.errorf(e.Lparen, "%s espera %d argumento(s), recebeu %d", fn.Name, len(fn.Params), len(e.Args))
-	}
-	for i, a := range e.Args {
-		context := fmt.Sprintf("argumento %d de %s", i+1, fn.Name)
-		if i < len(fn.Params) {
-			if b, ok := fn.Params[i].Type.(*Borrow); ok {
-				c.borrowArg(a, b, context)
-				continue
-			}
-		}
-		if i < len(fn.Params) {
-			c.valueAs(a, fn.Params[i].Type, context)
-		} else {
-			c.value(a)
-		}
-	}
+	c.callArgs(e, fn, fn.Params)
 	c.info.Calls[e] = Callee{Func: fn}
 	return fn.Result
 }

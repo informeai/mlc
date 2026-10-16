@@ -1,0 +1,7 @@
+// erro: Ponto já tem um campo x; o método precisa de outro nome
+struct Ponto { x int; y int }
+fn (p Ponto) x() int {
+    return 1
+}
+fn main() {
+}

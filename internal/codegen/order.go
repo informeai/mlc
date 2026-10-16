@@ -127,7 +127,7 @@ func (g *gen) binary(e *ast.BinaryExpr, top bool) string {
 	switch {
 	case opNames[e.Op] != "":
 		core = arith(e.Op, g.typeOf(e.X), v[0], v[1])
-	case (e.Op == token.EQL || e.Op == token.NEQ) && (t == checker.String || isStruct(t) || isArray(t)):
+	case (e.Op == token.EQL || e.Op == token.NEQ) && (t == checker.String || isStruct(t) || isArray(t) || isEnum(t)):
 		core = eqExpr(t, v[0], v[1])
 		if e.Op == token.NEQ {
 			core = "!" + core

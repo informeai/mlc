@@ -21,11 +21,13 @@ type module struct {
 	file   string
 	prefix string // prefixo dos nomes no C, para não colidir entre arquivos
 
-	imports map[string]bool    // módulos do runtime importados (io, str)
-	uses    map[string]*module // arquivos importados, pelo nome
-	funcs   map[string]*Func
-	structs map[string]*Struct
-	global  *scope // constantes do topo; pai do escopo de cada função
+	imports  map[string]bool    // módulos do runtime importados (io, str)
+	uses     map[string]*module // arquivos importados, pelo nome
+	funcs    map[string]*Func
+	generics map[string]*Func // funções genéricas (só a definição; as instâncias são criadas no uso)
+	structs  map[string]*Struct
+	enums    map[string]*Enum
+	global   *scope // constantes do topo; pai do escopo de cada função
 
 	pendingConsts map[string]bool // constantes do topo ainda não avaliadas
 }
@@ -35,6 +37,8 @@ func (c *checker) newModule(src Source, i int) *module {
 		path: src.Path, file: src.File,
 		imports: map[string]bool{}, uses: map[string]*module{},
 		funcs: map[string]*Func{}, structs: map[string]*Struct{},
+		generics:      map[string]*Func{},
+		enums:         map[string]*Enum{},
 		global:        &scope{names: map[string]*Local{}},
 		pendingConsts: map[string]bool{},
 	}

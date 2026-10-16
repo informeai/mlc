@@ -106,5 +106,8 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 - [x] **Slices de donos:** `[]?*T` e `[][]T`, com `take(&s[i])`, `replace(&s[i], v)` e `for x in drain(s)`; `free(s)` provado seguro na compilação
 - [x] **Marco 7:** texto em buffers explícitos: tipo `byte` e literais `'a'`, conversões `int(x)`/`byte(x)`, módulo `str` (`copy`, `put_int`, `int_len`, `eq`, `parse_int`) e `io.write`/`io.read_line`, nenhum deles aloca. Veja [docs/texto.md](docs/texto.md)
 - [x] **Vários arquivos:** `import "geometria"` (caminho relativo à pasta do arquivo principal), visibilidade explícita com `pub`, nomes qualificados (`geometria.area`, `geometria.Ponto`), importação circular recusada
+- [x] **Métodos:** `fn (p &Ponto) area() int`, chamado como `p.area()`; o receptor (`Ponto`, `&Ponto` ou `*Ponto`) diz se a chamada copia, empresta ou move
+- [x] **Genéricos:** `fn maior[T ordered](a T, b T) T`, `struct Par[A any, B any]`, métodos genéricos, inferência; restrições `any`, `comparable`, `ordered`, `number`, `integer`; monomorfização no C
+- [x] **Enums com dados:** `enum Forma { Circulo(raio float64); Vazio }`, `match` com desestruturação e cobertura obrigatória, enums genéricos (`Resultado[T]`) com inferência pelo valor ou pelo contexto
 - [x] **Números:** `int8`, `int16`, `int32`, `uint16`, `uint32`, `uint64`, `float32`, `float64`; constantes sem tipo; conversões checadas. Veja [docs/tipos.md](docs/tipos.md)
 - [x] **Arrays `[N]T`:** tamanho fixo, por valor, na pilha ou em structs, sem `alloc`; `&a` empresta como `&[]T`

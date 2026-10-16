@@ -1,0 +1,8 @@
+// erro: não foi possível deduzir T em Resultado.Erro: escreva Resultado[int].Erro(...)
+enum Resultado[T any] {
+    Ok(valor T)
+    Erro(codigo int)
+}
+fn main() {
+    r := Resultado.Erro(1)
+}

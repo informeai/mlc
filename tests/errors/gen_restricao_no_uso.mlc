@@ -1,0 +1,11 @@
+// erro: string não atende ordered, exigida por T em maior
+import "io"
+fn maior[T ordered](a T, b T) T {
+    if a > b {
+        return a
+    }
+    return b
+}
+fn main() {
+    io.print(maior("a", "b"))
+}

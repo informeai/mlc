@@ -1,0 +1,9 @@
+// erro: vazamento: p ainda é dona da memória
+struct Ponto { x int; y int }
+fn (p &Ponto) move() {
+    p.x++
+}
+fn main() {
+    p := alloc(Ponto)
+    p.move()
+}

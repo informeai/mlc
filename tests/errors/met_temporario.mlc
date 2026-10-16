@@ -1,0 +1,11 @@
+// erro: o método Ponto.move empresta o receptor, e um valor temporário não pode ser emprestado
+struct Ponto { x int; y int }
+fn (p &Ponto) move() {
+    p.x++
+}
+fn cria() Ponto {
+    return Ponto{x: 1, y: 2}
+}
+fn main() {
+    cria().move()
+}

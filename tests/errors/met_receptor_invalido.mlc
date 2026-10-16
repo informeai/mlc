@@ -1,0 +1,6 @@
+// erro: métodos só existem em structs: int não é uma struct deste arquivo
+fn (n int) dobro() int {
+    return n * 2
+}
+fn main() {
+}

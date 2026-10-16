@@ -1,0 +1,9 @@
+// erro: *int não atende any, exigida por T em id (argumentos de tipo não podem ser donos nem empréstimos nesta versão)
+fn id[T any](x T) T {
+    return x
+}
+fn main() {
+    p := alloc(1)
+    q := id(p)
+    free(q)
+}

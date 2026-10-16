@@ -1,0 +1,9 @@
+// erro: Ponto.move espera 2 argumento(s), recebeu 1
+struct Ponto { x int; y int }
+fn (p &Ponto) move(dx int, dy int) {
+    p.x += dx
+}
+fn main() {
+    p := Ponto{x: 1, y: 2}
+    p.move(1)
+}

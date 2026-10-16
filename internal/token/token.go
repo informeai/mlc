@@ -67,6 +67,7 @@ const (
 	BREAK
 	CONTINUE
 	PUB
+	ENUM
 	keywordEnd
 )
 
@@ -130,6 +131,7 @@ var names = [...]string{
 	BREAK:    "break",
 	CONTINUE: "continue",
 	PUB:      "pub",
+	ENUM:     "enum",
 }
 
 func (k Kind) String() string {

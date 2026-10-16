@@ -1,0 +1,12 @@
+// erro: match sobre Forma precisa cobrir todas as variantes (faltam: Vazio) ou ter um braço _
+enum Forma {
+    Circulo(raio float64)
+    Vazio
+}
+fn f(x Forma) {
+    match x {
+        Circulo(_) => {}
+    }
+}
+fn main() {
+}

@@ -1,0 +1,8 @@
+// erro: Forma não tem variante Quadrado
+enum Forma {
+    Circulo(raio float64)
+    Vazio
+}
+fn main() {
+    x := Forma.Quadrado(1.0)
+}

@@ -37,7 +37,9 @@ func (c *checker) arrayOf(elem Type, n int64) *Array {
 	}
 	a := &Array{Elem: elem, Len: n}
 	c.arrays[key] = a
-	c.info.Arrays = append(c.info.Arrays, a)
+	if !abstract(elem) {
+		c.info.Arrays = append(c.info.Arrays, a)
+	}
 	return a
 }
 
@@ -103,6 +105,18 @@ func (c *checker) arrayLen(e ast.Expr) (int64, bool) {
 // sizeOf estima quantos bytes um valor do tipo t ocupa (sem alinhamento).
 func sizeOf(t Type) int64 {
 	switch t := t.(type) {
+	case *Enum:
+		var max int64
+		for _, v := range t.Variants {
+			var n int64
+			for _, f := range v.Fields {
+				n += sizeOf(f.Type)
+			}
+			if n > max {
+				max = n
+			}
+		}
+		return max + 8
 	case *Array:
 		return sizeOf(t.Elem) * t.Len
 	case *Struct:

@@ -1,0 +1,6 @@
+// erro: Ponto.x é um campo, não um método
+struct Ponto { x int; y int }
+fn main() {
+    p := Ponto{x: 1, y: 2}
+    p.x()
+}

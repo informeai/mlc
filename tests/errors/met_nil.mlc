@@ -1,0 +1,13 @@
+// erro: p pode ser nil aqui: verifique com if p != nil antes de usar o conteúdo
+struct Ponto { x int; y int }
+fn (p &Ponto) move() {
+    p.x++
+}
+fn talvez() ?*Ponto {
+    return nil
+}
+fn main() {
+    p := talvez()
+    p.move()
+    free(p)
+}

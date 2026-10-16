@@ -1,0 +1,6 @@
+// erro: operador < não se aplica a T e T
+fn menor[T any](a T, b T) bool {
+    return a < b
+}
+fn main() {
+}

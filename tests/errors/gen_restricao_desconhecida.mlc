@@ -1,0 +1,6 @@
+// erro: restrição desconhecida "numero"
+fn f[T numero](x T) T {
+    return x
+}
+fn main() {
+}

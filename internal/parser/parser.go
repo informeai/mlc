@@ -138,10 +138,12 @@ func (p *Parser) parseFile() *ast.File {
 			f.Funcs = append(f.Funcs, p.parseFunc())
 		case token.STRUCT:
 			f.Structs = append(f.Structs, p.parseStruct())
+		case token.ENUM:
+			f.Enums = append(f.Enums, p.parseEnum())
 		case token.CONST:
 			f.Consts = append(f.Consts, p.parseConst())
 		default:
-			p.unexpected("esperado declaração (import, fn, struct ou const)")
+			p.unexpected("esperado declaração (import, fn, struct, enum ou const)")
 		}
 	}
 	return f
@@ -156,7 +158,18 @@ func (p *Parser) parseImport() *ast.Import {
 
 func (p *Parser) parseFunc() *ast.FuncDecl {
 	pos := p.expect(token.FN).Pos
-	fn := &ast.FuncDecl{Name: p.expect(token.IDENT).Lit, P: pos}
+	var recv *ast.Param
+	if p.tok.Kind == token.LPAREN {
+		// método: fn (p &Ponto) area()
+		p.next()
+		name := p.expect(token.IDENT)
+		recv = &ast.Param{Name: name.Lit, Type: p.parseType(), P: name.Pos}
+		p.expect(token.RPAREN)
+	}
+	fn := &ast.FuncDecl{Name: p.expect(token.IDENT).Lit, Recv: recv, P: pos}
+	if p.tok.Kind == token.LBRACK {
+		fn.TypeParams = p.parseTypeParams()
+	}
 	p.expect(token.LPAREN)
 	for p.tok.Kind != token.RPAREN {
 		name := p.expect(token.IDENT)
@@ -177,6 +190,9 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 func (p *Parser) parseStruct() *ast.StructDecl {
 	pos := p.expect(token.STRUCT).Pos
 	s := &ast.StructDecl{Name: p.expect(token.IDENT).Lit, P: pos}
+	if p.tok.Kind == token.LBRACK {
+		s.TypeParams = p.parseTypeParams()
+	}
 	p.expect(token.LBRACE)
 	for p.tok.Kind != token.RBRACE && p.tok.Kind != token.EOF {
 		if p.tok.Kind == token.SEMICOLON {
@@ -224,9 +240,10 @@ func (p *Parser) parseType() *ast.TypeExpr {
 			p.next()
 			qualified := &ast.TypeExpr{Module: name, Name: p.tok.Lit, P: pos}
 			p.next()
+			qualified.Args = p.parseTypeArgs()
 			return qualified
 		}
-		return &ast.TypeExpr{Name: name, P: pos}
+		return &ast.TypeExpr{Name: name, Args: p.parseTypeArgs(), P: pos}
 	case token.LBRACK:
 		p.next()
 		if p.tok.Kind == token.RBRACK {
@@ -417,6 +434,9 @@ func (p *Parser) parsePattern() *ast.Pattern {
 	pat := &ast.Pattern{P: t.Pos}
 	switch t.Kind {
 	case token.IDENT:
+		if t.Lit != "_" && p.peek.Kind == token.LPAREN {
+			return p.variantPattern(pat)
+		}
 		switch t.Lit {
 		case "_":
 			pat.Wildcard = true
@@ -601,6 +621,13 @@ func (p *Parser) parsePostfix() ast.Expr {
 			switch t := x.(type) {
 			case *ast.Ident:
 				x = p.parseComposite(nil, t)
+			case *ast.IndexExpr, *ast.IndexListExpr:
+				// literal de struct genérica: Par[int, string]{...}
+				if lit := p.genericComposite(t); lit != nil {
+					x = lit
+				} else {
+					return x
+				}
 			case *ast.SelectorExpr:
 				// literal de um tipo de outro arquivo: geometria.Ponto{...}
 				mod, ok := t.X.(*ast.Ident)
@@ -616,10 +643,15 @@ func (p *Parser) parsePostfix() ast.Expr {
 			p.next()
 			// s[i], ou o sub-slice s[a:b] com limites opcionais
 			var lo, hi ast.Expr
+			var more []ast.Expr
 			isSlice := false
 			p.withLit(true, func() {
 				if p.tok.Kind != token.COLON {
 					lo = p.parseExpr()
+				}
+				for p.tok.Kind == token.COMMA {
+					p.next()
+					more = append(more, p.parseExpr())
 				}
 				if p.tok.Kind == token.COLON {
 					isSlice = true
@@ -630,9 +662,13 @@ func (p *Parser) parsePostfix() ast.Expr {
 				}
 			})
 			p.expect(token.RBRACK)
-			if isSlice {
+			switch {
+			case isSlice:
 				x = &ast.SliceExpr{X: x, Low: lo, High: hi, Lbrack: pos}
-			} else {
+			case len(more) > 0:
+				// f[A, B]: argumentos de tipo
+				x = &ast.IndexListExpr{X: x, Indices: append([]ast.Expr{lo}, more...), Lbrack: pos}
+			default:
 				x = &ast.IndexExpr{X: x, Index: lo, Lbrack: pos}
 			}
 		default:
@@ -684,22 +720,27 @@ func (p *Parser) parsePub(f *ast.File) {
 		s := p.parseStruct()
 		s.Pub = true
 		f.Structs = append(f.Structs, s)
+	case token.ENUM:
+		en := p.parseEnum()
+		en.Pub = true
+		f.Enums = append(f.Enums, en)
 	case token.CONST:
 		c := p.parseConst()
 		c.Pub = true
 		f.Consts = append(f.Consts, c)
 	default:
-		p.errorf(pos, "pub só vale antes de fn, struct ou const")
+		p.errorf(pos, "pub só vale antes de fn, struct, enum ou const")
 	}
 }
 
 // parseArrayLit lê "[3]int{1, 2, 3}". Como um tipo array sozinho nunca é uma
 // expressão, o '{' depois dele sempre abre o literal, mesmo no cabeçalho de
 // if, for e match.
-func (p *Parser) parseArrayLit() *ast.ArrayLit {
+func (p *Parser) parseArrayLit() ast.Expr {
 	typ := p.parseType()
-	if typ.Mod != ast.TypeArray {
-		p.errorf(typ.P, "um literal começando com [ precisa de tamanho: [3]int{1, 2, 3}")
+	if p.tok.Kind != token.LBRACE || typ.Mod != ast.TypeArray {
+		// um tipo usado como argumento de tipo: f[[]int](...)
+		return &ast.TypeArg{Type: typ}
 	}
 	return p.arrayLitBody(typ)
 }
@@ -721,4 +762,121 @@ func (p *Parser) arrayLitBody(typ *ast.TypeExpr) *ast.ArrayLit {
 	})
 	p.expect(token.RBRACE)
 	return lit
+}
+
+// parseTypeParams lê [T any, U ordered] depois do nome de uma fn ou struct.
+func (p *Parser) parseTypeParams() []*ast.TypeParam {
+	p.expect(token.LBRACK)
+	var params []*ast.TypeParam
+	for {
+		name := p.expect(token.IDENT)
+		if p.tok.Kind != token.IDENT {
+			p.unexpected("esperado a restrição do parâmetro de tipo (any, comparable, ordered, number ou integer)")
+		}
+		params = append(params, &ast.TypeParam{Name: name.Lit, Constraint: p.tok.Lit, P: name.Pos})
+		p.next()
+		if p.tok.Kind != token.COMMA {
+			break
+		}
+		p.next()
+	}
+	p.expect(token.RBRACK)
+	return params
+}
+
+// parseTypeArgs lê [int, string] depois do nome de um tipo genérico, se houver.
+func (p *Parser) parseTypeArgs() []*ast.TypeExpr {
+	if p.tok.Kind != token.LBRACK {
+		return nil
+	}
+	p.next()
+	var args []*ast.TypeExpr
+	for {
+		args = append(args, p.parseType())
+		if p.tok.Kind != token.COMMA {
+			break
+		}
+		p.next()
+	}
+	p.expect(token.RBRACK)
+	return args
+}
+
+// genericComposite lê o literal de Par[int, string]{...}, se x for Par[...]
+// (ou mod.Par[...]).
+func (p *Parser) genericComposite(x ast.Expr) *ast.CompositeLit {
+	var base ast.Expr
+	var args []ast.Expr
+	switch t := x.(type) {
+	case *ast.IndexExpr:
+		base, args = t.X, []ast.Expr{t.Index}
+	case *ast.IndexListExpr:
+		base, args = t.X, t.Indices
+	}
+	var lit *ast.CompositeLit
+	switch b := base.(type) {
+	case *ast.Ident:
+		lit = p.parseComposite(nil, b)
+	case *ast.SelectorExpr:
+		mod, ok := b.X.(*ast.Ident)
+		if !ok {
+			return nil
+		}
+		lit = p.parseComposite(mod, &ast.Ident{Name: b.Sel, P: b.SelPos})
+	default:
+		return nil
+	}
+	lit.TypeArgs = args
+	return lit
+}
+
+// parseEnum lê "enum Forma { Circulo(raio float64); Vazio }".
+func (p *Parser) parseEnum() *ast.EnumDecl {
+	pos := p.expect(token.ENUM).Pos
+	en := &ast.EnumDecl{Name: p.expect(token.IDENT).Lit, P: pos}
+	if p.tok.Kind == token.LBRACK {
+		en.TypeParams = p.parseTypeParams()
+	}
+	p.expect(token.LBRACE)
+	for p.tok.Kind != token.RBRACE && p.tok.Kind != token.EOF {
+		if p.tok.Kind == token.SEMICOLON {
+			p.next()
+			continue
+		}
+		name := p.expect(token.IDENT)
+		v := &ast.VariantDecl{Name: name.Lit, P: name.Pos}
+		if p.tok.Kind == token.LPAREN {
+			p.next()
+			for p.tok.Kind != token.RPAREN {
+				fname := p.expect(token.IDENT)
+				v.Fields = append(v.Fields, &ast.FieldDecl{Name: fname.Lit, Type: p.parseType(), P: fname.Pos})
+				if p.tok.Kind != token.COMMA {
+					break
+				}
+				p.next()
+			}
+			p.expect(token.RPAREN)
+		}
+		en.Variants = append(en.Variants, v)
+		p.expectEOS()
+	}
+	p.expect(token.RBRACE)
+	return en
+}
+
+// variantPattern lê o padrão Circulo(r, _) de um match sobre enum.
+func (p *Parser) variantPattern(pat *ast.Pattern) *ast.Pattern {
+	name := p.expect(token.IDENT)
+	pat.Variant = &ast.Ident{Name: name.Lit, P: name.Pos}
+	p.expect(token.LPAREN)
+	for p.tok.Kind != token.RPAREN {
+		b := p.expect(token.IDENT)
+		pat.Binds = append(pat.Binds, &ast.Ident{Name: b.Lit, P: b.Pos})
+		if p.tok.Kind != token.COMMA {
+			break
+		}
+		p.next()
+	}
+	p.expect(token.RPAREN)
+	return pat
 }

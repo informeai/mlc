@@ -1,0 +1,10 @@
+// erro: método Ponto.soma já declarado na linha 3
+struct Ponto { x int; y int }
+fn (p Ponto) soma() int {
+    return p.x + p.y
+}
+fn (p &Ponto) soma() int {
+    return 0
+}
+fn main() {
+}

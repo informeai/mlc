@@ -1,0 +1,6 @@
+// erro: operador % não se aplica a T (só a inteiros)
+fn resto[T number](a T, b T) T {
+    return a % b
+}
+fn main() {
+}

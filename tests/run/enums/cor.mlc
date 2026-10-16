@@ -1,0 +1,15 @@
+pub enum Cor {
+    Vermelho
+    Verde
+    Azul
+    Rgb(r byte, g byte, b byte)
+}
+
+pub fn nome(c Cor) string {
+    match c {
+        Vermelho => return "vermelho"
+        Verde => return "verde"
+        Azul => return "azul"
+        Rgb(_, _, _) => return "personalizada"
+    }
+}

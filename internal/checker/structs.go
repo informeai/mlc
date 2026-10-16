@@ -9,17 +9,27 @@ import (
 
 // Struct é um tipo struct declarado pelo usuário.
 type Struct struct {
-	Name   string
-	CName  string // nome no C, sem o prefixo mlc_st_
-	File   string
-	Pub    bool
-	Fields []*Field
-	Decl   *ast.StructDecl
+	Name    string
+	Methods map[string]*Func
+	CName   string // nome no C, sem o prefixo mlc_st_
+	File    string
+	Pub     bool
+	Fields  []*Field
+	Decl    *ast.StructDecl
 
 	// Resource: a struct contém ponteiros donos (direto ou numa struct
 	// guardada por valor). Valores dela só existem atrás de um ponteiro:
 	// copiar duplicaria os donos.
 	Resource bool
+
+	// Genéricos: Params na struct genérica (a declaração); Origin e Args numa
+	// instância (Par[int, string]).
+	Params      []*ast.TypeParam
+	Origin      *Struct
+	Args        []Type
+	instances   map[string]*Struct
+	methodDecls map[string]*ast.FuncDecl
+	mod         *module
 }
 
 type Field struct {
@@ -52,9 +62,18 @@ func (c *checker) collectStructs(f *ast.File) {
 			c.errorf(d.P, "struct %s já declarada na linha %d", d.Name, c.mod.structs[d.Name].Decl.P.Line)
 			continue
 		}
-		c.mod.structs[d.Name] = &Struct{
-			Name: c.qualify(d.Name), CName: c.mod.prefix + d.Name, File: c.mod.file, Pub: d.Pub, Decl: d,
+		s := &Struct{
+			Name: c.qualify(d.Name), Methods: map[string]*Func{}, CName: c.mod.prefix + d.Name, File: c.mod.file, Pub: d.Pub, Decl: d,
+			mod: c.mod,
 		}
+		if len(d.TypeParams) > 0 {
+			// genérica: os campos são resolvidos em cada instância
+			c.typeVars(d.TypeParams)
+			s.Params = d.TypeParams
+			s.instances = map[string]*Struct{}
+			s.methodDecls = map[string]*ast.FuncDecl{}
+		}
+		c.mod.structs[d.Name] = s
 	}
 	for _, d := range f.Structs {
 		s := c.mod.structs[d.Name]
@@ -68,6 +87,9 @@ func (c *checker) collectStructs(f *ast.File) {
 				continue
 			}
 			seen[fd.Name] = true
+			if s.Params != nil {
+				continue
+			}
 			s.Fields = append(s.Fields, &Field{Name: fd.Name, Type: c.resolveType(fd.Type, ctxField)})
 		}
 	}
@@ -122,8 +144,19 @@ func (c *checker) collectStructs(f *ast.File) {
 		return ok
 	}
 	for _, d := range f.Structs {
-		if s := c.mod.structs[d.Name]; s != nil && s.Decl == d {
+		if s := c.mod.structs[d.Name]; s != nil && s.Decl == d && s.Params == nil {
 			visit(s)
+		}
+	}
+	// Instâncias de structs genéricas criadas nos campos acima: o Resource das
+	// structs que elas contêm só ficou pronto agora.
+	for _, s := range c.mod.structs {
+		for _, inst := range s.instances {
+			for _, f := range inst.Fields {
+				if IsOwner(f.Type) || isResource(f.Type) {
+					inst.Resource = true
+				}
+			}
 		}
 	}
 }
@@ -134,6 +167,24 @@ func (c *checker) composite(e *ast.CompositeLit) Type {
 	allowed := c.litOK
 	c.litOK = false
 	var s *Struct
+	if len(e.TypeArgs) > 0 || c.genericStruct(e) {
+		// struct genérica: Par[int, string]{...}
+		te := &ast.TypeExpr{Name: e.Type.Name, P: e.Type.P}
+		if e.Module != nil {
+			te.Module = e.Module.Name
+		}
+		for _, a := range e.TypeArgs {
+			te.Args = append(te.Args, typeExprOf(a))
+		}
+		inst, ok := c.resolveType(te, ctxField).(*Struct)
+		if !ok {
+			for _, fi := range e.Fields {
+				c.value(fi.Value)
+			}
+			return Invalid
+		}
+		return c.compositeOf(e, inst, allowed)
+	}
 	if e.Module != nil {
 		// literal de um tipo de outro arquivo: geometria.Ponto{...}
 		if c.userModule(e.Module) == nil {
@@ -198,6 +249,9 @@ func (c *checker) compositeOf(e *ast.CompositeLit, s *Struct, allowed bool) Type
 
 // selector checa "x.campo" em leitura.
 func (c *checker) selector(e *ast.SelectorExpr) Type {
+	if en := c.enumNamed(e.X); en != nil {
+		return c.enumCtor(e, nil, en, e) // Forma.Vazio
+	}
 	if m := c.userModule(e.X); m != nil {
 		return c.moduleConst(e, m)
 	}
@@ -258,4 +312,17 @@ func hasNonNullOwner(t Type) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// genericStruct diz se o literal e é de uma struct genérica (local).
+func (c *checker) genericStruct(e *ast.CompositeLit) bool {
+	if e.Module != nil {
+		if m := c.userModule(e.Module); m != nil {
+			s := m.structs[e.Type.Name]
+			return s != nil && s.Params != nil
+		}
+		return false
+	}
+	s := c.mod.structs[e.Type.Name]
+	return s != nil && s.Params != nil
 }

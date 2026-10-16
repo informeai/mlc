@@ -1,0 +1,14 @@
+// erro: braço _ nunca é executado: todas as variantes de Forma já foram cobertas
+enum Forma {
+    Circulo(raio float64)
+    Vazio
+}
+fn f(x Forma) {
+    match x {
+        Circulo(_) => {}
+        Vazio => {}
+        _ => {}
+    }
+}
+fn main() {
+}

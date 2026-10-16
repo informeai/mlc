@@ -1,0 +1,7 @@
+// erro: tipo T usado como valor (para converter: T(x))
+import "io"
+fn f[T any](x T) {
+    io.print(T)
+}
+fn main() {
+}

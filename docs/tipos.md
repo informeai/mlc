@@ -86,3 +86,73 @@ soma(&a[1:3])                // sub-slice de array
 - Um array vai para a pilha ou para dentro de uma struct, então o tamanho é limitado a 1 MiB, para não estourar a pilha. Para mais, use `alloc([]T, n)`.
 - Os elementos não podem ser donos (`[4]?*No`, `[2][]int`).
 - Não existe ponteiro para array: use o array direto, ou um slice.
+
+## Genéricos
+
+```
+fn maior[T ordered](a T, b T) T {
+    if a > b { return a }
+    return b
+}
+
+struct Par[A any, B any] {
+    primeiro A
+    segundo B
+}
+
+fn (p Par[A, B]) troca() Par[B, A] {
+    return Par[B, A]{primeiro: p.segundo, segundo: p.primeiro}
+}
+
+maior(3, 7)              // T deduzido: int
+maior[int8](-3, -9)      // T explícito
+p := Par[int, string]{primeiro: 1, segundo: "um"}
+```
+
+- **Restrições:** cada parâmetro de tipo declara o que o código pode fazer com ele.
+
+  | Restrição | Tipos aceitos | Operações permitidas |
+  |---|---|---|
+  | `any` | qualquer tipo sem posse | atribuir, passar, devolver, imprimir |
+  | `comparable` | qualquer tipo sem posse | o de `any` e `==`, `!=` |
+  | `ordered` | números | o de `comparable` e `<`, `<=`, `>`, `>=` |
+  | `number` | números | o de `ordered` e `+`, `-`, `*`, `/` |
+  | `integer` | inteiros | o de `number` e `%` |
+
+- **A definição é checada uma vez,** com `T` valendo só o que a restrição permite: `a < b` com `T any` é erro na própria definição, antes de qualquer uso.
+- **Cada uso com tipos concretos gera uma instância** (`maior[int]`, `Par[int, string]`): uma cópia checada com os tipos reais e compilada no C com nome próprio. Não há custo em tempo de execução. Um erro que só aparece com um tipo concreto (como `x + 300` com `T = int8`) aponta a linha da definição e diz qual instância falhou.
+- **Inferência:** os tipos são deduzidos dos argumentos; quando não dá (nenhum argumento usa `T`), escreva-os: `vazio[int]()`.
+- **`T(x)`** converte para o parâmetro de tipo: `total := T(0)`.
+- **Métodos de struct genérica** nomeiam os parâmetros no receptor: `fn (v &Vetor[T]) adiciona(x T)`.
+- Nesta versão, argumentos de tipo não podem ser donos nem empréstimos (`*No`, `[]int`, `&T`), a mesma regra dos arrays.
+
+## Enums com dados
+
+```
+enum Forma {
+    Circulo(raio float64)
+    Retangulo(largura float64, altura float64)
+    Vazio
+}
+
+enum Resultado[T any] {
+    Ok(valor T)
+    Erro(codigo int)
+}
+
+f := Forma.Circulo(2.0)
+v := Forma.Vazio
+
+match f {
+    Circulo(r) => io.print(3.14 * r * r)    // r recebe uma cópia do campo
+    Retangulo(l, _) => io.print(l)          // _ ignora um campo
+    Vazio => io.print("nada")
+}
+```
+
+- Um valor de enum é uma das variantes, com os dados dela. Constrói-se com o nome do enum na frente: `Forma.Circulo(2.0)`, `Forma.Vazio`.
+- O `match` precisa cobrir todas as variantes (ou ter `_`); esquecer uma é erro de compilação, e a mensagem diz quais faltam. Numa variante com dados, o padrão dá um nome a cada campo (ou `_`).
+- **Enums genéricos:** os tipos podem ser escritos (`Resultado[int].Erro(2)`) ou deduzidos do valor (`Resultado.Ok(5)`) ou do contexto (`return Resultado.Erro(1)` numa função que devolve `Resultado[int]`).
+- `==` compara variante e dados; `io.print` mostra `Circulo(2)`.
+- O valor zero (`var f Forma`) é a primeira variante, com os campos zerados.
+- Nesta versão os dados das variantes não podem ser donos (`*T`, `[]T`): um enum é um valor comum, copiável.

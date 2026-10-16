@@ -1,0 +1,8 @@
+// erro: Forma.Circulo espera 1 valor(es), recebeu 2
+enum Forma {
+    Circulo(raio float64)
+    Vazio
+}
+fn main() {
+    x := Forma.Circulo(1.0, 2.0)
+}

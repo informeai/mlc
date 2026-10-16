@@ -133,6 +133,14 @@ func (c *checker) convertUntyped(e ast.Expr, target Type) bool {
 	if !isUntyped(t) {
 		return true
 	}
+	if _, isVar := target.(*TypeVar); isVar {
+		// na definição genérica: o valor é checado em cada instância
+		if !numLike(target) {
+			return false
+		}
+		c.info.Types[e] = target
+		return true
+	}
 	if !isNumeric(target) {
 		return false
 	}
@@ -154,7 +162,10 @@ func (c *checker) convertUntyped(e ast.Expr, target Type) bool {
 // valueAs checa uma expressão que vai para um lugar do tipo want (variável,
 // argumento, retorno, campo). Uma constante sem tipo assume want.
 func (c *checker) valueAs(e ast.Expr, want Type, context string) Type {
+	savedT, savedE := c.expected, c.expectedFor
+	c.expected, c.expectedFor = want, e
 	t := c.value(e)
+	c.expected, c.expectedFor = savedT, savedE
 	if isUntyped(t) && want != Invalid {
 		if c.convertUntyped(e, want) {
 			return want
@@ -214,7 +225,7 @@ func (c *checker) unary(e *ast.UnaryExpr) Type {
 	case e.Op == token.NOT && t != Bool:
 		c.errorf(e.P, "operador ! não se aplica a %s", t)
 		return Invalid
-	case e.Op == token.SUB && !isNumeric(t) && !isUntyped(t):
+	case e.Op == token.SUB && !numLike(t) && !isUntyped(t):
 		c.errorf(e.P, "operador - não se aplica a %s", t)
 		return Invalid
 	case e.Op == token.SUB && isInteger(t) && !IsSigned(t):
@@ -257,10 +268,10 @@ func (c *checker) binary(e *ast.BinaryExpr) Type {
 	// Uma constante sem tipo assume o tipo do outro lado: em n + 1, com n
 	// int32, o 1 é int32.
 	switch {
-	case isUntyped(x) && !isUntyped(y) && isNumeric(y):
+	case isUntyped(x) && !isUntyped(y) && numLike(y):
 		c.convertUntyped(e.X, y)
 		x = y
-	case isUntyped(y) && !isUntyped(x) && isNumeric(x):
+	case isUntyped(y) && !isUntyped(x) && numLike(x):
 		c.convertUntyped(e.Y, x)
 		y = x
 	case isUntyped(x) && isUntyped(y) && x != y:
@@ -281,15 +292,15 @@ func (c *checker) binary(e *ast.BinaryExpr) Type {
 		case e.Op == token.ADD && x == String && y == String:
 			c.errorf(e.OpPos, "concatenação de strings exige alocação explícita: monte o texto num buffer (veja docs/texto.md)")
 			return Invalid
-		case x != y || (!isNumeric(x) && !isUntyped(x)):
+		case x != y || (!numLike(x) && !isUntyped(x)):
 			return mismatch()
-		case e.Op == token.REM && (isFloat(x) || x == UntypedFloat):
+		case e.Op == token.REM && (isFloat(x) || x == UntypedFloat || (abstract(x) && !tvHas(x, "mod"))):
 			c.errorf(e.OpPos, "operador %% não se aplica a %s (só a inteiros)", x)
 			return Invalid
 		}
 		result = x
 	case token.LSS, token.LEQ, token.GTR, token.GEQ:
-		if x != y || (!isNumeric(x) && !isUntyped(x)) {
+		if x != y || (!orderLike(x) && !isUntyped(x)) {
 			return mismatch()
 		}
 		result = Bool
@@ -448,11 +459,17 @@ func (c *checker) conversion(e *ast.CallExpr, target Type) Type {
 	switch {
 	case t == Invalid:
 		return Invalid
-	case !isNumeric(target) || (!isNumeric(t) && !isUntyped(t)):
+	case !numLike(target) || (!numLike(t) && !isUntyped(t)):
 		c.errorf(a.Pos(), "não é possível converter %s em %s", t, target)
 		return Invalid
 	}
 	c.info.Calls[e] = Callee{Builtin: Convert, Elem: target}
+	if abstract(target) || abstract(t) {
+		if isUntyped(t) {
+			c.convertUntyped(a, target)
+		}
+		return target // na definição genérica, a conversão é checada em cada instância
+	}
 	if f, ok := c.info.Values[a].(float64); ok && t == UntypedFloat && isInteger(target) {
 		// conversão explícita de constante decimal: trunca, como int(x) faz
 		// em tempo de execução (int(-2.9) é -2)

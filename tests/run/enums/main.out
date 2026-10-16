@@ -1,0 +1,11 @@
+área total: 24
+[Circulo(2) Retangulo(3, 4) Vazio]
+ok: 3
+erro: 1
+ok: 7
+erro: 2
+{placa Retangulo(2, 0.5)} 1
+Circulo(0)
+passos antes do erro: 5
+personalizada azul Rgb(10, 20, 30)
+soma: 60

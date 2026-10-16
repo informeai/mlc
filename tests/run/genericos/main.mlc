@@ -1,0 +1,79 @@
+import "io"
+import "colecao"
+
+struct Par[A any, B any] {
+    primeiro A
+    segundo B
+}
+
+fn (p Par[A, B]) troca() Par[B, A] {
+    return Par[B, A]{primeiro: p.segundo, segundo: p.primeiro}
+}
+
+fn maior[T ordered](a T, b T) T {
+    if a > b {
+        return a
+    }
+    return b
+}
+
+fn soma[T number](s &[]T) T {
+    total := T(0)
+    for x in s {
+        total += x
+    }
+    return total
+}
+
+fn mdc[T integer](a T, b T) T {
+    for b != 0 {
+        r := a % b
+        a = b
+        b = r
+    }
+    return a
+}
+
+// genérica chamando genérica
+fn maior_de_tres[T ordered](a T, b T, c T) T {
+    return maior(maior(a, b), c)
+}
+
+fn iguais[T comparable](a T, b T) bool {
+    return a == b
+}
+
+struct Ponto {
+    x int
+    y int
+}
+
+fn main() {
+    io.print(maior(3, 7), maior(2.5, 1.5), maior[int8](-3, -9))
+    io.print(maior_de_tres(4, 9, 2))
+
+    v := [4]float64{1.5, 2.5, 3.0, 4.0}
+    w := [3]int{1, 2, 3}
+    io.print(soma(&v), soma[int](&w))
+    io.print(mdc(48, 18), mdc[uint16](100, 75))
+
+    p := Par[int, string]{primeiro: 1, segundo: "um"}
+    q := p.troca()
+    io.print(p, q, q.primeiro)
+
+    io.print(iguais(Ponto{x: 1, y: 2}, Ponto{x: 1, y: 2}), iguais("a", "b"))
+
+    nums := colecao.novo[int](1)
+    for i := 1; i <= 5; i++ {
+        nums.adiciona(i * i)
+    }
+    io.print("vetor:", nums.tamanho(), nums.pega(0), nums.pega(4))
+    nums.libera()
+
+    pontos := colecao.novo[Ponto](2)
+    pontos.adiciona(Ponto{x: 1, y: 2})
+    pontos.adiciona(Ponto{x: 3, y: 4})
+    pontos.adiciona(Ponto{x: 5, y: 6})
+    io.print("pontos:", pontos.tamanho(), pontos.pega(2))
+    pontos.libera()
+}

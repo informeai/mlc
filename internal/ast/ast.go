@@ -10,15 +10,17 @@ type Node interface {
 type File struct {
 	Imports []*Import
 	Structs []*StructDecl
+	Enums   []*EnumDecl
 	Consts  []*ConstDecl // na ordem do arquivo
 	Funcs   []*FuncDecl
 }
 
 type StructDecl struct {
-	Name   string
-	Pub    bool
-	Fields []*FieldDecl
-	P      token.Pos
+	Name       string
+	TypeParams []*TypeParam // struct Par[A any, B any] { ... }
+	Pub        bool
+	Fields     []*FieldDecl
+	P          token.Pos
 }
 
 type FieldDecl struct {
@@ -48,12 +50,14 @@ type Import struct {
 }
 
 type FuncDecl struct {
-	Name   string
-	Pub    bool // visível para quem importa o arquivo
-	Params []*Param
-	Result *TypeExpr // nil quando a função não retorna valor
-	Body   *Block
-	P      token.Pos
+	Name       string
+	TypeParams []*TypeParam // fn maior[T ordered](...)
+	Pub        bool         // visível para quem importa o arquivo
+	Recv       *Param       // receptor de um método: fn (p &Ponto) area(); nil numa função
+	Params     []*Param
+	Result     *TypeExpr // nil quando a função não retorna valor
+	Body       *Block
+	P          token.Pos
 }
 
 type Param struct {
@@ -68,8 +72,9 @@ type TypeExpr struct {
 	Name   string
 	Module string // qualificador: "geometria" em geometria.Ponto
 	Mod    TypeMod
-	Elem   *TypeExpr // não nil quando Mod != TypeNamed
-	Len    Expr      // tamanho de [N]T
+	Elem   *TypeExpr   // não nil quando Mod != TypeNamed
+	Len    Expr        // tamanho de [N]T
+	Args   []*TypeExpr // argumentos de tipo: Par[int, string]
 	P      token.Pos
 }
 
@@ -170,6 +175,9 @@ type MatchArm struct {
 // Pattern é um literal (Lit: *IntLit, *StringLit, *FloatLit ou *Ident
 // true/false) ou o curinga _. Neg marca um inteiro negativo, como em -1.
 type Pattern struct {
+	// Variante de enum: Circulo(r, _). Binds tem um nome por campo (_ ignora).
+	Variant  *Ident
+	Binds    []*Ident
 	Wildcard bool
 	Lit      Expr
 	Neg      bool
@@ -287,10 +295,11 @@ func (*IndexExpr) exprNode()    {}
 
 // CompositeLit é "Ponto{x: 1, y: 2}". Fields vazio significa o valor zero.
 type CompositeLit struct {
-	Type   *Ident
-	Module *Ident // qualificador: geometria em geometria.Ponto{...}
-	Fields []*FieldInit
-	Lbrace token.Pos
+	Type     *Ident
+	Module   *Ident // qualificador: geometria em geometria.Ponto{...}
+	TypeArgs []Expr // Par[int, string]{...}
+	Fields   []*FieldInit
+	Lbrace   token.Pos
 }
 
 type FieldInit struct {
@@ -342,3 +351,41 @@ type ArrayLit struct {
 func (n *ArrayLit) Pos() token.Pos { return n.Type.P }
 
 func (*ArrayLit) exprNode() {}
+
+// TypeParam é um parâmetro de tipo: o T de fn maior[T ordered](...).
+type TypeParam struct {
+	Name       string
+	Constraint string // any, comparable, ordered, number, integer
+	P          token.Pos
+}
+
+// IndexListExpr é f[A, B]: argumentos de tipo de uma função ou struct genérica.
+// Com um argumento só, f[int] é um IndexExpr; o checker decide se é índice ou
+// instância.
+type IndexListExpr struct {
+	X       Expr
+	Indices []Expr
+	Lbrack  token.Pos
+}
+
+func (n *IndexListExpr) Pos() token.Pos { return n.X.Pos() }
+
+func (*IndexListExpr) exprNode() {}
+
+// EnumDecl é "enum Forma { Circulo(raio float64); Vazio }".
+type EnumDecl struct {
+	Name       string
+	Pub        bool
+	TypeParams []*TypeParam
+	Variants   []*VariantDecl
+	P          token.Pos
+}
+
+// VariantDecl é uma variante de enum, com campos opcionais: Circulo(raio float64).
+type VariantDecl struct {
+	Name   string
+	Fields []*FieldDecl
+	P      token.Pos
+}
+
+func (n *EnumDecl) Pos() token.Pos { return n.P }

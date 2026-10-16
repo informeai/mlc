@@ -910,6 +910,12 @@ func (o *ownChecker) literalFields(lit *ast.CompositeLit, prefix string, sub map
 
 func (o *ownChecker) call(e *ast.CallExpr) {
 	callee := o.c.info.Calls[e]
+	if _, isCtor := o.c.info.EnumCtors[e]; isCtor {
+		for _, a := range e.Args {
+			o.read(a) // dados de variante não são donos
+		}
+		return
+	}
 	switch callee.Builtin {
 	case Free:
 		o.free(e.Args[0])
@@ -954,7 +960,7 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 // userArgs avalia os argumentos de uma chamada de função do usuário, da
 // esquerda para a direita. Os moves só valem depois de todos (deferMoves).
 func (o *ownChecker) userArgs(e *ast.CallExpr, callee Callee, borrowedRoots map[*Local]bool, touched *[]pathKey) {
-	for i, a := range e.Args {
+	for i, a := range o.c.info.CallArgs(e) { // num método, o receptor vem primeiro
 		context := "o argumento " + itoa(i+1) + " de " + callee.Func.Name
 		pt := callee.Func.Params[i].Type
 		switch {

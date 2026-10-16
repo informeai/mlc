@@ -1,0 +1,10 @@
+// erro: argumento 2 de maior[int]: esperado int, encontrado float64
+import "io"
+fn maior[T ordered](a T, b T) T {
+    return a
+}
+fn main() {
+    x := 1
+    y := 2.5
+    io.print(maior(x, y))
+}

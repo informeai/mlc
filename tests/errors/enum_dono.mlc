@@ -1,0 +1,7 @@
+// erro: variantes não podem guardar donos nesta versão (p é *int)
+enum Caixa {
+    Cheia(p *int)
+    Vazia
+}
+fn main() {
+}
