@@ -155,3 +155,17 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 - [x] **Hash map em MLC:** `std/map` (`Map[K owned + hash.Hash, V owned]`, endereçamento aberto) e a interface `hash.Hash` para inteiros, `bool`, `string` e slices; restrições combinadas com `+`. Veja [docs/biblioteca.md](docs/biblioteca.md)
 - [x] **Empréstimos devolvidos e guardados:** `fn (v &Vec[T]) at(i int) &T`, `x := m.get(&k)`, `x := &a[i]`; a origem fica congelada enquanto o empréstimo é usado, conferido na compilação. `vec.at`/`last` e `map.get`/`key_ref`/`value_ref`. Veja [docs/memoria.md](docs/memoria.md)
 - [x] **LSP:** `mlc lsp` com diagnósticos ao digitar, cores, formatação, hover e ir para a definição; extensão para VS Code e configuração para Neovim. Veja [Editores](#editores)
+
+### Próximos passos (em ordem de prioridade)
+
+- [ ] **Donos aninhados:** donos dentro de donos em genéricos, structs e enums com dados donos (`Vec[Vec[int]]`, `Map[[]byte, Vec[T]]`, `Vec[?*No]` com `No` contendo donos). Destrava JSON, árvores de sintaxe, grafos e índices
+- [ ] **FFI para bibliotecas do usuário:** `extern fn` fora da `std`, marcado de forma explícita e verificado na fronteira, para usar bibliotecas C (rede, bancos de dados, processos, diretórios, leitura de arquivo aos pedaços)
+- [ ] **Caminho de busca de bibliotecas:** reaproveitar bibliotecas entre projetos (por exemplo `MLC_PATH` ou uma pasta `lib/`), além dos imports relativos ao `main.mlc` e do `std/` embutido
+- [ ] **Formatação para buffer:** `str.format(dst, "...", x)`, um `io.Writer` que escreve num `[]byte` e especificadores de formato (`{:x}`, `{:.2}`, largura)
+- [ ] **Callbacks com contexto:** métodos com parâmetros de tipo próprios (como `each[C](ctx &C, f fn(&C, &K, &V))`) ou funções sem captura no heap
+- [ ] **Erros com conteúdo:** enums com dados donos (mensagens alocadas) e um atalho de propagação (como `try`)
+- [ ] **Interfaces `Ord` e `Eq`:** `sort.sort` e `map` aceitando structs pela ordem e igualdade que elas definem
+- [ ] **Iteradores como objetos:** empréstimos guardados em structs, com tempo de vida conferido
+- [ ] **Interfaces dinâmicas:** `&I` e `*I`, para guardar valores de tipos diferentes juntos (sem boxing: só a partir de `&T` ou `*T`)
+- [ ] **Concorrência:** threads, atomics e mutex, com a posse garantindo a ausência de data races
+- [ ] **Múltiplos retornos**
