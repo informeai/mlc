@@ -38,7 +38,7 @@ func (c *checker) signature(fn *Func, d *ast.FuncDecl, recv *Local) {
 	}
 	for _, p := range d.Params {
 		switch {
-		case predeclared[p.Name] || modules[p.Name]:
+		case predeclared[p.Name]:
 			c.errorf(p.P, "o nome %q é reservado", p.Name)
 		case seen[p.Name]:
 			c.errorf(p.P, "parâmetro %s repetido", p.Name)

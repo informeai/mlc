@@ -11,6 +11,7 @@ import (
 	"mlc/internal/checker"
 	"mlc/internal/parser"
 	"mlc/internal/token"
+	"mlc/std"
 )
 
 // Loader lê um arquivo do programa pelo nome (o caminho do arquivo principal
@@ -49,9 +50,6 @@ func (l *loader) errorf(file string, pos token.Pos, format string, args ...any) 
 
 func (l *loader) imports(file string, f *ast.File) {
 	for _, imp := range f.Imports {
-		if checker.IsRuntimeModule(imp.Path) {
-			continue
-		}
 		if msg := badPath(imp.Path); msg != "" {
 			l.errorf(file, imp.P, "import %q: %s", imp.Path, msg)
 			continue
@@ -75,11 +73,24 @@ func (l *loader) visit(from string, imp *ast.Import) {
 		l.errorf(from, imp.P, "importação circular: %s", cycle)
 		return
 	}
+	isStd := strings.HasPrefix(imp.Path, "std/")
 	name := filepath.Join(l.root, filepath.FromSlash(imp.Path)+".mlc")
-	src, err := l.read(name)
+	read := l.read
+	if isStd {
+		// biblioteca padrão: embutida no compilador
+		name = imp.Path + ".mlc"
+		read = func(string) ([]byte, error) { return std.FS.ReadFile(strings.TrimPrefix(name, "std/")) }
+	}
+	src, err := read(name)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			l.errorf(from, imp.P, "módulo desconhecido %q: arquivo %s não encontrado (nem é do runtime: \"io\", \"str\")", imp.Path, name)
+		if isStd {
+			l.errorf(from, imp.P, "a biblioteca padrão não tem o módulo %q", imp.Path)
+		} else if errors.Is(err, fs.ErrNotExist) {
+			hint := ""
+			if _, err := std.FS.ReadFile(imp.Path + ".mlc"); err == nil {
+				hint = fmt.Sprintf(" (para o da biblioteca padrão: import \"std/%s\")", imp.Path)
+			}
+			l.errorf(from, imp.P, "módulo desconhecido %q: arquivo %s não encontrado%s", imp.Path, name, hint)
 		} else {
 			l.errorf(from, imp.P, "não foi possível ler %s: %v", name, err)
 		}
@@ -96,7 +107,7 @@ func (l *loader) visit(from string, imp *ast.Import) {
 	l.imports(name, f)
 	l.stack = l.stack[:len(l.stack)-1]
 	l.state[imp.Path] = 2
-	l.srcs = append(l.srcs, checker.Source{Path: imp.Path, File: name, AST: f})
+	l.srcs = append(l.srcs, checker.Source{Path: imp.Path, File: name, AST: f, Std: isStd})
 }
 
 // badPath explica o que há de errado num caminho de import, ou devolve "".

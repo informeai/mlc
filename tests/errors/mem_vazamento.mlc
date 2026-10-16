@@ -1,5 +1,5 @@
 // erro: vazamento: p ainda é dona da memória (linha 5) no fim da função
-import "io"
+import "std/io"
 struct Ponto { x int; y int }
 fn main() {
     p := alloc(Ponto)

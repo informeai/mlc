@@ -86,6 +86,7 @@ func BuildWith(file string, src []byte, out string, read Loader) error {
 	args = append(args, "-I", dir, "-o", out,
 		filepath.Join(dir, "program.c"),
 		filepath.Join(dir, "mlc_runtime.c"),
+		"-lm", // libm, para std/math
 	)
 	cmd := exec.Command(cc, args...)
 	output, err := cmd.CombinedOutput()

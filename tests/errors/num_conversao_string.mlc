@@ -1,5 +1,5 @@
 // erro: não é possível converter string em float64
-import "io"
+import "std/io"
 fn main() {
     io.print(float64("2.5"))
 }

@@ -1,5 +1,5 @@
 // erro: constante 300 não cabe em int8 (-128 a 127) (na instância mais[int8])
-import "io"
+import "std/io"
 fn mais[T number](x T) T {
     return x + 300
 }

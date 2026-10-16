@@ -1,5 +1,5 @@
 // erro: len se aplica a slices, arrays e strings, não a constante inteira
-import "io"
+import "std/io"
 fn main() {
     io.print(len(3))
 }

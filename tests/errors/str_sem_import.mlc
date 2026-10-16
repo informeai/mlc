@@ -1,4 +1,4 @@
-// erro: módulo str não foi importado (adicione: import "str")
+// erro: módulo str não foi importado (adicione: import "std/str")
 fn main() {
     buf := alloc([]byte, 4)
     str.copy(&buf, "a")

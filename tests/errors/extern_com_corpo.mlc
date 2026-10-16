@@ -1,0 +1,7 @@
+// erro: extern fn não tem corpo
+extern fn f() int {
+    return 1
+}
+
+fn main() {
+}

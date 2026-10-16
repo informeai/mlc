@@ -1,5 +1,5 @@
 // erro: comparação entre tipos diferentes: byte e int
-import "io"
+import "std/io"
 fn main() {
     s := "abc"
     n := 97

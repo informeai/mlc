@@ -1,5 +1,5 @@
 // erro: identificador não declarado: x
-import "io"
+import "std/io"
 fn main() {
     io.print(x)
 }

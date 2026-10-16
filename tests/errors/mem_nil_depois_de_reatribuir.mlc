@@ -1,5 +1,5 @@
 // erro: q pode ser nil aqui: verifique com if q != nil antes de usar o conteúdo
-import "io"
+import "std/io"
 struct Ponto { x int; y int }
 fn main() {
     var q ?*Ponto = alloc(Ponto)

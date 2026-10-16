@@ -1,5 +1,5 @@
 // erro: tipo T usado como valor (para converter: T(x))
-import "io"
+import "std/io"
 fn f[T any](x T) {
     io.print(T)
 }

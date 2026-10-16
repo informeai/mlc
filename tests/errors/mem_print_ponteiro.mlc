@@ -1,5 +1,5 @@
 // erro: io.print não imprime ponteiros (*Ponto); imprima o conteúdo
-import "io"
+import "std/io"
 struct Ponto { x int; y int }
 fn main() {
     p := alloc(Ponto)

@@ -1,5 +1,5 @@
 // erro: valor do tipo No contém ponteiros donos e não pode ser copiado
-import "io"
+import "std/io"
 struct No {
     valor int
     prox ?*No

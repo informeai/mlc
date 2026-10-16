@@ -124,7 +124,7 @@ func TestErrors(t *testing.T) {
 // escrita no C gerado. Rodar o programa não basta: o clang já avalia da
 // esquerda para a direita por conta própria, mas o padrão do C não garante.
 func TestEvaluationOrderIsExplicit(t *testing.T) {
-	src := `import "io"
+	src := `import "std/io"
 fn a() int { return 1 }
 fn b() int { return 2 }
 fn soma(x int, y int) int { return x + y }

@@ -1,0 +1,65 @@
+// Ordenação de slices (e arrays, via &a), no lugar, sem alocar.
+
+// sort ordena s em ordem crescente (quicksort, com inserção nas partes pequenas).
+pub fn sort[T ordered](s &[]T) {
+    n := len(s)
+    if n <= 16 {
+        insertion(s)
+        return
+    }
+    p := partition(s)
+    sort(&s[:p])
+    sort(&s[p + 1:])
+}
+
+fn insertion[T ordered](s &[]T) {
+    for i := 1; i < len(s); i++ {
+        x := s[i]
+        j := i - 1
+        for j >= 0 && s[j] > x {
+            s[j + 1] = s[j]
+            j--
+        }
+        s[j + 1] = x
+    }
+}
+
+fn partition[T ordered](s &[]T) int {
+    last := len(s) - 1
+    swap(s, last / 2, last) // pivô do meio, contra entradas já ordenadas
+    pivot := s[last]
+    i := 0
+    for j := 0; j < last; j++ {
+        if s[j] < pivot {
+            swap(s, i, j)
+            i++
+        }
+    }
+    swap(s, i, last)
+    return i
+}
+
+pub fn swap[T any](s &[]T, i int, j int) {
+    t := s[i]
+    s[i] = s[j]
+    s[j] = t
+}
+
+pub fn is_sorted[T ordered](s &[]T) bool {
+    for i := 1; i < len(s); i++ {
+        if s[i] < s[i - 1] {
+            return false
+        }
+    }
+    return true
+}
+
+pub fn reverse[T any](s &[]T) {
+    i := 0
+    j := len(s) - 1
+    for i < j {
+        swap(s, i, j)
+        i++
+        j--
+    }
+}

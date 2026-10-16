@@ -1,5 +1,5 @@
 // erro: Foo não é uma struct
-import "io"
+import "std/io"
 fn main() {
     io.print(Foo{x: 1})
 }

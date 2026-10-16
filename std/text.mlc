@@ -1,0 +1,118 @@
+// Funções de texto sobre bytes. Nenhuma aloca: buscam, comparam ou alteram
+// no lugar.
+
+pub fn is_space(b byte) bool {
+    return b == ' ' || b == '\t' || b == '\n' || b == '\r'
+}
+
+pub fn is_digit(b byte) bool {
+    return b >= '0' && b <= '9'
+}
+
+pub fn is_letter(b byte) bool {
+    return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
+}
+
+// index_byte devolve a posição do primeiro b em s, ou -1.
+pub fn index_byte(s &[]byte, b byte) int {
+    for i := 0; i < len(s); i++ {
+        if s[i] == b {
+            return i
+        }
+    }
+    return -1
+}
+
+// index_of devolve a posição da primeira ocorrência de sub em s, ou -1.
+pub fn index_of(s &[]byte, sub string) int {
+    for i := 0; i + len(sub) <= len(s); i++ {
+        if matches(s, i, sub) {
+            return i
+        }
+    }
+    return -1
+}
+
+pub fn contains(s &[]byte, sub string) bool {
+    return index_of(s, sub) >= 0
+}
+
+pub fn starts_with(s &[]byte, prefix string) bool {
+    return len(prefix) <= len(s) && matches(s, 0, prefix)
+}
+
+pub fn ends_with(s &[]byte, suffix string) bool {
+    return len(suffix) <= len(s) && matches(s, len(s) - len(suffix), suffix)
+}
+
+fn matches(s &[]byte, at int, sub string) bool {
+    for j := 0; j < len(sub); j++ {
+        if s[at + j] != sub[j] {
+            return false
+        }
+    }
+    return true
+}
+
+pub fn count_byte(s &[]byte, b byte) int {
+    n := 0
+    for c in s {
+        if c == b {
+            n++
+        }
+    }
+    return n
+}
+
+// trim_start devolve a posição do primeiro byte que não é espaço.
+pub fn trim_start(s &[]byte) int {
+    i := 0
+    for i < len(s) && is_space(s[i]) {
+        i++
+    }
+    return i
+}
+
+// trim_end devolve o fim (exclusivo) do texto sem os espaços do final:
+// &s[trim_start(s):trim_end(s)] é o texto aparado.
+pub fn trim_end(s &[]byte) int {
+    j := len(s)
+    for j > 0 && is_space(s[j - 1]) {
+        j--
+    }
+    return j
+}
+
+// field_end devolve onde termina o campo que começa em start, separado por
+// sep: o índice do próximo sep, ou len(s). Para percorrer os campos:
+//
+//     i := 0
+//     for i <= len(linha) {
+//         fim := text.field_end(&linha, ',', i)
+//         ... campo em &linha[i:fim] ...
+//         i = fim + 1
+//     }
+pub fn field_end(s &[]byte, sep byte, start int) int {
+    for i := start; i < len(s); i++ {
+        if s[i] == sep {
+            return i
+        }
+    }
+    return len(s)
+}
+
+pub fn to_upper(s &[]byte) {
+    for i := 0; i < len(s); i++ {
+        if s[i] >= 'a' && s[i] <= 'z' {
+            s[i] -= 32
+        }
+    }
+}
+
+pub fn to_lower(s &[]byte) {
+    for i := 0; i < len(s); i++ {
+        if s[i] >= 'A' && s[i] <= 'Z' {
+            s[i] += 32
+        }
+    }
+}

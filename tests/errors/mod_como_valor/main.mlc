@@ -1,5 +1,5 @@
 // erro: módulo geometria usado como valor
-import "io"
+import "std/io"
 import "geometria"
 fn main() {
     io.print(geometria)

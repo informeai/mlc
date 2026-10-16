@@ -1,0 +1,10 @@
+// Resultado de uma operação que pode falhar: o valor, ou um código de erro.
+//
+//     match fs.read_file(&caminho, &buf) {
+//         Ok(n) => ...
+//         Err(code) => ...
+//     }
+pub enum Result[T any] {
+    Ok(value T)
+    Err(code int)
+}

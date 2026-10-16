@@ -1,5 +1,5 @@
 // erro: argumento 2 de str.parse_int: esperado &int; para emprestar, escreva &n
-import "str"
+import "std/str"
 fn main() {
     buf := alloc([]byte, 4)
     n := 0

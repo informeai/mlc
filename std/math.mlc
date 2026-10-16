@@ -1,0 +1,50 @@
+// Funções matemáticas. As de ponto flutuante vêm da libm do C.
+
+pub const PI = 3.141592653589793
+pub const E = 2.718281828459045
+
+pub fn abs[T number](x T) T {
+    if x < T(0) {
+        return -x
+    }
+    return x
+}
+
+pub fn min[T ordered](a T, b T) T {
+    if a < b {
+        return a
+    }
+    return b
+}
+
+pub fn max[T ordered](a T, b T) T {
+    if a > b {
+        return a
+    }
+    return b
+}
+
+// clamp limita x à faixa [lo, hi].
+pub fn clamp[T ordered](x T, lo T, hi T) T {
+    if x < lo {
+        return lo
+    }
+    if x > hi {
+        return hi
+    }
+    return x
+}
+
+pub extern fn sqrt(x float64) float64
+pub extern fn pow(x float64, y float64) float64
+pub extern fn floor(x float64) float64
+pub extern fn ceil(x float64) float64
+pub extern fn round(x float64) float64
+pub extern fn sin(x float64) float64
+pub extern fn cos(x float64) float64
+pub extern fn tan(x float64) float64
+pub extern fn atan2(y float64, x float64) float64
+pub extern fn log(x float64) float64
+pub extern fn exp(x float64) float64
+pub extern fn is_nan(x float64) bool
+pub extern fn is_inf(x float64) bool

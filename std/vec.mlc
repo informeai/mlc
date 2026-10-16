@@ -1,0 +1,71 @@
+// Vetor que cresce. É a única parte da biblioteca que aloca, e a alocação
+// está visível aqui: new aloca, push chama grow quando falta espaço, e grow
+// dobra a capacidade com realloc. Para ver os elementos como slice, use
+// &v.items[:v.count].
+//
+//     v := vec.new[int](8)
+//     v.push(1)
+//     v.free()
+
+pub struct Vec[T any] {
+    items []T
+    count int
+}
+
+extern fn fail(msg string)
+
+pub fn new[T any](cap int) *Vec[T] {
+    return alloc(Vec[T]{items: alloc([]T, cap), count: 0})
+}
+
+pub fn (v &Vec[T]) push(x T) {
+    if v.count == len(v.items) {
+        v.grow()
+    }
+    v.items[v.count] = x
+    v.count++
+}
+
+// grow dobra a capacidade (realloc).
+pub fn (v &Vec[T]) grow() {
+    v.items = realloc(v.items, len(v.items) * 2 + 1)
+}
+
+pub fn (v &Vec[T]) get(i int) T {
+    if i < 0 || i >= v.count {
+        fail("vec.get: índice fora do vetor")
+    }
+    return v.items[i]
+}
+
+pub fn (v &Vec[T]) set(i int, x T) {
+    if i < 0 || i >= v.count {
+        fail("vec.set: índice fora do vetor")
+    }
+    v.items[i] = x
+}
+
+pub fn (v &Vec[T]) pop() T {
+    if v.count == 0 {
+        fail("vec.pop: vetor vazio")
+    }
+    v.count--
+    return v.items[v.count]
+}
+
+pub fn (v &Vec[T]) len() int {
+    return v.count
+}
+
+pub fn (v &Vec[T]) cap() int {
+    return len(v.items)
+}
+
+pub fn (v &Vec[T]) clear() {
+    v.count = 0
+}
+
+pub fn (v *Vec[T]) free() {
+    free(v.items)
+    free(v)
+}

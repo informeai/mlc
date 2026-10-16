@@ -1,5 +1,5 @@
 // erro: concatenação de strings exige alocação explícita
-import "io"
+import "std/io"
 fn main() {
     s := "a"
     s += "b"

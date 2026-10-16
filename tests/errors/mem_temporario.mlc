@@ -1,5 +1,5 @@
 // erro: vazamento: o ponteiro dono temporário é perdido aqui
-import "io"
+import "std/io"
 struct Ponto { x int; y int }
 fn novo() *Ponto {
     return alloc(Ponto)

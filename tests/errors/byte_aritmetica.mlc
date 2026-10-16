@@ -1,5 +1,5 @@
 // erro: operador + não se aplica a int32 e int (converta um dos lados: int32(x) ou int(x))
-import "io"
+import "std/io"
 fn main() {
     var a int32 = 1
     b := 2

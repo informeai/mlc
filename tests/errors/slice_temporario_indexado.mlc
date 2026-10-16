@@ -1,5 +1,5 @@
 // erro: vazamento: o ponteiro dono temporário é perdido aqui
-import "io"
+import "std/io"
 fn faz() []int {
     return alloc([]int, 2)
 }

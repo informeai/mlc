@@ -55,7 +55,7 @@ func (s *Struct) Field(name string) *Field {
 func (c *checker) collectStructs(f *ast.File) {
 	for _, d := range f.Structs {
 		switch {
-		case predeclared[d.Name] || modules[d.Name]:
+		case predeclared[d.Name]:
 			c.errorf(d.P, "o nome %q é reservado", d.Name)
 			continue
 		case c.mod.structs[d.Name] != nil:
@@ -254,10 +254,6 @@ func (c *checker) selector(e *ast.SelectorExpr) Type {
 	}
 	if m := c.userModule(e.X); m != nil {
 		return c.moduleConst(e, m)
-	}
-	if id, ok := e.X.(*ast.Ident); ok && modules[id.Name] && c.scope.lookup(id.Name) == nil {
-		c.errorf(e.SelPos, "%s.%s só pode ser usado como chamada", id.Name, e.Sel)
-		return Invalid
 	}
 	return c.field(c.value(e.X), e)
 }

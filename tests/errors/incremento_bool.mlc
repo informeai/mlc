@@ -1,5 +1,5 @@
 // erro: operador ++ não se aplica a bool
-import "io"
+import "std/io"
 fn main() {
     b := true
     b++

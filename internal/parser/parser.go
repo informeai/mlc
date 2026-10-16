@@ -25,7 +25,8 @@ type Parser struct {
 	// noLit desliga literais compostos no nível de cima do cabeçalho de
 	// if/for/match: em "if x == P {", o '{' abre o bloco. Dentro de
 	// parênteses, chamadas e índices eles voltam a valer.
-	noLit bool
+	noLit  bool
+	extern bool // lendo um extern fn: sem corpo
 }
 
 const litInHeader = "literal de struct no cabeçalho de if, for ou match precisa de parênteses: (Tipo{...})"
@@ -136,6 +137,8 @@ func (p *Parser) parseFile() *ast.File {
 			p.parsePub(f)
 		case token.FN:
 			f.Funcs = append(f.Funcs, p.parseFunc())
+		case token.EXTERN:
+			f.Funcs = append(f.Funcs, p.parseExtern())
 		case token.STRUCT:
 			f.Structs = append(f.Structs, p.parseStruct())
 		case token.ENUM:
@@ -167,6 +170,7 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 		p.expect(token.RPAREN)
 	}
 	fn := &ast.FuncDecl{Name: p.expect(token.IDENT).Lit, Recv: recv, P: pos}
+	fn.Extern = p.extern
 	if p.tok.Kind == token.LBRACK {
 		fn.TypeParams = p.parseTypeParams()
 	}
@@ -183,8 +187,29 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 	if p.startsType() {
 		fn.Result = p.parseType()
 	}
+	if fn.Extern {
+		if p.tok.Kind == token.LBRACE {
+			p.errorf(p.tok.Pos, "extern fn não tem corpo: a implementação fica no runtime C")
+			p.parseBlock()
+			return fn
+		}
+		p.expectEOS()
+		return fn
+	}
 	fn.Body = p.parseBlock()
 	return fn
+}
+
+// parseExtern lê "extern fn sqrt(x float64) float64": uma função sem corpo,
+// implementada no runtime C.
+func (p *Parser) parseExtern() *ast.FuncDecl {
+	p.expect(token.EXTERN)
+	if p.tok.Kind != token.FN {
+		p.unexpected("esperado fn depois de extern")
+	}
+	p.extern = true
+	defer func() { p.extern = false }()
+	return p.parseFunc()
 }
 
 func (p *Parser) parseStruct() *ast.StructDecl {
@@ -712,6 +737,10 @@ func (p *Parser) parsePrimary() ast.Expr {
 func (p *Parser) parsePub(f *ast.File) {
 	pos := p.expect(token.PUB).Pos
 	switch p.tok.Kind {
+	case token.EXTERN:
+		fn := p.parseExtern()
+		fn.Pub = true
+		f.Funcs = append(f.Funcs, fn)
 	case token.FN:
 		fn := p.parseFunc()
 		fn.Pub = true

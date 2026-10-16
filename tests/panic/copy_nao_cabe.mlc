@@ -1,4 +1,4 @@
-import "str"
+import "std/str"
 
 fn main() {
     buf := alloc([]byte, 4)

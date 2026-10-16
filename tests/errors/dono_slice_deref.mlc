@@ -1,5 +1,5 @@
 // erro: s[i] pode ser nil e não pode ser usado direto: tire com take(&s[i])
-import "io"
+import "std/io"
 struct Item { peso int }
 fn main() {
     s := alloc([]?*Item, 2)

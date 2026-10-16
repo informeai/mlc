@@ -1,0 +1,18 @@
+// Entrada e saída padrão. Nada aqui aloca: read_line lê num buffer de quem
+// chama.
+//
+// io.print(a, b, ...) também é deste módulo, mas é embutido no compilador:
+// aceita qualquer quantidade de argumentos, de qualquer tipo, e vira uma
+// chamada tipada por argumento (não existe printf). Separa os valores com
+// espaço e termina a linha.
+
+// write escreve os bytes de s, sem quebra de linha.
+pub extern fn write(s &[]byte)
+
+// write_line escreve os bytes de s e uma quebra de linha.
+pub extern fn write_line(s &[]byte)
+
+// read_line lê uma linha (sem o \n) para o começo de dst e devolve quantos
+// bytes leu. Se a linha não couber, o resto fica para a próxima chamada.
+// No fim da entrada devolve -1.
+pub extern fn read_line(dst &[]byte) int

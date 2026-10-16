@@ -1,5 +1,5 @@
 // erro: argumento 1 de str.copy: esperado &[]byte, encontrado &[]int
-import "str"
+import "std/str"
 fn main() {
     buf := alloc([]int, 4)
     str.copy(&buf, "a")

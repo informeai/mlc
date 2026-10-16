@@ -1,0 +1,11 @@
+// erro: P não atende ordered, exigida por T em sort.sort
+import "std/sort"
+
+struct P {
+    x int
+}
+
+fn main() {
+    var a [2]P
+    sort.sort(&a)
+}

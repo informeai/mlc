@@ -1,5 +1,5 @@
-import "io"
-import "str"
+import "std/io"
+import "std/str"
 
 const LIMITE = 100              // sem tipo: serve para int8 e para uint64
 const PI float64 = 3.14159
@@ -85,5 +85,7 @@ fn main() {
     if str.parse_float(&buf[:k], &lido) {
         io.print("lido:", lido * 2.0)
     }
+    // formato dos float, igual ao do Go: expoente só abaixo de 1e-4 ou a partir de 1e6
+    io.print(1000.0, 123456.7, 1234567.0, 0.0001, 0.00001, 1e21, float32(0.1))
     free(buf)
 }

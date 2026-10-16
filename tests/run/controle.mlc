@@ -1,4 +1,4 @@
-import "io"
+import "std/io"
 
 fn classifica(n int) string {
     if n < 0 {

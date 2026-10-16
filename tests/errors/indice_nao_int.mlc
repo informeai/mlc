@@ -1,5 +1,5 @@
 // erro: o índice precisa ser int, encontrado string
-import "io"
+import "std/io"
 fn main() {
     s := alloc([]int, 1)
     io.print(s["a"])

@@ -1,5 +1,5 @@
 // erro: valor do tipo *Ponto nunca é nil
-import "io"
+import "std/io"
 struct Ponto { x int; y int }
 fn main() {
     p := alloc(Ponto)

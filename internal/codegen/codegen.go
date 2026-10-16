@@ -50,6 +50,15 @@ func Generate(file string, f *ast.File, info *checker.Info) string {
 	g.raw("// Gerado por mlc a partir de %s. Não edite.\n", file)
 	g.raw("#include \"mlc_runtime.h\"\n\n")
 	g.structs()
+	// funções da biblioteca padrão implementadas no runtime C
+	for _, fn := range info.Externs {
+		params := []string{}
+		for _, p := range fn.Params {
+			params = append(params, cType(p.Type))
+		}
+		params = append(params, "const char *", "int")
+		g.raw("%s %s(%s);\n", cType(fn.Result), fn.Native, strings.Join(params, ", "))
+	}
 	for _, fn := range info.Funcs {
 		g.raw("static %s;\n", signature(fn))
 	}
@@ -57,7 +66,7 @@ func Generate(file string, f *ast.File, info *checker.Info) string {
 	for _, fn := range info.Funcs {
 		g.function(fn)
 	}
-	g.raw("int main(void) {\n    %s();\n    mlc_check_allocs();\n    return 0;\n}\n", info.Main.CName)
+	g.raw("int main(int argc, char **argv) {\n    mlc_args_init(argc, argv);\n    %s();\n    mlc_check_allocs();\n    return 0;\n}\n", info.Main.CName)
 	return g.buf.String()
 }
 

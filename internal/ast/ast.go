@@ -50,6 +50,7 @@ type Import struct {
 }
 
 type FuncDecl struct {
+	Extern     bool // extern fn: implementada no runtime C (só na biblioteca padrão), sem corpo
 	Name       string
 	TypeParams []*TypeParam // fn maior[T ordered](...)
 	Pub        bool         // visível para quem importa o arquivo

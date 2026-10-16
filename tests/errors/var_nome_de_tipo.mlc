@@ -1,5 +1,5 @@
 // erro: o nome Ponto já é um tipo (struct)
-import "io"
+import "std/io"
 struct Ponto { x int }
 fn main() {
     Ponto := 1

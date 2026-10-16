@@ -46,9 +46,6 @@ var predeclared = map[string]bool{
 	"take": true, "replace": true, "drain": true,
 }
 
-// modules são os módulos que podem ser importados.
-var modules = map[string]bool{"io": true, "str": true}
-
 type Local struct {
 	Name  string
 	CName string // nome no C gerado, único dentro da função
@@ -121,6 +118,7 @@ type Info struct {
 	EnumCtors    map[ast.Expr]*Variant      // Forma.Circulo(...) e Forma.Vazio
 	PatternBinds map[*ast.Pattern][]*Local  // nomes dados aos campos em Circulo(r)
 	Enums        []*Enum                    // enums concretos, para o gerador declarar
+	Externs      []*Func                    // extern fn da biblioteca padrão, para o gerador declarar
 	Drains       map[*ast.ForStmt]ast.Expr  // for x in drain(s): o slice esvaziado
 	Calls        map[*ast.CallExpr]Callee
 	Funcs        []*Func // na ordem de declaração
@@ -159,7 +157,6 @@ type checker struct {
 	borrows     map[Type]*Borrow
 	slices      map[Type]*Slice
 	arrays      map[arrKey]*Array
-	natives     map[string]*Func
 	scope       *scope
 	fn          *Func
 	errs        []token.Error
@@ -172,6 +169,7 @@ type checker struct {
 // Source é um arquivo do programa, já analisado pelo parser.
 type Source struct {
 	Path string // caminho usado no import ("" para o arquivo principal)
+	Std  bool   // arquivo da biblioteca padrão: pode declarar extern fn
 	File string // nome do arquivo, para mensagens e #line
 	AST  *ast.File
 }
@@ -205,7 +203,6 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 		slices:   map[Type]*Slice{},
 		arrays:   map[arrKey]*Array{},
 		building: map[*Struct]bool{},
-		natives:  map[string]*Func{},
 		breaks:   map[*ast.ForStmt]bool{},
 	}
 	for i, src := range srcs {
@@ -270,7 +267,7 @@ func (c *checker) declare(name string, pos token.Pos, t Type, param bool) *Local
 		cname = fmt.Sprintf("l%d_%s", n, name)
 	}
 	l := &Local{Name: name, CName: cname, Type: t, Pos: pos, Param: param}
-	if predeclared[name] || modules[name] {
+	if predeclared[name] {
 		c.errorf(pos, "o nome %q é reservado", name)
 		l.Used = true
 		return l
@@ -317,7 +314,7 @@ func (c *checker) collectFuncs(f *ast.File) {
 			c.collectMethod(d)
 			continue
 		}
-		if predeclared[d.Name] || modules[d.Name] {
+		if predeclared[d.Name] {
 			c.errorf(d.P, "o nome %q é reservado", d.Name)
 			continue
 		}
@@ -342,6 +339,16 @@ func (c *checker) collectFuncs(f *ast.File) {
 			CName: "mlc_fn_" + c.mod.prefix + d.Name, File: c.mod.file, Pub: d.Pub, mod: c.mod,
 		}
 		c.signature(fn, d, nil)
+		if d.Extern {
+			// implementada no runtime C: mlc_std_<módulo>_<nome>, sem corpo
+			if !c.mod.std {
+				c.errorf(d.P, "extern fn só é permitida na biblioteca padrão")
+			}
+			fn.Native = "mlc_std_" + c.mod.name + "_" + d.Name
+			c.info.Externs = append(c.info.Externs, fn)
+			c.mod.funcs[d.Name] = fn
+			continue
+		}
 		c.mod.funcs[d.Name] = fn
 		c.info.Funcs = append(c.info.Funcs, fn)
 	}
@@ -723,7 +730,7 @@ func (c *checker) targetVar(id *ast.Ident) Type {
 	case l != nil:
 		c.info.Locals[id] = l
 		return l.Type
-	case c.mod.funcs[id.Name] != nil || c.mod.structs[id.Name] != nil || predeclared[id.Name] || modules[id.Name]:
+	case c.mod.funcs[id.Name] != nil || c.mod.structs[id.Name] != nil || predeclared[id.Name]:
 		c.errorf(id.P, "não é possível atribuir a %s", id.Name)
 	default:
 		c.errorf(id.P, "identificador não declarado: %s", id.Name)
@@ -827,14 +834,14 @@ func (c *checker) ident(e *ast.Ident) Type {
 		c.errorf(e.P, "tipo %s usado como valor (para converter: %s(x))", e.Name, e.Name)
 	case c.mod.uses[e.Name] != nil:
 		c.errorf(e.P, "módulo %s usado como valor", e.Name)
-	case modules[e.Name]:
-		c.errorf(e.P, "módulo %s usado como valor", e.Name)
 	case basicTypes[e.Name] != nil:
 		c.errorf(e.P, "tipo %s usado como valor", e.Name)
 	case c.mod.enums[e.Name] != nil:
 		c.errorf(e.P, "tipo %s usado como valor (para criar um valor: %s.Variante)", e.Name, e.Name)
 	case c.mod.structs[e.Name] != nil:
 		c.errorf(e.P, "tipo %s usado como valor (para criar um valor: %s{...}; no cabeçalho de if, for ou match, entre parênteses)", e.Name, e.Name)
+	case StdModule(e.Name):
+		c.errorf(e.P, "módulo %s não foi importado (adicione: import \"std/%s\")", e.Name, e.Name)
 	default:
 		c.errorf(e.P, "identificador não declarado: %s", e.Name)
 	}
@@ -851,44 +858,14 @@ func (c *checker) call(e *ast.CallExpr) Type {
 			return c.genericCall(e, g, nil) // mod.f(args), genérica
 		}
 		if m := c.userModule(fun.X); m != nil {
+			if isIoPrint(m, fun.Sel) {
+				return c.ioPrint(e)
+			}
 			return c.moduleCall(e, m, fun)
 		}
-		if id, isID := fun.X.(*ast.Ident); !isID || !modules[id.Name] || c.scope.lookup(id.Name) != nil {
-			if t, ok := c.methodCall(e, fun); ok {
-				return t
-			}
-		}
-		id, ok := fun.X.(*ast.Ident)
-		if !ok || !modules[id.Name] || c.scope.lookup(id.Name) != nil {
-			break
-		}
-		if !c.mod.imports[id.Name] {
-			c.errorf(id.P, "módulo %s não foi importado (adicione: import %q)", id.Name, id.Name)
-			c.checkArgs(e)
-			return Invalid
-		}
-		if id.Name == "io" && fun.Sel == "print" {
-			for _, a := range e.Args {
-				t := c.valueDefault(a)
-				elem, isSl := sliceElem(t)
-				switch {
-				case isPointerType(t) || t == NilType:
-					c.errorf(a.Pos(), "io.print não imprime ponteiros (%s); imprima o conteúdo: *p ou p.campo", t)
-				case isSl && (isPointerType(elem) || isSlicePtrElem(elem)):
-					c.errorf(a.Pos(), "io.print não imprime %s: os elementos são ponteiros", t)
-				default:
-					c.noCopy(t, a.Pos())
-				}
-			}
-			c.info.Calls[e] = Callee{Builtin: IoPrint}
-			return Void
-		}
-		if t, ok := c.moduleFunc(e, id.Name, fun.Sel); ok {
+		if t, ok := c.methodCall(e, fun); ok {
 			return t
 		}
-		c.errorf(fun.SelPos, "%s.%s não existe", id.Name, fun.Sel)
-		c.checkArgs(e)
-		return Invalid
 
 	case *ast.Ident:
 		if t, ok := c.builtinCall(e, fun.Name); ok {
@@ -927,7 +904,7 @@ func (c *checker) call(e *ast.CallExpr) Type {
 // erros dentro deles também.
 func (c *checker) checkArgs(e *ast.CallExpr) {
 	for _, a := range e.Args {
-		c.value(a)
+		c.peekType(a) // aceita &x e &s[a:b], como numa chamada válida
 	}
 }
 

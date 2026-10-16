@@ -1,5 +1,5 @@
 // erro: s já foi liberada ou movida (linha 8)
-import "io"
+import "std/io"
 fn consome(s []int) {
     free(s)
 }

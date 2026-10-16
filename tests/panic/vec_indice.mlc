@@ -1,0 +1,10 @@
+import "std/io"
+import "std/vec"
+
+fn main() {
+    v := vec.new[int](4)
+    v.push(7)
+    io.print(v.get(0))
+    io.print(v.get(1))
+    v.free()
+}

@@ -1,5 +1,5 @@
 // erro: índice 3 fora dos limites de [3]int (0 a 2)
-import "io"
+import "std/io"
 fn main() {
     a := [3]int{1, 2, 3}
     io.print(a[3])

@@ -1,5 +1,5 @@
 // erro: o nome geometria é um módulo importado
-import "io"
+import "std/io"
 import "geometria"
 fn main() {
     geometria := 1

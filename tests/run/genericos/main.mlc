@@ -1,4 +1,4 @@
-import "io"
+import "std/io"
 import "colecao"
 
 struct Par[A any, B any] {

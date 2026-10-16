@@ -1,0 +1,33 @@
+// Argumentos da linha de comando, variáveis de ambiente e saída do programa.
+// Nada aqui aloca: o texto é copiado para buffers de quem chama.
+import "std/result"
+
+// códigos de erro de arg e getenv
+pub const NOT_FOUND = 1   // argumento ou variável que não existe
+pub const TOO_LONG = 2    // não cabe no buffer
+
+// arg_count devolve quantos argumentos o programa recebeu (o 0 é o nome dele).
+pub extern fn arg_count() int
+
+extern fn arg_copy(i int, dst &[]byte) int
+extern fn getenv_copy(name string, dst &[]byte) int
+
+// arg copia o argumento i para dst e devolve quantos bytes usou.
+pub fn arg(i int, dst &[]byte) result.Result[int] {
+    return wrap(arg_copy(i, dst))
+}
+
+// getenv copia o valor da variável de ambiente name para dst.
+pub fn getenv(name string, dst &[]byte) result.Result[int] {
+    return wrap(getenv_copy(name, dst))
+}
+
+// exit encerra o programa com o código dado, sem voltar.
+pub extern fn exit(code int)
+
+fn wrap(n int) result.Result[int] {
+    if n < 0 {
+        return result.Result.Err(-n)
+    }
+    return result.Result.Ok(n)
+}

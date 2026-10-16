@@ -1,5 +1,5 @@
 // erro: for in percorre uma variável ou campo
-import "io"
+import "std/io"
 fn faz() []int {
     return alloc([]int, 2)
 }

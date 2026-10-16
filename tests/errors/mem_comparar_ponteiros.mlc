@@ -1,5 +1,5 @@
 // erro: ponteiros só podem ser comparados com nil
-import "io"
+import "std/io"
 struct Ponto { x int; y int }
 fn main() {
     p := alloc(Ponto)

@@ -68,6 +68,7 @@ const (
 	CONTINUE
 	PUB
 	ENUM
+	EXTERN
 	keywordEnd
 )
 
@@ -132,6 +133,7 @@ var names = [...]string{
 	CONTINUE: "continue",
 	PUB:      "pub",
 	ENUM:     "enum",
+	EXTERN:   "extern",
 }
 
 func (k Kind) String() string {

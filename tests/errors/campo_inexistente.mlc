@@ -1,5 +1,5 @@
 // erro: Ponto não tem campo z
-import "io"
+import "std/io"
 struct Ponto { x int; y int }
 fn main() {
     p := Ponto{x: 1, y: 2}

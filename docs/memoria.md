@@ -172,6 +172,10 @@ Para manter a análise simples e correta, os empréstimos são restritos:
 
 Com essas restrições, um empréstimo nunca sobrevive ao dono, e por isso não existe ponteiro pendente. A consequência é que percorrer uma estrutura só para ler é feito com recursão (`soma(&n.prox)`), e não com uma variável que aponta para o nó atual. Empréstimos guardados em variáveis, com análise de tempo de vida, podem vir depois, se fizerem falta.
 
+## Coleções que crescem
+
+A linguagem não tem `append` nem coleção que cresce sozinha. Para isso existe `std/vec`, escrito em MLC: `vec.new[T](cap)` aloca, `push` chama `grow` (que faz `realloc` dobrando a capacidade) quando falta espaço, e `free()` libera. A alocação fica à vista no código da biblioteca, e o `*Vec[T]` devolvido por `new` é um dono comum, cobrado pelo verificador. Veja [biblioteca.md](biblioteca.md).
+
 ## O que é proibido
 
 - Aritmética de ponteiros e conversão entre tipos de ponteiro.
@@ -206,6 +210,6 @@ O runtime conta as alocações vivas. No fim do `main`, se sobrou alguma, o prog
 - **Vazamento lógico:** guardar memória por mais tempo que o necessário é decisão do programador, e continua sendo possível.
 - **Falta de memória:** `alloc` encerra o programa, não se recupera.
 - **Concorrência:** não há threads na linguagem por enquanto, então data races ficam fora do escopo.
-- **Código C externo:** quando houver FFI, o que acontece do lado do C não é verificado.
+- **Código C externo:** as `extern fn` da biblioteca padrão são implementadas no runtime C e não passam pelo verificador; o código delas é revisado à mão. Programas comuns não podem declarar `extern fn`.
 - **Moves numa chamada** valem quando a chamada acontece, depois de todos os argumentos: `f(s, len(s))` é aceito, mas mover duas vezes (`f(s, s)`) ou mover e emprestar (`f(s, &s)`) na mesma chamada é erro.
 - **Estruturas compartilhadas:** com um único dono por objeto, grafos com ciclos ou nós com dois pais (lista duplamente ligada) não são expressáveis com ponteiros donos. Isso exigiria outro mecanismo, como índices num slice ou contagem de referências explícita.

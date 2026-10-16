@@ -128,13 +128,34 @@ func typeName(t Type) string {
 	return strings.ReplaceAll(t.String(), " ", "_")
 }
 
+// typeKey identifica t no cache de instâncias. TypeVars, structs e enums
+// entram pela identidade: dois parâmetros chamados T (o de sort e o de
+// reverse) são tipos diferentes, assim como duas structs Ponto de arquivos
+// diferentes.
+func typeKey(t Type) string {
+	switch t := t.(type) {
+	case *TypeVar, *Struct, *Enum:
+		return fmt.Sprintf("%p", t)
+	case *Slice:
+		return "[]" + typeKey(t.Elem)
+	case *Array:
+		return fmt.Sprintf("[%d]%s", t.Len, typeKey(t.Elem))
+	case *Pointer:
+		return "*" + typeKey(t.Elem)
+	case *Borrow:
+		return "&" + typeKey(t.Elem)
+	}
+	return t.String()
+}
+
 func typeList(ts []Type) (display, key, mangled string) {
-	var d, m []string
+	var d, k, m []string
 	for _, t := range ts {
 		d = append(d, t.String())
+		k = append(k, typeKey(t))
 		m = append(m, typeName(t))
 	}
-	return strings.Join(d, ", "), strings.Join(d, ","), strings.Join(m, "__")
+	return strings.Join(d, ", "), strings.Join(k, ","), strings.Join(m, "__")
 }
 
 // bind liga os nomes dos parâmetros de tipo aos tipos.
@@ -580,6 +601,9 @@ type abstractCheck struct {
 // collectGeneric registra uma função genérica: a assinatura com TypeVars, para
 // as chamadas, e o corpo para a checagem abstrata.
 func (c *checker) collectGeneric(d *ast.FuncDecl) {
+	if d.Extern {
+		c.errorf(d.P, "extern fn não pode ser genérica")
+	}
 	if d.Name == "main" {
 		c.errorf(d.P, "main não pode ser genérica")
 	}

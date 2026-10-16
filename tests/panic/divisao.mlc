@@ -1,4 +1,4 @@
-import "io"
+import "std/io"
 
 fn divide(a int, b int) int {
     return a / b

@@ -1,5 +1,5 @@
 // erro: x já declarada neste escopo (linha 4)
-import "io"
+import "std/io"
 fn main() {
     x := 1
     x := 2

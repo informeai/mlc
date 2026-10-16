@@ -1,0 +1,5 @@
+// erro: extern fn só é permitida na biblioteca padrão
+extern fn segredo() int
+
+fn main() {
+}

@@ -1,0 +1,185 @@
+// Usa todos os módulos da biblioteca padrão. Cada alocação continua visível:
+// só vec.new, push (via grow) e os alloc daqui alocam.
+import "std/io"
+import "std/str"
+import "std/result"
+import "std/math"
+import "std/sort"
+import "std/text"
+import "std/vec"
+import "std/rand"
+import "std/os"
+import "std/fs"
+import "std/time"
+
+struct Ponto {
+    x int
+    y int
+}
+
+fn show(r result.Result[int]) {
+    match r {
+        Ok(n) => io.print("ok", n)
+        Err(code) => io.print("erro", code)
+    }
+}
+
+fn test_math() {
+    io.print("math:", math.abs(-3), math.abs(-2.5), math.min(4, 9), math.max(4, 9))
+    io.print(math.clamp(15, 0, 10), math.clamp(-1, 0, 10), math.clamp(byte(7), byte(0), byte(10)))
+    io.print(math.sqrt(16.0), math.pow(2.0, 10.0), math.floor(2.7), math.ceil(2.1), math.round(2.5))
+    io.print(math.round(math.sin(math.PI / 2.0) * 1000.0), math.cos(0.0), math.exp(0.0), math.log(math.E))
+    io.print(math.round(math.atan2(1.0, 1.0) * 4.0 / math.PI), math.tan(0.0))
+    zero := 0.0
+    io.print(math.is_nan(zero / zero), math.is_inf(1.0 / zero), math.is_nan(1.0))
+}
+
+fn test_sort() {
+    s := alloc([]int, 40)
+    for i := 0; i < len(s); i++ {
+        s[i] = (i * 37) % 41 - 20
+    }
+    io.print("sort:", sort.is_sorted(&s))
+    sort.sort(&s)
+    io.print(sort.is_sorted(&s), s[0], s[1], s[39])
+    sort.reverse(&s)
+    io.print(s[0], s[39])
+    sort.swap(&s, 0, 39)
+    io.print(s[0], s[39])
+
+    var f [5]float64 = [5]float64{2.5, -1.0, 9.0, 0.5, 3.0}
+    sort.sort(&f)
+    io.print(f[0], f[1], f[2], f[3], f[4])
+    free(s)
+}
+
+fn test_text() {
+    buf := alloc([]byte, 32)
+    n := str.copy(&buf, "  Ola, Mundo 42  ")
+    a := text.trim_start(&buf[:n])
+    b := text.trim_end(&buf[:n])
+    io.write_line(&buf[a:b])
+    show_text(&buf[a:b])
+    free(buf)
+}
+
+fn show_text(t &[]byte) {
+    io.print("text:", text.index_byte(t, ','), text.index_of(t, "Mundo"), text.index_of(t, "x"))
+    io.print(text.contains(t, "42"), text.starts_with(t, "Ola"), text.ends_with(t, "42"), text.ends_with(t, "Ola"))
+    io.print(text.count_byte(t, 'o'), text.is_space(' '), text.is_digit('7'), text.is_letter('7'))
+    io.print(text.field_end(t, ' ', 0), text.field_end(t, ' ', 5), text.field_end(t, '#', 0))
+    text.to_upper(t)
+    io.write_line(t)
+    text.to_lower(t)
+    io.write_line(t)
+}
+
+fn test_vec() {
+    v := vec.new[int](2)
+    for i := 1; i <= 10; i++ {
+        v.push(i * i)
+    }
+    io.print("vec:", v.len(), v.cap(), v.get(0), v.get(9))
+    v.set(0, -1)
+    io.print(v.pop(), v.len(), v.get(0))
+    v.clear()
+    io.print(v.len())
+    v.free()
+
+    pontos := vec.new[Ponto](1)
+    pontos.push(Ponto{x: 1, y: 2})
+    pontos.push(Ponto{x: 3, y: 4})
+    p := pontos.get(1)
+    io.print(p.x, p.y, pontos.len())
+    pontos.free()
+}
+
+fn test_rand() {
+    r := rand.new(42)
+    s := rand.new(42)
+    iguais := true
+    dentro := true
+    for i := 0; i < 1000; i++ {
+        if r.next() != s.next() {
+            iguais = false
+        }
+    }
+    for i := 0; i < 1000; i++ {
+        n := r.int_n(10)
+        k := r.range(-5, 5)
+        f := r.float()
+        if n < 0 || n >= 10 || k < -5 || k > 5 || f < 0.0 || f >= 1.0 {
+            dentro = false
+        }
+    }
+    io.print("rand:", iguais, dentro)
+}
+
+fn test_os() {
+    io.print("os:", os.arg_count() >= 1)
+    var buf [8]byte
+    show(os.arg(99, &buf))
+    show(os.getenv("MLC_VARIAVEL_QUE_NAO_EXISTE", &buf))
+    big := alloc([]byte, 4096)
+    match os.getenv("PATH", &big) {
+        Ok(n) => io.print("PATH tem texto:", n > 0)
+        Err(code) => io.print("sem PATH", code)
+    }
+    free(big)
+}
+
+fn test_fs() {
+    path := alloc([]byte, 32)
+    n := str.copy(&path, "mlc_teste_std.tmp")
+    files(&path[:n])
+    free(path)
+}
+
+fn files(p &[]byte) {
+    data := alloc([]byte, 16)
+    k := str.copy(&data, "linha 1\n")
+
+    io.print("fs:", fs.exists(p))
+    show(fs.write_file(p, &data[:k]))
+    show(fs.append_file(p, &data[:k]))
+    io.print(fs.exists(p))
+    show(fs.file_size(p))
+
+    small := alloc([]byte, 4)
+    match fs.read_file(p, &small) {
+        Ok(m) => io.print("leu", m)
+        Err(code) => io.print("grande demais:", code == fs.TOO_BIG)
+    }
+    whole := alloc([]byte, 16)
+    match fs.read_file(p, &whole) {
+        Ok(m) => io.write(&whole[:m])
+        Err(code) => io.print("erro", code)
+    }
+    show(fs.remove_file(p))
+    match fs.remove_file(p) {
+        Ok(_) => io.print("removeu duas vezes?")
+        Err(code) => io.print("não existe:", code == fs.NOT_FOUND)
+    }
+    show(fs.file_size(p))
+    free(data)
+    free(small)
+    free(whole)
+}
+
+fn test_time() {
+    a := time.mono_ns()
+    time.sleep_ms(5)
+    b := time.mono_ns()
+    io.print("time:", b - a >= 5000000, time.now_ms() > 1600000000000)
+}
+
+fn main() {
+    test_math()
+    test_sort()
+    test_text()
+    test_vec()
+    test_rand()
+    test_os()
+    test_fs()
+    test_time()
+}

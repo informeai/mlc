@@ -1,5 +1,5 @@
 // erro: falta ',' depois do campo y
-import "io"
+import "std/io"
 struct Ponto { x int; y int }
 fn main() {
     p := Ponto{

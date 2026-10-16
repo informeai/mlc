@@ -1,0 +1,10 @@
+// Relógio e espera.
+
+// now_ms devolve o horário atual em milissegundos desde 1970 (UTC).
+pub extern fn now_ms() int
+
+// mono_ns devolve um relógio que só anda para frente, em nanossegundos: para
+// medir quanto tempo algo levou (a diferença entre duas leituras).
+pub extern fn mono_ns() int
+
+pub extern fn sleep_ms(ms int)

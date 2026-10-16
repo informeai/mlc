@@ -1,4 +1,4 @@
-import "io"
+import "std/io"
 import "geometria"
 import "pilha"
 import "util/numeros"

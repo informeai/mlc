@@ -1,5 +1,5 @@
 // erro: str.concat não existe
-import "str"
+import "std/str"
 fn main() {
     str.concat("a", "b")
 }

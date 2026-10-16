@@ -1,5 +1,5 @@
 // erro: string não atende ordered, exigida por T em maior
-import "io"
+import "std/io"
 fn maior[T ordered](a T, b T) T {
     if a > b {
         return a

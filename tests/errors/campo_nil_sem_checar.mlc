@@ -1,5 +1,5 @@
 // erro: p.prox pode ser nil aqui: verifique com if p.prox != nil antes de usar o conteúdo
-import "io"
+import "std/io"
 struct No {
     valor int
     prox ?*No

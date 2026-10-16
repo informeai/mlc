@@ -1,5 +1,5 @@
 // erro: slices não podem ser comparados com ==
-import "io"
+import "std/io"
 fn main() {
     a := alloc([]int, 1)
     b := alloc([]int, 1)

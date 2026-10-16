@@ -1,0 +1,49 @@
+// Arquivos. O conteúdo é lido e escrito em buffers de quem chama: para ler um
+// arquivo inteiro, pergunte o tamanho (file_size) e aloque o buffer.
+// Os caminhos são []byte (por exemplo, vindos de os.arg); para um literal,
+// copie-o antes com str.copy.
+import "std/result"
+
+// códigos de erro (os números são os do sistema, errno)
+pub const NOT_FOUND = 2     // ENOENT
+pub const DENIED = 13       // EACCES
+pub const TOO_BIG = 1000    // o arquivo não cabe no buffer
+
+extern fn size_raw(path &[]byte) int
+extern fn read_raw(path &[]byte, dst &[]byte) int
+extern fn write_raw(path &[]byte, data &[]byte, append bool) int
+extern fn remove_raw(path &[]byte) int
+
+pub extern fn exists(path &[]byte) bool
+
+// file_size devolve o tamanho do arquivo em bytes.
+pub fn file_size(path &[]byte) result.Result[int] {
+    return wrap(size_raw(path))
+}
+
+// read_file lê o arquivo inteiro para o começo de dst e devolve o tamanho.
+// Se o arquivo for maior que dst, nada é lido e o erro é TOO_BIG.
+pub fn read_file(path &[]byte, dst &[]byte) result.Result[int] {
+    return wrap(read_raw(path, dst))
+}
+
+// write_file cria (ou substitui) o arquivo com o conteúdo de data.
+pub fn write_file(path &[]byte, data &[]byte) result.Result[int] {
+    return wrap(write_raw(path, data, false))
+}
+
+// append_file acrescenta data ao fim do arquivo (criando-o, se preciso).
+pub fn append_file(path &[]byte, data &[]byte) result.Result[int] {
+    return wrap(write_raw(path, data, true))
+}
+
+pub fn remove_file(path &[]byte) result.Result[int] {
+    return wrap(remove_raw(path))
+}
+
+fn wrap(n int) result.Result[int] {
+    if n < 0 {
+        return result.Result.Err(-n)
+    }
+    return result.Result.Ok(n)
+}

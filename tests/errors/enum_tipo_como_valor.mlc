@@ -1,5 +1,5 @@
 // erro: tipo Forma usado como valor (para criar um valor: Forma.Variante)
-import "io"
+import "std/io"
 enum Forma {
     Circulo(raio float64)
     Vazio

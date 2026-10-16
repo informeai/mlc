@@ -1,0 +1,34 @@
+// Números pseudoaleatórios (splitmix64). Não servem para criptografia.
+//
+//     r := rand.new(uint64(time.now_ms()))
+//     dado := r.range(1, 7)
+
+pub struct Rand {
+    state uint64
+}
+
+extern fn splitmix(state &uint64) uint64
+
+pub fn new(seed uint64) Rand {
+    return Rand{state: seed}
+}
+
+// next devolve um uint64 qualquer.
+pub fn (r &Rand) next() uint64 {
+    return splitmix(&r.state)
+}
+
+// int_n devolve um inteiro em [0, n). n precisa ser maior que zero.
+pub fn (r &Rand) int_n(n int) int {
+    return int(r.next() % uint64(n))
+}
+
+// range devolve um inteiro em [lo, hi).
+pub fn (r &Rand) range(lo int, hi int) int {
+    return lo + r.int_n(hi - lo)
+}
+
+// float devolve um float64 em [0, 1).
+pub fn (r &Rand) float() float64 {
+    return float64(r.next() / 2048) / 9007199254740992.0
+}

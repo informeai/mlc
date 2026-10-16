@@ -1,0 +1,56 @@
+import "std/io"
+
+// Dois parâmetros chamados T, em funções diferentes, são tipos diferentes:
+// cada genérica que chama outra genérica (ou usa Caixa[T]) tem a sua instância.
+struct Caixa[T any] {
+    valor T
+}
+
+fn embrulha[T any](x T) Caixa[T] {
+    return Caixa[T]{valor: x}
+}
+
+fn troca[T any](s &[]T, i int, j int) {
+    t := s[i]
+    s[i] = s[j]
+    s[j] = t
+}
+
+fn inverte[T any](s &[]T) {
+    for i := 0; i < len(s) / 2; i++ {
+        troca(s, i, len(s) - 1 - i)
+    }
+}
+
+fn primeiro_maior[T ordered](s &[]T) {
+    m := 0
+    for i := 1; i < len(s); i++ {
+        if s[i] > s[m] {
+            m = i
+        }
+    }
+    troca(s, 0, m)
+}
+
+fn dobro[T number](x T) T {
+    c := embrulha(x)
+    return c.valor + c.valor
+}
+
+fn texto[T any](x T) Caixa[T] {
+    c := embrulha(x)
+    return c
+}
+
+fn main() {
+    var a [4]int = [4]int{3, 9, 1, 5}
+    primeiro_maior(&a)
+    io.print(a[0], a[1], a[2], a[3])
+    inverte(&a)
+    io.print(a[0], a[1], a[2], a[3])
+    var f [3]float64 = [3]float64{0.5, 2.5, 1.5}
+    inverte(&f)
+    primeiro_maior(&f)
+    io.print(f[0], f[1], f[2])
+    io.print(dobro(21), dobro(1.25), texto("oi").valor)
+}

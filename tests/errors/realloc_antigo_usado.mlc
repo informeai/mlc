@@ -1,5 +1,5 @@
 // erro: s já foi liberada ou movida (linha 5)
-import "io"
+import "std/io"
 fn main() {
     s := alloc([]int, 1)
     t := realloc(s, 2)

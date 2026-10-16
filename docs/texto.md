@@ -3,8 +3,8 @@
 Texto é montado num **buffer `[]byte` que você aloca**. As funções de texto e de entrada e saída **nunca alocam**: escrevem no buffer emprestado, devolvem quantos bytes usaram e dão panic se não couber. Assim, toda alocação de texto aparece no código como `alloc` ou `realloc`, e o tamanho de cada buffer é escolhido por quem programa.
 
 ```
-import "io"
-import "str"
+import "std/io"
+import "std/str"
 
 fn main() {
     nome := alloc([]byte, 32)
@@ -44,7 +44,7 @@ k += str.put_int(&buf[k:], 42)
 io.write_line(&buf[:k])
 ```
 
-## Funções (`import "str"`)
+## Funções (`import "std/str"`)
 
 | Função | O que faz |
 |---|---|
@@ -60,7 +60,7 @@ io.write_line(&buf[:k])
 
 As funções que escrevem dão panic se o texto não couber em `dst`, com uma mensagem como `str.copy: o texto (3 bytes) não cabe no destino (2 bytes)`.
 
-## Entrada e saída (`import "io"`)
+## Entrada e saída (`import "std/io"`)
 
 | Função | O que faz |
 |---|---|

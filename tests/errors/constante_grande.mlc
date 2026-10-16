@@ -1,5 +1,5 @@
 // erro: não cabe em int
-import "io"
+import "std/io"
 fn main() {
     io.print(9223372036854775808)
 }

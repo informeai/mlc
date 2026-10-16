@@ -1,5 +1,5 @@
 // erro: empréstimos (&Ponto) não podem ser guardados em variáveis
-import "io"
+import "std/io"
 struct Ponto { x int; y int }
 fn f(p &Ponto) {
     q := p

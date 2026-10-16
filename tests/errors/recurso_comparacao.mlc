@@ -1,5 +1,5 @@
 // erro: structs que contêm ponteiros donos não podem ser comparadas com ==
-import "io"
+import "std/io"
 struct No {
     valor int
     prox ?*No

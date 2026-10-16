@@ -141,23 +141,7 @@ double mlc_conv_f(double v, double lo, double hi, const char *type, const char *
 /* float64 para float32: fora da faixa vira infinito (em C seria indefinido). */
 float mlc_f64_to_f32(double v);
 
-/* Texto. Nenhuma destas funções aloca: elas escrevem no buffer recebido,
- * devolvem quantos bytes usaram e dão panic se o texto não couber. */
-int64_t mlc_str_copy(mlc_sl_byte *dst, mlc_str src, const char *file, int line);
-int64_t mlc_str_copy_bytes(mlc_sl_byte *dst, mlc_sl_byte *src, const char *file, int line);
-int64_t mlc_str_put_int(mlc_sl_byte *dst, int64_t n, const char *file, int line);
-int64_t mlc_str_int_len(int64_t n, const char *file, int line);
-bool mlc_str_eq(mlc_sl_byte *a, mlc_str b, const char *file, int line);
-bool mlc_str_eq_bytes(mlc_sl_byte *a, mlc_sl_byte *b, const char *file, int line);
-bool mlc_str_parse_int(mlc_sl_byte *s, int64_t *out, const char *file, int line);
-int64_t mlc_str_put_float(mlc_sl_byte *dst, double x, const char *file, int line);
-bool mlc_str_parse_float(mlc_sl_byte *s, double *out, const char *file, int line);
-
-/* Entrada e saída de bytes. read_line lê uma linha (sem o \n) até encher o
- * buffer; o que não coube fica para a próxima chamada. Devolve -1 no fim da
- * entrada. */
-void mlc_io_write(mlc_sl_byte *s, const char *file, int line);
-void mlc_io_write_line(mlc_sl_byte *s, const char *file, int line);
-int64_t mlc_io_read_line(mlc_sl_byte *dst, const char *file, int line);
+/* Argumentos da linha de comando, guardados pelo main gerado para std/os. */
+void mlc_args_init(int argc, char **argv);
 
 #endif

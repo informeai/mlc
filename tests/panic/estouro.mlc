@@ -1,4 +1,4 @@
-import "io"
+import "std/io"
 
 fn dobra(n int) int {
     return n * 2

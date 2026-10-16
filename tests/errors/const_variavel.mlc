@@ -1,5 +1,5 @@
 // erro: o valor de uma const precisa ser uma expressão constante
-import "io"
+import "std/io"
 fn main() {
     x := 1
     const N = x

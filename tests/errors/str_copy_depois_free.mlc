@@ -1,5 +1,5 @@
 // erro: buf já foi liberada ou movida (linha 5)
-import "str"
+import "std/str"
 fn main() {
     buf := alloc([]byte, 4)
     free(buf)

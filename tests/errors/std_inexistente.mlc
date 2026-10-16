@@ -1,0 +1,5 @@
+// erro: a biblioteca padrão não tem o módulo "std/nada"
+import "std/nada"
+
+fn main() {
+}

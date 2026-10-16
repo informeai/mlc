@@ -1,5 +1,5 @@
 // erro: atribuição: esperado int, encontrado string
-import "io"
+import "std/io"
 fn main() {
     x := 1
     x = "a"

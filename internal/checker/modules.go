@@ -6,6 +6,7 @@ import (
 
 	"mlc/internal/ast"
 	"mlc/internal/token"
+	"mlc/std"
 )
 
 // Arquivos (módulos)
@@ -13,15 +14,16 @@ import (
 // Cada arquivo .mlc é um módulo. "import \"geometria\"" dá acesso às
 // declarações públicas (pub) de geometria.mlc: geometria.area(p),
 // geometria.Ponto{...}, geometria.PI. O que não é pub fica privado ao arquivo.
-// io e str são módulos do runtime, que não vêm de arquivos.
+// A biblioteca padrão (import "std/io") também é feita de arquivos .mlc,
+// embutidos no compilador.
 
 type module struct {
 	name   string // nome usado para qualificar (geometria); "" no principal
 	path   string // caminho do import (util/texto); "" no principal
 	file   string
 	prefix string // prefixo dos nomes no C, para não colidir entre arquivos
+	std    bool   // arquivo da biblioteca padrão
 
-	imports  map[string]bool    // módulos do runtime importados (io, str)
 	uses     map[string]*module // arquivos importados, pelo nome
 	funcs    map[string]*Func
 	generics map[string]*Func // funções genéricas (só a definição; as instâncias são criadas no uso)
@@ -35,7 +37,8 @@ type module struct {
 func (c *checker) newModule(src Source, i int) *module {
 	m := &module{
 		path: src.Path, file: src.File,
-		imports: map[string]bool{}, uses: map[string]*module{},
+		std:   src.Std,
+		uses:  map[string]*module{},
 		funcs: map[string]*Func{}, structs: map[string]*Struct{},
 		generics:      map[string]*Func{},
 		enums:         map[string]*Enum{},
@@ -64,20 +67,15 @@ func (c *checker) qualify(name string) string {
 
 func (c *checker) collectImports(f *ast.File) {
 	for _, imp := range f.Imports {
-		if modules[imp.Path] {
-			if c.mod.imports[imp.Path] {
-				c.errorf(imp.P, "módulo %q importado duas vezes", imp.Path)
-			}
-			c.mod.imports[imp.Path] = true
-			continue
-		}
 		m := c.modules[imp.Path]
 		if m == nil {
-			c.errorf(imp.P, "módulo desconhecido %q: não é do runtime (\"io\", \"str\") nem um arquivo carregado", imp.Path)
+			c.errorf(imp.P, "módulo desconhecido %q: o arquivo não foi carregado", imp.Path)
 			continue
 		}
 		switch {
-		case predeclared[m.name] || modules[m.name]:
+		case c.mod.uses[m.name] == m:
+			c.errorf(imp.P, "módulo %q importado duas vezes", imp.Path)
+		case predeclared[m.name]:
 			c.errorf(imp.P, "o arquivo %s.mlc não pode ser importado: %q é um nome reservado", imp.Path, m.name)
 		case c.mod.uses[m.name] != nil:
 			c.errorf(imp.P, "dois imports com o mesmo nome %s (%q e %q)", m.name, c.mod.uses[m.name].path, imp.Path)
@@ -135,6 +133,8 @@ func (c *checker) moduleCall(e *ast.CallExpr, m *module, sel *ast.SelectorExpr) 
 func (c *checker) moduleConst(e *ast.SelectorExpr, m *module) Type {
 	l := m.global.names[e.Sel]
 	switch {
+	case isIoPrint(m, e.Sel):
+		c.errorf(e.SelPos, "%s.print só pode ser usado como chamada", m.name)
 	case l != nil && !l.Pub:
 		c.errorf(e.SelPos, "%s.%s não é pública (declare com pub const)", m.name, e.Sel)
 	case l != nil:
@@ -150,6 +150,15 @@ func (c *checker) moduleConst(e *ast.SelectorExpr, m *module) Type {
 	return Invalid
 }
 
-// IsRuntimeModule diz se name é um módulo do runtime (io, str), que não vem
-// de um arquivo.
-func IsRuntimeModule(name string) bool { return modules[name] }
+// StdModule diz se name é um módulo da biblioteca padrão (std/name).
+func StdModule(name string) bool {
+	_, err := std.FS.ReadFile(name + ".mlc")
+	return err == nil
+}
+
+// isIoPrint diz se m.sel é o io.print, que é declarado em std/io mas
+// embutido no compilador: aceita qualquer quantidade de argumentos, de
+// qualquer tipo.
+func isIoPrint(m *module, sel string) bool {
+	return m.std && m.path == "std/io" && sel == "print"
+}

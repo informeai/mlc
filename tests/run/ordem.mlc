@@ -1,4 +1,4 @@
-import "io"
+import "std/io"
 
 struct Par {
     x int

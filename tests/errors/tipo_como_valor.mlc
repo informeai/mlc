@@ -1,5 +1,5 @@
 // erro: tipo Ponto usado como valor
-import "io"
+import "std/io"
 struct Ponto { x int }
 fn main() {
     io.print(Ponto)

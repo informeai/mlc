@@ -1,5 +1,5 @@
 // erro: p.prox já foi liberada ou movida (linha 10)
-import "io"
+import "std/io"
 struct No {
     valor int
     prox ?*No

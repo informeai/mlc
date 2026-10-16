@@ -1,5 +1,5 @@
 // erro: for in percorre slices, encontrado int
-import "io"
+import "std/io"
 fn main() {
     n := 3
     for x in n {

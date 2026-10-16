@@ -1,5 +1,5 @@
 // erro: valor do tipo int não tem campos
-import "io"
+import "std/io"
 fn main() {
     n := 1
     io.print(n.x)

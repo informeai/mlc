@@ -9,7 +9,7 @@ arquivo.mlc  →  mlc (Go)  →  program.c  →  cc + runtime C  →  binário
 ## Exemplo
 
 ```
-import "io"
+import "std/io"
 
 fn primo(n int) bool {
     if n < 2 {
@@ -58,6 +58,7 @@ O compilador C usado é o da variável `CC` (padrão: `cc`).
 | `internal/codegen` | AST → C11 |
 | `internal/driver` | encadeia as fases e chama o `cc` |
 | `rt/c` | runtime em C, embutido no binário do `mlc` |
+| `std` | biblioteca padrão escrita em MLC (`import "std/io"`, `import "std/math"`), embutida no binário. Veja [docs/biblioteca.md](docs/biblioteca.md) |
 | `tests/run` | programas e saída esperada (`.out`); entrada opcional (`.in`) |
 | `tests/panic` | programas que devem abortar (`.out` + `.err`) |
 | `tests/errors` | programas que devem ser rejeitados (`// erro: ...` na 1ª linha) |
@@ -111,3 +112,6 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 - [x] **Enums com dados:** `enum Forma { Circulo(raio float64); Vazio }`, `match` com desestruturação e cobertura obrigatória, enums genéricos (`Resultado[T]`) com inferência pelo valor ou pelo contexto
 - [x] **Números:** `int8`, `int16`, `int32`, `uint16`, `uint32`, `uint64`, `float32`, `float64`; constantes sem tipo; conversões checadas. Veja [docs/tipos.md](docs/tipos.md)
 - [x] **Arrays `[N]T`:** tamanho fixo, por valor, na pilha ou em structs, sem `alloc`; `&a` empresta como `&[]T`
+- [x] **Biblioteca padrão** em MLC, importada com `std/`: `io`, `str`, `result`, `math`, `sort`, `text`, `vec`, `rand`, `os`, `fs`, `time`. Nada aloca escondido; erros como `Result[T]`. Veja [docs/biblioteca.md](docs/biblioteca.md)
+- [ ] **`mlc fmt`:** formatador canônico (4 espaços), preservando comentários
+- [ ] **LSP:** `mlc lsp` com diagnósticos ao digitar, cores e formatação; extensão para VS Code e configuração para Neovim

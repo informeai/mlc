@@ -1,5 +1,5 @@
 // erro: argumento 2 de maior[int]: esperado int, encontrado float64
-import "io"
+import "std/io"
 fn maior[T ordered](a T, b T) T {
     return a
 }

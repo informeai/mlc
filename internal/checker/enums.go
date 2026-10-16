@@ -65,7 +65,7 @@ func (e *Enum) Variant(name string) *Variant {
 func (c *checker) collectEnumNames(f *ast.File) {
 	for _, d := range f.Enums {
 		switch {
-		case predeclared[d.Name] || modules[d.Name]:
+		case predeclared[d.Name]:
 			c.errorf(d.P, "o nome %q é reservado", d.Name)
 			continue
 		case c.mod.enums[d.Name] != nil:

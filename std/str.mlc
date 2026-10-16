@@ -1,0 +1,106 @@
+// Texto em buffers []byte. Nenhuma função aloca: as que escrevem recebem o
+// buffer de quem chama (dst), devolvem quantos bytes usaram e dão panic se o
+// texto não couber. Veja docs/texto.md.
+//
+// As que podem dar panic são extern (no runtime C), para o panic apontar a
+// linha de quem chamou; as outras são MLC comum.
+
+// copy copia s para o começo de dst e devolve quantos bytes copiou.
+pub extern fn copy(dst &[]byte, s string) int
+
+// copy_bytes copia src para o começo de dst (podem se sobrepor).
+pub extern fn copy_bytes(dst &[]byte, src &[]byte) int
+
+// put_int escreve n em decimal no começo de dst.
+pub extern fn put_int(dst &[]byte, n int) int
+
+// put_float escreve x com o menor número de dígitos que o representa
+// exatamente, no mesmo formato do io.print.
+pub extern fn put_float(dst &[]byte, x float64) int
+
+// parse_float lê um decimal (2.5, -1e9) de s inteiro; em caso de sucesso
+// grava em out e devolve true.
+pub extern fn parse_float(s &[]byte, out &float64) bool
+
+// int_len diz quantos bytes n ocupa em decimal (para saber quanto alocar).
+pub fn int_len(n int) int {
+    k := 1
+    if n < 0 {
+        k = 2
+    }
+    // n / 10 não estoura nem no menor int; os dígitos são contados no negativo
+    if n > 0 {
+        n = -n
+    }
+    for n <= -10 {
+        n = n / 10
+        k++
+    }
+    return k
+}
+
+// eq diz se a tem o mesmo texto que s.
+pub fn eq(a &[]byte, s string) bool {
+    if len(a) != len(s) {
+        return false
+    }
+    for i := 0; i < len(a); i++ {
+        if a[i] != s[i] {
+            return false
+        }
+    }
+    return true
+}
+
+// eq_bytes diz se a e b têm o mesmo texto.
+pub fn eq_bytes(a &[]byte, b &[]byte) bool {
+    if len(a) != len(b) {
+        return false
+    }
+    for i := 0; i < len(a); i++ {
+        if a[i] != b[i] {
+            return false
+        }
+    }
+    return true
+}
+
+const MIN_INT = -9223372036854775807 - 1
+const MIN_DIV_10 = -922337203685477580  // MIN_INT / 10
+
+// parse_int lê um inteiro decimal, com sinal opcional, de s inteiro. Em caso
+// de sucesso grava em out e devolve true; texto inválido ou que não cabe em
+// int devolve false.
+pub fn parse_int(s &[]byte, out &int) bool {
+    i := 0
+    neg := false
+    if len(s) > 0 && (s[0] == '-' || s[0] == '+') {
+        neg = s[0] == '-'
+        i = 1
+    }
+    if i == len(s) {
+        return false
+    }
+    // acumula no negativo, para alcançar o menor int sem estourar
+    v := 0
+    for i < len(s) {
+        c := s[i]
+        if c < '0' || c > '9' {
+            return false
+        }
+        d := int(c) - int('0')
+        if v < MIN_DIV_10 || (v == MIN_DIV_10 && d > 8) {
+            return false
+        }
+        v = v * 10 - d
+        i++
+    }
+    if !neg {
+        if v == MIN_INT {
+            return false
+        }
+        v = -v
+    }
+    *out = v
+    return true
+}

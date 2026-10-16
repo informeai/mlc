@@ -1,5 +1,5 @@
 // erro: campo x repetido no literal
-import "io"
+import "std/io"
 struct Ponto { x int; y int }
 fn main() {
     io.print(Ponto{x: 1, x: 2, y: 3})
