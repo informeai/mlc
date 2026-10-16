@@ -142,8 +142,10 @@ func (c *checker) moduleConst(e *ast.SelectorExpr, m *module) Type {
 	case l != nil:
 		c.info.Values[e] = l.Const
 		return l.Type
+	case m.funcs[e.Sel] != nil && !m.funcs[e.Sel].Pub:
+		c.errorf(e.SelPos, "%s.%s não é pública (declare com pub fn)", m.name, e.Sel)
 	case m.funcs[e.Sel] != nil:
-		c.errorf(e.SelPos, "função %s.%s usada como valor (faltou chamar?)", m.name, e.Sel)
+		return c.funcRef(e, m.funcs[e.Sel])
 	case m.structs[e.Sel] != nil:
 		c.errorf(e.SelPos, "tipo %s.%s usado como valor (para criar um valor: %s.%s{...})", m.name, e.Sel, m.name, e.Sel)
 	default:

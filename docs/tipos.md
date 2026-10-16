@@ -26,6 +26,54 @@ O tamanho de cada valor é explícito: quem programa escolhe quanto um campo ou 
 - **Decimais seguem o IEEE 754:** estouro vira infinito, `1.0 / 0.0` é `+Inf`, `0.0 / 0.0` é `NaN`. Nada disso é comportamento indefinido. `%` não existe para decimais, e decimais não podem ser padrão de `match`.
 - **Tipos sem sinal não têm `-` unário.**
 
+## Bits e contas que dão a volta
+
+| Operador | O que faz |
+|---|---|
+| `a & b`, `a \| b`, `a ^ b` | e, ou, ou exclusivo, bit a bit |
+| `^a` | inverte todos os bits (`^0` é -1; num `byte`, `^0xF0` é `0x0F`) |
+| `a << n`, `a >> n` | desloca `n` bits; `>>` com sinal repete o bit de sinal |
+| `a +% b`, `a -% b`, `a *% b` | soma, subtração e multiplicação **módulo 2^bits**: dão a volta em vez de dar panic |
+| `&= \|= ^= <<= >>= +%= -%= *%=` | as atribuições compostas |
+
+- Só valem para inteiros, e os dois lados de `& | ^ +% -% *%` precisam ser do mesmo tipo.
+- Num deslocamento, `n` pode ser de qualquer tipo inteiro; fora de `0..bits-1` é panic (erro de compilação se `n` for constante). Os bits que saem pela esquerda num `<<` são descartados.
+- A precedência é a do Go: `<< >> &` junto com `* / %`, e `| ^` junto com `+ -`. Assim `a & b == c` é `(a & b) == c`, e `1 + 2 << 1` é 5.
+- A conta comum continua checada: quem quer que ela dê a volta (hash, criptografia, geradores aleatórios) escreve `+%`, e isso fica visível no código.
+
+```
+var h uint64 = 0xCBF2_9CE4_8422_2325       // FNV-1a
+for i := 0; i < len(s); i++ {
+    h ^= uint64(s[i])
+    h *%= 0x0000_0100_0000_01B3
+}
+```
+
+## Literais inteiros
+
+`255`, `0xFF`, `0b1111_1111`, `0o377` e `1_000_000`: o `_` só pode ficar entre dígitos. Um zero à esquerda não muda a base (`010` é dez).
+
+## Funções como valor
+
+`fn(int, int) bool` é o tipo de um valor função: o endereço de uma função, sem variáveis capturadas (não há closures), então não aloca e não tem dono.
+
+```
+fn dobro(x int) int { return x * 2 }
+
+fn aplica(f fn(int) int, x int) int {
+    return f(x)
+}
+
+f := dobro                      // o nome da função é o valor
+io.print(aplica(f, 21))
+var g fn(int, int) int = maior[int]   // genérica: com os tipos
+sort.sort_by(&pessoas, por_idade)     // fn(&Pessoa, &Pessoa) bool
+```
+
+- Os tipos dos parâmetros dizem o que a chamada faz com cada argumento (copia, empresta `&T`, move `*T`), e o verificador de posse confere como numa chamada direta.
+- O valor zero de um fn (variável sem valor, campo não preenchido) é nulo, e chamá-lo dá panic com a linha da chamada.
+- Métodos e `extern fn` não viram valor; uma função genérica precisa dos tipos (`maior[int]`). Valores fn não podem ser comparados.
+
 ## Conversões
 
 `int8(x)`, `int(x)`, `byte(x)`, `uint64(x)`, `float32(x)`, `float64(x)` e as demais convertem entre quaisquer números.

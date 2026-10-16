@@ -127,6 +127,12 @@ func (c *checker) methodCall(e *ast.CallExpr, sel *ast.SelectorExpr) (Type, bool
 		m = c.instMethod(s, sel.Sel) // método de struct genérica
 	}
 	if m == nil {
+		if f := s.Field(sel.Sel); f != nil {
+			if ft, ok := f.Type.(*FuncType); ok {
+				c.expr(sel) // s.campo(x), com o campo um valor fn
+				return c.indirectCall(e, ft), true
+			}
+		}
 		if rt, ok := c.implMethodCall(e, sel, t); ok {
 			return rt, true // método de um impl com bloco (ou impl auto)
 		}

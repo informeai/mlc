@@ -943,6 +943,9 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 		return
 	}
 
+	if callee.Indirect {
+		o.read(e.Fun) // a variável ou o campo com o valor fn
+	}
 	// Numa mesma chamada, um objeto não pode ser emprestado e movido.
 	borrowedRoots := map[*Local]bool{}
 	var touched []pathKey // objetos emprestados: a função pode mudar os campos

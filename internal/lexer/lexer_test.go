@@ -21,8 +21,8 @@ func kinds(src string) string {
 }
 
 func TestOperators(t *testing.T) {
-	got := kinds("+ ++ += - -- -= * *= / /= % %= = == => ! != < <= > >= := : && || ( ) [ ] { } , ; . & ?")
-	want := "+ ++ += - -- -= * *= / /= % %= = == => ! != < <= > >= := : && || ( ) [ ] { } , ; . & ?"
+	got := kinds("+ ++ += - -- -= * *= / /= % %= = == => ! != < <= > >= := : && || ( ) [ ] { } , ; . & ? | ^ << >> &= |= ^= <<= >>= +% -% *% +%= -%= *%=")
+	want := "+ ++ += - -- -= * *= / /= % %= = == => ! != < <= > >= := : && || ( ) [ ] { } , ; . & ? | ^ << >> &= |= ^= <<= >>= +% -% *% +%= -%= *%="
 	if got != want {
 		t.Errorf("\ngot  %s\nwant %s", got, want)
 	}
@@ -63,7 +63,10 @@ func TestErrors(t *testing.T) {
 		{`"abc`, "string não terminada"},
 		{`"\q"`, `escape inválido \q`},
 		{"@", "caractere inesperado"},
-		{"|x", "caractere inesperado"},
+		{"$x", "caractere inesperado"},
+		{"0x", "faltam dígitos"},
+		{"1__0", "_ só pode separar dígitos"},
+		{"0b12", "não é um dígito válido"},
 		{"#", "caractere inesperado"},
 		{"12ab", "número malformado"},
 	}
@@ -124,5 +127,15 @@ func TestFloatLiterals(t *testing.T) {
 	}
 	if len(l.Errors()) == 0 {
 		t.Error("1e: esperado erro de número malformado")
+	}
+}
+
+func TestIntPrefixes(t *testing.T) {
+	for _, src := range []string{"0xFF", "0Xff", "0b1010", "0o17", "1_000_000", "0x_FF"} {
+		l := New("t.mlc", []byte(src))
+		tok := l.Next()
+		if tok.Kind != token.INT || tok.Lit != src || (len(l.Errors()) > 0 && src != "0x_FF") {
+			t.Errorf("%q: %v %q %v", src, tok.Kind, tok.Lit, l.Errors())
+		}
 	}
 }

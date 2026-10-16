@@ -1,0 +1,42 @@
+// Hashes não criptográficos, para tabelas e checagens rápidas. As contas dão
+// a volta de propósito (*%), e nada aloca.
+//
+//     h := hash.fnv64(&dados)
+
+// fnv32 é o FNV-1a de 32 bits dos bytes de s.
+pub fn fnv32(s &[]byte) uint32 {
+    var h uint32 = 0x811C_9DC5
+    for i := 0; i < len(s); i++ {
+        h ^= uint32(s[i])
+        h *%= 0x0100_0193
+    }
+    return h
+}
+
+// fnv64 é o FNV-1a de 64 bits dos bytes de s.
+pub fn fnv64(s &[]byte) uint64 {
+    var h uint64 = 0xCBF2_9CE4_8422_2325
+    for i := 0; i < len(s); i++ {
+        h ^= uint64(s[i])
+        h *%= 0x0000_0100_0000_01B3
+    }
+    return h
+}
+
+// fnv64_str é o fnv64 de uma string fixa.
+pub fn fnv64_str(s string) uint64 {
+    var h uint64 = 0xCBF2_9CE4_8422_2325
+    for i := 0; i < len(s); i++ {
+        h ^= uint64(s[i])
+        h *%= 0x0000_0100_0000_01B3
+    }
+    return h
+}
+
+// mix64 espalha os bits de x (o finalizador do splitmix64): bom para usar um
+// inteiro como chave de tabela.
+pub fn mix64(x uint64) uint64 {
+    x = (x ^ (x >> 30)) *% 0xBF58_476D_1CE4_E5B9
+    x = (x ^ (x >> 27)) *% 0x94D0_49BB_1331_11EB
+    return x ^ (x >> 31)
+}

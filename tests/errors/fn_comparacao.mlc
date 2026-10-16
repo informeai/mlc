@@ -1,0 +1,9 @@
+// erro: valores fn não podem ser comparados
+fn f() {
+}
+
+fn main() {
+    a := f
+    b := f
+    c := a == b
+}

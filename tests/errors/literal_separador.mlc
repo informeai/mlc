@@ -1,0 +1,4 @@
+// erro: _ só pode separar dígitos
+fn main() {
+    x := 1__000
+}

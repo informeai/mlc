@@ -1,0 +1,4 @@
+// erro: não é um dígito válido em "0b10"
+fn main() {
+    x := 0b102
+}

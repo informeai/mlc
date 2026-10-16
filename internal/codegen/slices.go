@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"fmt"
+	"strings"
 
 	"mlc/internal/ast"
 	"mlc/internal/checker"
@@ -31,6 +32,8 @@ func mangle(t checker.Type) string {
 		return "p_" + mangle(t.Elem)
 	case *checker.Slice:
 		return "sl_" + mangle(t.Elem)
+	case *checker.FuncType:
+		return fmt.Sprintf("fn%d", t.ID)
 	}
 	switch t {
 	case checker.Int:
@@ -46,16 +49,39 @@ func mangle(t checker.Type) string {
 }
 
 func (g *gen) sliceTypedefs() {
+	// primeiro os nomes, depois os tipos fn (que podem receber slices) e só
+	// então os corpos (um slice pode ter elementos fn)
 	for _, s := range g.info.Slices {
-		if s.Elem == checker.Byte {
-			continue // mlc_sl_byte vem do runtime, que também o usa
+		if s.Elem != checker.Byte { // mlc_sl_byte vem do runtime, que também o usa
+			g.raw("typedef struct %s %s;\n", sliceCType(s), sliceCType(s))
 		}
-		g.raw("typedef struct { %s *ptr; int64_t len; } %s;\n", cType(s.Elem), sliceCType(s))
+	}
+	g.funcTypedefs()
+	for _, s := range g.info.Slices {
+		if s.Elem != checker.Byte {
+			g.raw("struct %s { %s *ptr; int64_t len; };\n", sliceCType(s), cType(s.Elem))
+		}
 	}
 	if len(g.info.Slices) > 0 {
 		g.raw("\n")
 	}
 }
+
+// funcTypedefs declara um tipo C (ponteiro de função) para cada tipo fn.
+func (g *gen) funcTypedefs() {
+	for _, f := range g.info.FuncTypes {
+		params := []string{}
+		for _, p := range f.Params {
+			params = append(params, cType(p))
+		}
+		if len(params) == 0 {
+			params = append(params, "void")
+		}
+		g.raw("typedef %s (*%s)(%s);\n", cType(f.Result), funcCType(f), strings.Join(params, ", "))
+	}
+}
+
+func funcCType(f *checker.FuncType) string { return fmt.Sprintf("mlc_fnt_%d", f.ID) }
 
 // sliceVal devolve o slice de e em C, seguindo o empréstimo se e for &[]T.
 func (g *gen) sliceVal(e ast.Expr) string {

@@ -33,8 +33,8 @@ func (g *gen) effectful(e ast.Expr) bool {
 	case *ast.SliceExpr:
 		return true // pode dar panic fora dos limites
 	case *ast.BinaryExpr:
-		if _, isArith := opNames[e.Op]; isArith {
-			return true
+		if _, isArith := opNames[e.Op]; isArith || e.Op == token.SHL || e.Op == token.SHR {
+			return true // pode dar panic (estouro, divisão por zero, deslocamento)
 		}
 		return g.effectful(e.X) || g.effectful(e.Y)
 	case *ast.UnaryExpr:
@@ -125,8 +125,8 @@ func (g *gen) binary(e *ast.BinaryExpr, top bool) string {
 	bare := false // core é "x op y", sem parênteses próprios
 	t := g.info.Types[e.X]
 	switch {
-	case opNames[e.Op] != "":
-		core = arith(e.Op, g.typeOf(e.X), v[0], v[1])
+	case opNames[e.Op] != "" || intOps[e.Op] != "":
+		core = binop(e.Op, g.typeOf(e.X), v[0], v[1])
 	case (e.Op == token.EQL || e.Op == token.NEQ) && (t == checker.String || isStruct(t) || isArray(t) || isEnum(t)):
 		core = eqExpr(t, v[0], v[1])
 		if e.Op == token.NEQ {

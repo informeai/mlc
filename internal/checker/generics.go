@@ -76,6 +76,13 @@ func abstract(t Type) bool {
 				return true
 			}
 		}
+	case *FuncType:
+		for _, p := range t.Params {
+			if abstract(p) {
+				return true
+			}
+		}
+		return abstract(t.Result)
 	}
 	return false
 }
@@ -127,6 +134,8 @@ func typeName(t Type) string {
 		return "p_" + typeName(t.Elem)
 	case *Borrow:
 		return "b_" + typeName(t.Elem)
+	case *FuncType:
+		return fmt.Sprintf("fn%d", t.ID)
 	}
 	return strings.ReplaceAll(t.String(), " ", "_")
 }
@@ -147,6 +156,12 @@ func typeKey(t Type) string {
 		return "*" + typeKey(t.Elem)
 	case *Borrow:
 		return "&" + typeKey(t.Elem)
+	case *FuncType:
+		var ps []string
+		for _, p := range t.Params {
+			ps = append(ps, typeKey(p))
+		}
+		return "fn(" + strings.Join(ps, ",") + ")" + typeKey(t.Result)
 	}
 	return t.String()
 }

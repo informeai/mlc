@@ -252,7 +252,7 @@ func (p *Parser) parseConst() *ast.ConstDecl {
 // startsType diz se o token atual pode começar um tipo.
 func (p *Parser) startsType() bool {
 	switch p.tok.Kind {
-	case token.IDENT, token.LBRACK, token.MUL, token.QUESTION, token.AMP:
+	case token.IDENT, token.LBRACK, token.MUL, token.QUESTION, token.AMP, token.FN:
 		return true
 	}
 	return false
@@ -261,6 +261,23 @@ func (p *Parser) startsType() bool {
 func (p *Parser) parseType() *ast.TypeExpr {
 	pos := p.tok.Pos
 	switch p.tok.Kind {
+	case token.FN:
+		// fn(int, &T) bool: o tipo de um valor função
+		p.next()
+		t := &ast.TypeExpr{Mod: ast.TypeFunc, P: pos}
+		p.expect(token.LPAREN)
+		for p.tok.Kind != token.RPAREN {
+			t.Params = append(t.Params, p.parseType())
+			if p.tok.Kind != token.COMMA {
+				break
+			}
+			p.next()
+		}
+		p.expect(token.RPAREN)
+		if p.startsType() {
+			t.Elem = p.parseType()
+		}
+		return t
 	case token.IDENT:
 		name := p.tok.Lit
 		p.next()
@@ -366,7 +383,9 @@ func (p *Parser) parseSimpleStmt() ast.Stmt {
 		p.next()
 		return &ast.VarDecl{Name: id.Name, Value: p.parseExpr(), Short: true, P: id.P}
 	case token.ASSIGN, token.ADD_ASSIGN, token.SUB_ASSIGN,
-		token.MUL_ASSIGN, token.QUO_ASSIGN, token.REM_ASSIGN:
+		token.MUL_ASSIGN, token.QUO_ASSIGN, token.REM_ASSIGN,
+		token.AND_ASSIGN, token.OR_ASSIGN, token.XOR_ASSIGN, token.SHL_ASSIGN, token.SHR_ASSIGN,
+		token.ADD_WRAP_ASSIGN, token.SUB_WRAP_ASSIGN, token.MUL_WRAP_ASSIGN:
 		op := p.tok
 		p.next()
 		return &ast.AssignStmt{Op: op.Kind, Lhs: x, Rhs: p.parseExpr(), OpPos: op.Pos}
@@ -576,10 +595,10 @@ func precedence(k token.Kind) int {
 		return 2
 	case token.EQL, token.NEQ, token.LSS, token.LEQ, token.GTR, token.GEQ:
 		return 3
-	case token.ADD, token.SUB:
+	case token.ADD, token.SUB, token.OR, token.XOR, token.ADD_WRAP, token.SUB_WRAP:
 		return 4
-	case token.MUL, token.QUO, token.REM:
-		return 5
+	case token.MUL, token.QUO, token.REM, token.SHL, token.SHR, token.AMP, token.MUL_WRAP:
+		return 5 // como no Go: a & b == c é (a & b) == c
 	}
 	return 0
 }
@@ -602,7 +621,7 @@ func (p *Parser) parseBinary(minPrec int) ast.Expr {
 
 func (p *Parser) parseUnary() ast.Expr {
 	switch p.tok.Kind {
-	case token.SUB, token.NOT, token.MUL, token.AMP: // -x, !x, *p (conteúdo), &x (empréstimo)
+	case token.SUB, token.NOT, token.MUL, token.AMP, token.XOR: // -x, !x, *p (conteúdo), &x (empréstimo), ^x (inverte os bits)
 		op := p.tok
 		p.next()
 		return &ast.UnaryExpr{Op: op.Kind, X: p.parseUnary(), P: op.Pos}

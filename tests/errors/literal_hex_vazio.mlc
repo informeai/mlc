@@ -1,0 +1,4 @@
+// erro: faltam dígitos depois de "0x"
+fn main() {
+    x := 0x
+}

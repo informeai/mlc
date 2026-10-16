@@ -1,0 +1,96 @@
+import "std/io"
+import "std/sort"
+
+// Funções como valor: fn(T) R é o endereço de uma função, sem captura (não
+// aloca, não tem dono). A posse dos argumentos segue os tipos do fn.
+
+fn dobro(x int) int {
+    return x * 2
+}
+
+fn quadrado(x int) int {
+    return x * x
+}
+
+fn maior[T ordered](a T, b T) T {
+    if a > b {
+        return a
+    }
+    return b
+}
+
+fn aplica(f fn(int) int, x int) int {
+    return f(x)
+}
+
+fn soma_em(alvo &int, v int) {
+    *alvo += v
+}
+
+struct Botao {
+    nome string
+    clique fn(int) int
+}
+
+fn escolhe(n int) fn(int) int {
+    if n > 0 {
+        return dobro
+    }
+    return quadrado
+}
+
+fn main() {
+    f := dobro
+    var g fn(int) int = quadrado
+    io.print(f(3), g(3), aplica(dobro, 10), aplica(g, 10), escolhe(1) (5), escolhe(0) (5))
+    var ops[2] fn(int) int = [2]fn(int) int{dobro, quadrado}
+    s := alloc([]fn(int) int, 2)
+    s[0] = quadrado
+    s[1] = dobro
+    io.print(ops[0](7), ops[1](7), s[0](4), s[1](4))
+    b := Botao{nome: "ok", clique: dobro}
+    io.print(b.nome, b.clique(21))
+    m := maior[int]
+    io.print(m(3, 9))
+    total := 0
+    h := soma_em
+    h(&total, 5)
+    h(&total, 7)
+    io.print(total)
+    free(s)
+
+    var ps [4]Pessoa = [4]Pessoa{Pessoa{nome: "ana", idade: 30}, Pessoa{nome: "bia", idade: 12}, Pessoa{nome: "caio", idade: 45}, Pessoa{nome: "davi", idade: 20}}
+    sort.sort_by(&ps, por_idade)
+    io.print(ps, sort.is_sorted_by(&ps, por_idade))
+    sort.sort_by(&ps, por_nome_desc)
+    io.print(ps)
+
+    c := consome
+    n := alloc(No{v: 3})
+    io.print(c(n)) // n foi movido pela chamada através do valor fn
+}
+
+struct Pessoa {
+    nome string
+    idade int
+}
+
+impl auto io.Display for Pessoa
+
+fn por_idade(a &Pessoa, b &Pessoa) bool {
+    return a.idade < b.idade
+}
+
+fn por_nome_desc(a &Pessoa, b &Pessoa) bool {
+    return a.nome[0] > b.nome[0]
+}
+
+struct No {
+    v int
+}
+
+fn consome(p *No) int {
+    v := p.v
+    free(p)
+    return v
+}

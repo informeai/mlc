@@ -29,6 +29,9 @@ static inline bool mlc_string_eq(mlc_str a, mlc_str b) {
 /* Encerra o programa com uma mensagem apontando para a linha do .mlc. */
 _Noreturn void mlc_panic(const char *file, int line, const char *msg);
 
+/* Chamada através de um valor fn que ficou com o valor zero. */
+_Noreturn void mlc_null_fn(const char *file, int line);
+
 /* Memória. mlc_alloc devolve memória zerada e dá panic se faltar memória,
  * então um ponteiro *T nunca é nulo. O contador de alocações vivas é uma
  * rede de segurança: o compilador já garante que todo alloc tem seu free, e
@@ -111,6 +114,36 @@ void mlc_check_slice(int64_t lo, int64_t hi, int64_t len, const char *file, int 
         if (b == 0) mlc_panic(file, line, "resto de divisão por zero");               \
         return (T)(a % b);                                                             \
     }
+
+/* Bits e aritmética que dá a volta. Os deslocamentos checam 0 <= n < bits
+ * (fora disso o C não define o resultado); << é feito sem sinal, então os
+ * bits que saem são descartados, e >> com sinal repete o bit de sinal sem
+ * depender do compilador. +% -% *% calculam sem sinal, com pelo menos 32
+ * bits (uint16 * uint16 promovido a int poderia estourar), e voltam ao tipo. */
+#define MLC_INT_BITS(T, UT, S, BITS, SIGNED)                                           \
+    static inline T mlc_shl_##S(T a, int64_t n, const char *file, int line) {         \
+        if (n < 0 || n >= BITS) mlc_shift_panic(n, BITS, file, line);                \
+        return (T)((UT)a << n);                                                        \
+    }                                                                                  \
+    static inline T mlc_shr_##S(T a, int64_t n, const char *file, int line) {         \
+        if (n < 0 || n >= BITS) mlc_shift_panic(n, BITS, file, line);                \
+        if (SIGNED && a < 0) return (T)~((T)~a >> n);                                 \
+        return (T)(a >> n);                                                            \
+    }                                                                                  \
+    static inline T mlc_addw_##S(T a, T b) { return (T)((UT)a + (UT)b); }             \
+    static inline T mlc_subw_##S(T a, T b) { return (T)((UT)a - (UT)b); }             \
+    static inline T mlc_mulw_##S(T a, T b) { return (T)((UT)a * (UT)b); }
+
+_Noreturn void mlc_shift_panic(int64_t n, int bits, const char *file, int line);
+
+MLC_INT_BITS(int8_t, uint32_t, i8, 8, 1)
+MLC_INT_BITS(int16_t, uint32_t, i16, 16, 1)
+MLC_INT_BITS(int32_t, uint32_t, i32, 32, 1)
+MLC_INT_BITS(int64_t, uint64_t, i64, 64, 1)
+MLC_INT_BITS(uint8_t, uint32_t, u8, 8, 0)
+MLC_INT_BITS(uint16_t, uint32_t, u16, 16, 0)
+MLC_INT_BITS(uint32_t, uint32_t, u32, 32, 0)
+MLC_INT_BITS(uint64_t, uint64_t, u64, 64, 0)
 
 MLC_INT_SIGNED(int8_t, i8, INT8_MIN, "int8")
 MLC_INT_SIGNED(int16_t, i16, INT16_MIN, "int16")

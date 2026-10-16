@@ -1,0 +1,5 @@
+// erro: deslocamento de 32 bits num uint32 (use de 0 a 31)
+fn main() {
+    var w uint32 = 1
+    w <<= 32
+}

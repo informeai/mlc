@@ -107,6 +107,7 @@ type TypeExpr struct {
 	Elem   *TypeExpr   // não nil quando Mod != TypeNamed
 	Len    Expr        // tamanho de [N]T
 	Args   []*TypeExpr // argumentos de tipo: Par[int, string]
+	Params []*TypeExpr // fn(int, &T) R: os parâmetros; o retorno fica em Elem (nil: nenhum)
 	P      token.Pos
 }
 
@@ -119,6 +120,7 @@ const (
 	TypeNullPtr         // ?*T
 	TypeBorrow          // &T
 	TypeArray           // [N]T
+	TypeFunc            // fn(T, U) R
 )
 
 func (n *Import) Pos() token.Pos   { return n.P }

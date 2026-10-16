@@ -101,6 +101,8 @@ func cType(t checker.Type) string {
 		return cType(t.Elem) + " *"
 	case *checker.Borrow:
 		return cType(t.Elem) + " *"
+	case *checker.FuncType:
+		return funcCType(t)
 	}
 	if s, ok := t.(*checker.Struct); ok {
 		return structCType(s)
@@ -376,7 +378,7 @@ func (g *gen) simple(s ast.Stmt) string {
 		}
 		// x += v lê x antes de calcular v, da esquerda para a direita.
 		ops, v := g.operands([]ast.Expr{s.Lhs, s.Rhs})
-		return sequence(append(pre, ops...), lhs+" = "+arith(assignOps[s.Op], g.typeOf(s.Lhs), v[0], v[1]))
+		return sequence(append(pre, ops...), lhs+" = "+binop(checker.CompoundOp(s.Op), g.typeOf(s.Lhs), v[0], v[1]))
 	case *ast.IncDecStmt:
 		op := token.ADD
 		if s.Op == token.DEC {
@@ -389,15 +391,6 @@ func (g *gen) simple(s ast.Stmt) string {
 		return sequence(pre, x+" = "+arith(op, t, x, constant(big.NewInt(1), t)))
 	}
 	panic(fmt.Sprintf("codegen: comando simples desconhecido %T", s))
-}
-
-// assignOps liga cada atribuição composta ao seu operador aritmético.
-var assignOps = map[token.Kind]token.Kind{
-	token.ADD_ASSIGN: token.ADD,
-	token.SUB_ASSIGN: token.SUB,
-	token.MUL_ASSIGN: token.MUL,
-	token.QUO_ASSIGN: token.QUO,
-	token.REM_ASSIGN: token.REM,
 }
 
 func zeroValue(t checker.Type) string {
@@ -415,6 +408,9 @@ func zeroValue(t checker.Type) string {
 	}
 	if _, ok := t.(*checker.Pointer); ok {
 		return "NULL" // só ?*T tem valor zero; *T sempre é inicializado
+	}
+	if _, ok := t.(*checker.FuncType); ok {
+		return "NULL" // chamar dá panic: toda chamada indireta confere
 	}
 	if s, ok := t.(*checker.Struct); ok {
 		return "((" + structCType(s) + "){0})"
@@ -489,6 +485,9 @@ func (g *gen) expr(e ast.Expr) string {
 	if v, ok := g.info.EnumCtors[e]; ok {
 		return g.enumCtor(e, v)
 	}
+	if fn, ok := g.info.FuncRefs[e]; ok {
+		return fn.CName // a função usada como valor: o endereço dela
+	}
 	switch e := e.(type) {
 	case *ast.Ident:
 		if l := g.info.Locals[e]; l != nil {
@@ -504,6 +503,8 @@ func (g *gen) expr(e ast.Expr) string {
 			return neg(g.typeOf(e.X), g.expr(e.X))
 		case token.MUL:
 			return "(*" + g.expr(e.X) + ")"
+		case token.XOR:
+			return fmt.Sprintf("((%s)~(%s))", numericC[g.typeOf(e)], g.expr(e.X))
 		case token.AMP:
 			if _, at := g.arrayOf(e.X); at != nil {
 				if _, view := g.info.Types[e].(*checker.Borrow); view && !isArrayBorrow(g.info.Types[e]) {
@@ -551,6 +552,9 @@ func (g *gen) expr(e ast.Expr) string {
 			}
 			return g.sliceVal(e.Args[0]) + ".len"
 		}
+		if callee.Indirect {
+			return g.indirectCall(e)
+		}
 		pre, args := g.operands(g.info.CallArgs(e)) // num método, o receptor vem primeiro
 		if callee.Func.Native != "" {
 			// função do runtime: recebe arquivo e linha para os panics
@@ -560,6 +564,18 @@ func (g *gen) expr(e ast.Expr) string {
 		return sequence(pre, fmt.Sprintf("%s(%s)", callee.Func.CName, strings.Join(args, ", ")))
 	}
 	panic(fmt.Sprintf("codegen: expressão desconhecida %T", e))
+}
+
+// indirectCall traduz f(args) com f um valor fn: f é calculado primeiro,
+// depois os argumentos (da esquerda para a direita), e a chamada confere que
+// f não é nulo (o valor zero de um fn).
+func (g *gen) indirectCall(e *ast.CallExpr) string {
+	fun := g.temp(g.info.Types[e.Fun])
+	pre := []string{fun + " = " + g.expr(e.Fun)}
+	more, args := g.operands(e.Args)
+	pre = append(pre, more...)
+	pre = append(pre, fmt.Sprintf("(%s == NULL ? mlc_null_fn(__FILE__, __LINE__) : (void)0)", fun))
+	return sequence(pre, fmt.Sprintf("%s(%s)", fun, strings.Join(args, ", ")))
 }
 
 // cString escreve s como literal de string C. Bytes fora do ASCII imprimível

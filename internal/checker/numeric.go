@@ -225,6 +225,9 @@ func (c *checker) unary(e *ast.UnaryExpr) Type {
 	case e.Op == token.NOT && t != Bool:
 		c.errorf(e.P, "operador ! não se aplica a %s", t)
 		return Invalid
+	case e.Op == token.XOR && !intLike(t):
+		c.errorf(e.P, "operador ^ (inverter os bits) só se aplica a inteiros, não a %s", t)
+		return Invalid
 	case e.Op == token.SUB && !numLike(t) && !isUntyped(t):
 		c.errorf(e.P, "operador - não se aplica a %s", t)
 		return Invalid
@@ -243,6 +246,9 @@ func (c *checker) unary(e *ast.UnaryExpr) Type {
 }
 
 func foldUnary(op token.Kind, v any, t Type) (any, string) {
+	if b, ok := v.(*big.Int); ok && op == token.XOR {
+		return complement(b, t), ""
+	}
 	switch v := v.(type) {
 	case bool:
 		return !v, ""
@@ -264,6 +270,9 @@ func (c *checker) binary(e *ast.BinaryExpr) Type {
 	x, y := c.value(e.X), c.value(e.Y)
 	if x == Invalid || y == Invalid {
 		return Invalid
+	}
+	if e.Op == token.SHL || e.Op == token.SHR {
+		return c.shift(e, x, y)
 	}
 	// Uma constante sem tipo assume o tipo do outro lado: em n + 1, com n
 	// int32, o 1 é int32.
@@ -299,6 +308,15 @@ func (c *checker) binary(e *ast.BinaryExpr) Type {
 			return Invalid
 		}
 		result = x
+	case token.AMP, token.OR, token.XOR, token.ADD_WRAP, token.SUB_WRAP, token.MUL_WRAP:
+		switch {
+		case x != y && intLike(x) && intLike(y):
+			return mismatch()
+		case !intLike(x) || !intLike(y):
+			c.errorf(e.OpPos, "operador %s só se aplica a inteiros, não a %s", e.Op, x)
+			return Invalid
+		}
+		result = x
 	case token.LSS, token.LEQ, token.GTR, token.GEQ:
 		if x != y || (!orderLike(x) && !isUntyped(x)) {
 			return mismatch()
@@ -312,6 +330,9 @@ func (c *checker) binary(e *ast.BinaryExpr) Type {
 			c.errorf(e.OpPos, "ponteiros só podem ser comparados com nil")
 			return Invalid
 		case c.noSliceCompare(e, x) || c.noSliceCompare(e, y):
+			return Invalid
+		case isFuncType(x) || isFuncType(y):
+			c.errorf(e.OpPos, "valores fn não podem ser comparados")
 			return Invalid
 		case x != y:
 			c.errorf(e.OpPos, "comparação entre tipos diferentes: %s e %s", x, y)
@@ -346,6 +367,12 @@ func foldBinary(op token.Kind, a, b any, t Type) (any, string) {
 	// Com t decimal, inteiros viram decimais (1 + 2.5).
 	if isFloat(t) || t == UntypedFloat {
 		a, b = toFloat(a), toFloat(b)
+	}
+	if isBitOp(op) {
+		if a, ok := a.(*big.Int); ok {
+			return foldBits(op, a, b.(*big.Int), t), ""
+		}
+		return nil, ""
 	}
 	switch a := a.(type) {
 	case *big.Int:

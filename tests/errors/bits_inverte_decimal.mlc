@@ -1,0 +1,5 @@
+// erro: operador ^ (inverter os bits) só se aplica a inteiros, não a float64
+fn main() {
+    var f float64 = 1.0
+    g := ^f
+}

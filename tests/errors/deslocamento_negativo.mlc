@@ -1,0 +1,4 @@
+// erro: deslocamento negativo (-1)
+fn main() {
+    x := 1 << -1
+}

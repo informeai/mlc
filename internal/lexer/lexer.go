@@ -147,11 +147,17 @@ func (l *Lexer) scanToken() token.Token {
 	k := token.ILLEGAL
 	switch c {
 	case '+':
-		k = l.pick(token.ADD, alt{'+', token.INC}, alt{'=', token.ADD_ASSIGN})
+		if k = l.wrap(token.ADD_WRAP, token.ADD_WRAP_ASSIGN); k == token.ILLEGAL {
+			k = l.pick(token.ADD, alt{'+', token.INC}, alt{'=', token.ADD_ASSIGN})
+		}
 	case '-':
-		k = l.pick(token.SUB, alt{'-', token.DEC}, alt{'=', token.SUB_ASSIGN})
+		if k = l.wrap(token.SUB_WRAP, token.SUB_WRAP_ASSIGN); k == token.ILLEGAL {
+			k = l.pick(token.SUB, alt{'-', token.DEC}, alt{'=', token.SUB_ASSIGN})
+		}
 	case '*':
-		k = l.pick(token.MUL, alt{'=', token.MUL_ASSIGN})
+		if k = l.wrap(token.MUL_WRAP, token.MUL_WRAP_ASSIGN); k == token.ILLEGAL {
+			k = l.pick(token.MUL, alt{'=', token.MUL_ASSIGN})
+		}
 	case '/':
 		k = l.pick(token.QUO, alt{'=', token.QUO_ASSIGN})
 	case '%':
@@ -161,15 +167,25 @@ func (l *Lexer) scanToken() token.Token {
 	case '!':
 		k = l.pick(token.NOT, alt{'=', token.NEQ})
 	case '<':
-		k = l.pick(token.LSS, alt{'=', token.LEQ})
+		if l.match('<') {
+			k = l.pick(token.SHL, alt{'=', token.SHL_ASSIGN})
+		} else {
+			k = l.pick(token.LSS, alt{'=', token.LEQ})
+		}
 	case '>':
-		k = l.pick(token.GTR, alt{'=', token.GEQ})
+		if l.match('>') {
+			k = l.pick(token.SHR, alt{'=', token.SHR_ASSIGN})
+		} else {
+			k = l.pick(token.GTR, alt{'=', token.GEQ})
+		}
 	case ':':
 		k = l.pick(token.COLON, alt{'=', token.DEFINE})
 	case '&':
-		k = l.pick(token.AMP, alt{'&', token.LAND})
+		k = l.pick(token.AMP, alt{'&', token.LAND}, alt{'=', token.AND_ASSIGN})
 	case '|':
-		k = l.pick(token.ILLEGAL, alt{'|', token.LOR})
+		k = l.pick(token.OR, alt{'|', token.LOR}, alt{'=', token.OR_ASSIGN})
+	case '^':
+		k = l.pick(token.XOR, alt{'=', token.XOR_ASSIGN})
 	case '(':
 		k = token.LPAREN
 	case ')':
@@ -196,6 +212,18 @@ func (l *Lexer) scanToken() token.Token {
 		l.errorf(pos, "caractere inesperado %q", lit)
 	}
 	return token.Token{Kind: k, Lit: lit, Pos: pos}
+}
+
+// wrap lê o % de +%, -% e *% (aritmética que dá a volta), com o = opcional
+// da atribuição composta. Devolve ILLEGAL se não houver %.
+func (l *Lexer) wrap(op, assign token.Kind) token.Kind {
+	if !l.match('%') {
+		return token.ILLEGAL
+	}
+	if l.match('=') {
+		return assign
+	}
+	return op
 }
 
 // alt é uma variante de dois caracteres: se o próximo byte for next, o token é kind.
@@ -226,15 +254,37 @@ func (l *Lexer) scanIdent(pos token.Pos) token.Token {
 func (l *Lexer) scanNumber(pos token.Pos) token.Token {
 	start := l.off
 	kind := token.INT
-	for l.off < len(l.src) && isDigit(l.src[l.off]) {
-		l.advance()
+	// 0xFF, 0b1010, 0o17: inteiros em outras bases
+	if l.peek(0) == '0' {
+		var base func(byte) bool
+		switch l.peek(1) {
+		case 'x', 'X':
+			base = isHex
+		case 'b', 'B':
+			base = func(c byte) bool { return c == '0' || c == '1' }
+		case 'o', 'O':
+			base = func(c byte) bool { return c >= '0' && c <= '7' }
+		}
+		if base != nil {
+			l.advance()
+			l.advance()
+			if !l.digits(base, start) {
+				l.errorf(pos, "número malformado: faltam dígitos depois de %q", string(l.src[start:l.off]))
+			}
+			if l.off < len(l.src) && (isLetter(l.src[l.off]) || isDigit(l.src[l.off])) {
+				l.errorf(l.pos(), "número malformado: %q não é um dígito válido em %q", l.src[l.off], string(l.src[start:l.off]))
+				for l.off < len(l.src) && (isLetter(l.src[l.off]) || isDigit(l.src[l.off])) {
+					l.advance()
+				}
+			}
+			return token.Token{Kind: token.INT, Lit: string(l.src[start:l.off]), Pos: pos}
+		}
 	}
+	l.digits(isDigit, start)
 	if l.peek(0) == '.' && isDigit(l.peek(1)) {
 		kind = token.FLOAT
 		l.advance()
-		for l.off < len(l.src) && isDigit(l.src[l.off]) {
-			l.advance()
-		}
+		l.digits(isDigit, start)
 	}
 	// expoente: 1e9, 2.5E-3
 	if c := l.peek(0); c == 'e' || c == 'E' {
@@ -245,9 +295,7 @@ func (l *Lexer) scanNumber(pos token.Pos) token.Token {
 			if sign {
 				l.advance()
 			}
-			for l.off < len(l.src) && isDigit(l.src[l.off]) {
-				l.advance()
-			}
+			l.digits(isDigit, start)
 		}
 	}
 	if l.off < len(l.src) && isLetter(l.src[l.off]) {
@@ -257,6 +305,36 @@ func (l *Lexer) scanNumber(pos token.Pos) token.Token {
 		}
 	}
 	return token.Token{Kind: kind, Lit: string(l.src[start:l.off]), Pos: pos}
+}
+
+// digits lê dígitos (conforme ok) e separadores _ entre eles: 1_000_000.
+// Devolve se leu algum dígito.
+func (l *Lexer) digits(ok func(byte) bool, start int) bool {
+	any, lastUnderscore := false, false
+	for l.off < len(l.src) {
+		c := l.src[l.off]
+		if c == '_' {
+			if !any || lastUnderscore {
+				l.errorf(l.pos(), "número malformado: _ só pode separar dígitos")
+			}
+			lastUnderscore = true
+			l.advance()
+			continue
+		}
+		if !ok(c) {
+			break
+		}
+		any, lastUnderscore = true, false
+		l.advance()
+	}
+	if lastUnderscore {
+		l.errorf(l.pos(), "número malformado: _ só pode separar dígitos")
+	}
+	return any
+}
+
+func isHex(c byte) bool {
+	return isDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 }
 
 // scanString lê um literal entre aspas e devolve o valor já sem escapes.

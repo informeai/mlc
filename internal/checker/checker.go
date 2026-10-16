@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"sort"
 	"strconv"
+	"strings"
 
 	"mlc/internal/ast"
 	"mlc/internal/token"
@@ -91,11 +92,12 @@ const (
 
 // Callee é o destino resolvido de uma chamada: uma função do usuário ou um builtin.
 type Callee struct {
-	Func    *Func
-	Builtin Builtin
-	Elem    Type // alloc: o tipo alocado
-	Zero    bool // alloc: memória zerada (alloc(T)) em vez de valor inicial
-	Slice   bool // alloc([]T, n)
+	Func     *Func
+	Builtin  Builtin
+	Elem     Type // alloc: o tipo alocado
+	Zero     bool // alloc: memória zerada (alloc(T)) em vez de valor inicial
+	Slice    bool // alloc([]T, n)
+	Indirect bool // chamada através de um valor fn: f(x), s.campo(x)
 }
 
 // Info é o resultado da checagem, consumido pelo gerador de código.
@@ -122,6 +124,8 @@ type Info struct {
 	Drains       map[*ast.ForStmt]ast.Expr  // for x in drain(s): o slice esvaziado
 	Calls        map[*ast.CallExpr]Callee
 	Prints       map[*ast.CallExpr]*PrintPlan // io.print e io.printf reescritos
+	FuncRefs     map[ast.Expr]*Func           // funções usadas como valor
+	FuncTypes    []*FuncType                  // tipos fn concretos, para o gerador declarar
 	Funcs        []*Func                      // na ordem de declaração
 }
 
@@ -155,8 +159,9 @@ type checker struct {
 	impls       []*Impl                       // impl de todos os arquivos já checados
 	paramIfaces map[*ast.TypeParam]*Interface // interface de cada restrição (resolvida na declaração)
 	tvMethods   map[string]*Func
-	autos       []autoImpl // impl auto do arquivo atual, para conferir os campos              // métodos de interface chamados em parâmetros de tipo
-	expected    Type       // tipo esperado de expectedFor (para Resultado.Ok sem argumentos de tipo)
+	autos       []autoImpl           // impl auto do arquivo atual, para conferir os campos
+	funcTypes   map[string]*FuncType // métodos de interface chamados em parâmetros de tipo
+	expected    Type                 // tipo esperado de expectedFor (para Resultado.Ok sem argumentos de tipo)
 	expectedFor ast.Expr
 	litOK       bool // o próximo literal composto pode conter ponteiros donos (dentro de alloc)
 	borrows     map[Type]*Borrow
@@ -203,6 +208,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 			Drains:       map[*ast.ForStmt]ast.Expr{},
 			Calls:        map[*ast.CallExpr]Callee{},
 			Prints:       map[*ast.CallExpr]*PrintPlan{},
+			FuncRefs:     map[ast.Expr]*Func{},
 		},
 		pointers: map[ptrKey]*Pointer{},
 		borrows:  map[Type]*Borrow{},
@@ -212,6 +218,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 		breaks:   map[*ast.ForStmt]bool{},
 
 		paramIfaces: map[*ast.TypeParam]*Interface{},
+		funcTypes:   map[string]*FuncType{},
 		tvMethods:   map[string]*Func{},
 	}
 	for i, src := range srcs {
@@ -479,6 +486,25 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			return
 		}
 		rt := c.value(s.Rhs)
+		op := compoundOps[s.Op]
+		if op == token.SHL || op == token.SHR {
+			// x <<= n: n pode ser de qualquer tipo inteiro
+			switch {
+			case lt == Invalid || rt == Invalid:
+			case !intLike(lt):
+				c.errorf(s.OpPos, "operador %s só se aplica a inteiros, não a %s", s.Op, lt)
+			case !intLike(rt):
+				c.errorf(s.OpPos, "a quantidade de bits de %s precisa ser um inteiro, não %s", s.Op, rt)
+			default:
+				if v, ok := c.info.Values[s.Rhs]; ok && (v.(*big.Int).Sign() < 0 || isInteger(lt) && v.(*big.Int).Cmp(big.NewInt(int64(IntBits(lt)))) >= 0) {
+					c.errorf(s.Rhs.Pos(), "deslocamento de %s bits num %s (use de 0 a %d)", v, lt, IntBits(lt)-1)
+				}
+				if rt == UntypedInt {
+					c.convertUntyped(s.Rhs, Int)
+				}
+			}
+			return
+		}
 		if isUntyped(rt) && numLike(lt) {
 			c.convertUntyped(s.Rhs, lt)
 			rt = lt
@@ -489,6 +515,8 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			c.errorf(s.OpPos, "operador %s não se aplica a %s e %s", s.Op, lt, rt)
 		case s.Op == token.REM_ASSIGN && (isFloat(lt) || (abstract(lt) && !tvHas(lt, "mod"))):
 			c.errorf(s.OpPos, "operador %%= não se aplica a %s (só a inteiros)", lt)
+		case isBitOp(op) && !intLike(lt):
+			c.errorf(s.OpPos, "operador %s só se aplica a inteiros, não a %s", s.Op, lt)
 		}
 	case *ast.IncDecStmt:
 		if t := c.target(s.X); !isInteger(t) && t != Invalid {
@@ -770,11 +798,11 @@ func (c *checker) expr(e ast.Expr) Type {
 func (c *checker) expr0(e ast.Expr) Type {
 	switch e := e.(type) {
 	case *ast.IntLit:
-		v, _ := new(big.Int).SetString(e.Value, 10)
+		v := ParseIntLit(e.Value)
 		c.info.Values[e] = v
 		return UntypedInt
 	case *ast.FloatLit:
-		f, err := strconv.ParseFloat(e.Value, 64)
+		f, err := strconv.ParseFloat(strings.ReplaceAll(e.Value, "_", ""), 64)
 		if err != nil {
 			c.errorf(e.P, "constante decimal %s fora da faixa de float64", e.Value)
 			return Invalid
@@ -801,8 +829,24 @@ func (c *checker) expr0(e ast.Expr) Type {
 		return c.composite(e)
 	case *ast.ArrayLit:
 		return c.arrayLit(e)
-	case *ast.IndexExpr:
-		return c.index(e)
+	case *ast.IndexExpr, *ast.IndexListExpr:
+		// f[int] como valor: a instância de uma função genérica
+		base, targs := splitIndex(e)
+		if g := c.genericFuncOf(base); g != nil {
+			var args []Type
+			for _, a := range targs {
+				args = append(args, c.exprType(a))
+			}
+			if inst := c.instFunc(g, args, e.Pos()); inst != nil {
+				return c.funcRef(e, inst)
+			}
+			return Invalid
+		}
+		if ix, ok := e.(*ast.IndexExpr); ok {
+			return c.index(ix)
+		}
+		c.errorf(e.Pos(), "argumentos de tipo só valem para funções e tipos genéricos")
+		return Invalid
 	case *ast.TypeArg:
 		c.errorf(e.Pos(), "um tipo só pode ser argumento de alloc")
 		return Invalid
@@ -838,9 +882,9 @@ func (c *checker) ident(e *ast.Ident) Type {
 	case c.mod.pendingConsts[e.Name]:
 		c.errorf(e.P, "constante %s usada antes de ser declarada", e.Name)
 	case c.mod.funcs[e.Name] != nil:
-		c.errorf(e.P, "função %s usada como valor (faltou chamar?)", e.Name)
+		return c.funcRef(e, c.mod.funcs[e.Name])
 	case c.mod.generics[e.Name] != nil:
-		c.errorf(e.P, "função %s usada como valor (faltou chamar?)", e.Name)
+		c.errorf(e.P, "%s é genérica: para usar como valor, escreva os tipos, como %s[int]", e.Name, e.Name)
 	case c.typeParams[e.Name] != nil:
 		c.errorf(e.P, "tipo %s usado como valor (para converter: %s(x))", e.Name, e.Name)
 	case c.mod.uses[e.Name] != nil:
@@ -891,6 +935,12 @@ func (c *checker) call(e *ast.CallExpr) Type {
 		if bt, ok := basicTypes[fun.Name]; ok && c.scope.lookup(fun.Name) == nil {
 			return c.conversion(e, bt)
 		}
+		if l := c.scope.lookup(fun.Name); l != nil {
+			if ft, ok := l.Type.(*FuncType); ok {
+				c.value(fun)
+				return c.indirectCall(e, ft) // f(x), com f uma variável fn
+			}
+		}
 		fn := c.mod.funcs[fun.Name]
 		if fn == nil || c.scope.lookup(fun.Name) != nil {
 			break
@@ -905,6 +955,9 @@ func (c *checker) call(e *ast.CallExpr) Type {
 	}
 
 	if t := c.expr(e.Fun); t != Invalid {
+		if ft, ok := t.(*FuncType); ok {
+			return c.indirectCall(e, ft) // fs[i](x), pega()(x)
+		}
 		c.errorf(e.Lparen, "valor do tipo %s não é uma função", t)
 	}
 	c.checkArgs(e)
@@ -924,4 +977,26 @@ func (c *checker) userCall(e *ast.CallExpr, fn *Func) Type {
 	c.callArgs(e, fn, fn.Params)
 	c.info.Calls[e] = Callee{Func: fn}
 	return fn.Result
+}
+
+// ParseIntLit lê um literal inteiro: decimal (com _ entre os dígitos) ou
+// com prefixo 0x, 0b, 0o. Um zero à esquerda continua decimal (010 é dez).
+func ParseIntLit(s string) *big.Int {
+	s = strings.ReplaceAll(s, "_", "")
+	base := 10
+	if len(s) > 2 && s[0] == '0' {
+		switch s[1] {
+		case 'x', 'X':
+			base, s = 16, s[2:]
+		case 'b', 'B':
+			base, s = 2, s[2:]
+		case 'o', 'O':
+			base, s = 8, s[2:]
+		}
+	}
+	v, ok := new(big.Int).SetString(s, base)
+	if !ok {
+		return new(big.Int)
+	}
+	return v
 }

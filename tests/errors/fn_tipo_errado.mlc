@@ -1,0 +1,8 @@
+// erro: esperado fn(int) int, encontrado fn(int) bool
+fn par(x int) bool {
+    return x % 2 == 0
+}
+
+fn main() {
+    var f fn(int) int = par
+}

@@ -1,0 +1,6 @@
+import "std/io"
+
+fn main() {
+    n := 64
+    io.print(1 << n)
+}

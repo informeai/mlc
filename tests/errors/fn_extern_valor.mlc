@@ -1,0 +1,6 @@
+// erro: extern fn não pode ser usada como valor
+import "std/io"
+
+fn main() {
+    f := io.write
+}

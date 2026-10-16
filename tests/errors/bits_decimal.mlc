@@ -1,0 +1,4 @@
+// erro: operador & só se aplica a inteiros
+fn main() {
+    x := 1.5 & 2
+}

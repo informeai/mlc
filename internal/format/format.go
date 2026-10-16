@@ -126,6 +126,7 @@ type printer struct {
 	lines    []*line
 	stack    []opener
 	prev     *token.Token // último token (não comentário) escrito na linha atual
+	prev2    *token.Token // o anterior a prev, na mesma linha
 	last     *token.Token // último token (não comentário) escrito
 	lastLine int          // linha, no original, do último token ou comentário escrito
 	closed   opener       // o par fechado pelo último ']', ')' ou '}'
@@ -189,7 +190,7 @@ func (p *printer) newLine(t *token.Token, closer bool) {
 		}
 	}
 	p.lines = append(p.lines, &line{indent: indent})
-	p.prev = nil
+	p.prev, p.prev2 = nil, nil
 }
 
 // afterOpener diz se a última linha escrita termina abrindo um bloco ou
@@ -248,7 +249,7 @@ func (p *printer) token(i int, t *token.Token) {
 		o.attached = p.attached
 		p.stack = append(p.stack, o)
 	}
-	p.prev, p.last = t, t
+	p.prev2, p.prev, p.last = p.prev, t, t
 	p.lastLine = t.Pos.Line
 }
 
@@ -294,9 +295,9 @@ func (p *printer) attachedBracket(i int, t *token.Token) bool {
 // ou faz parte de um tipo (*T, ?*T, &T).
 func (p *printer) unary(t *token.Token) bool {
 	switch t.Kind {
-	case token.NOT, token.AMP, token.QUESTION:
+	case token.NOT, token.QUESTION:
 		return true
-	case token.SUB, token.MUL, token.ADD:
+	case token.SUB, token.MUL, token.ADD, token.AMP, token.XOR: // &x ou a & b, ^x ou a ^ b
 		return !p.marks.binary[t.Pos]
 	}
 	return false
@@ -331,6 +332,9 @@ func (p *printer) space(prev, t *token.Token) bool {
 		return !p.top().composite && t.Kind != token.RBRACE
 	case t.Kind == token.RBRACE:
 		return !p.top().composite && prev.Kind != token.LBRACE // o '{' ainda está na pilha
+	case t.Kind == token.LPAREN && prev.Kind == token.FN:
+		// fn (p &Ponto) area(): receptor, separado; fn(int) bool: tipo, colado
+		return p.prev2 == nil || p.prev2.Kind == token.PUB || p.prev2.Kind == token.EXTERN
 	case t.Kind == token.LPAREN:
 		if prev.Kind == token.IDENT {
 			return false // chamada ou conversão: f(x), int(x)

@@ -1,0 +1,19 @@
+// erro: p já foi liberada ou movida
+import "std/io"
+
+struct No {
+    v int
+}
+
+fn consome(p *No) int {
+    v := p.v
+    free(p)
+    return v
+}
+
+fn main() {
+    f := consome
+    p := alloc(No{v: 3})
+    io.print(f(p))
+    io.print(p.v)
+}

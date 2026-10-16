@@ -1,0 +1,5 @@
+// erro: deslocamento de 8 bits num byte, que tem 8 (use de 0 a 7)
+fn main() {
+    var b byte = 1
+    c := b << 8
+}

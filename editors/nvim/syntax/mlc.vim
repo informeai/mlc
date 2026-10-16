@@ -17,11 +17,12 @@ syn match  mlcComment   "//.*$" contains=@Spell
 syn region mlcString    start=+"+ skip=+\\.+ end=+"\|$+ contains=mlcEscape
 syn match  mlcChar      "'\(\\.\|[^'\\]\)'" contains=mlcEscape
 syn match  mlcEscape    "\\[ntr0\\\"']" contained
-syn match  mlcNumber    "\<\d\+\(\.\d\+\)\=\([eE][+-]\=\d\+\)\=\>"
+syn match  mlcNumber    "\<\d[0-9_]*\(\.[0-9_]\+\)\=\([eE][+-]\=[0-9_]\+\)\=\>"
+syn match  mlcNumber    "\<0[xX][0-9a-fA-F_]\+\>\|\<0[bB][01_]\+\>\|\<0[oO][0-7_]\+\>"
 syn match  mlcFunction  "\<\h\w*\ze\s*("
 syn match  mlcTypeName  "\<\u\l\w*\>"
 syn match  mlcConstName "\<\u[A-Z0-9_]\+\>"
-syn match  mlcOperator  "=>\|:=\|&&\|||\|[-+*/%=!<>&?]"
+syn match  mlcOperator  "=>\|:=\|&&\|||\|<<\|>>\|[-+*]%\|[-+*/%=!<>&?|^]"
 
 hi def link mlcKeyword     Keyword
 hi def link mlcConditional Conditional

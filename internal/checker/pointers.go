@@ -89,6 +89,8 @@ const (
 
 func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 	switch t.Mod {
+	case ast.TypeFunc:
+		return c.resolveFuncType(t)
 	case ast.TypeSlice:
 		return c.resolveSlice(t, ctx)
 	case ast.TypeArray:

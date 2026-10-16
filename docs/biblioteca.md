@@ -65,6 +65,8 @@ Ordenam no lugar um `&[]T` (um slice emprestado, ou um array com `&a`).
 | `is_sorted[T ordered](s &[]T) bool` | já está em ordem? |
 | `reverse[T any](s &[]T)` | inverte a ordem |
 | `swap[T any](s &[]T, i int, j int)` | troca dois elementos |
+| `sort_by[T any](s &[]T, less fn(&T, &T) bool)` | ordena pela função `less` (para structs ou outra ordem) |
+| `is_sorted_by[T any](s &[]T, less fn(&T, &T) bool) bool` | já está na ordem de `less`? |
 
 ### `std/text`
 
@@ -106,6 +108,8 @@ Os elementos não podem ser donos (como em todo genérico, nesta versão). Para 
 
 ### `std/rand`
 
+Escrito em MLC (splitmix64 com `+%`, `*%`, `^` e `>>`).
+
 Gerador pseudoaleatório (splitmix64) **com estado explícito**: não há gerador global, e a mesma semente dá sempre a mesma sequência.
 
 | Declaração | O que faz |
@@ -117,6 +121,16 @@ Gerador pseudoaleatório (splitmix64) **com estado explícito**: não há gerado
 | `r.float() float64` | real em `[0, 1)` |
 
 Para uma semente diferente a cada execução, use `uint64(time.now_ms())`.
+
+### `std/hash`
+
+Hashes não criptográficos, em MLC, para tabelas e checagens rápidas.
+
+| Função | O que faz |
+|---|---|
+| `fnv32(s &[]byte) uint32`, `fnv64(s &[]byte) uint64` | FNV-1a de 32 e 64 bits |
+| `fnv64_str(s string) uint64` | FNV-1a de 64 bits de uma string fixa |
+| `mix64(x uint64) uint64` | espalha os bits de um inteiro (finalizador do splitmix64), para usar como chave |
 
 ### `std/os`
 

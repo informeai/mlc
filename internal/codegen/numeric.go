@@ -42,6 +42,28 @@ func (g *gen) typeOf(e ast.Expr) checker.Type {
 	return checker.DefaultType(g.info.Types[e])
 }
 
+// intOps são os operadores só de inteiros: bits, deslocamentos e as contas
+// que dão a volta.
+var intOps = map[token.Kind]string{
+	token.AMP: "&", token.OR: "|", token.XOR: "^",
+	token.SHL: "shl", token.SHR: "shr",
+	token.ADD_WRAP: "addw", token.SUB_WRAP: "subw", token.MUL_WRAP: "mulw",
+}
+
+// binop escreve a operação binária op (aritmética ou de inteiros) entre a e
+// b, do tipo t.
+func binop(op token.Kind, t checker.Type, a, b string) string {
+	switch op {
+	case token.AMP, token.OR, token.XOR:
+		return fmt.Sprintf("((%s)(%s %s %s))", numericC[t], a, intOps[op], b)
+	case token.SHL, token.SHR:
+		return fmt.Sprintf("mlc_%s_%s(%s, (int64_t)(%s), __FILE__, __LINE__)", intOps[op], suffix[t], a, b)
+	case token.ADD_WRAP, token.SUB_WRAP, token.MUL_WRAP:
+		return fmt.Sprintf("mlc_%s_%s(%s, %s)", intOps[op], suffix[t], a, b)
+	}
+	return arith(op, t, a, b)
+}
+
 // arith escreve a operação op entre a e b, do tipo t.
 func arith(op token.Kind, t checker.Type, a, b string) string {
 	if checker.IsFloat(t) {

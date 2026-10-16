@@ -51,7 +51,24 @@ const (
 	COLON      // :
 	AMP        // & (empréstimo)
 	QUESTION   // ? (em ?*T)
-	COMMENT    // // até o fim da linha (só no modo com comentários do lexer)
+
+	// bits e aritmética que dá a volta
+	OR              // |
+	XOR             // ^ (binário: ou exclusivo; unário: inverte os bits)
+	SHL             // <<
+	SHR             // >>
+	AND_ASSIGN      // &=
+	OR_ASSIGN       // |=
+	XOR_ASSIGN      // ^=
+	SHL_ASSIGN      // <<=
+	SHR_ASSIGN      // >>=
+	ADD_WRAP        // +%
+	SUB_WRAP        // -%
+	MUL_WRAP        // *%
+	ADD_WRAP_ASSIGN // +%=
+	SUB_WRAP_ASSIGN // -%=
+	MUL_WRAP_ASSIGN // *%=
+	COMMENT         // // até o fim da linha (só no modo com comentários do lexer)
 
 	keywordBeg
 	IMPORT
@@ -120,7 +137,23 @@ var names = [...]string{
 	COLON:      ":",
 	AMP:        "&",
 	QUESTION:   "?",
-	COMMENT:    "comentário",
+
+	OR:              "|",
+	XOR:             "^",
+	SHL:             "<<",
+	SHR:             ">>",
+	AND_ASSIGN:      "&=",
+	OR_ASSIGN:       "|=",
+	XOR_ASSIGN:      "^=",
+	SHL_ASSIGN:      "<<=",
+	SHR_ASSIGN:      ">>=",
+	ADD_WRAP:        "+%",
+	SUB_WRAP:        "-%",
+	MUL_WRAP:        "*%",
+	ADD_WRAP_ASSIGN: "+%=",
+	SUB_WRAP_ASSIGN: "-%=",
+	MUL_WRAP_ASSIGN: "*%=",
+	COMMENT:         "comentário",
 
 	IMPORT:    "import",
 	FN:        "fn",

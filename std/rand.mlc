@@ -7,15 +7,18 @@ pub struct Rand {
     state uint64
 }
 
-extern fn splitmix(state &uint64) uint64
-
 pub fn new(seed uint64) Rand {
     return Rand{state: seed}
 }
 
-// next devolve um uint64 qualquer.
+// next devolve um uint64 qualquer (splitmix64: as contas dão a volta de
+// propósito, com +% e *%).
 pub fn (r &Rand) next() uint64 {
-    return splitmix(&r.state)
+    r.state +%= 0x9E37_79B9_7F4A_7C15
+    z := r.state
+    z = (z ^ (z >> 30)) *% 0xBF58_476D_1CE4_E5B9
+    z = (z ^ (z >> 27)) *% 0x94D0_49BB_1331_11EB
+    return z ^ (z >> 31)
 }
 
 // int_n devolve um inteiro em [0, n). n precisa ser maior que zero.
@@ -30,5 +33,5 @@ pub fn (r &Rand) range(lo int, hi int) int {
 
 // float devolve um float64 em [0, 1).
 pub fn (r &Rand) float() float64 {
-    return float64(r.next() / 2048) / 9007199254740992.0
+    return float64(r.next() >> 11) / 9007199254740992.0 // 53 bits / 2^53
 }

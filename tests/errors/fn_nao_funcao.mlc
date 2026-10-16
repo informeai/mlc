@@ -1,0 +1,5 @@
+// erro: valor do tipo int não é uma função
+fn main() {
+    x := 1
+    x(2)
+}

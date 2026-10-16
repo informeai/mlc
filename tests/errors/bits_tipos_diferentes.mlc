@@ -1,0 +1,6 @@
+// erro: operador & não se aplica a int e byte
+fn main() {
+    a := 1
+    var b byte = 2
+    c := a & b
+}

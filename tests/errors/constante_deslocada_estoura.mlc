@@ -1,0 +1,4 @@
+// erro: estouro de inteiro na constante: constante 256 não cabe em byte
+fn main() {
+    const C = byte(0x80) << 1
+}

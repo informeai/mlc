@@ -1,0 +1,43 @@
+import "std/io"
+import "std/hash"
+import "std/rand"
+import "std/str"
+
+// Operadores de bits, deslocamentos, aritmética que dá a volta e literais
+// em outras bases. Os valores de hash e de rand conferem com as
+// implementações de referência.
+fn main() {
+    a := 0b1100
+    b := 0xA
+    io.print(a & b, a | b, a ^ b, ^a, a << 2, a >> 1, -16 >> 2)
+    var x byte = 0xF0
+    io.print(^x, x >> 4, x << 1, x & 0x3C, x | 0x0F)
+    var u uint64 = 0xFFFF_FFFF_FFFF_FFFF
+    io.print(u +% 1, uint64(0) -% 1, u *% 3, u >> 63)
+    var m int = 9223372036854775807
+    io.print(m +% 1, m *% 2, -m -% 2)
+    var s int8 = -128
+    one := int8(1)
+    io.print(s >> 7, s -% 1, int8(-1) & 0x7F, one << 7)
+    n := 3
+    k := 1 << n
+    k <<= 2
+    k |= 1
+    k ^= 0b10
+    k &= 0xFF
+    k >>= 1
+    io.print(k, k & 1 == 1, 6 & 3 == 2, 1 + 2 << 1)
+    var w uint32 = 0xFFFF_FFFF
+    w +%= 2
+    w *%= 3
+    w -%= 10
+    io.print(w)
+    const MASK = 0xFF << 8
+    io.print(MASK, ^0, uint16(0xFF00) | 0x00FF, 0o17, 1_000_000, 007)
+
+    var buf [16]byte
+    t := str.copy(&buf, "hello")
+    io.print(hash.fnv32(&buf[:t]), hash.fnv64(&buf[:t]), hash.fnv64_str(""), hash.mix64(1))
+    r := rand.new(42)
+    io.print(r.next(), r.next(), r.int_n(100))
+}

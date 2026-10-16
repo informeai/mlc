@@ -26,7 +26,8 @@ field_decl   = ident type ;
 const_decl   = "const" ident [ type ] "=" expr eos ;
 
 (* ---------- Tipos ---------- *)
-type         = [ ident "." ] ident [ "[" type { "," type } "]" ] | "[" "]" type | "[" expr "]" type | "*" type | "?" "*" type | "&" type ;   (* geometria.Ponto, [N]T *)
+type         = [ ident "." ] ident [ "[" type { "," type } "]" ] | "[" "]" type | "[" expr "]" type | "*" type | "?" "*" type | "&" type
+             | "fn" "(" [ type { "," type } ] ")" [ type ] ;   (* geometria.Ponto, [N]T, fn(int, &T) bool *)
 
 (* ---------- Blocos e comandos ---------- *)
 block        = "{" { statement } "}" ;
@@ -51,7 +52,7 @@ simple_stmt  = short_decl
 
 short_decl   = ident ":=" expr ;
 assign_stmt  = postfix_expr assign_op expr ;
-assign_op    = "=" | "+=" | "-=" | "*=" | "/=" | "%=" ;
+assign_op    = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^=" | "<<=" | ">>=" | "+%=" | "-%=" | "*%=" ;
 inc_dec_stmt = postfix_expr ( "++" | "--" ) ;
 
 return_stmt  = "return" [ expr ] eos ;
@@ -78,9 +79,9 @@ or_expr      = and_expr { "||" and_expr } ;
 and_expr     = cmp_expr { "&&" cmp_expr } ;
 cmp_expr     = add_expr { cmp_op add_expr } ;
 cmp_op       = "==" | "!=" | "<" | "<=" | ">" | ">=" ;
-add_expr     = mul_expr { ( "+" | "-" ) mul_expr } ;
-mul_expr     = unary_expr { ( "*" | "/" | "%" ) unary_expr } ;
-unary_expr   = ( "-" | "!" | "*" | "&" ) unary_expr | postfix_expr ;   (* *p: conteúdo; &x: empréstimo, só como argumento *)
+add_expr     = mul_expr { ( "+" | "-" | "|" | "^" | "+%" | "-%" ) mul_expr } ;
+mul_expr     = unary_expr { ( "*" | "/" | "%" | "<<" | ">>" | "&" | "*%" ) unary_expr } ;   (* como no Go: a & b == c é (a & b) == c *)
+unary_expr   = ( "-" | "!" | "*" | "&" | "^" ) unary_expr | postfix_expr ;   (* *p: conteúdo; &x: empréstimo, só como argumento; ^x: inverte os bits *)
 
 postfix_expr = primary { call | index | slice | selector | composite } ;
 slice        = "[" [ expr ] ":" [ expr ] "]" ;
@@ -95,6 +96,7 @@ field_init   = ident ":" expr ;
 primary      = ident | literal | array_lit | "(" expr ")" ;
 array_lit    = "[" expr "]" type "{" [ expr { "," expr } [ "," ] ] "}" ;
 literal      = int_lit | string_lit | float_lit | char_lit ;   (* char_lit: 'a', um byte; float_lit: 2.5, 1e9 *)
+int_lit      = digits | "0x" hex_digits | "0b" bin_digits | "0o" oct_digits ;   (* _ entre dígitos: 1_000_000, 0xFF_FF *)
 
 (* ---------- Terminador de comando ---------- *)
 eos          = ";" | (* inserido pelo lexer no fim da linha *) ;
@@ -118,6 +120,8 @@ eos          = ";" | (* inserido pelo lexer no fim da linha *) ;
 - **Métodos:** `fn (p &Ponto) area() int` declara o método `area` de `Ponto`, chamado como `p.area()`. O receptor diz o que a chamada faz com `p`: `Ponto` recebe uma cópia, `&Ponto` empresta e `*Ponto` recebe a posse; o empréstimo ou o move acontece sem `&` na chamada. Métodos só existem em structs, declarados no arquivo da struct, e `pub` os exporta.
 - **Arquivos:** `import "geometria"` carrega `geometria.mlc`; o caminho é relativo à pasta do arquivo principal (`import "util/texto"` carrega `util/texto.mlc`, e o módulo se chama `texto`). O que o arquivo declara com `pub` é usado com o nome do módulo na frente: `geometria.area(r)`, `geometria.Ponto{...}`, `geometria.PI`, inclusive em tipos e em padrões de `match`. Importação circular é erro, e `fn main` só existe no arquivo principal.
 - **Interfaces:** `interface Medida { fn tamanho(self &Self) int }` só serve de restrição de genérico (`fn f[T Medida](x &T)`), nunca de tipo de variável. Um tipo implementa com `impl Medida for Quadrado` (struct com os métodos de receptor `&S`), com bloco (`impl Medida for int { fn (x &int) tamanho() int {...} }`) ou genérico (`impl[T Medida] Medida for []T {...}`). O impl fica no arquivo do tipo ou no da interface. `impl auto io.Display for T` gera o método `write` de uma struct ou enum. Veja [interfaces.md](interfaces.md).
+- **Bits e contas que dão a volta:** `& | ^ << >>`, `^x` e `+% -% *%` só valem para inteiros. `+ - *` continuam dando panic no estouro; `+%`, `-%` e `*%` calculam módulo 2^bits. O deslocamento por `n` fora de `0..bits-1` dá panic (erro de compilação se `n` for constante); a quantidade de bits pode ser de qualquer tipo inteiro, e `1 << n` com `n` variável é `int`. Um `<<` descarta os bits que saem; `>>` com sinal repete o bit de sinal. Constantes que estouram continuam sendo erro de compilação.
+- **Funções como valor:** `fn(int, &T) bool` é o tipo de um valor função. O nome de uma função (`dobro`, `geo.dobro`, `maior[int]`) vira valor; não há closures, métodos como valor nem `extern fn` como valor. Chamar um valor fn nulo (o valor zero) dá panic. Valores fn não podem ser comparados.
 - **Impressão:** `io.print(a, b)`, `io.eprint`, `io.printf("x = {}\n", x)` e `io.eprintf` aceitam qualquer quantidade de valores que implementem `io.Display`; o formato de `printf` é uma string literal, conferida na compilação (`{}` para cada valor, `{{` e `}}` para chaves).
 - **Biblioteca padrão:** `import "std/math"` carrega o módulo `math` da biblioteca embutida no `mlc` (veja [biblioteca.md](biblioteca.md)); `io` e `str` também vêm dela (`import "std/io"`). `io.print`, `io.eprint`, `io.printf` e `io.eprintf` aceitam qualquer quantidade de argumentos: o compilador reescreve a chamada em chamadas aos métodos `write` de `io.Display`. `extern fn` declara uma função implementada no runtime C e só é aceita nos arquivos da biblioteca padrão.
 - **Conversões:** `int8(x)`, `int(x)`, `byte(x)`, `float64(x)` e as demais têm a forma de chamada; as que podem não caber dão panic (veja [tipos.md](tipos.md)).

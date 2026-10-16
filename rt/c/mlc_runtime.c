@@ -395,16 +395,6 @@ void mlc_std_time_sleep_ms(int64_t ms, const char *file, int line) {
     nanosleep(&ts, NULL);
 }
 
-/* std/rand: splitmix64 (as contas de 64 bits dão a volta de propósito) */
-uint64_t mlc_std_rand_splitmix(uint64_t *state, const char *file, int line) {
-    (void)file;
-    (void)line;
-    uint64_t z = (*state += UINT64_C(0x9E3779B97F4A7C15));
-    z = (z ^ (z >> 30)) * UINT64_C(0xBF58476D1CE4E5B9);
-    z = (z ^ (z >> 27)) * UINT64_C(0x94D049BB133111EB);
-    return z ^ (z >> 31);
-}
-
 /* std/vec */
 void mlc_std_vec_fail(mlc_str msg, const char *file, int line) {
     char buf[160];
@@ -431,4 +421,14 @@ int64_t mlc_std_io_format_f32(mlc_sl_byte *dst, float x, const char *file, int l
     char buf[32];
     int n = mlc_format_float(buf, sizeof buf, x, 9, 1);
     return mlc_put_bytes(dst, buf, n, "io.put_f32", file, line);
+}
+
+void mlc_shift_panic(int64_t n, int bits, const char *file, int line) {
+    char msg[128];
+    snprintf(msg, sizeof msg, "deslocamento de %" PRId64 " bits num inteiro de %d (use de 0 a %d)", n, bits, bits - 1);
+    mlc_panic(file, line, msg);
+}
+
+void mlc_null_fn(const char *file, int line) {
+    mlc_panic(file, line, "chamada de um valor fn nulo (o valor zero de um fn: a variável ou o campo não recebeu uma função)");
 }

@@ -1,0 +1,9 @@
+// erro: a função fn(int) int espera 1 argumento(s), recebeu 2
+fn dobro(x int) int {
+    return x * 2
+}
+
+fn main() {
+    f := dobro
+    f(1, 2)
+}

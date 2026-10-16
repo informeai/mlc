@@ -176,6 +176,10 @@ Com essas restrições, um empréstimo nunca sobrevive ao dono, e por isso não 
 
 A linguagem não tem `append` nem coleção que cresce sozinha. Para isso existe `std/vec`, escrito em MLC: `vec.new[T](cap)` aloca, `push` chama `grow` (que faz `realloc` dobrando a capacidade) quando falta espaço, e `free()` libera. A alocação fica à vista no código da biblioteca, e o `*Vec[T]` devolvido por `new` é um dono comum, cobrado pelo verificador. Veja [biblioteca.md](biblioteca.md).
 
+## Funções como valor
+
+Um valor `fn(T) R` é só o endereço de uma função: como não captura variáveis, não aloca nem tem dono, e pode ser copiado livremente. Uma chamada através dele segue os tipos dos parâmetros (`&T` empresta, `*T` move), e o verificador confere como numa chamada direta. O valor zero é nulo; chamá-lo dá panic, nunca comportamento indefinido.
+
 ## O que é proibido
 
 - Aritmética de ponteiros e conversão entre tipos de ponteiro.

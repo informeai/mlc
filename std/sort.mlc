@@ -63,3 +63,58 @@ pub fn reverse[T any](s &[]T) {
         j--
     }
 }
+
+// sort_by ordena s pela ordem de less (less(a, b): a vem antes de b). Serve
+// para structs e para qualquer outra ordem:
+//
+//     fn por_idade(a &Pessoa, b &Pessoa) bool {
+//         return a.idade < b.idade
+//     }
+//     sort.sort_by(&pessoas, por_idade)
+pub fn sort_by[T any](s &[]T, less fn(&T, &T) bool) {
+    n := len(s)
+    if n <= 16 {
+        insertion_by(s, less)
+        return
+    }
+    p := partition_by(s, less)
+    sort_by(&s[:p], less)
+    sort_by(&s[p + 1:], less)
+}
+
+fn insertion_by[T any](s &[]T, less fn(&T, &T) bool) {
+    for i := 1; i < len(s); i++ {
+        x := s[i]
+        j := i - 1
+        for j >= 0 && less(&x, &s[j]) {
+            s[j + 1] = s[j]
+            j--
+        }
+        s[j + 1] = x
+    }
+}
+
+fn partition_by[T any](s &[]T, less fn(&T, &T) bool) int {
+    last := len(s) - 1
+    swap(s, last / 2, last)
+    pivot := s[last]
+    i := 0
+    for j := 0; j < last; j++ {
+        if less(&s[j], &pivot) {
+            swap(s, i, j)
+            i++
+        }
+    }
+    swap(s, i, last)
+    return i
+}
+
+// is_sorted_by diz se s já está na ordem de less.
+pub fn is_sorted_by[T any](s &[]T, less fn(&T, &T) bool) bool {
+    for i := 1; i < len(s); i++ {
+        if less(&s[i], &s[i - 1]) {
+            return false
+        }
+    }
+    return true
+}
