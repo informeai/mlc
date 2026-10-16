@@ -1,0 +1,11 @@
+// erro: Q não implementa io.Display: declare impl auto io.Display for Q
+import "std/io"
+
+struct Q {
+    l int
+}
+
+fn main() {
+    q := Q{l: 1}
+    io.print(q)
+}

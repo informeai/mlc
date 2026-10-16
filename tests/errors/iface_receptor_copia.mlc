@@ -1,0 +1,17 @@
+// erro: Q.area precisa receber o receptor emprestado (&Q) para cumprir Area
+interface Area {
+    fn area(self &Self) int
+}
+
+struct Q {
+    l int
+}
+
+fn (q Q) area() int {
+    return q.l
+}
+
+impl Area for Q
+
+fn main() {
+}

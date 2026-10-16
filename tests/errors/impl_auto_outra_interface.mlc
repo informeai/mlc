@@ -1,0 +1,13 @@
+// erro: impl auto só existe para io.Display
+interface Area {
+    fn area(self &Self) int
+}
+
+struct Q {
+    l int
+}
+
+impl auto Area for Q
+
+fn main() {
+}

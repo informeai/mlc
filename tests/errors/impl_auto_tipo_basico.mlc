@@ -1,0 +1,7 @@
+// erro: impl io.Display for bool precisa ficar no arquivo de bool ou no de io.Display
+import "std/io"
+
+impl auto io.Display for bool
+
+fn main() {
+}

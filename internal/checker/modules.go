@@ -29,6 +29,7 @@ type module struct {
 	generics map[string]*Func // funções genéricas (só a definição; as instâncias são criadas no uso)
 	structs  map[string]*Struct
 	enums    map[string]*Enum
+	ifaces   map[string]*Interface
 	global   *scope // constantes do topo; pai do escopo de cada função
 
 	pendingConsts map[string]bool // constantes do topo ainda não avaliadas
@@ -42,6 +43,7 @@ func (c *checker) newModule(src Source, i int) *module {
 		funcs: map[string]*Func{}, structs: map[string]*Struct{},
 		generics:      map[string]*Func{},
 		enums:         map[string]*Enum{},
+		ifaces:        map[string]*Interface{},
 		global:        &scope{names: map[string]*Local{}},
 		pendingConsts: map[string]bool{},
 	}
@@ -133,8 +135,8 @@ func (c *checker) moduleCall(e *ast.CallExpr, m *module, sel *ast.SelectorExpr) 
 func (c *checker) moduleConst(e *ast.SelectorExpr, m *module) Type {
 	l := m.global.names[e.Sel]
 	switch {
-	case isIoPrint(m, e.Sel):
-		c.errorf(e.SelPos, "%s.print só pode ser usado como chamada", m.name)
+	case ioBuiltin(m, e.Sel) != "":
+		c.errorf(e.SelPos, "%s.%s só pode ser usado como chamada", m.name, e.Sel)
 	case l != nil && !l.Pub:
 		c.errorf(e.SelPos, "%s.%s não é pública (declare com pub const)", m.name, e.Sel)
 	case l != nil:
@@ -154,11 +156,4 @@ func (c *checker) moduleConst(e *ast.SelectorExpr, m *module) Type {
 func StdModule(name string) bool {
 	_, err := std.FS.ReadFile(name + ".mlc")
 	return err == nil
-}
-
-// isIoPrint diz se m.sel é o io.print, que é declarado em std/io mas
-// embutido no compilador: aceita qualquer quantidade de argumentos, de
-// qualquer tipo.
-func isIoPrint(m *module, sel string) bool {
-	return m.std && m.path == "std/io" && sel == "print"
 }

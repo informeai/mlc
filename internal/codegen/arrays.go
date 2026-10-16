@@ -26,13 +26,6 @@ func (g *gen) arrayDef(a *checker.Array) {
 	g.raw("    for (int64_t i = 0; i < %d; i++) {\n", a.Len)
 	g.raw("        if (!(%s)) return false;\n", eqExpr(a.Elem, "x.a[i]", "y.a[i]"))
 	g.raw("    }\n    return true;\n}\n\n")
-	g.raw("static void mlc_print_%s(%s v) {\n", mangle(a), t)
-	g.raw("    mlc_io_print_str(MLC_STR_LIT(\"[\", 1));\n")
-	g.raw("    for (int64_t i = 0; i < %d; i++) {\n", a.Len)
-	g.raw("        if (i > 0) mlc_io_print_sep();\n")
-	g.raw("        %s;\n", printCall(a.Elem, "v.a[i]"))
-	g.raw("    }\n")
-	g.raw("    mlc_io_print_str(MLC_STR_LIT(\"]\", 1));\n}\n\n")
 }
 
 // arrayOf devolve o array de e (seguindo o empréstimo, se e for &[N]T) e o
@@ -84,6 +77,15 @@ func (g *gen) forInArray(s *ast.ForStmt) {
 		g.line("%s %s = %s.a[%s];", cType(l.Type), l.CName, a, i)
 		g.indent--
 	}
+}
+
+// arrayType devolve o array de t ([N]T ou &[N]T), ou nil.
+func arrayType(t checker.Type) *checker.Array {
+	if b, ok := t.(*checker.Borrow); ok {
+		t = b.Elem
+	}
+	a, _ := t.(*checker.Array)
+	return a
 }
 
 func isArrayBorrow(t checker.Type) bool {

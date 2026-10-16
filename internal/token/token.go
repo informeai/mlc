@@ -70,6 +70,8 @@ const (
 	PUB
 	ENUM
 	EXTERN
+	INTERFACE
+	IMPL
 	keywordEnd
 )
 
@@ -120,22 +122,24 @@ var names = [...]string{
 	QUESTION:   "?",
 	COMMENT:    "comentário",
 
-	IMPORT:   "import",
-	FN:       "fn",
-	STRUCT:   "struct",
-	CONST:    "const",
-	VAR:      "var",
-	IF:       "if",
-	ELSE:     "else",
-	MATCH:    "match",
-	FOR:      "for",
-	IN:       "in",
-	RETURN:   "return",
-	BREAK:    "break",
-	CONTINUE: "continue",
-	PUB:      "pub",
-	ENUM:     "enum",
-	EXTERN:   "extern",
+	IMPORT:    "import",
+	FN:        "fn",
+	STRUCT:    "struct",
+	CONST:     "const",
+	VAR:       "var",
+	IF:        "if",
+	ELSE:      "else",
+	MATCH:     "match",
+	FOR:       "for",
+	IN:        "in",
+	RETURN:    "return",
+	BREAK:     "break",
+	CONTINUE:  "continue",
+	PUB:       "pub",
+	ENUM:      "enum",
+	EXTERN:    "extern",
+	INTERFACE: "interface",
+	IMPL:      "impl",
 }
 
 func (k Kind) String() string {

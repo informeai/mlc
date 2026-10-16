@@ -94,7 +94,7 @@ func TestNavigation(t *testing.T) {
 		{"main", "p := «geo.Ponto", "geo", 1, []string{`import "geo"`, "Geometria plana."}},
 		{"main", `import «"std/io"`, "std/io.mlc", 1, []string{`import "std/io"`, "Entrada e saída padrão"}},
 		{"main", "«io.print(area", "std/io.mlc", 1, []string{`import "std/io"`}},
-		{"main", "io.«print(area", "std/io.mlc", 1, []string{"io.print(a, b, ...)", "embutido no compilador"}},
+		{"main", "io.«print(area", "std/io.mlc", 1, []string{"io.print(a, b, ...)", "O compilador só reescreve a chamada"}},
 		{"main", "v.len(), «len(\"ab\")", "", 0, []string{"len(s) int"}},
 		{"main", "vec.new[«int](2)", "", 0, []string{"Inteiro com sinal de 64 bits"}},
 		{"main", "fn «area(f Forma)", "main", 18, []string{"fn area(f Forma) float64"}},
@@ -197,5 +197,82 @@ func TestNavigationEverywhere(t *testing.T) {
 	t.Logf("%d de %d identificadores resolvidos", found, total)
 	if total == 0 || found*100/total < 99 {
 		t.Fatalf("poucos nomes resolvidos: %d de %d", found, total)
+	}
+}
+
+const navIface = `import "std/io"
+
+// Medida dá um tamanho
+interface Medida {
+    fn tamanho(self &Self) int
+}
+
+struct Caixa {
+    l int
+}
+
+fn (c &Caixa) tamanho() int {
+    return c.l
+}
+
+impl Medida for Caixa
+
+impl auto io.Display for Caixa
+
+fn maior[T Medida](a &T) int {
+    return a.tamanho()
+}
+
+fn main() {
+    c := Caixa{l: 2}
+    io.printf("{} {}\n", c, maior(&c))
+}
+`
+
+func TestNavigationInterfaces(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.mlc")
+	os.WriteFile(path, []byte(navIface), 0o644)
+	read := driver.Overlay(nil)
+	prog := driver.Analyze(path, read)
+	if prog == nil {
+		t.Fatal("não analisou")
+	}
+	nav := newNavigator(prog, read, []byte(navIface))
+	cases := []struct {
+		at, file string
+		line     int
+		hover    string
+	}{
+		{"impl «Medida for Caixa", path, 4, "Medida dá um tamanho"},
+		{"fn maior[T «Medida]", path, 4, "interface Medida {"},
+		{"return a.«tamanho()", path, 5, "fn tamanho(self &Self) int"},
+		{"impl auto io.«Display for", "std/io.mlc", 0, "pub interface Display {"},
+		{"impl «auto io", "", 0, "impl auto io.Display for T"},
+		{"fn tamanho(self &«Self)", "", 0, "o tipo que a implementa"},
+		{"io.«printf(", "std/io.mlc", 1, "trocando cada `{}` por um valor"},
+	}
+	for _, tc := range cases {
+		mark := strings.Index(tc.at, "«")
+		needle := strings.Replace(tc.at, "«", "", 1)
+		pos := strings.Index(navIface, needle)
+		if pos < 0 {
+			t.Fatalf("trecho não encontrado: %q", needle)
+		}
+		sym, _ := nav.resolve(pos + mark)
+		if sym == nil {
+			t.Errorf("%q: nada encontrado", tc.at)
+			continue
+		}
+		if !strings.Contains(sym.code+"\n"+sym.doc, tc.hover) {
+			t.Errorf("%q: o hover não tem %q:\n%s\n%s", tc.at, tc.hover, sym.code, sym.doc)
+		}
+		if tc.file == "" {
+			if !sym.noDef {
+				t.Errorf("%q: não deveria ter definição", tc.at)
+			}
+		} else if sym.file != tc.file || (tc.line > 1 && sym.pos.Line != tc.line) {
+			t.Errorf("%q: definição em %s:%d, esperado %s:%d", tc.at, sym.file, sym.pos.Line, tc.file, tc.line)
+		}
 	}
 }

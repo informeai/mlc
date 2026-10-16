@@ -18,18 +18,6 @@ void mlc_panic(const char *file, int line, const char *msg) {
     exit(2);
 }
 
-void mlc_io_print_int(int64_t v) { printf("%" PRId64, v); }
-
-void mlc_io_print_bool(bool v) { fputs(v ? "true" : "false", stdout); }
-
-void mlc_io_print_str(mlc_str s) {
-    if (s.len > 0) fwrite(s.ptr, 1, (size_t)s.len, stdout); /* ptr pode ser NULL na string zero */
-}
-
-void mlc_io_print_sep(void) { putchar(' '); }
-
-void mlc_io_print_newline(void) { putchar('\n'); }
-
 static int64_t mlc_live_allocs = 0;
 
 void *mlc_alloc(size_t size, const char *file, int line) {
@@ -148,8 +136,6 @@ int64_t mlc_std_io_read_line(mlc_sl_byte *dst, const char *file, int line) {
     return n;
 }
 
-void mlc_io_print_uint(uint64_t v) { printf("%" PRIu64, v); }
-
 /* Escreve x com o menor número de dígitos que, lido de volta, dá o mesmo
  * valor (como o Go imprime: 0.1, 3, 1000, 1e+06). digits é 17 para float64 e 9 para
  * float32. Devolve o tamanho. */
@@ -169,18 +155,6 @@ static int mlc_format_float(char *buf, size_t size, double x, int digits, int is
     if (exp < -4 || exp >= 6) return snprintf(buf, size, "%.*e", p - 1, x);
     int decimals = p - 1 - exp;
     return snprintf(buf, size, "%.*f", decimals > 0 ? decimals : 0, x);
-}
-
-void mlc_io_print_f64(double v) {
-    char buf[32];
-    mlc_format_float(buf, sizeof buf, v, 17, 0);
-    fputs(buf, stdout);
-}
-
-void mlc_io_print_f32(float v) {
-    char buf[32];
-    mlc_format_float(buf, sizeof buf, v, 9, 1);
-    fputs(buf, stdout);
 }
 
 int64_t mlc_conv_i(int64_t v, int64_t lo, int64_t hi, const char *type, const char *file, int line) {
@@ -438,4 +412,23 @@ void mlc_std_vec_fail(mlc_str msg, const char *file, int line) {
     if (n > 0) memcpy(buf, msg.ptr, (size_t)n);
     buf[n] = '\0';
     mlc_panic(file, line, buf);
+}
+
+/* std/io: escrita do Writer e formatação de números reais */
+void mlc_std_io_write_fd(int64_t fd, mlc_sl_byte *b, const char *file, int line) {
+    (void)file;
+    (void)line;
+    if (b->len > 0) fwrite(b->ptr, 1, (size_t)b->len, fd == 2 ? stderr : stdout);
+}
+
+int64_t mlc_std_io_format_f64(mlc_sl_byte *dst, double x, const char *file, int line) {
+    char buf[32];
+    int n = mlc_format_float(buf, sizeof buf, x, 17, 0);
+    return mlc_put_bytes(dst, buf, n, "io.put_float", file, line);
+}
+
+int64_t mlc_std_io_format_f32(mlc_sl_byte *dst, float x, const char *file, int line) {
+    char buf[32];
+    int n = mlc_format_float(buf, sizeof buf, x, 9, 1);
+    return mlc_put_bytes(dst, buf, n, "io.put_f32", file, line);
 }

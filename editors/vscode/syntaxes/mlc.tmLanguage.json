@@ -51,7 +51,7 @@
           }
         },
         {
-          "match": "\\b(struct|enum)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "match": "\\b(struct|enum|interface)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": { "name": "keyword.declaration.type.mlc" },
             "2": { "name": "entity.name.type.mlc" }
@@ -62,13 +62,14 @@
     "keywords": {
       "patterns": [
         { "name": "keyword.control.mlc", "match": "\\b(if|else|for|in|match|return|break|continue)\\b" },
-        { "name": "keyword.other.mlc", "match": "\\b(import|fn|struct|enum|const|var|pub|extern)\\b" }
+        { "name": "keyword.other.mlc", "match": "\\b(import|fn|struct|enum|const|var|pub|extern|interface|impl)\\b|(?<=\\bimpl\\s)auto\\b|(?<=\\]\\s)auto\\b" }
       ]
     },
     "types": {
       "patterns": [
         { "name": "storage.type.builtin.mlc", "match": "\\b(int|int8|int16|int32|int64|uint8|uint16|uint32|uint64|byte|float32|float64|bool|string)\\b" },
         { "name": "storage.type.constraint.mlc", "match": "\\b(any|comparable|ordered|number|integer)\\b" },
+        { "name": "storage.type.self.mlc", "match": "\\bSelf\\b" },
         { "name": "entity.name.type.mlc", "match": "\\b[A-Z][a-z0-9_][A-Za-z0-9_]*\\b" }
       ]
     },

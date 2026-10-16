@@ -1,0 +1,9 @@
+// erro: Q não é uma interface
+struct Q {
+    l int
+}
+
+impl Q for int
+
+fn main() {
+}

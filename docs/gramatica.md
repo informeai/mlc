@@ -6,13 +6,16 @@ Notação EBNF: `=` define, `|` alterna, `[ ]` é opcional, `{ }` repete zero ou
 (* ---------- Programa ---------- *)
 program      = { import_decl | top_decl } ;
 import_decl  = "import" string_lit eos ;           (* "std/io", "std/math"... ou o caminho de um arquivo, sem .mlc *)
-top_decl     = [ "pub" ] ( fn_decl | extern_decl | struct_decl | enum_decl | const_decl ) ;
+top_decl     = [ "pub" ] ( fn_decl | extern_decl | struct_decl | enum_decl | const_decl | interface_decl ) | impl_decl ;
+interface_decl = "interface" ident "{" { "fn" ident "(" param_list ")" [ type ] eos } "}" ;   (* o 1º parâmetro é self &Self *)
+impl_decl    = "impl" [ type_params ] [ "auto" ] type "for" type [ "{" { fn_decl } "}" ] eos ;
 enum_decl    = "enum" ident [ type_params ] "{" { variant eos } "}" ;
 variant      = ident [ "(" field_decl { "," field_decl } ")" ] ;
 
 (* ---------- Declarações de topo ---------- *)
 fn_decl      = "fn" [ "(" param ")" ] ident [ type_params ] "(" [ param_list ] ")" [ type ] block ;   (* com receptor: método *)
-type_params  = "[" ident ident { "," ident ident } "]" ;   (* [T ordered, U any] *)
+type_params  = "[" ident constraint { "," ident constraint } "]" ;   (* [T ordered, U io.Display] *)
+constraint   = ident [ "." ident ] ;   (* any, comparable, ordered, number, integer ou uma interface *)
 extern_decl  = "extern" "fn" ident "(" [ param_list ] ")" [ type ] eos ;   (* só na biblioteca padrão; sem corpo *)
 param_list   = param { "," param } ;
 param        = ident type ;
@@ -114,7 +117,9 @@ eos          = ";" | (* inserido pelo lexer no fim da linha *) ;
 - **`for x in drain(s)`:** só para slices de donos; cada elemento sai do slice para `x`, que precisa ser liberado ou movido na volta. `drain` só existe nessa forma.
 - **Métodos:** `fn (p &Ponto) area() int` declara o método `area` de `Ponto`, chamado como `p.area()`. O receptor diz o que a chamada faz com `p`: `Ponto` recebe uma cópia, `&Ponto` empresta e `*Ponto` recebe a posse; o empréstimo ou o move acontece sem `&` na chamada. Métodos só existem em structs, declarados no arquivo da struct, e `pub` os exporta.
 - **Arquivos:** `import "geometria"` carrega `geometria.mlc`; o caminho é relativo à pasta do arquivo principal (`import "util/texto"` carrega `util/texto.mlc`, e o módulo se chama `texto`). O que o arquivo declara com `pub` é usado com o nome do módulo na frente: `geometria.area(r)`, `geometria.Ponto{...}`, `geometria.PI`, inclusive em tipos e em padrões de `match`. Importação circular é erro, e `fn main` só existe no arquivo principal.
-- **Biblioteca padrão:** `import "std/math"` carrega o módulo `math` da biblioteca embutida no `mlc` (veja [biblioteca.md](biblioteca.md)); `io` e `str` também vêm dela (`import "std/io"`). `io.print` é a única função embutida no compilador: aceita qualquer quantidade de argumentos, de qualquer tipo. `extern fn` declara uma função implementada no runtime C e só é aceita nos arquivos da biblioteca padrão.
+- **Interfaces:** `interface Medida { fn tamanho(self &Self) int }` só serve de restrição de genérico (`fn f[T Medida](x &T)`), nunca de tipo de variável. Um tipo implementa com `impl Medida for Quadrado` (struct com os métodos de receptor `&S`), com bloco (`impl Medida for int { fn (x &int) tamanho() int {...} }`) ou genérico (`impl[T Medida] Medida for []T {...}`). O impl fica no arquivo do tipo ou no da interface. `impl auto io.Display for T` gera o método `write` de uma struct ou enum. Veja [interfaces.md](interfaces.md).
+- **Impressão:** `io.print(a, b)`, `io.eprint`, `io.printf("x = {}\n", x)` e `io.eprintf` aceitam qualquer quantidade de valores que implementem `io.Display`; o formato de `printf` é uma string literal, conferida na compilação (`{}` para cada valor, `{{` e `}}` para chaves).
+- **Biblioteca padrão:** `import "std/math"` carrega o módulo `math` da biblioteca embutida no `mlc` (veja [biblioteca.md](biblioteca.md)); `io` e `str` também vêm dela (`import "std/io"`). `io.print`, `io.eprint`, `io.printf` e `io.eprintf` aceitam qualquer quantidade de argumentos: o compilador reescreve a chamada em chamadas aos métodos `write` de `io.Display`. `extern fn` declara uma função implementada no runtime C e só é aceita nos arquivos da biblioteca padrão.
 - **Conversões:** `int8(x)`, `int(x)`, `byte(x)`, `float64(x)` e as demais têm a forma de chamada; as que podem não caber dão panic (veja [tipos.md](tipos.md)).
 - **Constantes sem tipo:** literais numéricos assumem o tipo do contexto; sem contexto, viram `int` ou `float64`.
 - **Literal de array:** lista todos os elementos ou nenhum (`[3]int{}` é o valor zero).

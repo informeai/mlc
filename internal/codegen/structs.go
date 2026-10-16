@@ -10,8 +10,8 @@ import (
 
 // Structs viram "struct mlc_st_<Nome>" com campos f_<nome>. O prefixo evita
 // colisão com palavras reservadas do C (um campo pode se chamar default).
-// Para cada struct também são geradas mlc_eq_<Nome> (==) e mlc_print_<Nome>
-// (io.print), em ordem de dependência: uma struct só usa as já definidas.
+// Para cada struct também é gerada mlc_eq_<Nome> (==), em ordem de
+// dependência: uma struct só usa as já definidas.
 
 func structCType(s *checker.Struct) string { return "mlc_st_" + s.CName }
 
@@ -43,7 +43,6 @@ func (g *gen) structs() {
 	for _, e := range g.info.Enums {
 		g.valueType(e, done)
 	}
-	g.slicePrints()
 }
 
 // valueType define a struct ou o array t (e antes, os que t contém por valor),
@@ -91,9 +90,8 @@ func (g *gen) structDef(s *checker.Struct) {
 		g.raw("    char mlc_empty;\n")
 	}
 	g.raw("};\n\n")
-	if !s.Resource { // struct com ponteiros donos não é comparada nem impressa
+	if !s.Resource { // struct com ponteiros donos não é comparada
 		g.structEq(s)
-		g.structPrint(s)
 	}
 }
 
@@ -109,19 +107,6 @@ func (g *gen) structEq(s *checker.Struct) {
 	}
 	t := structCType(s)
 	g.raw("static bool mlc_eq_%s(%s a, %s b) {\n    return %s;\n}\n\n", s.CName, t, t, body)
-}
-
-// structPrint imprime no formato {campo1 campo2}, como o %v do Go.
-func (g *gen) structPrint(s *checker.Struct) {
-	g.raw("static void mlc_print_%s(%s v) {\n", s.CName, structCType(s))
-	g.raw("    mlc_io_print_str(MLC_STR_LIT(\"{\", 1));\n")
-	for i, f := range s.Fields {
-		if i > 0 {
-			g.raw("    mlc_io_print_sep();\n")
-		}
-		g.raw("    %s;\n", printCall(f.Type, "v.f_"+f.Name))
-	}
-	g.raw("    mlc_io_print_str(MLC_STR_LIT(\"}\", 1));\n}\n\n")
 }
 
 // eqExpr compara dois valores do tipo t em C.
@@ -140,36 +125,6 @@ func eqExpr(t checker.Type, a, b string) string {
 		return fmt.Sprintf("mlc_string_eq(%s, %s)", a, b)
 	}
 	return fmt.Sprintf("%s == %s", a, b)
-}
-
-// printCall imprime um valor do tipo t, sem separador nem quebra de linha.
-func printCall(t checker.Type, v string) string {
-	if en, ok := t.(*checker.Enum); ok {
-		return fmt.Sprintf("mlc_print_%s(%s)", mangle(en), v)
-	}
-	if a, ok := t.(*checker.Array); ok {
-		return fmt.Sprintf("mlc_print_%s(%s)", mangle(a), v)
-	}
-	if s, ok := printNumber(t, v); ok {
-		return s
-	}
-	switch t := t.(type) {
-	case *checker.Slice:
-		return fmt.Sprintf("mlc_print_%s(%s)", sliceCType(t), v)
-	case *checker.Struct:
-		return fmt.Sprintf("mlc_print_%s(%s)", t.CName, v)
-	}
-	switch t {
-	case checker.Int:
-		return "mlc_io_print_int(" + v + ")"
-	case checker.Byte:
-		return "mlc_io_print_int((int64_t)(" + v + "))"
-	case checker.Bool:
-		return "mlc_io_print_bool(" + v + ")"
-	case checker.String:
-		return "mlc_io_print_str(" + v + ")"
-	}
-	panic(fmt.Sprintf("codegen: tipo sem impressão: %s", t))
 }
 
 func (g *gen) composite(e *ast.CompositeLit) string {

@@ -1,0 +1,7 @@
+// erro: o primeiro parâmetro de Area.area precisa ser self &Self
+interface Area {
+    fn area(x int) int
+}
+
+fn main() {
+}

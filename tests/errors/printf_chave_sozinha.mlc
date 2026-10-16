@@ -1,0 +1,6 @@
+// erro: '{' sozinho no formato de io.printf
+import "std/io"
+
+fn main() {
+    io.printf("a { b\n")
+}

@@ -1,0 +1,6 @@
+// erro: io.printf só pode ser usado como chamada
+import "std/io"
+
+fn main() {
+    f := io.printf
+}

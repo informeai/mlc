@@ -1,0 +1,6 @@
+// erro: o formato tem 2 {} e a chamada passa 1 valor(es)
+import "std/io"
+
+fn main() {
+    io.printf("{} e {}\n", 1)
+}

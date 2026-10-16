@@ -1,0 +1,7 @@
+// erro: o formato de io.printf precisa ser uma string literal
+import "std/io"
+
+fn main() {
+    f := "{}"
+    io.printf(f, 1)
+}

@@ -34,3 +34,5 @@ fn main() {
     }
     io.print("for:", total)
 }
+
+impl auto io.Display for Par

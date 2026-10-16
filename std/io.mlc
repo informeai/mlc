@@ -1,10 +1,10 @@
 // Entrada e saída padrão. Nada aqui aloca: read_line lê num buffer de quem
-// chama.
+// chama, e a escrita formatada passa por um Writer com buffer fixo na pilha.
 //
-// io.print(a, b, ...) também é deste módulo, mas é embutido no compilador:
-// aceita qualquer quantidade de argumentos, de qualquer tipo, e vira uma
-// chamada tipada por argumento (não existe printf). Separa os valores com
-// espaço e termina a linha.
+// io.print(a, b, ...) e io.printf("x = {}\n", x) são reescritos pelo
+// compilador em chamadas aos métodos write (da interface Display) de cada
+// valor, sobre um Writer. Toda a formatação está aqui, em MLC; só a dos
+// números reais e a escrita no arquivo ficam no runtime C.
 
 // write escreve os bytes de s, sem quebra de linha.
 pub extern fn write(s &[]byte)
@@ -16,3 +16,213 @@ pub extern fn write_line(s &[]byte)
 // bytes leu. Se a linha não couber, o resto fica para a próxima chamada.
 // No fim da entrada devolve -1.
 pub extern fn read_line(dst &[]byte) int
+
+// ---------- escrita formatada ----------
+
+// Display é o que io.print e io.printf sabem escrever. Para structs e
+// enums, impl auto io.Display for T gera o write no formato {1 2} /
+// Circulo(2); ou escreva o método à mão.
+pub interface Display {
+    fn write(self &Self, w &Writer)
+}
+
+// Writer junta a saída num buffer fixo e escreve no arquivo (1: saída
+// padrão, 2: erro padrão) quando enche ou no flush.
+pub struct Writer {
+    buf [256]byte
+    n int
+    fd int
+}
+
+extern fn write_fd(fd int, b &[]byte)
+extern fn format_f64(dst &[]byte, x float64) int
+extern fn format_f32(dst &[]byte, x float32) int
+
+// stdout cria um Writer para a saída padrão.
+pub fn stdout() Writer {
+    var w Writer
+    w.fd = 1
+    return w
+}
+
+// stderr cria um Writer para o erro padrão.
+pub fn stderr() Writer {
+    var w Writer
+    w.fd = 2
+    return w
+}
+
+// flush escreve o que está no buffer.
+pub fn (w &Writer) flush() {
+    if w.n > 0 {
+        write_fd(w.fd, &w.buf[:w.n])
+        w.n = 0
+    }
+}
+
+pub fn (w &Writer) put_byte(b byte) {
+    if w.n == len(w.buf) {
+        w.flush()
+    }
+    w.buf[w.n] = b
+    w.n++
+}
+
+pub fn (w &Writer) put_bytes(b &[]byte) {
+    for i := 0; i < len(b); i++ {
+        w.put_byte(b[i])
+    }
+}
+
+pub fn (w &Writer) put_str(s string) {
+    for i := 0; i < len(s); i++ {
+        w.put_byte(s[i])
+    }
+}
+
+// put_int escreve n em decimal. Os dígitos são tirados com n negativo, para
+// o menor int (que não tem positivo correspondente) funcionar também.
+pub fn (w &Writer) put_int(n int) {
+    neg := n < 0
+    if !neg {
+        n = -n
+    }
+    var d [20]byte
+    k := len(d)
+    for {
+        k--
+        d[k] = byte(int('0') - n % 10)
+        n = n / 10
+        if n == 0 {
+            break
+        }
+    }
+    if neg {
+        w.put_byte('-')
+    }
+    w.put_bytes(&d[k:])
+}
+
+pub fn (w &Writer) put_uint(n uint64) {
+    var d [20]byte
+    k := len(d)
+    for {
+        k--
+        d[k] = '0' + byte(n % 10)
+        n = n / 10
+        if n == 0 {
+            break
+        }
+    }
+    w.put_bytes(&d[k:])
+}
+
+// put_float escreve x com o menor número de dígitos que o representa
+// exatamente (0.1, 1000, 1e+21), como o Go.
+pub fn (w &Writer) put_float(x float64) {
+    var d [32]byte
+    k := format_f64(&d, x)
+    w.put_bytes(&d[:k])
+}
+
+pub fn (w &Writer) put_f32(x float32) {
+    var d [32]byte
+    k := format_f32(&d, x)
+    w.put_bytes(&d[:k])
+}
+
+pub fn (w &Writer) put_bool(b bool) {
+    if b {
+        w.put_str("true")
+    } else {
+        w.put_str("false")
+    }
+}
+
+// ---------- Display dos tipos embutidos ----------
+
+impl Display for int {
+    fn (x &int) write(w &Writer) {
+        w.put_int(*x)
+    }
+}
+
+impl Display for int8 {
+    fn (x &int8) write(w &Writer) {
+        w.put_int(int(*x))
+    }
+}
+
+impl Display for int16 {
+    fn (x &int16) write(w &Writer) {
+        w.put_int(int(*x))
+    }
+}
+
+impl Display for int32 {
+    fn (x &int32) write(w &Writer) {
+        w.put_int(int(*x))
+    }
+}
+
+impl Display for byte {
+    fn (x &byte) write(w &Writer) {
+        w.put_int(int(*x))
+    }
+}
+
+impl Display for uint16 {
+    fn (x &uint16) write(w &Writer) {
+        w.put_uint(uint64(*x))
+    }
+}
+
+impl Display for uint32 {
+    fn (x &uint32) write(w &Writer) {
+        w.put_uint(uint64(*x))
+    }
+}
+
+impl Display for uint64 {
+    fn (x &uint64) write(w &Writer) {
+        w.put_uint(*x)
+    }
+}
+
+impl Display for float64 {
+    fn (x &float64) write(w &Writer) {
+        w.put_float(*x)
+    }
+}
+
+impl Display for float32 {
+    fn (x &float32) write(w &Writer) {
+        w.put_f32(*x)
+    }
+}
+
+impl Display for bool {
+    fn (x &bool) write(w &Writer) {
+        w.put_bool(*x)
+    }
+}
+
+impl Display for string {
+    fn (x &string) write(w &Writer) {
+        w.put_str(*x)
+    }
+}
+
+// Um slice (ou array) é escrito como [a b c].
+impl[T Display] Display for []T {
+    fn (s &[]T) write(w &Writer) {
+        w.put_byte('[')
+        for i := 0; i < len(s); i++ {
+            if i > 0 {
+                w.put_byte(' ')
+            }
+            s[i].write(w)
+        }
+        w.put_byte(']')
+    }
+}

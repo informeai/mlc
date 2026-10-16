@@ -202,7 +202,7 @@ O runtime conta as alocações vivas. No fim do `main`, se sobrou alguma, o prog
 | estouro de inteiro com sinal | `__builtin_*_overflow` | execução (panic) |
 | divisão por zero | checagem antes de dividir | execução (panic) |
 | ordem de avaliação indefinida | esquerda para a direita, escrita no C gerado | compilação |
-| string de formato (`printf`) | `io.print` gera chamadas tipadas | compilação |
+| string de formato (`printf`) | formato de `io.printf` conferido contra os valores; cada um escrito pelo seu `io.Display` | compilação |
 | buffer overflow | checagem de limites em slices e strings | execução (panic) |
 
 ## O que o MLC não garante

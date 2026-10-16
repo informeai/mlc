@@ -119,13 +119,17 @@ func (c *checker) methodCall(e *ast.CallExpr, sel *ast.SelectorExpr) (Type, bool
 	t := c.value(sel.X)
 	s := structBehind(t)
 	if s == nil {
-		return nil, false
+		// int, []T, parâmetros de tipo...: só métodos de impl
+		return c.implMethodCall(e, sel, t)
 	}
 	m := s.Methods[sel.Sel]
 	if m == nil && s.Origin != nil {
 		m = c.instMethod(s, sel.Sel) // método de struct genérica
 	}
 	if m == nil {
+		if rt, ok := c.implMethodCall(e, sel, t); ok {
+			return rt, true // método de um impl com bloco (ou impl auto)
+		}
 		if s.Field(sel.Sel) != nil {
 			c.errorf(sel.SelPos, "%s.%s é um campo, não um método", s.Name, sel.Sel)
 		} else {

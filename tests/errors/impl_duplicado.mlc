@@ -1,0 +1,19 @@
+// erro: int já implementa Area (linha 6
+interface Area {
+    fn area(self &Self) int
+}
+
+impl Area for int {
+    fn (x &int) area() int {
+        return *x
+    }
+}
+
+impl Area for int {
+    fn (x &int) area() int {
+        return 0
+    }
+}
+
+fn main() {
+}

@@ -3,9 +3,11 @@ package driver
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -135,15 +137,26 @@ fn main() {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// as temporárias são numeradas no programa todo (a biblioteca também
+	// usa): renumera as da main na ordem em que aparecem
+	start := strings.Index(csrc, "mlc_fn_main(void) {")
+	body := csrc[start:]
+	names := map[string]string{}
+	body = regexp.MustCompile(`mlc_t_[0-9]+`).ReplaceAllStringFunc(body, func(n string) string {
+		if _, ok := names[n]; !ok {
+			names[n] = fmt.Sprintf("t%d", len(names)+1)
+		}
+		return names[n]
+	})
 	for _, want := range []string{
-		"mlc_t_1 = mlc_fn_a(), mlc_fn_soma(mlc_t_1, mlc_fn_b())",
-		"mlc_t_3 = mlc_fn_a(), mlc_sub_i64(mlc_t_3, mlc_fn_b(), __FILE__, __LINE__)",
-		// io.print calcula todos os argumentos antes de imprimir
-		"(mlc_t_2 = (mlc_t_1", "mlc_t_4 = (mlc_t_3",
-		"mlc_t_4 = (mlc_t_3 = mlc_fn_a(), mlc_sub_i64(mlc_t_3, mlc_fn_b(), __FILE__, __LINE__)), mlc_io_print_int((int64_t)(mlc_t_2))",
+		// t1 é o io.Writer; os argumentos vão para t2 e t4, da esquerda para a direita
+		"t2 = (t3 = mlc_fn_a(), mlc_fn_soma(t3, mlc_fn_b()))",
+		"t4 = (t5 = mlc_fn_a(), mlc_sub_i64(t5, mlc_fn_b(), __FILE__, __LINE__))",
+		// io.print calcula todos os argumentos antes de escrever
+		"t4 = (t5 = mlc_fn_a(), mlc_sub_i64(t5, mlc_fn_b(), __FILE__, __LINE__)), mlc_fn_m0_io__impl_Display__int__write(&t2, &t1)",
 	} {
-		if !strings.Contains(csrc, want) {
-			t.Errorf("C gerado não contém %q:\n%s", want, csrc)
+		if !strings.Contains(body, want) {
+			t.Errorf("C gerado não contém %q:\n%s", want, body)
 		}
 	}
 }

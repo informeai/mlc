@@ -83,3 +83,5 @@ fn main() {
     io.print("no heap:", h.area())
     free(h)
 }
+
+impl auto io.Display for Contador

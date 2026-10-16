@@ -14,7 +14,7 @@ fn main() {
 }
 ```
 
-Tudo que vem com a linguagem está aqui, inclusive entrada e saída (`std/io`) e texto (`std/str`), detalhados em [texto.md](texto.md). A única parte que não é escrita em MLC é `io.print`: ele aceita qualquer quantidade de argumentos, de qualquer tipo, então é embutido no compilador, que gera uma chamada tipada por argumento.
+Tudo que vem com a linguagem está aqui, inclusive entrada e saída (`std/io`) e texto (`std/str`), detalhados em [texto.md](texto.md). Até a impressão é MLC: `io.print` e `io.printf` são reescritos pelo compilador em chamadas aos métodos `write` (interface `io.Display`) de cada valor, implementados em [`std/io.mlc`](../std/io.mlc). Veja [interfaces.md](interfaces.md).
 
 ## Regras da biblioteca
 
@@ -35,7 +35,7 @@ Tudo que vem com a linguagem está aqui, inclusive entrada e saída (`std/io`) e
 
 ### `std/io` e `std/str`
 
-Entrada e saída (`io.print`, `io.write`, `io.write_line`, `io.read_line`) e texto em buffers (`str.copy`, `str.put_int`, `str.parse_int`, ...). Veja [texto.md](texto.md). As funções de `str` que podem dar panic por falta de espaço são `extern fn`, para o panic apontar a linha de quem chamou; as outras (`int_len`, `eq`, `eq_bytes`, `parse_int`) são MLC, em [`std/str.mlc`](../std/str.mlc).
+Entrada e saída (`io.print`, `io.printf`, `io.eprint`, `io.eprintf`, `io.write`, `io.write_line`, `io.read_line`), a interface `io.Display` e o `io.Writer` (escrita com buffer fixo na pilha), veja [interfaces.md](interfaces.md); e texto em buffers (`str.copy`, `str.put_int`, `str.parse_int`, ...). Veja [texto.md](texto.md). As funções de `str` que podem dar panic por falta de espaço são `extern fn`, para o panic apontar a linha de quem chamou; as outras (`int_len`, `eq`, `eq_bytes`, `parse_int`) são MLC, em [`std/str.mlc`](../std/str.mlc).
 
 ### `std/result`
 

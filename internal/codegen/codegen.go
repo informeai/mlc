@@ -444,31 +444,39 @@ func (g *gen) cond(e ast.Expr) string {
 // Como em qualquer chamada, todos os argumentos são calculados antes de
 // imprimir: se algum tem efeito, os que não são literais vão para
 // temporárias, e só depois começam as impressões.
+// ioPrint traduz io.print e io.printf conforme o plano do checker: os
+// valores vão para temporárias (da esquerda para a direita, antes de escrever
+// qualquer coisa) e cada um é escrito pelo seu método write, sobre um
+// io.Writer na pilha.
 func (g *gen) ioPrint(call *ast.CallExpr) string {
-	effects := false
-	for _, a := range call.Args {
-		effects = effects || g.effectful(a)
+	plan := g.info.Prints[call]
+	w := g.temp(plan.Writer)
+	parts := []string{
+		fmt.Sprintf("%s = %s", w, zeroValue(plan.Writer)),
+		fmt.Sprintf("%s.f_fd = INT64_C(%d)", w, plan.Fd),
 	}
-	var parts []string
-	vals := make([]string, len(call.Args))
-	for i, a := range call.Args {
-		vals[i] = g.expr(a)
-		if effects && !g.isLiteral(a) {
-			t := g.temp(g.info.Types[a])
-			parts = append(parts, t+" = "+vals[i])
-			vals[i] = t
+	vals := make([]string, len(plan.Args))
+	for i, a := range plan.Args {
+		vals[i] = g.temp(plan.ArgTypes[i])
+		parts = append(parts, vals[i]+" = "+g.expr(a))
+	}
+	for _, p := range plan.Parts {
+		if p.Arg < 0 {
+			parts = append(parts, fmt.Sprintf("%s(&%s, %s)", plan.PutStr.CName, w, constant(p.Lit, checker.String)))
+			continue
 		}
-	}
-	for i, a := range call.Args {
-		if i > 0 {
-			parts = append(parts, "mlc_io_print_sep()")
+		v, t := vals[p.Arg], plan.ArgTypes[p.Arg]
+		recv := "&" + v
+		if p.Ptr {
+			recv, v, t = v, "(*"+v+")", t.(*checker.Borrow).Elem // o empréstimo já é o ponteiro
 		}
-		parts = append(parts, printCall(g.info.Types[a], vals[i]))
+		if p.View {
+			at := t.(*checker.Array)
+			recv = fmt.Sprintf("&(%s){%s.a, INT64_C(%d)}", sliceCType(&checker.Slice{Elem: at.Elem}), v, at.Len)
+		}
+		parts = append(parts, fmt.Sprintf("%s(%s, &%s)", p.Write.CName, recv, w))
 	}
-	parts = append(parts, "mlc_io_print_newline()")
-	if len(parts) == 1 {
-		return parts[0]
-	}
+	parts = append(parts, fmt.Sprintf("%s(&%s)", plan.Flush.CName, w))
 	return "(" + strings.Join(parts, ", ") + ")"
 }
 

@@ -123,6 +123,8 @@ func classifyIdent(toks []token.Token, i int, at func(int) token.Kind, modules m
 	switch {
 	case name == "true" || name == "false" || name == "nil":
 		return tKeyword, 0
+	case name == "auto" && (prev == token.IMPL || prev == token.RBRACK) && next == token.IDENT:
+		return tKeyword, 0 // impl auto io.Display for T
 	case basicTypes[name] && !afterDot:
 		return tType, mDefaultLibrary
 	case next == token.PERIOD && modules[name] && !afterDot:

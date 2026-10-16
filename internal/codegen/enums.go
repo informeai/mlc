@@ -50,24 +50,6 @@ func (g *gen) enumDef(e *checker.Enum) {
 		g.raw("    case %d: return %s;\n", v.Tag, strings.Join(conds, " && "))
 	}
 	g.raw("    }\n    return true;\n}\n\n")
-
-	// impressão: Circulo(2.5), Vazio
-	g.raw("static void mlc_print_%s(%s v) {\n    switch (v.tag) {\n", mangle(e), t)
-	for _, v := range e.Variants {
-		g.raw("    case %d:\n        mlc_io_print_str(%s);\n", v.Tag, constant(v.Name, checker.String))
-		if len(v.Fields) > 0 {
-			g.raw("        mlc_io_print_str(MLC_STR_LIT(\"(\", 1));\n")
-			for i, f := range v.Fields {
-				if i > 0 {
-					g.raw("        mlc_io_print_str(MLC_STR_LIT(\", \", 2));\n")
-				}
-				g.raw("        %s;\n", printCall(f.Type, fmt.Sprintf("v.u.v_%s.f_%s", v.Name, f.Name)))
-			}
-			g.raw("        mlc_io_print_str(MLC_STR_LIT(\")\", 1));\n")
-		}
-		g.raw("        break;\n")
-	}
-	g.raw("    }\n}\n\n")
 }
 
 // enumCtor traduz Forma.Circulo(r) ou Forma.Vazio.

@@ -166,18 +166,3 @@ func floatBounds(t checker.Type) (string, string) {
 	}
 	return floatLit(lo, checker.Float64), floatLit(hi, checker.Float64)
 }
-
-// printNumber imprime um número com io.print.
-func printNumber(t checker.Type, v string) (string, bool) {
-	switch {
-	case t == checker.Float64:
-		return "mlc_io_print_f64(" + v + ")", true
-	case t == checker.Float32:
-		return "mlc_io_print_f32(" + v + ")", true
-	case checker.IsInteger(t) && checker.IsSigned(t):
-		return "mlc_io_print_int((int64_t)(" + v + "))", true
-	case checker.IsInteger(t):
-		return "mlc_io_print_uint((uint64_t)(" + v + "))", true
-	}
-	return "", false
-}

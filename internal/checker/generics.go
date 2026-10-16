@@ -28,6 +28,7 @@ import (
 type TypeVar struct {
 	Name       string
 	Constraint string
+	Iface      *Interface // restrição que é uma interface (nil nas embutidas)
 }
 
 func (t *TypeVar) String() string { return t.Name }
@@ -116,6 +117,8 @@ func typeName(t Type) string {
 	switch t := t.(type) {
 	case *Struct:
 		return t.CName
+	case *Enum:
+		return t.CName
 	case *Slice:
 		return "sl_" + typeName(t.Elem)
 	case *Array:
@@ -175,14 +178,11 @@ func (c *checker) typeVars(params []*ast.TypeParam) []Type {
 	var vs []Type
 	seen := map[string]bool{}
 	for _, p := range params {
-		if !constraints[p.Constraint] {
-			c.errorf(p.P, "restrição desconhecida %q (use any, comparable, ordered, number ou integer)", p.Constraint)
-		}
 		if seen[p.Name] {
 			c.errorf(p.P, "parâmetro de tipo %s repetido", p.Name)
 		}
 		seen[p.Name] = true
-		vs = append(vs, &TypeVar{Name: p.Name, Constraint: p.Constraint})
+		vs = append(vs, c.newTypeVar(p.Name, p))
 	}
 	return vs
 }
@@ -199,10 +199,15 @@ func (c *checker) checkTypeArgs(what string, params []*ast.TypeParam, args []Typ
 			ok = false
 			continue
 		}
-		if !satisfies(args[i], p.Constraint) {
+		if !c.satisfiesParam(args[i], p) {
 			reason := ""
-			if IsOwner(args[i]) || isBorrow(args[i]) || isResource(args[i]) {
+			switch {
+			case IsOwner(args[i]) || isBorrow(args[i]) || isResource(args[i]):
 				reason = " (argumentos de tipo não podem ser donos nem empréstimos nesta versão)"
+			case !constraints[p.Constraint]:
+				c.errorf(pos, "%s não implementa %s, exigida por %s em %s (declare impl %s for %s)", args[i], p.Constraint, p.Name, what, p.Constraint, args[i])
+				ok = false
+				continue
 			}
 			c.errorf(pos, "%s não atende %s, exigida por %s em %s%s", args[i], p.Constraint, p.Name, what, reason)
 			ok = false
@@ -648,7 +653,7 @@ func (c *checker) collectGenericMethod(d *ast.FuncDecl, s *Struct, named *ast.Ty
 	// checagem abstrata: uma instância de s com TypeVars no lugar dos tipos
 	var vars []Type
 	for i, a := range named.Args {
-		vars = append(vars, &TypeVar{Name: a.Name, Constraint: s.Params[i].Constraint})
+		vars = append(vars, c.newTypeVar(a.Name, s.Params[i]))
 	}
 	inst, ok := c.instStruct(s, vars, named.P).(*Struct)
 	if !ok {

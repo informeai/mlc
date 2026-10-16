@@ -8,12 +8,43 @@ type Node interface {
 }
 
 type File struct {
-	Imports []*Import
-	Structs []*StructDecl
-	Enums   []*EnumDecl
-	Consts  []*ConstDecl // na ordem do arquivo
-	Funcs   []*FuncDecl
+	Imports    []*Import
+	Structs    []*StructDecl
+	Enums      []*EnumDecl
+	Consts     []*ConstDecl // na ordem do arquivo
+	Funcs      []*FuncDecl
+	Interfaces []*InterfaceDecl
+	Impls      []*ImplDecl
 }
+
+// InterfaceDecl é "interface Display { fn write(self &Self, w &Writer) }":
+// assinaturas de métodos que um tipo implementa com impl. Nesta versão, uma
+// interface só serve como restrição de genérico.
+type InterfaceDecl struct {
+	Name    string
+	Pub     bool
+	Methods []*FuncDecl // sem corpo; o primeiro parâmetro é o receptor (self &Self)
+	P       token.Pos
+}
+
+// ImplDecl declara que um tipo implementa uma interface:
+//
+//	impl Display for Ponto                       (com os métodos da struct)
+//	impl Display for int { fn (x &int) write(...) {...} }
+//	impl[T Display] Display for []T { ... }       (genérico)
+//	impl auto Display for Ponto                  (write gerado)
+type ImplDecl struct {
+	TypeParams []*TypeParam
+	Auto       bool
+	Iface      *TypeExpr // a interface (Display ou io.Display)
+	Type       *TypeExpr
+	Methods    []*FuncDecl // forma com bloco; nil na forma de uma linha
+	Block      bool        // tem bloco { } (mesmo vazio)
+	P          token.Pos
+}
+
+func (n *InterfaceDecl) Pos() token.Pos { return n.P }
+func (n *ImplDecl) Pos() token.Pos      { return n.P }
 
 type StructDecl struct {
 	Name       string

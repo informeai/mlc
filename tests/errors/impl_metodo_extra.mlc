@@ -1,0 +1,16 @@
+// erro: volume não é método da interface Area
+interface Area {
+    fn area(self &Self) int
+}
+
+impl Area for int {
+    fn (x &int) area() int {
+        return *x
+    }
+    fn (x &int) volume() int {
+        return *x
+    }
+}
+
+fn main() {
+}

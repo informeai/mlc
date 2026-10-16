@@ -1,0 +1,18 @@
+// erro: o campo c (Cor) não implementa io.Display
+import "std/io"
+
+struct Cor {
+    r byte
+}
+
+struct Pixel {
+    x int
+    c Cor
+}
+
+impl auto io.Display for Pixel
+
+fn main() {
+    p := Pixel{x: 1, c: Cor{r: 2}}
+    io.print(p)
+}

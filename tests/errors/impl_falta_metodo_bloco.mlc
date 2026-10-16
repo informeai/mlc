@@ -1,0 +1,10 @@
+// erro: int não implementa Area: falta o método area
+interface Area {
+    fn area(self &Self) int
+}
+
+impl Area for int {
+}
+
+fn main() {
+}

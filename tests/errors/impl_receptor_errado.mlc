@@ -1,0 +1,13 @@
+// erro: o receptor de area precisa ser &int
+interface Area {
+    fn area(self &Self) int
+}
+
+impl Area for int {
+    fn (x &bool) area() int {
+        return 1
+    }
+}
+
+fn main() {
+}

@@ -1,0 +1,12 @@
+// erro: []Q não implementa io.Display, porque Q não implementa
+import "std/io"
+
+struct Q {
+    l int
+}
+
+fn main() {
+    s := alloc([]Q, 1)
+    io.print(s)
+    free(s)
+}

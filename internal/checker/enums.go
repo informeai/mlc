@@ -258,7 +258,7 @@ func (c *checker) inferEnum(node ast.Expr, en *Enum, sel *ast.SelectorExpr, args
 	}
 	var vars []Type
 	for _, p := range en.Params {
-		vars = append(vars, &TypeVar{Name: p.Name, Constraint: p.Constraint})
+		vars = append(vars, c.newTypeVar(p.Name, p))
 	}
 	abs, ok := c.instEnum(en, vars, sel.SelPos).(*Enum)
 	if !ok {

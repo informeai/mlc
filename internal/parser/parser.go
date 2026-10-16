@@ -145,8 +145,12 @@ func (p *Parser) parseFile() *ast.File {
 			f.Enums = append(f.Enums, p.parseEnum())
 		case token.CONST:
 			f.Consts = append(f.Consts, p.parseConst())
+		case token.INTERFACE:
+			f.Interfaces = append(f.Interfaces, p.parseInterface())
+		case token.IMPL:
+			f.Impls = append(f.Impls, p.parseImpl())
 		default:
-			p.unexpected("esperado declaração (import, fn, struct, enum ou const)")
+			p.unexpected("esperado declaração (import, fn, struct, enum, const, interface ou impl)")
 		}
 	}
 	return f
@@ -757,8 +761,12 @@ func (p *Parser) parsePub(f *ast.File) {
 		c := p.parseConst()
 		c.Pub = true
 		f.Consts = append(f.Consts, c)
+	case token.INTERFACE:
+		in := p.parseInterface()
+		in.Pub = true
+		f.Interfaces = append(f.Interfaces, in)
 	default:
-		p.errorf(pos, "pub só vale antes de fn, struct, enum ou const")
+		p.errorf(pos, "pub só vale antes de fn, struct, enum, const ou interface")
 	}
 }
 
@@ -800,10 +808,17 @@ func (p *Parser) parseTypeParams() []*ast.TypeParam {
 	for {
 		name := p.expect(token.IDENT)
 		if p.tok.Kind != token.IDENT {
-			p.unexpected("esperado a restrição do parâmetro de tipo (any, comparable, ordered, number ou integer)")
+			p.unexpected("esperado a restrição do parâmetro de tipo (any, comparable, ordered, number, integer ou uma interface)")
 		}
-		params = append(params, &ast.TypeParam{Name: name.Lit, Constraint: p.tok.Lit, P: name.Pos})
+		constraint := p.tok.Lit
 		p.next()
+		if p.tok.Kind == token.PERIOD && p.peek.Kind == token.IDENT {
+			// interface de outro arquivo: T io.Display
+			p.next()
+			constraint += "." + p.tok.Lit
+			p.next()
+		}
+		params = append(params, &ast.TypeParam{Name: name.Lit, Constraint: constraint, P: name.Pos})
 		if p.tok.Kind != token.COMMA {
 			break
 		}
@@ -857,6 +872,67 @@ func (p *Parser) genericComposite(x ast.Expr) *ast.CompositeLit {
 	}
 	lit.TypeArgs = args
 	return lit
+}
+
+// parseInterface lê "interface Display { fn write(self &Self, w &Writer) }":
+// assinaturas de métodos, sem corpo.
+func (p *Parser) parseInterface() *ast.InterfaceDecl {
+	pos := p.expect(token.INTERFACE).Pos
+	in := &ast.InterfaceDecl{Name: p.expect(token.IDENT).Lit, P: pos}
+	p.expect(token.LBRACE)
+	for p.tok.Kind != token.RBRACE && p.tok.Kind != token.EOF {
+		if p.tok.Kind == token.SEMICOLON {
+			p.next()
+			continue
+		}
+		if p.tok.Kind != token.FN {
+			p.unexpected("esperado fn: uma interface só tem assinaturas de métodos")
+		}
+		p.extern = true // sem corpo, como um extern fn
+		m := p.parseFunc()
+		p.extern = false
+		m.Extern = false
+		in.Methods = append(in.Methods, m)
+	}
+	p.expect(token.RBRACE)
+	p.expectEOS()
+	return in
+}
+
+// parseImpl lê "impl [T C] [auto] Interface for Tipo [{ métodos }]".
+func (p *Parser) parseImpl() *ast.ImplDecl {
+	pos := p.expect(token.IMPL).Pos
+	d := &ast.ImplDecl{P: pos}
+	if p.tok.Kind == token.LBRACK {
+		d.TypeParams = p.parseTypeParams()
+	}
+	if p.tok.Kind == token.IDENT && p.tok.Lit == "auto" && p.peek.Kind == token.IDENT {
+		d.Auto = true
+		p.next()
+	}
+	d.Iface = p.parseType()
+	if p.tok.Kind != token.FOR {
+		p.unexpected("esperado for: impl Interface for Tipo")
+	}
+	p.next()
+	d.Type = p.parseType()
+	if p.tok.Kind == token.LBRACE {
+		d.Block = true
+		p.next()
+		for p.tok.Kind != token.RBRACE && p.tok.Kind != token.EOF {
+			if p.tok.Kind == token.SEMICOLON {
+				p.next()
+				continue
+			}
+			if p.tok.Kind != token.FN {
+				p.unexpected("esperado fn: o bloco de um impl só tem os métodos da interface")
+			}
+			d.Methods = append(d.Methods, p.parseFunc())
+		}
+		p.expect(token.RBRACE)
+	}
+	p.expectEOS()
+	return d
 }
 
 // parseEnum lê "enum Forma { Circulo(raio float64); Vazio }".

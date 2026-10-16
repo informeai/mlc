@@ -128,6 +128,10 @@ func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 	switch {
 	case t.Module != "":
 		// tipo de outro arquivo: geometria.Ponto
+		if m := c.mod.uses[t.Module]; m != nil && m.ifaces[t.Name] != nil {
+			c.errorf(t.P, "%s.%s é uma interface: nesta versão, interfaces só servem de restrição de genérico, como fn f[T %s.%s](x &T)", t.Module, t.Name, t.Module, t.Name)
+			return Invalid
+		}
 		if m := c.mod.uses[t.Module]; m != nil && m.enums[t.Name] != nil {
 			en := m.enums[t.Name]
 			if !en.Pub {
@@ -155,6 +159,9 @@ func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 		s = c.mod.structs[t.Name]
 	case c.mod.enums[t.Name] != nil:
 		return c.resolveEnum(c.mod.enums[t.Name], t)
+	case c.mod.ifaces[t.Name] != nil:
+		c.errorf(t.P, "%s é uma interface: nesta versão, interfaces só servem de restrição de genérico, como fn f[T %s](x &T)", t.Name, t.Name)
+		return Invalid
 	default:
 		c.errorf(t.P, "tipo desconhecido %s", t.Name)
 		return Invalid

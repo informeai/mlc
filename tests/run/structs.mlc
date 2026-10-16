@@ -91,3 +91,13 @@ fn main() {
     }
     io.print(r.largura)
 }
+
+impl auto io.Display for Ponto
+
+impl auto io.Display for Retangulo
+
+impl auto io.Display for Palavras
+
+impl auto io.Display for Vazio
+
+impl auto io.Display for Linha

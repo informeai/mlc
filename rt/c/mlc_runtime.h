@@ -29,15 +29,6 @@ static inline bool mlc_string_eq(mlc_str a, mlc_str b) {
 /* Encerra o programa com uma mensagem apontando para a linha do .mlc. */
 _Noreturn void mlc_panic(const char *file, int line, const char *msg);
 
-void mlc_io_print_int(int64_t v);
-void mlc_io_print_uint(uint64_t v);
-void mlc_io_print_f64(double v);
-void mlc_io_print_f32(float v);
-void mlc_io_print_bool(bool v);
-void mlc_io_print_str(mlc_str s);
-void mlc_io_print_sep(void);
-void mlc_io_print_newline(void);
-
 /* Memória. mlc_alloc devolve memória zerada e dá panic se faltar memória,
  * então um ponteiro *T nunca é nulo. O contador de alocações vivas é uma
  * rede de segurança: o compilador já garante que todo alloc tem seu free, e

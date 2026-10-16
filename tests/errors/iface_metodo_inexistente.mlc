@@ -1,0 +1,11 @@
+// erro: T não tem método perimetro
+interface Area {
+    fn area(self &Self) int
+}
+
+fn f[T Area](a &T) int {
+    return a.perimetro()
+}
+
+fn main() {
+}

@@ -1,0 +1,8 @@
+// erro: Area é uma interface: nesta versão, interfaces só servem de restrição de genérico
+interface Area {
+    fn area(self &Self) int
+}
+
+fn main() {
+    var a Area
+}

@@ -324,6 +324,11 @@ func (n *navigator) calleeSymbol(call *ast.CallExpr) *symbol {
 	}
 	if c.Builtin == checker.IoPrint {
 		d := builtinDocs["print"]
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+			if dd, ok := builtinDocs[sel.Sel]; ok {
+				d = dd
+			}
+		}
 		s := n.moduleSymbol("std/io")
 		if s == nil {
 			return &symbol{code: d[0], doc: d[1], noDef: true}
@@ -511,6 +516,28 @@ func (n *navigator) declAt(src *checker.Source, p token.Pos) *symbol {
 			return &symbol{file: src.File, pos: d.P, code: lineAt(text, d.P), doc: docAbove(text, d.P)}
 		}
 	}
+	for _, d := range f.Interfaces {
+		if namePos(text, d.P, d.Name) == p {
+			return n.blockSymbol(src.File, d.P, d.Name)
+		}
+		for _, m := range d.Methods {
+			if namePos(text, m.P, m.Name) == p {
+				return &symbol{file: src.File, pos: p, code: signature(text, m.P), doc: strings.TrimSpace(docAbove(text, m.P) + "\n\nmétodo da interface `" + d.Name + "`")}
+			}
+			for _, prm := range m.Params {
+				if prm.P == p {
+					return &symbol{file: src.File, pos: p, code: prm.Name + " " + typeString(prm.Type), doc: "parâmetro de `" + d.Name + "." + m.Name + "`"}
+				}
+			}
+		}
+	}
+	for _, d := range f.Impls {
+		for _, m := range d.Methods {
+			if namePos(text, m.P, m.Name) == p {
+				return n.funcDeclSymbol(src, m)
+			}
+		}
+	}
 	return nil
 }
 
@@ -541,6 +568,13 @@ func (n *navigator) typeParam(name string, p token.Pos) *symbol {
 	}
 	for _, d := range f.Enums {
 		decls = append(decls, decl{d.P, d.TypeParams, d.Name})
+	}
+	for _, d := range f.Impls {
+		decls = append(decls, decl{d.P, d.TypeParams, "impl " + typeString(d.Iface) + " for " + typeString(d.Type)})
+		for _, m := range d.Methods {
+			// método do bloco: vê os parâmetros do impl e os próprios
+			decls = append(decls, decl{m.P, append(append([]*ast.TypeParam{}, d.TypeParams...), m.TypeParams...), m.Name})
+		}
 	}
 	// a declaração que contém p é a última que começa antes dele
 	var best *decl
@@ -627,6 +661,11 @@ func (n *navigator) declNamed(src *checker.Source, name string) *symbol {
 	for _, d := range f.Consts {
 		if d.Name == name {
 			return &symbol{file: src.File, pos: d.P, code: lineAt(text, d.P), doc: docAbove(text, d.P)}
+		}
+	}
+	for _, d := range f.Interfaces {
+		if d.Name == name {
+			return n.blockSymbol(src.File, d.P, d.Name)
 		}
 	}
 	return nil
@@ -780,7 +819,10 @@ var builtinDocs = map[string][2]string{
 	"take":       {"take(&s[i]) ?*T", "Tira o dono da posição `i` de um slice de donos, deixando `nil` no lugar."},
 	"replace":    {"replace(&s[i], v) ?*T", "Põe `v` na posição `i` e devolve o dono que estava lá."},
 	"drain":      {"for x in drain(s)", "Percorre um slice de donos tirando cada elemento; cada `x` precisa ser liberado ou movido."},
-	"print":      {"io.print(a, b, ...)", "Imprime os valores separados por espaço e termina a linha. Aceita qualquer quantidade de argumentos, de qualquer tipo sem ponteiros; é embutido no compilador."},
+	"print":      {"io.print(a, b, ...)", "Escreve os valores separados por espaço e termina a linha. Cada valor precisa implementar `io.Display` e é escrito pelo seu método `write`, sobre um `io.Writer` com buffer na pilha (sem alocação). O compilador só reescreve a chamada."},
+	"eprint":     {"io.eprint(a, b, ...)", "Como `io.print`, mas no erro padrão."},
+	"printf":     {"io.printf(\"x = {}\\n\", x)", "Escreve o formato trocando cada `{}` por um valor (que precisa implementar `io.Display`); `{{` e `}}` escrevem chaves. O formato é uma string literal, conferida na compilação: a quantidade de `{}` precisa bater com a de valores."},
+	"eprintf":    {"io.eprintf(\"erro: {}\\n\", e)", "Como `io.printf`, mas no erro padrão."},
 	"int":        {"int", "Inteiro com sinal de 64 bits. Estouro dá panic."},
 	"int8":       {"int8", "Inteiro com sinal de 8 bits (-128 a 127)."},
 	"int16":      {"int16", "Inteiro com sinal de 16 bits."},
@@ -796,6 +838,8 @@ var builtinDocs = map[string][2]string{
 	"bool":       {"bool", "`true` ou `false`."},
 	"string":     {"string", "Texto fixo do programa (literais). Não aloca e não precisa de `free`."},
 	"nil":        {"nil", "Ponteiro nulo; só cabe em `?*T`."},
+	"auto":       {"impl auto io.Display for T", "Gera o método `write` de uma struct ou enum, no formato `{1 2}` / `Circulo(2)`. Cada campo precisa implementar `io.Display`."},
+	"Self":       {"Self", "Numa interface, o tipo que a implementa."},
 	"true":       {"true", "Valor verdadeiro de `bool`."},
 	"false":      {"false", "Valor falso de `bool`."},
 	"any":        {"any", "Restrição de genérico: qualquer tipo que não seja dono."},

@@ -77,3 +77,7 @@ fn main() {
     io.print("pontos:", pontos.tamanho(), pontos.pega(2))
     pontos.libera()
 }
+
+impl auto io.Display for Ponto
+
+impl auto io.Display for Par

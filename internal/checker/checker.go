@@ -121,7 +121,8 @@ type Info struct {
 	Externs      []*Func                    // extern fn da biblioteca padrão, para o gerador declarar
 	Drains       map[*ast.ForStmt]ast.Expr  // for x in drain(s): o slice esvaziado
 	Calls        map[*ast.CallExpr]Callee
-	Funcs        []*Func // na ordem de declaração
+	Prints       map[*ast.CallExpr]*PrintPlan // io.print e io.printf reescritos
+	Funcs        []*Func                      // na ordem de declaração
 }
 
 type scope struct {
@@ -151,7 +152,11 @@ type checker struct {
 	pending     []pendingInst
 	instName    string // instância genérica em checagem, para as mensagens
 	abstracts   []abstractCheck
-	expected    Type // tipo esperado de expectedFor (para Resultado.Ok sem argumentos de tipo)
+	impls       []*Impl                       // impl de todos os arquivos já checados
+	paramIfaces map[*ast.TypeParam]*Interface // interface de cada restrição (resolvida na declaração)
+	tvMethods   map[string]*Func
+	autos       []autoImpl // impl auto do arquivo atual, para conferir os campos              // métodos de interface chamados em parâmetros de tipo
+	expected    Type       // tipo esperado de expectedFor (para Resultado.Ok sem argumentos de tipo)
 	expectedFor ast.Expr
 	litOK       bool // o próximo literal composto pode conter ponteiros donos (dentro de alloc)
 	borrows     map[Type]*Borrow
@@ -197,6 +202,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 			PatternBinds: map[*ast.Pattern][]*Local{},
 			Drains:       map[*ast.ForStmt]ast.Expr{},
 			Calls:        map[*ast.CallExpr]Callee{},
+			Prints:       map[*ast.CallExpr]*PrintPlan{},
 		},
 		pointers: map[ptrKey]*Pointer{},
 		borrows:  map[Type]*Borrow{},
@@ -204,6 +210,9 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 		arrays:   map[arrKey]*Array{},
 		building: map[*Struct]bool{},
 		breaks:   map[*ast.ForStmt]bool{},
+
+		paramIfaces: map[*ast.TypeParam]*Interface{},
+		tvMethods:   map[string]*Func{},
 	}
 	for i, src := range srcs {
 		c.order[src.File] = i
@@ -213,7 +222,9 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 		c.collectEnumNames(src.AST)
 		c.collectStructs(src.AST)
 		c.collectEnumVariants(src.AST)
+		c.collectInterfaces(src.AST)
 		c.collectFuncs(src.AST)
+		c.collectImpls(src.AST)
 		for _, fn := range c.info.Funcs {
 			if fn.mod == c.mod {
 				c.checkFunc(fn)
@@ -858,8 +869,8 @@ func (c *checker) call(e *ast.CallExpr) Type {
 			return c.genericCall(e, g, nil) // mod.f(args), genérica
 		}
 		if m := c.userModule(fun.X); m != nil {
-			if isIoPrint(m, fun.Sel) {
-				return c.ioPrint(e)
+			if kind := ioBuiltin(m, fun.Sel); kind != "" {
+				return c.ioPrint(e, kind)
 			}
 			return c.moduleCall(e, m, fun)
 		}

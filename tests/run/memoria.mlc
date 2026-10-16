@@ -103,3 +103,5 @@ fn main() {
     }
     destroi(c)
 }
+
+impl auto io.Display for Ponto

@@ -110,7 +110,7 @@ go test ./...
 - Conversão entre números que não cabe vira panic (em C seria comportamento indefinido); constante que não cabe é erro de compilação.
 - Estouro de inteiro, divisão por zero e índice fora dos limites viram panic com arquivo e linha do `.mlc`, nunca comportamento indefinido do C.
 - Diretivas `#line` no C gerado: panics e erros apontam para o código MLC.
-- Sem `printf` exposto: `io.print` gera chamadas tipadas por argumento.
+- Impressão checada na compilação: `io.printf("x = {}\n", x)` confere o formato e se cada valor implementa `io.Display`, e vira chamadas diretas, escritas em MLC, sem `printf` do C e sem alocação.
 - Variável declarada e nunca lida é erro de compilação, como no Go.
 - `match` sem fallthrough e com cobertura obrigatória: esquecer um caso é erro de compilação.
 - Literal de struct lista todos os campos (`Ponto{}` é o valor zero explícito): campo novo esquecido é erro de compilação.
@@ -149,4 +149,5 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 - [x] **Arrays `[N]T`:** tamanho fixo, por valor, na pilha ou em structs, sem `alloc`; `&a` empresta como `&[]T`
 - [x] **Biblioteca padrão** em MLC, importada com `std/`: `io`, `str`, `result`, `math`, `sort`, `text`, `vec`, `rand`, `os`, `fs`, `time`. Nada aloca escondido; erros como `Result[T]`. Veja [docs/biblioteca.md](docs/biblioteca.md)
 - [x] **`mlc fmt`:** formatador canônico (4 espaços), preservando comentários e quebras de linha; `-l` lista, `-` usa a entrada padrão
+- [x] **Interfaces estáticas:** `interface`, `impl` (de uma linha, com bloco ou genérico) e `impl auto`; interfaces como restrição de genérico, com chamadas diretas (sem tabela de métodos). `io.print`/`io.printf`/`io.eprintf` sobre `io.Display`, com a formatação em MLC. Veja [docs/interfaces.md](docs/interfaces.md)
 - [x] **LSP:** `mlc lsp` com diagnósticos ao digitar, cores, formatação, hover e ir para a definição; extensão para VS Code e configuração para Neovim. Veja [Editores](#editores)

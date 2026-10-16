@@ -91,3 +91,7 @@ fn main() {
         _ => io.print("básica")
     }
 }
+
+impl auto io.Display for Forma
+
+impl auto io.Display for Figura

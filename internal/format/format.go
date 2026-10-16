@@ -258,8 +258,8 @@ func (p *printer) token(i int, t *token.Token) {
 // correspondente é seguido de outro tipo: a [3]int, mas Vec[T]{...},
 // f[T any](...) e Result[int].Err.
 func (p *printer) attachedBracket(i int, t *token.Token) bool {
-	if p.marks.index[t.Pos] {
-		return true
+	if p.marks.index[t.Pos] || p.prev != nil && p.prev.Kind == token.IMPL {
+		return true // s[i], ou impl[T Display]
 	}
 	if p.prev == nil || p.prev.Kind != token.IDENT {
 		return false

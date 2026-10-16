@@ -1,0 +1,132 @@
+import "std/io"
+
+// Interfaces estáticas: restrição de genérico, sem tabela de métodos.
+interface Medida {
+    fn tamanho(self &Self) int
+    fn escala(self &Self, k int) int
+}
+
+struct Quadrado {
+    lado int
+}
+
+fn (q &Quadrado) tamanho() int {
+    return q.lado * q.lado
+}
+
+fn (q &Quadrado) escala(k int) int {
+    return q.tamanho() * k
+}
+
+// forma de uma linha: os métodos da struct cumprem a interface
+impl Medida for Quadrado
+
+impl auto io.Display for Quadrado
+
+// forma com bloco: tipos embutidos não têm métodos próprios
+impl Medida for int {
+    fn (x &int) tamanho() int {
+        return *x
+    }
+    fn (x &int) escala(k int) int {
+        return *x * k
+    }
+}
+
+// impl genérico: um slice mede a soma dos elementos
+impl[T Medida] Medida for []T {
+    fn (s &[]T) tamanho() int {
+        total := 0
+        for i := 0; i < len(s); i++ {
+            total += s[i].tamanho()
+        }
+        return total
+    }
+    fn (s &[]T) escala(k int) int {
+        return len(s) * k
+    }
+}
+
+fn maior[T Medida](a &T, b &T) int {
+    if a.tamanho() > b.tamanho() {
+        return a.tamanho()
+    }
+    return b.tamanho()
+}
+
+fn soma_escala[T Medida](itens &[]T, k int) int {
+    total := 0
+    for i := 0; i < len(itens); i++ {
+        total += itens[i].escala(k)
+    }
+    return total
+}
+
+// Display escrito à mão
+struct Fracao {
+    num int
+    den int
+}
+
+fn (f &Fracao) write(w &io.Writer) {
+    w.put_int(f.num)
+    w.put_byte('/')
+    w.put_int(f.den)
+}
+
+impl io.Display for Fracao
+
+// Display gerado
+struct Ponto {
+    x int
+    y int
+}
+
+impl auto io.Display for Ponto
+
+enum Forma {
+    Circulo(raio float64)
+    Retangulo(l float64, a float64)
+    Vazio
+}
+
+impl auto io.Display for Forma
+
+struct Par[A any, B any] {
+    a A
+    b B
+}
+
+impl auto io.Display for Par
+
+fn mostra[T io.Display](x &T) {
+    io.printf("<{}>\n", x)
+}
+
+fn main() {
+    q := Quadrado{lado: 3}
+    r := Quadrado{lado: 4}
+    n := 7
+    io.print(maior(&q, &r), maior(&n, &n), q.escala(2), n.escala(3))
+    s := alloc([]Quadrado, 2)
+    s[0] = q
+    s[1] = r
+    io.print(s.tamanho(), soma_escala(&s, 10))
+    var a [3]int = [3]int{1, 2, 3}
+    io.print(a.tamanho(), soma_escala(&a, 2))
+
+    f := Fracao{num: 1, den: 3}
+    p := Ponto{x: 1, y: -2}
+    io.print(f, p, Forma.Circulo(1.5), Forma.Retangulo(2.0, 3.0), Forma.Vazio)
+    io.print(Par[int, string]{a: 1, b: "um"}, Par[Ponto, bool]{a: p, b: true})
+    mostra(&f)
+    mostra(&p)
+    io.printf("{} + {} = {}; chaves: {{ e }}\n", 1, 2, 1 + 2)
+    io.printf("sem valores\n")
+    io.print(s, a, "texto", 'b', int8(-8), uint64(18446744073709551615), float32(0.25), 1e21)
+    var m [2][2]int = [2][2]int{[2]int{1, 2}, [2]int{3, 4}}
+    io.print(m)
+    io.print()
+    io.eprint("isto vai para o erro padrão")
+    free(s)
+}

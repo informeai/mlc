@@ -1,3 +1,4 @@
+import "std/io"
 pub enum Cor {
     Vermelho
     Verde
@@ -13,3 +14,5 @@ pub fn nome(c Cor) string {
         Rgb(_, _, _) => return "personalizada"
     }
 }
+
+impl auto io.Display for Cor

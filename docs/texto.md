@@ -64,10 +64,14 @@ As funções que escrevem dão panic se o texto não couber em `dst`, com uma me
 
 | Função | O que faz |
 |---|---|
-| `io.print(a, b, ...)` | imprime valores separados por espaço, com quebra de linha no fim |
+| `io.print(a, b, ...)` | escreve valores separados por espaço, com quebra de linha no fim |
+| `io.printf("x = {}\n", x)` | escreve o formato trocando cada `{}` por um valor (formato conferido na compilação) |
+| `io.eprint(...)`, `io.eprintf(...)` | o mesmo, no erro padrão |
 | `io.write(s &[]byte)` | escreve os bytes de `s`, sem separador nem quebra de linha |
 | `io.write_line(s &[]byte)` | escreve `s` e uma quebra de linha |
 | `io.read_line(dst &[]byte) int` | lê uma linha (sem o `\n`) em `dst` e devolve quantos bytes leu; `-1` no fim da entrada |
+
+Os valores de `io.print` e `io.printf` precisam implementar `io.Display`: os tipos embutidos, slices e arrays já implementam, e structs e enums ganham a implementação com `impl auto io.Display for T`. Veja [interfaces.md](interfaces.md).
 
 Se a linha não couber em `dst`, `read_line` enche o buffer e o resto da linha fica para a próxima chamada. Para ler linhas de qualquer tamanho, cresça o buffer com `realloc` e continue lendo no espaço novo:
 

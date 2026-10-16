@@ -57,22 +57,6 @@ func (g *gen) sliceTypedefs() {
 	}
 }
 
-// slicePrints gera a impressão de cada tipo slice: [a b c].
-func (g *gen) slicePrints() {
-	for _, s := range g.info.Slices {
-		if _, ptrs := s.Elem.(*checker.Pointer); ptrs {
-			continue // slices de ponteiros não são impressos
-		}
-		g.raw("static void mlc_print_%s(%s v) {\n", sliceCType(s), sliceCType(s))
-		g.raw("    mlc_io_print_str(MLC_STR_LIT(\"[\", 1));\n")
-		g.raw("    for (int64_t i = 0; i < v.len; i++) {\n")
-		g.raw("        if (i > 0) mlc_io_print_sep();\n")
-		g.raw("        %s;\n", printCall(s.Elem, "v.ptr[i]"))
-		g.raw("    }\n")
-		g.raw("    mlc_io_print_str(MLC_STR_LIT(\"]\", 1));\n}\n\n")
-	}
-}
-
 // sliceVal devolve o slice de e em C, seguindo o empréstimo se e for &[]T.
 func (g *gen) sliceVal(e ast.Expr) string {
 	if _, ok := g.info.Types[e].(*checker.Borrow); ok {
@@ -152,8 +136,13 @@ func (g *gen) hoistIndex(target ast.Expr, rhsEffects bool) []string {
 		return nil
 	}
 	t := g.temp(checker.Int)
-	s := g.sliceVal(ix.X)
-	pre := fmt.Sprintf("%s = MLC_INDEX(%s, %s.len)", t, g.expr(ix.Index), s)
+	var pre string
+	if a := arrayType(g.info.Types[ix.X]); a != nil {
+		// [N]T: o tamanho é constante
+		pre = fmt.Sprintf("%s = MLC_INDEX(%s, INT64_C(%d))", t, g.expr(ix.Index), a.Len)
+	} else {
+		pre = fmt.Sprintf("%s = MLC_INDEX(%s, %s.len)", t, g.expr(ix.Index), g.sliceVal(ix.X))
+	}
 	g.indexOverride[ix] = t
 	return []string{pre}
 }

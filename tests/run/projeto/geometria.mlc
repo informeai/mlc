@@ -1,3 +1,4 @@
+import "std/io"
 import "util/numeros"
 
 pub const LADOS_QUADRADO = 4
@@ -39,3 +40,7 @@ pub fn quadrado(lado int) Retangulo {
 pub fn descreve() int {
     return 1
 }
+
+impl auto io.Display for Retangulo
+
+impl auto io.Display for Ponto

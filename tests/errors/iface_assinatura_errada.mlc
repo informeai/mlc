@@ -1,0 +1,17 @@
+// erro: Q.area tem a assinatura errada para Area: esperado fn (self &Q) area() int
+interface Area {
+    fn area(self &Self) int
+}
+
+struct Q {
+    l int
+}
+
+fn (q &Q) area() bool {
+    return true
+}
+
+impl Area for Q
+
+fn main() {
+}

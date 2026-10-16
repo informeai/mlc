@@ -93,3 +93,5 @@ fn main() {
     free(p)
     free(pontos)
 }
+
+impl auto io.Display for Ponto

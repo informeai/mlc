@@ -1,3 +1,4 @@
+import "std/io"
 pub struct Retangulo {
     largura int
     altura int
@@ -23,3 +24,5 @@ pub fn (r Retangulo) descreve() string {
     }
     return "inválido"
 }
+
+impl auto io.Display for Retangulo

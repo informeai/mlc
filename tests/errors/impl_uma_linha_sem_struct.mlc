@@ -1,0 +1,9 @@
+// erro: a forma impl Area for int, sem bloco, só vale para structs
+interface Area {
+    fn area(self &Self) int
+}
+
+impl Area for int
+
+fn main() {
+}
