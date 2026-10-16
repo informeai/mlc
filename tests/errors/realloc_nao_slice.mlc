@@ -1,0 +1,6 @@
+// erro: realloc se aplica a slices, não a *int
+fn main() {
+    p := alloc(1)
+    p = realloc(p, 2)
+    free(p)
+}

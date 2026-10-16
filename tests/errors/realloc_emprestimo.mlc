@@ -1,0 +1,7 @@
+// erro: realloc precisa do dono do slice: um empréstimo (&[]int) não pode ser realocado
+fn f(s &[]int) {
+    s2 := realloc(s, 4)
+    free(s2)
+}
+fn main() {
+}

@@ -1,0 +1,5 @@
+// erro: vazamento: o ponteiro dono devolvido aqui é descartado
+fn main() {
+    s := alloc([]int, 1)
+    realloc(s, 2)
+}

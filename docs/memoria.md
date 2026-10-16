@@ -44,6 +44,18 @@ fn soma(s &[]int) int      // empréstimo: lê e escreve elementos, não libera
 var vazio []int            // valor zero: slice vazio, sem obrigação de free
 ```
 
+### Crescer e emprestar parte
+
+```
+s = realloc(s, len(s) * 2)   // consome o slice antigo e devolve um novo
+soma(&s[1:3])                // empresta os elementos 1 e 2
+soma(&s[2:])                 // do 2 até o fim
+```
+
+`realloc` se comporta como uma função que recebe a posse do slice antigo e devolve a de um slice novo: os elementos que já existiam são copiados, e os novos vêm zerados. Por isso não há como ficar com um nome apontando para o bloco antigo, o bug clássico do `realloc` em C. Encolher descarta os elementos do fim; `realloc(s, 0)` libera e devolve o slice vazio. Não existe crescimento automático (`append`): cada realocação aparece no código.
+
+Um sub-slice `&s[a:b]` não é dono de nada: é um empréstimo dos elementos de `a` até `b-1` e segue as regras dos empréstimos (só como argumento de chamada). Os limites são checados em tempo de execução: `0 <= a <= b <= len(s)`. `a` e `b` podem ser omitidos (`&s[:b]`, `&s[a:]`, `&s[:]`).
+
 Um slice é dono, como `*T`, e segue as mesmas regras de posse: move ao ser atribuído ou passado para um parâmetro `[]T`, e precisa de `free` em todos os caminhos. Liberar um slice dentro do `for in` que o percorre é erro. `s[i]` num slice vazio não precisa de checagem de `nil`: a checagem de limites dá panic. Nesta versão os elementos não podem ser donos (`[]*No`, `[][]int`).
 
 ## Posse (ownership)

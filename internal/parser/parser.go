@@ -575,10 +575,27 @@ func (p *Parser) parsePostfix() ast.Expr {
 		case token.LBRACK:
 			pos := p.tok.Pos
 			p.next()
-			var idx ast.Expr
-			p.withLit(true, func() { idx = p.parseExpr() })
+			// s[i], ou o sub-slice s[a:b] com limites opcionais
+			var lo, hi ast.Expr
+			isSlice := false
+			p.withLit(true, func() {
+				if p.tok.Kind != token.COLON {
+					lo = p.parseExpr()
+				}
+				if p.tok.Kind == token.COLON {
+					isSlice = true
+					p.next()
+					if p.tok.Kind != token.RBRACK {
+						hi = p.parseExpr()
+					}
+				}
+			})
 			p.expect(token.RBRACK)
-			x = &ast.IndexExpr{X: x, Index: idx, Lbrack: pos}
+			if isSlice {
+				x = &ast.SliceExpr{X: x, Low: lo, High: hi, Lbrack: pos}
+			} else {
+				x = &ast.IndexExpr{X: x, Index: lo, Lbrack: pos}
+			}
 		default:
 			return x
 		}

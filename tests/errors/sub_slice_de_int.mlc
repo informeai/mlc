@@ -1,0 +1,7 @@
+// erro: sub-slice se aplica a slices, não a int
+fn f(s &[]int) {
+}
+fn main() {
+    n := 3
+    f(&n[0:1])
+}

@@ -878,6 +878,11 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 	case Alloc:
 		o.allocValue(e)
 		return
+	case Realloc:
+		// o slice antigo é consumido; o resultado é um dono novo
+		o.consume(e.Args[0], callee.Elem, "realloc")
+		o.read(e.Args[1])
+		return
 	case IoPrint, Len:
 		for _, a := range e.Args {
 			o.read(a)
@@ -930,6 +935,16 @@ func (o *ownChecker) borrowArg(a ast.Expr) (pathKey, bool) {
 		}
 		o.read(a)
 		return k, ok
+	}
+	if sl, isSub := u.X.(*ast.SliceExpr); isSub {
+		// &s[a:b] empresta parte do slice: conta como emprestar o slice
+		o.sliceAccess(sl.X)
+		for _, b := range []ast.Expr{sl.Low, sl.High} {
+			if b != nil {
+				o.read(b)
+			}
+		}
+		return o.pathOf(sl.X)
 	}
 	if ix, isIndex := u.X.(*ast.IndexExpr); isIndex {
 		// &s[i] empresta um elemento: conta como emprestar o slice

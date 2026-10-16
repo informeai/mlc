@@ -1,0 +1,6 @@
+// erro: um sub-slice só pode ser emprestado como argumento de chamada: f(&s[a:b])
+fn main() {
+    s := alloc([]int, 3)
+    t := s[0:2]
+    free(s)
+}

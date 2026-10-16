@@ -116,3 +116,40 @@ func (g *gen) dropIndex(target ast.Expr) {
 		delete(g.indexOverride, ix)
 	}
 }
+
+// realloc traduz realloc(s, n). O slice e o tamanho são calculados antes,
+// da esquerda para a direita; mlc_realloc_array copia os elementos antigos e
+// zera os novos.
+func (g *gen) realloc(e *ast.CallExpr, callee checker.Callee) string {
+	s := callee.Elem.(*checker.Slice)
+	old := g.temp(s)
+	n := g.temp(checker.Int)
+	elem := cType(s.Elem)
+	return fmt.Sprintf("(%s = %s, %s = %s, ((%s){(%s *)mlc_realloc_array(%s.ptr, %s.len, %s, sizeof(%s), __FILE__, __LINE__), %s}))",
+		old, g.expr(e.Args[0]), n, g.expr(e.Args[1]), sliceCType(s), elem, old, old, n, elem, n)
+}
+
+// subSlice traduz &s[a:b]: um slice temporário (literal composto do C, que
+// vive até o fim da chamada) apontando para os elementos de a até b-1. Os
+// limites são checados antes: 0 <= a <= b <= len(s).
+func (g *gen) subSlice(e *ast.SliceExpr) string {
+	sv := g.sliceVal(e.X)
+	st := g.info.Types[e.X]
+	if b, ok := st.(*checker.Borrow); ok {
+		st = b.Elem
+	}
+	s := st.(*checker.Slice)
+	lo := g.temp(checker.Int)
+	hi := g.temp(checker.Int)
+	low, high := "INT64_C(0)", sv+".len"
+	if e.Low != nil {
+		low = g.expr(e.Low)
+	}
+	if e.High != nil {
+		high = g.expr(e.High)
+	}
+	// Somar a NULL é comportamento indefinido em C, mesmo somando zero: o
+	// slice vazio fica com ptr NULL.
+	return fmt.Sprintf("(%s = %s, %s = %s, mlc_check_slice(%s, %s, %s.len, __FILE__, __LINE__), &(%s){%s.ptr == NULL ? NULL : %s.ptr + %s, %s - %s})",
+		lo, low, hi, high, lo, hi, sv, sliceCType(s), sv, sv, lo, hi, lo)
+}

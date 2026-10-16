@@ -43,6 +43,9 @@ func (g *gen) alloc(e *ast.CallExpr, callee checker.Callee) string {
 // borrow traduz &x. Emprestar um ponteiro empresta o conteúdo: o ponteiro já
 // é o endereço. Emprestar uma variável ou um campo toma o endereço dele.
 func (g *gen) borrow(x ast.Expr) string {
+	if sl, ok := x.(*ast.SliceExpr); ok {
+		return g.subSlice(sl)
+	}
 	if isPointer(g.info.Types[x]) {
 		return g.expr(x)
 	}

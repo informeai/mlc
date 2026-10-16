@@ -51,6 +51,13 @@ static inline int64_t mlc_index(int64_t i, int64_t len, const char *file, int li
 
 #define MLC_INDEX(i, len) mlc_index((i), (len), __FILE__, __LINE__)
 
+/* realloc(s, n): copia os elementos antigos e zera os novos. Com n == 0, libera
+ * e devolve NULL (slice vazio). */
+void *mlc_realloc_array(void *old, int64_t old_len, int64_t n, size_t size, const char *file, int line);
+
+/* Sub-slice s[a:b]: exige 0 <= a <= b <= len. */
+void mlc_check_slice(int64_t lo, int64_t hi, int64_t len, const char *file, int line);
+
 /* Aritmética inteira checada: estouro e divisão por zero viram panic em vez
  * de comportamento indefinido do C. file/line vêm de __FILE__/__LINE__, que
  * as diretivas #line do código gerado fazem apontar para o .mlc. */

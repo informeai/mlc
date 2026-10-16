@@ -304,3 +304,13 @@ type TypeArg struct {
 func (n *TypeArg) Pos() token.Pos { return n.Type.P }
 
 func (*TypeArg) exprNode() {}
+
+// SliceExpr é s[a:b]. Low e High podem ser nil (s[:b], s[a:], s[:]).
+type SliceExpr struct {
+	X, Low, High Expr
+	Lbrack       token.Pos
+}
+
+func (n *SliceExpr) Pos() token.Pos { return n.X.Pos() }
+
+func (*SliceExpr) exprNode() {}

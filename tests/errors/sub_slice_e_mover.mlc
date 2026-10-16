@@ -1,0 +1,8 @@
+// erro: s é emprestada e movida na mesma chamada
+fn f(a &[]int, b []int) {
+    free(b)
+}
+fn main() {
+    s := alloc([]int, 3)
+    f(&s[0:2], s)
+}

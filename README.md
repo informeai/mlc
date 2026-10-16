@@ -66,6 +66,7 @@ go test ./...
 
 ## Garantias atuais
 
+- `realloc` e `free` são as únicas formas de mudar memória no heap: não há crescimento automático.
 - Estouro de inteiro, divisão por zero e índice fora dos limites viram panic com arquivo e linha do `.mlc`, nunca comportamento indefinido do C.
 - Diretivas `#line` no C gerado: panics e erros apontam para o código MLC.
 - Sem `printf` exposto: `io.print` gera chamadas tipadas por argumento.
@@ -76,6 +77,10 @@ go test ./...
 - Memória explícita (`alloc`/`free`) com verificador de posse na compilação: uso depois de `free`, `free` duplo, vazamento, ponteiro nulo e ponteiro pendente são erros de compilação. Veja [docs/memoria.md](docs/memoria.md).
 - Ordem de avaliação definida: da esquerda para a direita, sempre. Os argumentos de uma chamada, inclusive de `io.print`, são todos calculados antes da chamada.
 - Toda variável começa com valor zero (`0`, `false`, `""`): não existe leitura de memória não inicializada.
+
+## Princípio: toda alocação é explícita
+
+A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está alocando memória. Toda alocação aparece no código como uma chamada explícita (`alloc`, `realloc`), e toda liberação como `free`. Nenhuma construção da linguagem aloca escondido: não há concatenação de strings que aloca, `append` embutido nem cópias implícitas para o heap. O compilador verifica que cada alocação é liberada exatamente uma vez.
 
 ## Convenções
 
@@ -92,5 +97,6 @@ go test ./...
 - [x] **Marco 5a:** `alloc`/`free`, `*T`, `?*T`, `&T` e o verificador de posse para variáveis e parâmetros
 - [x] **Marco 5b:** ponteiros dentro de structs (listas, árvores), com posse rastreada por campo; checagem de `nil` pelo fluxo (`if`, `for`, `&&`, `||`); laços analisados até o ponto fixo
 - [x] **Marco 6:** slices `[]T` donos (`alloc([]T, n)`, `free`), checagem de limites, `len`, `for x in s`, `&[]T`; `len` e índice em strings
-- [ ] Slices de donos (`[]*No`, `[][]int`), crescimento (`realloc` explícito), sub-slices
+- [x] **Slices, parte 2:** `realloc(s, n)` (consome o slice e devolve outro, novos elementos zerados) e sub-slices emprestados `&s[a:b]`
+- [ ] Slices de donos (`[]?*No`, `[][]int`) com `take`/`replace`
 - [ ] **Marco 7:** strings alocadas (concatenação, conversões)

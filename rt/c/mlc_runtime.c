@@ -61,3 +61,24 @@ void mlc_panic_index(int64_t i, int64_t len, const char *file, int line) {
     snprintf(msg, sizeof msg, "índice %" PRId64 " fora dos limites (tamanho %" PRId64 ")", i, len);
     mlc_panic(file, line, msg);
 }
+
+void *mlc_realloc_array(void *old, int64_t old_len, int64_t n, size_t size, const char *file, int line) {
+    if (n < 0) mlc_panic(file, line, "tamanho negativo em realloc");
+    if (n == 0) {
+        mlc_free(old); /* slice vazio: não conta como alocação */
+        return NULL;
+    }
+    if (old == NULL) return mlc_alloc_array(n, size, file, line);
+    if ((uint64_t)n > SIZE_MAX / size) mlc_panic(file, line, "memória esgotada");
+    char *p = realloc(old, (size_t)n * size);
+    if (p == NULL) mlc_panic(file, line, "memória esgotada");
+    if (n > old_len) memset(p + (size_t)old_len * size, 0, (size_t)(n - old_len) * size);
+    return p; /* continua sendo uma alocação viva: o contador não muda */
+}
+
+void mlc_check_slice(int64_t lo, int64_t hi, int64_t len, const char *file, int line) {
+    if (lo >= 0 && lo <= hi && hi <= len) return;
+    char msg[128];
+    snprintf(msg, sizeof msg, "sub-slice [%" PRId64 ":%" PRId64 "] fora dos limites (tamanho %" PRId64 ")", lo, hi, len);
+    mlc_panic(file, line, msg);
+}

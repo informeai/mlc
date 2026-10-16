@@ -1,0 +1,8 @@
+// erro: o índice precisa ser int, encontrado string
+fn f(s &[]int) {
+}
+fn main() {
+    s := alloc([]int, 3)
+    f(&s["a":2])
+    free(s)
+}

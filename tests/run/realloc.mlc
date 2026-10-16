@@ -1,0 +1,95 @@
+import "io"
+
+struct Ponto {
+    x int
+    y int
+}
+
+fn soma(s &[]int) int {
+    total := 0
+    for v in s {
+        total += v
+    }
+    return total
+}
+
+// soma recursiva: empresta o resto do slice a cada chamada
+fn soma_rec(s &[]int) int {
+    if len(s) == 0 {
+        return 0
+    }
+    return s[0] + soma_rec(&s[1:])
+}
+
+fn zera(s &[]int) {
+    for i := 0; i < len(s); i++ {
+        s[i] = 0
+    }
+}
+
+// cresce dobrando a capacidade: quem chama vê cada realloc acontecer
+fn primos_ate(limite int) []int {
+    var primos []int
+    usados := 0
+    for n := 2; n <= limite; n++ {
+        primo := true
+        for i := 0; i < usados; i++ {
+            if n % primos[i] == 0 {
+                primo = false
+                break
+            }
+        }
+        if primo {
+            if usados == len(primos) {
+                novo := len(primos) * 2
+                if novo == 0 {
+                    novo = 2
+                }
+                primos = realloc(primos, novo)
+            }
+            primos[usados] = n
+            usados++
+        }
+    }
+    return realloc(primos, usados) // encolhe para o tamanho exato
+}
+
+fn main() {
+    s := alloc([]int, 3)
+    s[0] = 1
+    s[1] = 2
+    s[2] = 3
+    s = realloc(s, 5)
+    io.print(s, len(s))
+    s[4] = 10
+    s = realloc(s, 2)
+    io.print(s)
+
+    t := alloc([]int, 6)
+    for i := 0; i < len(t); i++ {
+        t[i] = i + 1
+    }
+    io.print(soma(&t[1:4]), soma(&t[:2]), soma(&t[4:]), soma(&t[:]), soma(&t[3:3]))
+    io.print(soma_rec(&t))
+    zera(&t[2:4])
+    io.print(t)
+
+    p := primos_ate(30)
+    io.print(p, len(p))
+
+    pontos := alloc([]Ponto, 1)
+    pontos = realloc(pontos, 3)
+    pontos[2] = Ponto{x: 7, y: 8}
+    io.print(pontos)
+
+    // realloc para zero esvazia; de vazio, aloca de novo
+    s = realloc(s, 0)
+    io.print(s, len(s))
+    s = realloc(s, 1)
+    io.print(s)
+
+    free(s)
+    free(t)
+    free(p)
+    free(pontos)
+}

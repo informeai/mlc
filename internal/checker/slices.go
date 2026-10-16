@@ -171,3 +171,53 @@ func (c *checker) noSliceCompare(e *ast.BinaryExpr, t Type) bool {
 	}
 	return false
 }
+
+// reallocCall checa realloc(s, n): consome o slice s e devolve um slice novo
+// com n elementos. Os elementos que já existiam são copiados; os novos vêm
+// zerados.
+func (c *checker) reallocCall(e *ast.CallExpr) Type {
+	if len(e.Args) != 2 {
+		c.errorf(e.Lparen, "realloc recebe o slice e o novo tamanho: s = realloc(s, n)")
+		c.checkArgs(e)
+		return Invalid
+	}
+	t := c.value(e.Args[0])
+	if nt := c.value(e.Args[1]); nt != Int && nt != Invalid {
+		c.errorf(e.Args[1].Pos(), "o tamanho em realloc precisa ser int, encontrado %s", nt)
+	}
+	switch {
+	case t == Invalid:
+		return Invalid
+	case isBorrow(t):
+		c.errorf(e.Args[0].Pos(), "realloc precisa do dono do slice: um empréstimo (%s) não pode ser realocado", t)
+		return Invalid
+	case !isSlice(t):
+		c.errorf(e.Args[0].Pos(), "realloc se aplica a slices, não a %s", t)
+		return Invalid
+	}
+	c.info.Calls[e] = Callee{Builtin: Realloc, Elem: t}
+	return t
+}
+
+// subSlice checa s[a:b] e devolve o tipo do empréstimo: &[]T. Um sub-slice
+// não é dono de nada: enxerga a memória de s.
+func (c *checker) subSlice(e *ast.SliceExpr) Type {
+	bt := c.value(e.X)
+	for _, b := range []ast.Expr{e.Low, e.High} {
+		if b != nil {
+			c.indexValue(b)
+		}
+	}
+	if bt == Invalid {
+		return Invalid
+	}
+	if b, ok := bt.(*Borrow); ok {
+		bt = b.Elem
+	}
+	s, ok := bt.(*Slice)
+	if !ok {
+		c.errorf(e.Lbrack, "sub-slice se aplica a slices, não a %s", bt)
+		return Invalid
+	}
+	return c.borrowOf(s)
+}

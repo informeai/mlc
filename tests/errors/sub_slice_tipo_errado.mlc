@@ -1,0 +1,8 @@
+// erro: argumento 1 de f: esperado &[]int, encontrado &[]bool
+fn f(s &[]int) {
+}
+fn main() {
+    s := alloc([]bool, 3)
+    f(&s[0:1])
+    free(s)
+}

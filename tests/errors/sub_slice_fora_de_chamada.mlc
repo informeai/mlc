@@ -1,0 +1,6 @@
+// erro: & só pode aparecer como argumento de chamada
+fn main() {
+    s := alloc([]int, 3)
+    t := &s[0:2]
+    free(s)
+}

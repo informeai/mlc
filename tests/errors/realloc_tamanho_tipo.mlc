@@ -1,0 +1,6 @@
+// erro: o tamanho em realloc precisa ser int, encontrado bool
+fn main() {
+    s := alloc([]int, 1)
+    s = realloc(s, true)
+    free(s)
+}

@@ -1,0 +1,8 @@
+// erro: s já foi liberada ou movida (linha 6)
+fn f(s &[]int) {
+}
+fn main() {
+    s := alloc([]int, 3)
+    free(s)
+    f(&s[0:1])
+}

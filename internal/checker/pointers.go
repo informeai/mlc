@@ -204,6 +204,8 @@ func (c *checker) builtinCall(e *ast.CallExpr, name string) (Type, bool) {
 	switch name {
 	case "len":
 		return c.lenCall(e), true
+	case "realloc":
+		return c.reallocCall(e), true
 	case "alloc":
 		if len(e.Args) > 0 {
 			if ta, ok := e.Args[0].(*ast.TypeArg); ok {
@@ -290,6 +292,13 @@ func (c *checker) borrowArg(a ast.Expr, want *Borrow, context string) {
 			return
 		}
 		c.errorf(a.Pos(), "%s: esperado %s, encontrado %s", context, want, t)
+		return
+	}
+	if sl, isSub := u.X.(*ast.SliceExpr); isSub {
+		// &s[a:b] empresta parte de um slice
+		got := c.subSlice(sl)
+		c.info.Types[a] = got
+		c.assignable(got, want, a.Pos(), context)
 		return
 	}
 	t := c.borrowPlace(u.X)

@@ -33,7 +33,7 @@ var basicTypes = map[string]Type{"int": Int, "bool": Bool, "string": String}
 var predeclared = map[string]bool{
 	"int": true, "bool": true, "string": true,
 	"true": true, "false": true, "nil": true,
-	"alloc": true, "free": true, "len": true,
+	"alloc": true, "free": true, "len": true, "realloc": true,
 }
 
 // modules são os módulos que podem ser importados.
@@ -66,6 +66,7 @@ const (
 	Alloc             // alloc(T) ou alloc(valor)
 	Free              // free(p)
 	Len               // len(s)
+	Realloc           // realloc(s, n)
 )
 
 // Callee é o destino resolvido de uma chamada: uma função do usuário ou um builtin.
@@ -680,6 +681,10 @@ func (c *checker) expr0(e ast.Expr) Type {
 	case *ast.TypeArg:
 		c.errorf(e.Pos(), "um tipo só pode ser argumento de alloc")
 		return Invalid
+	case *ast.SliceExpr:
+		c.errorf(e.Lbrack, "um sub-slice só pode ser emprestado como argumento de chamada: f(&s[a:b])")
+		c.subSlice(e)
+		return Invalid
 	}
 	panic(fmt.Sprintf("checker: expressão desconhecida %T", e))
 }
@@ -699,7 +704,7 @@ func (c *checker) ident(e *ast.Ident) Type {
 		return Bool
 	case "nil":
 		return NilType
-	case "alloc", "free", "len":
+	case "alloc", "free", "len", "realloc":
 		c.errorf(e.P, "%s precisa ser chamada: %s(...)", e.Name, e.Name)
 		return Invalid
 	}

@@ -30,6 +30,8 @@ func (g *gen) effectful(e ast.Expr) bool {
 		return true
 	case *ast.IndexExpr:
 		return true // pode dar panic fora dos limites
+	case *ast.SliceExpr:
+		return true // pode dar panic fora dos limites
 	case *ast.BinaryExpr:
 		if _, arith := arithMacros[e.Op]; arith {
 			return true
