@@ -1,0 +1,7 @@
+// erro: s já foi liberada ou movida (linha 5)
+import "io"
+fn main() {
+    s := alloc([]int, 3)
+    free(s)
+    io.print(s[0])
+}

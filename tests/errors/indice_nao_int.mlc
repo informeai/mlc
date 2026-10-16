@@ -1,0 +1,7 @@
+// erro: o índice precisa ser int, encontrado string
+import "io"
+fn main() {
+    s := alloc([]int, 1)
+    io.print(s["a"])
+    free(s)
+}

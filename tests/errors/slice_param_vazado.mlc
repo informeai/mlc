@@ -1,0 +1,6 @@
+// erro: vazamento: s ainda é dona da memória (linha 2) no fim da função
+fn f(s []int) {
+}
+fn main() {
+    f(alloc([]int, 2))
+}

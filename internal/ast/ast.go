@@ -136,12 +136,14 @@ type IfStmt struct {
 	P    token.Pos
 }
 
-// ForStmt cobre as três formas: "for { }" (tudo nil), "for cond { }" (só
-// Cond) e "for init; cond; post { }".
+// ForStmt cobre as quatro formas: "for { }" (tudo nil), "for cond { }" (só
+// Cond), "for init; cond; post { }" e "for x in s { }" (Var e Iter).
 type ForStmt struct {
 	Init Stmt
 	Cond Expr
 	Post Stmt
+	Var  *Ident // for x in s
+	Iter Expr
 	Body *Block
 	P    token.Pos
 }
@@ -293,3 +295,12 @@ type FieldInit struct {
 func (n *CompositeLit) Pos() token.Pos { return n.Type.P }
 
 func (*CompositeLit) exprNode() {}
+
+// TypeArg é um tipo usado como argumento: o []int de alloc([]int, n).
+type TypeArg struct {
+	Type *TypeExpr
+}
+
+func (n *TypeArg) Pos() token.Pos { return n.Type.P }
+
+func (*TypeArg) exprNode() {}

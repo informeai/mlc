@@ -33,7 +33,7 @@ var basicTypes = map[string]Type{"int": Int, "bool": Bool, "string": String}
 var predeclared = map[string]bool{
 	"int": true, "bool": true, "string": true,
 	"true": true, "false": true, "nil": true,
-	"alloc": true, "free": true,
+	"alloc": true, "free": true, "len": true,
 }
 
 // modules são os módulos que podem ser importados.
@@ -65,6 +65,7 @@ const (
 	IoPrint           // io.print
 	Alloc             // alloc(T) ou alloc(valor)
 	Free              // free(p)
+	Len               // len(s)
 )
 
 // Callee é o destino resolvido de uma chamada: uma função do usuário ou um builtin.
@@ -73,6 +74,7 @@ type Callee struct {
 	Builtin Builtin
 	Elem    Type // alloc: o tipo alocado
 	Zero    bool // alloc: memória zerada (alloc(T)) em vez de valor inicial
+	Slice   bool // alloc([]T, n)
 }
 
 // Info é o resultado da checagem, consumido pelo gerador de código.
@@ -85,7 +87,9 @@ type Info struct {
 	Patterns map[*ast.Pattern]any
 	// Consts guarda o valor dos identificadores que se referem a constantes.
 	Consts  map[*ast.Ident]any
-	Structs []*Struct // cada struct depois das que ela contém
+	Structs []*Struct               // cada struct depois das que ela contém
+	Slices  []*Slice                // tipos slice usados, para o gerador declarar
+	ForVars map[*ast.ForStmt]*Local // a variável de cada for x in s
 	Calls   map[*ast.CallExpr]Callee
 	Funcs   []*Func // na ordem de declaração
 }
@@ -117,6 +121,7 @@ type checker struct {
 	pointers      map[ptrKey]*Pointer
 	litOK         bool // o próximo literal composto pode conter ponteiros donos (dentro de alloc)
 	borrows       map[Type]*Borrow
+	slices        map[Type]*Slice
 	scope         *scope
 	fn            *Func
 	errs          []token.Error
@@ -135,6 +140,7 @@ func Check(file string, f *ast.File) (*Info, []token.Error) {
 			Decls:    map[*ast.VarDecl]*Local{},
 			Patterns: map[*ast.Pattern]any{},
 			Consts:   map[*ast.Ident]any{},
+			ForVars:  map[*ast.ForStmt]*Local{},
 			Calls:    map[*ast.CallExpr]Callee{},
 		},
 		imports: map[string]bool{},
@@ -145,6 +151,7 @@ func Check(file string, f *ast.File) (*Info, []token.Error) {
 		pendingConsts: map[string]bool{},
 		pointers:      map[ptrKey]*Pointer{},
 		borrows:       map[Type]*Borrow{},
+		slices:        map[Type]*Slice{},
 		breaks:        map[*ast.ForStmt]bool{},
 	}
 	c.collectImports(f)
@@ -391,6 +398,10 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			c.checkStmt(s.Else)
 		}
 	case *ast.ForStmt:
+		if s.Var != nil {
+			c.checkForIn(s)
+			return
+		}
 		// O escopo do for envolve o init: "for i := 0; ..." declara i só para o laço.
 		c.pushScope()
 		if s.Init != nil {
@@ -565,6 +576,8 @@ func (c *checker) target(e ast.Expr) Type {
 		t = c.field(base, e)
 	case *ast.Ident:
 		t = c.targetVar(e)
+	case *ast.IndexExpr:
+		t = c.targetIndex(e)
 	case *ast.UnaryExpr:
 		if e.Op != token.MUL {
 			c.errorf(e.Pos(), "não é possível atribuir a esta expressão (só a variáveis, campos e *p)")
@@ -663,7 +676,9 @@ func (c *checker) expr0(e ast.Expr) Type {
 	case *ast.CompositeLit:
 		return c.composite(e)
 	case *ast.IndexExpr:
-		c.errorf(e.Lbrack, "indexação ainda não é suportada nesta versão")
+		return c.index(e)
+	case *ast.TypeArg:
+		c.errorf(e.Pos(), "um tipo só pode ser argumento de alloc")
 		return Invalid
 	}
 	panic(fmt.Sprintf("checker: expressão desconhecida %T", e))
@@ -684,7 +699,7 @@ func (c *checker) ident(e *ast.Ident) Type {
 		return Bool
 	case "nil":
 		return NilType
-	case "alloc", "free":
+	case "alloc", "free", "len":
 		c.errorf(e.P, "%s precisa ser chamada: %s(...)", e.Name, e.Name)
 		return Invalid
 	}
@@ -766,6 +781,9 @@ func (c *checker) binary(e *ast.BinaryExpr) Type {
 		}
 		if isPointerType(x) || isPointerType(y) {
 			c.errorf(e.OpPos, "ponteiros só podem ser comparados com nil")
+			return Invalid
+		}
+		if c.noSliceCompare(e, x) || c.noSliceCompare(e, y) {
 			return Invalid
 		}
 		if x != y {

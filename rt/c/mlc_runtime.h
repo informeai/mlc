@@ -38,6 +38,19 @@ void mlc_check_allocs(void);
 
 #define MLC_ALLOC(T) ((T *)mlc_alloc(sizeof(T), __FILE__, __LINE__))
 
+/* Slices. mlc_alloc_array devolve n elementos zerados (NULL se n == 0) e dá
+ * panic com tamanho negativo ou grande demais. mlc_index dá panic fora dos
+ * limites. */
+void *mlc_alloc_array(int64_t n, size_t size, const char *file, int line);
+_Noreturn void mlc_panic_index(int64_t i, int64_t len, const char *file, int line);
+
+static inline int64_t mlc_index(int64_t i, int64_t len, const char *file, int line) {
+    if (i < 0 || i >= len) mlc_panic_index(i, len, file, line);
+    return i;
+}
+
+#define MLC_INDEX(i, len) mlc_index((i), (len), __FILE__, __LINE__)
+
 /* Aritmética inteira checada: estouro e divisão por zero viram panic em vez
  * de comportamento indefinido do C. file/line vêm de __FILE__/__LINE__, que
  * as diretivas #line do código gerado fazem apontar para o .mlc. */

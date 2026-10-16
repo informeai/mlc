@@ -248,6 +248,10 @@ func (c *checker) checkOwnership(fn *Func) {
 				s |= sNull
 			}
 			o.declare(p, ownValue{st: s}, p.Pos)
+		case *Slice:
+			// Um slice recebido é dono: precisa ser liberado ou passado
+			// adiante (free de um slice vazio não faz nada).
+			o.declare(p, ownValue{st: sLive}, p.Pos)
 		case *Borrow:
 			// Um empréstimo nunca é nil nem liberado aqui; o que interessa
 			// são os campos do objeto emprestado.
@@ -524,10 +528,15 @@ func (o *ownChecker) forStmt(s *ast.ForStmt) {
 	o.loops = o.loops[:len(o.loops)-1]
 
 	var out ownFlow
-	if s.Cond != nil {
+	switch {
+	case s.Cond != nil:
 		o.st = entry.clone() // a condição ficou falsa
 		o.read(s.Cond)
 		o.apply(o.facts(s.Cond, false))
+		out = o.st
+	case s.Iter != nil:
+		o.st = entry.clone() // os elementos acabaram
+		o.sliceAccess(s.Iter)
 		out = o.st
 	}
 	for _, ex := range loop.exits {
@@ -545,6 +554,9 @@ func (o *ownChecker) loopBody(s *ast.ForStmt, loop *ownLoop, entry ownFlow) ownF
 	if s.Cond != nil {
 		o.read(s.Cond)
 		o.apply(o.facts(s.Cond, true))
+	}
+	if s.Iter != nil {
+		o.sliceAccess(s.Iter) // cada volta lê o slice de novo
 	}
 	o.stmt(s.Body)
 	if o.st != nil && s.Post != nil {
@@ -669,7 +681,8 @@ func (o *ownChecker) check(k pathKey, pos token.Pos, deref bool) {
 		} else {
 			o.errorf(pos, "%s pode já ter sido liberada ou movida (linha %d), dependendo do caminho", k, o.gone[k].Line)
 		}
-	case deref && s&sNull != 0 && !isBorrow(pathType(k)):
+	case deref && s&sNull != 0 && !isBorrow(pathType(k)) && !isSlice(pathType(k)):
+		// (um slice vazio pode ser indexado: a checagem de limites resolve)
 		o.markReported(k)
 		o.errorf(pos, "%s pode ser nil aqui: verifique com if %s != nil antes de usar o conteúdo", k, k)
 	}
@@ -745,6 +758,9 @@ func (o *ownChecker) read(e ast.Expr) {
 		o.apply(o.facts(e.X, e.Op == token.LAND))
 		o.read(e.Y)
 		o.st = merge(skipped, o.st)
+	case *ast.IndexExpr:
+		o.sliceAccess(e.X)
+		o.read(e.Index)
 	case *ast.CompositeLit:
 		for _, f := range e.Fields {
 			o.read(f.Value)
@@ -764,6 +780,9 @@ func (o *ownChecker) lostTemporary(base ast.Expr) {
 // target avalia o lado esquerdo de uma atribuição que não é um caminho dono.
 func (o *ownChecker) target(e ast.Expr) {
 	switch e := e.(type) {
+	case *ast.IndexExpr:
+		o.sliceAccess(e.X)
+		o.read(e.Index)
 	case *ast.SelectorExpr:
 		if isPointerType(o.c.info.Types[e.X]) {
 			o.deref(e.X)
@@ -816,6 +835,10 @@ func (o *ownChecker) allocValue(call *ast.CallExpr) ownValue {
 	if callee.Zero {
 		return ownValue{st: sLive}
 	}
+	if callee.Slice {
+		o.read(call.Args[1]) // o tamanho
+		return ownValue{st: sLive}
+	}
 	if lit, ok := call.Args[0].(*ast.CompositeLit); ok {
 		v := ownValue{st: sLive, sub: map[string]ownState{}}
 		o.literalFields(lit, "", v.sub)
@@ -855,7 +878,7 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 	case Alloc:
 		o.allocValue(e)
 		return
-	case IoPrint:
+	case IoPrint, Len:
 		for _, a := range e.Args {
 			o.read(a)
 		}
@@ -867,15 +890,16 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 	var touched []pathKey // objetos emprestados: a função pode mudar os campos
 	for i, a := range e.Args {
 		context := "o argumento " + itoa(i+1) + " de " + callee.Func.Name
-		switch pt := callee.Func.Params[i].Type.(type) {
-		case *Pointer:
+		pt := callee.Func.Params[i].Type
+		switch {
+		case IsOwner(pt): // *T, ?*T e []T: a função recebe a posse
 			if k, ok := o.pathOf(a); ok && borrowedRoots[k.root] {
 				o.errorf(a.Pos(), "%s é emprestada e movida na mesma chamada", k.root.Name)
 				o.kill(k, a.Pos())
 				continue
 			}
 			o.consume(a, pt, context)
-		case *Borrow:
+		case isBorrow(pt):
 			if obj, ok := o.borrowArg(a); ok {
 				borrowedRoots[obj.root] = true
 				touched = append(touched, obj)
@@ -906,6 +930,12 @@ func (o *ownChecker) borrowArg(a ast.Expr) (pathKey, bool) {
 		}
 		o.read(a)
 		return k, ok
+	}
+	if ix, isIndex := u.X.(*ast.IndexExpr); isIndex {
+		// &s[i] empresta um elemento: conta como emprestar o slice
+		o.sliceAccess(ix.X)
+		o.read(ix.Index)
+		return o.pathOf(ix.X)
 	}
 	k, ok := o.pathOf(u.X)
 	if !ok {
@@ -972,4 +1002,17 @@ func (o *ownChecker) markReported(k pathKey) {
 	if o.muted == 0 {
 		o.reported[k] = true
 	}
+}
+
+// sliceAccess checa o slice usado em s[i], len(s) ou for x in s: ele não
+// pode estar liberado. Vazio pode: a checagem de limites resolve.
+func (o *ownChecker) sliceAccess(e ast.Expr) {
+	k, ok := o.pathOf(e)
+	if !ok {
+		o.lostTemporary(e)
+		o.read(e)
+		return
+	}
+	o.reach(k, e.Pos())
+	o.check(k, e.Pos(), true)
 }

@@ -1,0 +1,5 @@
+// erro: ponteiro para slice não é suportado
+fn f(p *[]int) {
+}
+fn main() {
+}

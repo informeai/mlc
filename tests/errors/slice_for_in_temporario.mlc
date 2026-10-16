@@ -1,0 +1,10 @@
+// erro: for in percorre uma variável ou campo
+import "io"
+fn faz() []int {
+    return alloc([]int, 2)
+}
+fn main() {
+    for v in faz() {
+        io.print(v)
+    }
+}

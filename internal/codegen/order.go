@@ -28,6 +28,8 @@ func (g *gen) effectful(e ast.Expr) bool {
 	switch e := e.(type) {
 	case *ast.CallExpr:
 		return true
+	case *ast.IndexExpr:
+		return true // pode dar panic fora dos limites
 	case *ast.BinaryExpr:
 		if _, arith := arithMacros[e.Op]; arith {
 			return true

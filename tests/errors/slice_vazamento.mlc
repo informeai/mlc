@@ -1,0 +1,6 @@
+// erro: vazamento: s ainda é dona da memória (linha 4) no fim da função
+import "io"
+fn main() {
+    s := alloc([]int, 3)
+    io.print(s[0])
+}

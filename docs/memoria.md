@@ -1,6 +1,6 @@
 # Modelo de memória do MLC
 
-> **Status:** implementado (Marcos 5a e 5b): ponteiros donos em variáveis, parâmetros e campos de struct. Slices entram no Marco 6.
+> **Status:** implementado (Marcos 5a, 5b e 6): ponteiros donos e slices em variáveis, parâmetros e campos de struct.
 
 ## Princípio
 
@@ -31,6 +31,20 @@ struct No {                    // campo dono: a lista é dona do próximo nó
 ```
 
 `alloc` encerra o programa com panic se faltar memória, para que `*T` nunca seja nulo. `free` de um `?*T` que vale `nil` não faz nada, como no C.
+
+## Slices
+
+```
+s := alloc([]int, n)       // []int: dono de n elementos zerados
+s[i] = 1                   // índice checado em tempo de execução
+for v in s { }             // v é uma cópia de cada elemento
+free(s)                    // obrigatório, como para *T
+
+fn soma(s &[]int) int      // empréstimo: lê e escreve elementos, não libera
+var vazio []int            // valor zero: slice vazio, sem obrigação de free
+```
+
+Um slice é dono, como `*T`, e segue as mesmas regras de posse: move ao ser atribuído ou passado para um parâmetro `[]T`, e precisa de `free` em todos os caminhos. Liberar um slice dentro do `for in` que o percorre é erro. `s[i]` num slice vazio não precisa de checagem de `nil`: a checagem de limites dá panic. Nesta versão os elementos não podem ser donos (`[]*No`, `[][]int`).
 
 ## Posse (ownership)
 
@@ -139,7 +153,7 @@ O runtime conta as alocações vivas. No fim do `main`, se sobrou alguma, o prog
 | divisão por zero | checagem antes de dividir | execução (panic) |
 | ordem de avaliação indefinida | esquerda para a direita, escrita no C gerado | compilação |
 | string de formato (`printf`) | `io.print` gera chamadas tipadas | compilação |
-| buffer overflow | checagem de índice nos slices | execução (panic), Marco 6 |
+| buffer overflow | checagem de limites em slices e strings | execução (panic) |
 
 ## O que o MLC não garante
 

@@ -26,6 +26,9 @@ func isStruct(t checker.Type) bool {
 
 // alloc traduz alloc(T) (memória zerada) e alloc(valor).
 func (g *gen) alloc(e *ast.CallExpr, callee checker.Callee) string {
+	if callee.Slice {
+		return g.allocSlice(e, callee)
+	}
 	elem := cType(callee.Elem)
 	if callee.Zero {
 		return fmt.Sprintf("MLC_ALLOC(%s)", elem)

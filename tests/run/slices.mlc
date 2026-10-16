@@ -1,0 +1,130 @@
+import "io"
+
+struct Ponto {
+    x int
+    y int
+}
+
+struct Pilha {
+    itens []int
+    topo int
+}
+
+fn soma(s &[]int) int {
+    total := 0
+    for v in s {
+        total += v
+    }
+    return total
+}
+
+fn dobra(s &[]int) {
+    for i := 0; i < len(s); i++ {
+        s[i] *= 2
+    }
+}
+
+fn quadrados(n int) []int {
+    s := alloc([]int, n)
+    for i := 0; i < n; i++ {
+        s[i] = i * i
+    }
+    return s
+}
+
+fn empilha(p &Pilha, v int) {
+    p.itens[p.topo] = v
+    p.topo++
+}
+
+fn desempilha(p &Pilha) int {
+    p.topo--
+    return p.itens[p.topo]
+}
+
+fn primeiro_par(s &[]int) int {
+    for v in s {
+        match v % 2 {
+            0 => return v
+            _ => continue
+        }
+    }
+    return -1
+}
+
+fn conta(texto string, c int) int {
+    n := 0
+    for i := 0; i < len(texto); i++ {
+        if texto[i] == c {
+            n++
+        }
+    }
+    return n
+}
+
+fn main() {
+    s := quadrados(5)
+    io.print(s, len(s), soma(&s))
+    dobra(&s)
+    io.print(s)
+    io.print("primeiro par:", primeiro_par(&s))
+    free(s)
+
+    pontos := alloc([]Ponto, 3)
+    for i := 0; i < len(pontos); i++ {
+        pontos[i] = Ponto{x: i, y: i * 10}
+    }
+    pontos[1].y += 5
+    io.print(pontos)
+    total := 0
+    for p in pontos {
+        total += p.x + p.y
+    }
+    io.print("total:", total)
+    free(pontos)
+
+    p := alloc(Pilha)
+    p.itens = alloc([]int, 4)
+    empilha(&p, 7)
+    empilha(&p, 8)
+    empilha(&p, 9)
+    io.print("pilha:", desempilha(&p), desempilha(&p), p.topo)
+    free(p.itens)
+    free(p)
+
+    var vazio []int
+    io.print(vazio, len(vazio), soma(&vazio))
+    for v in vazio {
+        io.print("nunca", v)
+    }
+    zero := alloc([]bool, 0)
+    io.print(zero)
+    free(zero)
+
+    nomes := alloc([]string, 3)
+    nomes[0] = "ana"
+    nomes[1] = "bia"
+    nomes[2] = "cris"
+    n := 0
+    for _ in nomes {
+        n++
+    }
+    io.print(nomes, n, nomes[2][0])
+    free(nomes)
+
+    io.print(len("olá"), conta("banana", "a"[0]))
+
+    // o índice com efeito é calculado uma vez só
+    c := alloc([]int, 3)
+    pos := 0
+    c[proximo(&pos)] += 10
+    c[proximo(&pos)] += 20
+    io.print(c, pos)
+    free(c)
+}
+
+fn proximo(p &int) int {
+    v := *p
+    *p += 1
+    return v
+}

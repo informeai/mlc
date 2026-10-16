@@ -1,5 +1,8 @@
-// erro: for ... in ainda não é suportado
+// erro: for in percorre slices, encontrado int
+import "io"
 fn main() {
-    for x in lista {
+    n := 3
+    for x in n {
+        io.print(x)
     }
 }

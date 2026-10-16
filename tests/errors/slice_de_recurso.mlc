@@ -1,0 +1,6 @@
+// erro: slices de No ainda não são suportados: No contém ponteiros donos
+struct No { prox ?*No }
+fn f(s []No) {
+}
+fn main() {
+}

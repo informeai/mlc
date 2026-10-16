@@ -1,0 +1,5 @@
+// erro: len se aplica a slices e strings, não a int
+import "io"
+fn main() {
+    io.print(len(3))
+}

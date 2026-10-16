@@ -1,0 +1,7 @@
+// erro: free(p): p.itens ainda pode ser dona de memória
+struct Pilha { itens []int; topo int }
+fn main() {
+    p := alloc(Pilha)
+    p.itens = alloc([]int, 4)
+    free(p)
+}

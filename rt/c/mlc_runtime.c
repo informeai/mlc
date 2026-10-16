@@ -45,3 +45,19 @@ void mlc_check_allocs(void) {
         exit(3);
     }
 }
+
+void *mlc_alloc_array(int64_t n, size_t size, const char *file, int line) {
+    if (n < 0) mlc_panic(file, line, "tamanho negativo em alloc de slice");
+    if (n == 0) return NULL; /* slice vazio: não conta como alocação */
+    if ((uint64_t)n > SIZE_MAX / size) mlc_panic(file, line, "memória esgotada");
+    void *p = calloc((size_t)n, size);
+    if (p == NULL) mlc_panic(file, line, "memória esgotada");
+    mlc_live_allocs++;
+    return p;
+}
+
+void mlc_panic_index(int64_t i, int64_t len, const char *file, int line) {
+    char msg[96];
+    snprintf(msg, sizeof msg, "índice %" PRId64 " fora dos limites (tamanho %" PRId64 ")", i, len);
+    mlc_panic(file, line, msg);
+}

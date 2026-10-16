@@ -63,38 +63,50 @@ func (c *checker) borrowOf(elem Type) *Borrow {
 	return b
 }
 
-// IsOwner diz se valores do tipo t carregam posse de memória.
+// IsOwner diz se valores do tipo t carregam posse de memória: ponteiros
+// donos e slices.
 func IsOwner(t Type) bool {
-	_, ok := t.(*Pointer)
-	return ok
+	switch t.(type) {
+	case *Pointer, *Slice:
+		return true
+	}
+	return false
 }
 
 // typeCtx diz onde um tipo aparece, porque nem todo tipo vale em todo lugar.
 type typeCtx int
 
 const (
-	ctxVar    typeCtx = iota // variável local ou constante
-	ctxParam                 // parâmetro: aceita &T
-	ctxResult                // retorno de função
-	ctxField                 // campo de struct
-	ctxElem                  // o T de *T ou &T
+	ctxVar        typeCtx = iota // variável local ou constante
+	ctxParam                     // parâmetro: aceita &T
+	ctxResult                    // retorno de função
+	ctxField                     // campo de struct
+	ctxElem                      // o T de *T
+	ctxBorrowElem                // o T de &T (aceita slices)
+	ctxSliceElem                 // o T de []T
 )
 
 func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 	switch t.Mod {
 	case ast.TypeSlice:
-		c.errorf(t.P, "slices ainda não são suportados nesta versão")
-		return Invalid
+		return c.resolveSlice(t, ctx)
 	case ast.TypePointer, ast.TypeNullPtr, ast.TypeBorrow:
 		switch {
-		case ctx == ctxElem:
+		case ctx == ctxSliceElem:
+			c.errorf(t.P, "slices de ponteiros ainda não são suportados: os elementos não podem ser donos nem empréstimos")
+			return Invalid
+		case ctx == ctxElem || ctx == ctxBorrowElem:
 			c.errorf(t.P, "ponteiro para ponteiro não é suportado")
 			return Invalid
 		case t.Mod == ast.TypeBorrow && ctx != ctxParam:
 			c.errorf(t.P, "&T só pode ser tipo de parâmetro: um empréstimo não pode ser guardado nem devolvido")
 			return Invalid
 		}
-		elem := c.resolveType(t.Elem, ctxElem)
+		elemCtx := ctxElem
+		if t.Mod == ast.TypeBorrow {
+			elemCtx = ctxBorrowElem
+		}
+		elem := c.resolveType(t.Elem, elemCtx)
 		if elem == Invalid {
 			return Invalid
 		}
@@ -127,6 +139,9 @@ func (c *checker) assignable(got, want Type, pos token.Pos, context string) {
 	gp, gotPtr := got.(*Pointer)
 	switch {
 	case got == NilType && wantPtr && wp.Nullable:
+		return
+	case got == NilType && isSlice(want):
+		c.errorf(pos, "%s: nil não é um slice; o valor zero de %s já é o slice vazio", context, want)
 		return
 	case got == NilType && wantPtr:
 		c.errorf(pos, "%s: nil só cabe em ?*%s, não em %s (um ponteiro *T nunca é nil)", context, wp.Elem, want)
@@ -187,7 +202,14 @@ func (c *checker) deref(t Type, pos token.Pos, what string) (Type, bool) {
 // builtinCall checa alloc e free. ok é false se a chamada não é de um deles.
 func (c *checker) builtinCall(e *ast.CallExpr, name string) (Type, bool) {
 	switch name {
+	case "len":
+		return c.lenCall(e), true
 	case "alloc":
+		if len(e.Args) > 0 {
+			if ta, ok := e.Args[0].(*ast.TypeArg); ok {
+				return c.allocSlice(e, ta), true
+			}
+		}
 		if len(e.Args) != 1 {
 			c.errorf(e.Lparen, "alloc recebe um argumento: um tipo (alloc(Ponto)) ou um valor inicial (alloc(Ponto{x: 1, y: 2}))")
 			c.checkArgs(e)
@@ -206,7 +228,7 @@ func (c *checker) builtinCall(e *ast.CallExpr, name string) (Type, bool) {
 			return Invalid, true
 		}
 		switch t := c.value(e.Args[0]); t.(type) {
-		case *Pointer:
+		case *Pointer, *Slice:
 		case *Borrow:
 			c.errorf(e.Args[0].Pos(), "não é possível liberar um empréstimo (%s): só o dono libera", t)
 		default:
@@ -318,6 +340,8 @@ func isPlace(e ast.Expr) bool {
 		return isPlace(e.X)
 	case *ast.UnaryExpr:
 		return e.Op == token.MUL
+	case *ast.IndexExpr:
+		return isPlace(e.X)
 	}
 	return false
 }

@@ -1,0 +1,5 @@
+// erro: o tamanho em alloc precisa ser int, encontrado string
+fn main() {
+    s := alloc([]int, "3")
+    free(s)
+}

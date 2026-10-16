@@ -29,7 +29,10 @@ type gen struct {
 	loops    []*loopCtx // laços abertos, o mais interno por último
 	switches int        // switch do C abertos (match sobre int)
 	labels   int        // contador para nomes únicos de labels e temporárias
-	temps    []string   // declarações das temporárias da função em geração
+	// indexOverride troca o índice de s[i] por uma temporária, para que um
+	// índice com efeito seja calculado uma vez só em s[f()] += 1.
+	indexOverride map[*ast.IndexExpr]string
+	temps         []string // declarações das temporárias da função em geração
 }
 
 // loopCtx acompanha um laço em geração. Um break do MLC dentro de um switch
@@ -42,7 +45,7 @@ type loopCtx struct {
 }
 
 func Generate(file string, f *ast.File, info *checker.Info) string {
-	g := &gen{file: file, info: info, buf: &strings.Builder{}}
+	g := &gen{file: file, info: info, buf: &strings.Builder{}, indexOverride: map[*ast.IndexExpr]string{}}
 	g.raw("// Gerado por mlc a partir de %s. Não edite.\n", file)
 	g.raw("#include \"mlc_runtime.h\"\n\n")
 	g.structs()
@@ -74,6 +77,8 @@ func (g *gen) lineDirective(pos token.Pos) {
 
 func cType(t checker.Type) string {
 	switch t := t.(type) {
+	case *checker.Slice:
+		return sliceCType(t)
 	case *checker.Pointer:
 		return cType(t.Elem) + " *"
 	case *checker.Borrow:
@@ -150,6 +155,8 @@ func (g *gen) stmt(s ast.Stmt) {
 	case *ast.ForStmt:
 		g.lineDirective(s.P)
 		switch {
+		case s.Var != nil:
+			g.forIn(s)
 		case s.Init == nil && s.Post == nil && s.Cond == nil:
 			g.line("for (;;) {")
 		case s.Init == nil && s.Post == nil:
@@ -347,18 +354,24 @@ func (g *gen) simple(s ast.Stmt) string {
 		}
 		return fmt.Sprintf("%s %s = %s", cType(l.Type), l.CName, value)
 	case *ast.AssignStmt:
-		lhs, rhs := g.expr(s.Lhs), g.expr(s.Rhs)
+		pre := g.hoistIndex(s.Lhs, g.effectful(s.Rhs))
+		defer g.dropIndex(s.Lhs)
+		lhs := g.expr(s.Lhs)
 		if s.Op == token.ASSIGN {
-			return lhs + " = " + rhs
+			return sequence(pre, lhs+" = "+g.expr(s.Rhs))
 		}
-		return fmt.Sprintf("%s = %s(%s, %s)", lhs, arithMacros[assignOps[s.Op]], lhs, rhs)
+		// x += v lê x antes de calcular v, da esquerda para a direita.
+		ops, v := g.operands([]ast.Expr{s.Lhs, s.Rhs})
+		return sequence(append(pre, ops...), fmt.Sprintf("%s = %s(%s, %s)", lhs, arithMacros[assignOps[s.Op]], v[0], v[1]))
 	case *ast.IncDecStmt:
 		macro := "MLC_ADD"
 		if s.Op == token.DEC {
 			macro = "MLC_SUB"
 		}
+		pre := g.hoistIndex(s.X, false)
+		defer g.dropIndex(s.X)
 		x := g.expr(s.X)
-		return fmt.Sprintf("%s = %s(%s, INT64_C(1))", x, macro, x)
+		return sequence(pre, fmt.Sprintf("%s = %s(%s, INT64_C(1))", x, macro, x))
 	}
 	panic(fmt.Sprintf("codegen: comando simples desconhecido %T", s))
 }
@@ -373,6 +386,9 @@ var assignOps = map[token.Kind]token.Kind{
 }
 
 func zeroValue(t checker.Type) string {
+	if s, ok := t.(*checker.Slice); ok {
+		return "((" + sliceCType(s) + "){0})" // slice vazio
+	}
 	if _, ok := t.(*checker.Pointer); ok {
 		return "NULL" // só ?*T tem valor zero; *T sempre é inicializado
 	}
@@ -469,6 +485,8 @@ func (g *gen) expr(e ast.Expr) string {
 		return "(!" + g.expr(e.X) + ")"
 	case *ast.BinaryExpr:
 		return g.binary(e, false)
+	case *ast.IndexExpr:
+		return g.index(e)
 	case *ast.SelectorExpr:
 		if isPointer(g.info.Types[e.X]) {
 			return g.expr(e.X) + "->f_" + e.Sel
@@ -485,7 +503,12 @@ func (g *gen) expr(e ast.Expr) string {
 		case checker.Alloc:
 			return g.alloc(e, callee)
 		case checker.Free:
+			if _, ok := g.info.Types[e.Args[0]].(*checker.Slice); ok {
+				return "mlc_free(" + g.expr(e.Args[0]) + ".ptr)"
+			}
 			return "mlc_free(" + g.expr(e.Args[0]) + ")"
+		case checker.Len:
+			return g.sliceVal(e.Args[0]) + ".len"
 		}
 		pre, args := g.operands(e.Args)
 		return sequence(pre, fmt.Sprintf("mlc_fn_%s(%s)", callee.Func.Name, strings.Join(args, ", ")))

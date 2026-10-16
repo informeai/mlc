@@ -1,0 +1,6 @@
+fn main() {
+    s := alloc([]int, 2)
+    i := -1
+    s[i] = 5
+    free(s)
+}

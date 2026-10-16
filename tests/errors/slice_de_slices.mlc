@@ -1,0 +1,5 @@
+// erro: slices de slices ainda não são suportados
+fn f(s [][]int) {
+}
+fn main() {
+}

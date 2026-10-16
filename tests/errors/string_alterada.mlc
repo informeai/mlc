@@ -1,0 +1,5 @@
+// erro: strings não podem ser alteradas
+fn main() {
+    s := "abc"
+    s[0] = 65
+}

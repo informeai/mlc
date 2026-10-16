@@ -76,7 +76,7 @@ mul_expr     = unary_expr { ( "*" | "/" | "%" ) unary_expr } ;
 unary_expr   = ( "-" | "!" | "*" | "&" ) unary_expr | postfix_expr ;   (* *p: conteúdo; &x: empréstimo, só como argumento *)
 
 postfix_expr = primary { call | index | selector | composite } ;
-call         = "(" [ arg_list ] ")" ;
+call         = "(" [ arg_list ] ")" ;   (* em alloc, o primeiro argumento pode ser um tipo: alloc([]int, n) *)
 index        = "[" expr "]" ;
 selector     = "." ident ;
 composite    = "{" [ field_init_list ] "}" ;
@@ -103,6 +103,8 @@ eos          = ";" | (* inserido pelo lexer no fim da linha *) ;
 - **Braço do `match`:** um comando simples, um bloco, `break`, `continue` ou `return`. Para `if`, `for`, `var` ou outro `match`, use `{ }`. Vários braços podem ficar na mesma linha, separados por `;`.
 - **Literal de struct:** lista todos os campos, ou nenhum (`Ponto{}` é o valor zero). Num literal em várias linhas, todo campo termina com vírgula, inclusive o último.
 - **`const`:** o valor é avaliado na compilação e só pode usar literais, outras constantes e operadores. No topo do arquivo, uma constante só usa as declaradas antes dela. Constantes podem ser usadas como padrão de `match`.
+- **`for x in s`:** `s` precisa ser uma variável ou campo slice; `x` recebe uma cópia de cada elemento. O nome `_` descarta o elemento.
+- **Índice:** `s[i]` em slice dá o elemento; em string, o byte como `int`. Fora dos limites, panic.
 - **Structs** podem ser declaradas em qualquer ordem, mas não podem conter a si mesmas por valor, nem por um caminho indireto.
 - **`_`** não é palavra reservada: é um identificador especial, válido só como padrão de `match` (e, depois, como descarte em atribuições).
 - **Nomes predeclarados:** `true`, `false`, `nil` e os tipos básicos (`int`, `bool`, `string`) não são palavras-chave e não aparecem na gramática.

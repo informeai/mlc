@@ -1,0 +1,6 @@
+// erro: s liberada duas vezes
+fn main() {
+    s := alloc([]int, 3)
+    free(s)
+    free(s)
+}

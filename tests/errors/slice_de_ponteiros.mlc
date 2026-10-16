@@ -1,0 +1,6 @@
+// erro: slices de ponteiros ainda não são suportados
+struct No { x int }
+fn f(s []*No) {
+}
+fn main() {
+}

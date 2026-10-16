@@ -1,0 +1,8 @@
+// erro: s liberada duas vezes
+fn f(s []int) {
+    free(s)
+    free(s)
+}
+fn main() {
+    f(alloc([]int, 1))
+}

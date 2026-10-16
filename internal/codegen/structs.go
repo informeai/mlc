@@ -16,13 +16,15 @@ import (
 func structCType(s *checker.Struct) string { return "mlc_st_" + s.Name }
 
 func (g *gen) structs() {
-	if len(g.info.Structs) == 0 {
-		return
-	}
 	for _, s := range g.info.Structs {
 		g.raw("typedef struct %s %s;\n", structCType(s), structCType(s))
 	}
-	g.raw("\n")
+	if len(g.info.Structs) > 0 {
+		g.raw("\n")
+	}
+	// Os slices vêm antes das structs: uma struct pode ter campo slice, e o
+	// slice só precisa do nome (typedef) do tipo dos elementos.
+	g.sliceTypedefs()
 	for _, s := range g.info.Structs {
 		g.lineDirective(s.Decl.P)
 		g.raw("struct %s {\n", structCType(s))
@@ -40,6 +42,7 @@ func (g *gen) structs() {
 			g.structPrint(s)
 		}
 	}
+	g.slicePrints()
 }
 
 func (g *gen) structEq(s *checker.Struct) {
@@ -84,6 +87,8 @@ func eqExpr(t checker.Type, a, b string) string {
 // printCall imprime um valor do tipo t, sem separador nem quebra de linha.
 func printCall(t checker.Type, v string) string {
 	switch t := t.(type) {
+	case *checker.Slice:
+		return fmt.Sprintf("mlc_print_%s(%s)", sliceCType(t), v)
 	case *checker.Struct:
 		return fmt.Sprintf("mlc_print_%s(%s)", t.Name, v)
 	}

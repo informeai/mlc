@@ -431,8 +431,13 @@ func (p *Parser) parseFor() *ast.ForStmt {
 		s.Body = p.parseBlock()
 		return s
 	}
-	if p.tok.Kind == token.IDENT && p.peek.Kind == token.IN {
-		p.errorf(p.tok.Pos, "for ... in ainda não é suportado nesta versão (depende de slices)")
+	if p.tok.Kind == token.IDENT && p.peek.Kind == token.IN { // for x in s { }
+		s.Var = &ast.Ident{Name: p.tok.Lit, P: p.tok.Pos}
+		p.next()
+		p.next()
+		p.withLit(false, func() { s.Iter = p.parseExpr() })
+		s.Body = p.parseBlock()
+		return s
 	}
 
 	p.withLit(false, func() { p.parseForHeader(s) })
@@ -541,6 +546,13 @@ func (p *Parser) parsePostfix() ast.Expr {
 		case token.LPAREN:
 			call := &ast.CallExpr{Fun: x, Lparen: p.tok.Pos}
 			p.next()
+			if id, ok := x.(*ast.Ident); ok && id.Name == "alloc" && p.tok.Kind == token.LBRACK {
+				// alloc([]T, n): o primeiro argumento é um tipo
+				call.Args = append(call.Args, &ast.TypeArg{Type: p.parseType()})
+				if p.tok.Kind == token.COMMA {
+					p.next()
+				}
+			}
 			for p.tok.Kind != token.RPAREN {
 				p.withLit(true, func() { call.Args = append(call.Args, p.parseExpr()) })
 				if p.tok.Kind != token.COMMA {

@@ -1,0 +1,4 @@
+// erro: nil não é um slice; o valor zero de []int já é o slice vazio
+fn main() {
+    var s []int = nil
+}

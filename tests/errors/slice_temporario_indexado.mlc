@@ -1,0 +1,8 @@
+// erro: vazamento: o ponteiro dono temporário é perdido aqui
+import "io"
+fn faz() []int {
+    return alloc([]int, 2)
+}
+fn main() {
+    io.print(faz()[0])
+}

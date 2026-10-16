@@ -1,0 +1,6 @@
+import "io"
+
+fn main() {
+    s := "abc"
+    io.print(s[5])
+}

@@ -66,7 +66,7 @@ go test ./...
 
 ## Garantias atuais
 
-- Estouro de inteiro e divisão por zero viram panic com arquivo e linha do `.mlc`, nunca comportamento indefinido do C.
+- Estouro de inteiro, divisão por zero e índice fora dos limites viram panic com arquivo e linha do `.mlc`, nunca comportamento indefinido do C.
 - Diretivas `#line` no C gerado: panics e erros apontam para o código MLC.
 - Sem `printf` exposto: `io.print` gera chamadas tipadas por argumento.
 - Variável declarada e nunca lida é erro de compilação, como no Go.
@@ -91,5 +91,6 @@ go test ./...
 - [x] **Ordem de avaliação:** argumentos, operandos e campos de literal são avaliados da esquerda para a direita, com a ordem escrita no C gerado (temporárias + operador vírgula), sem depender do compilador C
 - [x] **Marco 5a:** `alloc`/`free`, `*T`, `?*T`, `&T` e o verificador de posse para variáveis e parâmetros
 - [x] **Marco 5b:** ponteiros dentro de structs (listas, árvores), com posse rastreada por campo; checagem de `nil` pelo fluxo (`if`, `for`, `&&`, `||`); laços analisados até o ponto fixo
-- [ ] **Marco 6:** slices `[]T` com checagem de limites, `for x in`
+- [x] **Marco 6:** slices `[]T` donos (`alloc([]T, n)`, `free`), checagem de limites, `len`, `for x in s`, `&[]T`; `len` e índice em strings
+- [ ] Slices de donos (`[]*No`, `[][]int`), crescimento (`realloc` explícito), sub-slices
 - [ ] **Marco 7:** strings alocadas (concatenação, conversões)
