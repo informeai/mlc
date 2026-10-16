@@ -1,6 +1,7 @@
-// erro: operador + não se aplica a byte e byte (converta com int(b) para fazer contas)
+// erro: operador + não se aplica a int32 e int (converta um dos lados: int32(x) ou int(x))
 import "io"
 fn main() {
-    a := 'a'
-    io.print(a + 'b')
+    var a int32 = 1
+    b := 2
+    io.print(a + b)
 }

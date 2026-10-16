@@ -1,0 +1,5 @@
+fn main() {
+    f := 1.0e30
+    n := int(f)
+    f = float64(n)
+}

@@ -1,0 +1,5 @@
+// erro: constante 300 não cabe em byte (0 a 255)
+import "io"
+fn main() {
+    io.print(byte(300))
+}

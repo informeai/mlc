@@ -1,0 +1,4 @@
+// erro: constante 300 não cabe em int8 (-128 a 127)
+fn main() {
+    var a int8 = 300
+}

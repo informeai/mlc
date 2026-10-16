@@ -169,6 +169,10 @@ func (c *checker) compositeOf(e *ast.CompositeLit, s *Struct, allowed bool) Type
 			vt = c.value(fi.Value)
 		} else {
 			vt = c.value(fi.Value)
+			if isUntyped(vt) && f != nil && isNumeric(f.Type) {
+				c.convertUntyped(fi.Value, f.Type)
+				vt = f.Type
+			}
 			c.noCopy(vt, fi.Value.Pos())
 		}
 		switch {

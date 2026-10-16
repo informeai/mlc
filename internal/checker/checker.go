@@ -4,6 +4,7 @@ package checker
 
 import (
 	"fmt"
+	"math/big"
 	"sort"
 	"strconv"
 
@@ -28,11 +29,18 @@ var (
 	Byte    = &Basic{"byte"}
 )
 
-var basicTypes = map[string]Type{"int": Int, "bool": Bool, "string": String, "byte": Byte}
+var basicTypes = map[string]Type{
+	"int": Int, "bool": Bool, "string": String, "byte": Byte,
+	"int8": Int8, "int16": Int16, "int32": Int32,
+	"uint16": Uint16, "uint32": Uint32, "uint64": Uint64,
+	"float32": Float32, "float64": Float64,
+}
 
 // predeclared são nomes que o usuário não pode redeclarar.
 var predeclared = map[string]bool{
 	"int": true, "bool": true, "string": true, "byte": true,
+	"int8": true, "int16": true, "int32": true, "uint16": true, "uint32": true, "uint64": true,
+	"float32": true, "float64": true,
 	"true": true, "false": true, "nil": true,
 	"alloc": true, "free": true, "len": true, "realloc": true,
 	"take": true, "replace": true, "drain": true,
@@ -97,11 +105,13 @@ type Info struct {
 	// Patterns guarda o valor constante de cada padrão de match: int64,
 	// string ou bool. O curinga _ não aparece.
 	Patterns map[*ast.Pattern]any
-	// Consts guarda o valor dos identificadores que se referem a constantes.
-	Consts  map[ast.Expr]any          // *ast.Ident ou geometria.PI (*ast.SelectorExpr)
+	// Values guarda o valor das expressões constantes (literais, constantes,
+	// contas só com constantes): *big.Int, float64, string ou bool.
+	Values  map[ast.Expr]any
 	Main    *Func                     // fn main do arquivo principal
 	Structs []*Struct                 // cada struct depois das que ela contém
 	Slices  []*Slice                  // tipos slice usados, para o gerador declarar
+	Arrays  []*Array                  // tipos array usados, para o gerador declarar
 	ForVars map[*ast.ForStmt]*Local   // a variável de cada for x in s
 	Drains  map[*ast.ForStmt]ast.Expr // for x in drain(s): o slice esvaziado
 	Calls   map[*ast.CallExpr]Callee
@@ -133,6 +143,7 @@ type checker struct {
 	litOK    bool // o próximo literal composto pode conter ponteiros donos (dentro de alloc)
 	borrows  map[Type]*Borrow
 	slices   map[Type]*Slice
+	arrays   map[arrKey]*Array
 	natives  map[string]*Func
 	scope    *scope
 	fn       *Func
@@ -166,7 +177,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 			Locals:   map[*ast.Ident]*Local{},
 			Decls:    map[*ast.VarDecl]*Local{},
 			Patterns: map[*ast.Pattern]any{},
-			Consts:   map[ast.Expr]any{},
+			Values:   map[ast.Expr]any{},
 			ForVars:  map[*ast.ForStmt]*Local{},
 			Drains:   map[*ast.ForStmt]ast.Expr{},
 			Calls:    map[*ast.CallExpr]Callee{},
@@ -174,6 +185,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 		pointers: map[ptrKey]*Pointer{},
 		borrows:  map[Type]*Borrow{},
 		slices:   map[Type]*Slice{},
+		arrays:   map[arrKey]*Array{},
 		natives:  map[string]*Func{},
 		breaks:   map[*ast.ForStmt]bool{},
 	}
@@ -181,8 +193,8 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 		c.order[src.File] = i
 		c.mod = c.newModule(src, i)
 		c.collectImports(src.AST)
+		c.collectConsts(src.AST) // antes das structs: [N]T usa constantes
 		c.collectStructs(src.AST)
-		c.collectConsts(src.AST)
 		c.collectFuncs(src.AST)
 		for _, fn := range c.info.Funcs {
 			if fn.mod == c.mod {
@@ -383,11 +395,10 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		if s.Value != nil {
 			// O valor é checado antes de declarar: em "x := x + 1" o x da
 			// direita é o de fora.
-			vt := c.value(s.Value)
 			if t == nil {
-				t = vt
+				t = c.valueDefault(s.Value) // x := 5 é int; x := 2.5 é float64
 			} else {
-				c.assignable(vt, t, s.Value.Pos(), "declaração de "+s.Name)
+				c.valueAs(s.Value, t, "declaração de "+s.Name)
 			}
 		}
 		switch tt := t.(type) {
@@ -409,22 +420,30 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		c.info.Decls[s] = c.declare(s.Name, s.P, t, false)
 	case *ast.AssignStmt:
 		lt := c.target(s.Lhs)
-		rt := c.value(s.Rhs)
 		if s.Op == token.ASSIGN {
 			c.noCopy(lt, s.OpPos)
-			c.assignable(rt, lt, s.Rhs.Pos(), "atribuição")
+			c.valueAs(s.Rhs, lt, "atribuição")
 			return
 		}
-		if lt == Invalid || rt == Invalid {
+		if lt == String && s.Op == token.ADD_ASSIGN {
+			c.value(s.Rhs)
+			c.errorf(s.OpPos, "concatenação de strings exige alocação explícita: monte o texto num buffer (veja docs/texto.md)")
 			return
 		}
-		if s.Op == token.ADD_ASSIGN && lt == String {
-			c.errorf(s.OpPos, "concatenação de strings exige alocação explícita e ainda não é suportada")
-		} else if lt != Int || rt != Int {
+		rt := c.value(s.Rhs)
+		if isUntyped(rt) && isNumeric(lt) {
+			c.convertUntyped(s.Rhs, lt)
+			rt = lt
+		}
+		switch {
+		case lt == Invalid || rt == Invalid:
+		case lt != rt || !isNumeric(lt):
 			c.errorf(s.OpPos, "operador %s não se aplica a %s e %s", s.Op, lt, rt)
+		case s.Op == token.REM_ASSIGN && isFloat(lt):
+			c.errorf(s.OpPos, "operador %%= não se aplica a %s (só a inteiros)", lt)
 		}
 	case *ast.IncDecStmt:
-		if t := c.target(s.X); t != Int && t != Invalid {
+		if t := c.target(s.X); !isInteger(t) && t != Invalid {
 			c.errorf(s.OpPos, "operador %s não se aplica a %s", s.Op, t)
 		}
 	case *ast.IfStmt:
@@ -484,12 +503,12 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			}
 			return
 		}
-		t := c.value(s.Value)
 		if c.fn.Result == Void {
+			c.value(s.Value)
 			c.errorf(s.Value.Pos(), "função %s não retorna valor", c.fn.Name)
 			return
 		}
-		c.assignable(t, c.fn.Result, s.Value.Pos(), "return")
+		c.valueAs(s.Value, c.fn.Result, "return")
 	case *ast.Block:
 		c.checkBlock(s)
 	default:
@@ -500,12 +519,12 @@ func (c *checker) checkStmt(s ast.Stmt) {
 // checkMatch valida um match: tipo de cada padrão, padrões repetidos,
 // braços inalcançáveis e cobertura de todos os valores.
 func (c *checker) checkMatch(s *ast.MatchStmt) {
-	t := c.value(s.Subject)
-	if t != Int && t != Bool && t != String && t != Byte && t != Invalid {
-		c.errorf(s.Subject.Pos(), "match não se aplica a %s (só int, byte, bool e string)", t)
+	t := c.valueDefault(s.Subject)
+	if !isInteger(t) && t != Bool && t != String && t != Invalid {
+		c.errorf(s.Subject.Pos(), "match não se aplica a %s (só inteiros, bool e string)", t)
 		t = Invalid
 	}
-	seen := map[any]token.Pos{}
+	seen := map[string]token.Pos{}
 	var wildcard *ast.Pattern
 	unreachable := false
 	for _, arm := range s.Arms {
@@ -521,19 +540,20 @@ func (c *checker) checkMatch(s *ast.MatchStmt) {
 				wildcard = p
 				continue
 			}
-			v, pt := c.patternValue(p)
-			if pt == Invalid {
+			v, pt := c.patternValue(p, t)
+			if pt == Invalid || v == nil {
 				continue
 			}
 			if t != Invalid && pt != t {
 				c.errorf(p.P, "padrão do tipo %s em match sobre %s", pt, t)
 				continue
 			}
-			if prev, dup := seen[v]; dup {
+			key := fmt.Sprintf("%T:%v", v, v)
+			if prev, dup := seen[key]; dup {
 				c.errorf(p.P, "padrão %s repetido (já aparece na linha %d)", formatConst(v), prev.Line)
 				continue
 			}
-			seen[v] = p.P
+			seen[key] = p.P
 			c.info.Patterns[p] = v
 		}
 		c.pushScope()
@@ -554,48 +574,44 @@ func (c *checker) checkMatch(s *ast.MatchStmt) {
 }
 
 // patternValue devolve o valor constante de um padrão e o seu tipo.
-func (c *checker) patternValue(p *ast.Pattern) (any, Type) {
+// patternValue devolve o valor constante de um padrão e o seu tipo. Um
+// literal sem tipo assume o tipo do valor do match (subject).
+func (c *checker) patternValue(p *ast.Pattern, subject Type) (any, Type) {
 	switch lit := p.Lit.(type) {
-	case *ast.IntLit:
-		text := lit.Value
-		if p.Neg {
-			text = "-" + text
-		}
-		v, err := strconv.ParseInt(text, 10, 64)
-		if err != nil {
-			c.errorf(p.P, "constante %s não cabe em int (64 bits)", text)
-			return nil, Invalid
-		}
-		return v, Int
-	case *ast.StringLit:
-		return lit.Value, String
-	case *ast.CharLit:
-		return int64(lit.Value), Byte
-	case *ast.SelectorExpr:
-		if m := c.userModule(lit.X); m != nil {
-			t := c.moduleConst(lit, m)
-			if v, ok := c.info.Consts[lit]; ok {
-				return v, t
-			}
-			return nil, Invalid
-		}
-		c.errorf(p.P, "padrão precisa ser um literal, uma constante ou _")
 	case *ast.Ident:
-		if l := c.scope.lookup(lit.Name); l != nil {
-			if !l.IsConst {
-				c.errorf(p.P, "%s não é constante: padrão precisa ser um literal, uma constante ou _", lit.Name)
-				return nil, Invalid
-			}
-			return l.Const, l.Type
+		if l := c.scope.lookup(lit.Name); l != nil && !l.IsConst {
+			c.errorf(p.P, "%s não é constante: padrão precisa ser um literal, uma constante ou _", lit.Name)
+			return nil, Invalid
 		}
-		if lit.Name == "true" || lit.Name == "false" {
-			return lit.Name == "true", Bool
+	case *ast.SelectorExpr:
+		if c.userModule(lit.X) == nil {
+			c.errorf(p.P, "padrão precisa ser um literal, uma constante ou _")
+			return nil, Invalid
 		}
-		c.errorf(p.P, "identificador não declarado: %s", lit.Name)
-	case *ast.FloatLit:
-		c.errorf(p.P, "float ainda não é suportado nesta versão")
 	}
-	return nil, Invalid
+	t := c.value(p.Lit)
+	if t == Invalid {
+		return nil, Invalid
+	}
+	if p.Neg {
+		// -5: o sinal faz parte do padrão
+		if v, ok := c.info.Values[p.Lit].(*big.Int); ok {
+			c.info.Values[p.Lit] = new(big.Int).Neg(v)
+		}
+	}
+	if isUntyped(t) {
+		target := subject
+		if !isNumeric(target) {
+			target = DefaultType(t)
+		}
+		c.convertUntyped(p.Lit, target)
+		t = target
+	}
+	if isFloat(t) {
+		c.errorf(p.P, "padrões decimais não são aceitos (comparar decimais por igualdade é frágil)")
+		return nil, Invalid
+	}
+	return c.info.Values[p.Lit], t
 }
 
 func formatConst(v any) string {
@@ -702,17 +718,22 @@ func (c *checker) expr(e ast.Expr) Type {
 func (c *checker) expr0(e ast.Expr) Type {
 	switch e := e.(type) {
 	case *ast.IntLit:
-		if _, err := strconv.ParseInt(e.Value, 10, 64); err != nil {
-			c.errorf(e.P, "constante %s não cabe em int (64 bits)", e.Value)
+		v, _ := new(big.Int).SetString(e.Value, 10)
+		c.info.Values[e] = v
+		return UntypedInt
+	case *ast.FloatLit:
+		f, err := strconv.ParseFloat(e.Value, 64)
+		if err != nil {
+			c.errorf(e.P, "constante decimal %s fora da faixa de float64", e.Value)
 			return Invalid
 		}
-		return Int
-	case *ast.FloatLit:
-		c.errorf(e.P, "float ainda não é suportado nesta versão")
-		return Invalid
+		c.info.Values[e] = f
+		return UntypedFloat
 	case *ast.StringLit:
+		c.info.Values[e] = e.Value
 		return String
 	case *ast.CharLit:
+		c.info.Values[e] = big.NewInt(int64(e.Value))
 		return Byte
 	case *ast.Ident:
 		return c.ident(e)
@@ -726,6 +747,8 @@ func (c *checker) expr0(e ast.Expr) Type {
 		return c.selector(e)
 	case *ast.CompositeLit:
 		return c.composite(e)
+	case *ast.ArrayLit:
+		return c.arrayLit(e)
 	case *ast.IndexExpr:
 		return c.index(e)
 	case *ast.TypeArg:
@@ -743,7 +766,7 @@ func (c *checker) ident(e *ast.Ident) Type {
 	if l := c.scope.lookup(e.Name); l != nil {
 		l.Used = true
 		if l.IsConst {
-			c.info.Consts[e] = l.Const
+			c.info.Values[e] = l.Const
 		} else {
 			c.info.Locals[e] = l
 		}
@@ -751,6 +774,7 @@ func (c *checker) ident(e *ast.Ident) Type {
 	}
 	switch e.Name {
 	case "true", "false":
+		c.info.Values[e] = e.Name == "true"
 		return Bool
 	case "nil":
 		return NilType
@@ -759,6 +783,8 @@ func (c *checker) ident(e *ast.Ident) Type {
 		return Invalid
 	}
 	switch {
+	case c.mod.pendingConsts[e.Name]:
+		c.errorf(e.P, "constante %s usada antes de ser declarada", e.Name)
 	case c.mod.funcs[e.Name] != nil:
 		c.errorf(e.P, "função %s usada como valor (faltou chamar?)", e.Name)
 	case c.mod.uses[e.Name] != nil:
@@ -773,92 +799,6 @@ func (c *checker) ident(e *ast.Ident) Type {
 		c.errorf(e.P, "identificador não declarado: %s", e.Name)
 	}
 	return Invalid
-}
-
-func (c *checker) unary(e *ast.UnaryExpr) Type {
-	switch e.Op {
-	case token.AMP:
-		c.errorf(e.P, "& só pode aparecer como argumento de chamada, para emprestar: f(&x)")
-		c.value(e.X)
-		return Invalid
-	case token.MUL:
-		t := c.value(e.X)
-		if t == Invalid {
-			return Invalid
-		}
-		if !isPointerType(t) {
-			c.errorf(e.P, "operador * só se aplica a ponteiros e empréstimos, não a %s", t)
-			return Invalid
-		}
-		elem, _ := c.deref(t, e.X.Pos(), exprName(e.X))
-		return elem
-	}
-	t := c.value(e.X)
-	want := Int
-	if e.Op == token.NOT {
-		want = Bool
-	}
-	if t == Invalid {
-		return Invalid
-	}
-	if t != want {
-		c.errorf(e.P, "operador %s não se aplica a %s", e.Op, t)
-		return Invalid
-	}
-	return want
-}
-
-func (c *checker) binary(e *ast.BinaryExpr) Type {
-	x, y := c.value(e.X), c.value(e.Y)
-	if x == Invalid || y == Invalid {
-		return Invalid
-	}
-	mismatch := func() Type {
-		c.errorf(e.OpPos, "operador %s não se aplica a %s e %s%s", e.Op, x, y, byteHint(x, y))
-		return Invalid
-	}
-	switch e.Op {
-	case token.ADD, token.SUB, token.MUL, token.QUO, token.REM:
-		if e.Op == token.ADD && x == String && y == String {
-			c.errorf(e.OpPos, "concatenação de strings exige alocação explícita e ainda não é suportada")
-			return Invalid
-		}
-		if x != Int || y != Int {
-			return mismatch()
-		}
-		return Int
-	case token.LSS, token.LEQ, token.GTR, token.GEQ:
-		if x != y || (x != Int && x != Byte) {
-			return mismatch()
-		}
-		return Bool
-	case token.EQL, token.NEQ:
-		if x == NilType || y == NilType {
-			return c.nilComparison(e, x, y)
-		}
-		if isPointerType(x) || isPointerType(y) {
-			c.errorf(e.OpPos, "ponteiros só podem ser comparados com nil")
-			return Invalid
-		}
-		if c.noSliceCompare(e, x) || c.noSliceCompare(e, y) {
-			return Invalid
-		}
-		if x != y {
-			c.errorf(e.OpPos, "comparação entre tipos diferentes: %s e %s", x, y)
-			return Invalid
-		}
-		if isResource(x) {
-			c.errorf(e.OpPos, "structs que contêm ponteiros donos não podem ser comparadas com ==")
-			return Invalid
-		}
-		return Bool
-	case token.LAND, token.LOR:
-		if x != Bool || y != Bool {
-			return mismatch()
-		}
-		return Bool
-	}
-	panic(fmt.Sprintf("checker: operador binário desconhecido %s", e.Op))
 }
 
 func (c *checker) call(e *ast.CallExpr) Type {
@@ -878,7 +818,7 @@ func (c *checker) call(e *ast.CallExpr) Type {
 		}
 		if id.Name == "io" && fun.Sel == "print" {
 			for _, a := range e.Args {
-				t := c.value(a)
+				t := c.valueDefault(a)
 				elem, isSl := sliceElem(t)
 				switch {
 				case isPointerType(t) || t == NilType:
@@ -941,9 +881,10 @@ func (c *checker) userCall(e *ast.CallExpr, fn *Func) Type {
 				continue
 			}
 		}
-		t := c.value(a)
 		if i < len(fn.Params) {
-			c.assignable(t, fn.Params[i].Type, a.Pos(), context)
+			c.valueAs(a, fn.Params[i].Type, context)
+		} else {
+			c.value(a)
 		}
 	}
 	c.info.Calls[e] = Callee{Func: fn}

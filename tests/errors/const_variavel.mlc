@@ -1,4 +1,4 @@
-// erro: x não é constante
+// erro: o valor de uma const precisa ser uma expressão constante
 import "io"
 fn main() {
     x := 1

@@ -19,31 +19,67 @@ func (g *gen) structs() {
 	for _, s := range g.info.Structs {
 		g.raw("typedef struct %s %s;\n", structCType(s), structCType(s))
 	}
-	if len(g.info.Structs) > 0 {
+	for _, a := range g.info.Arrays {
+		g.raw("typedef struct %s %s;\n", arrayCType(a), arrayCType(a))
+	}
+	if len(g.info.Structs)+len(g.info.Arrays) > 0 {
 		g.raw("\n")
 	}
-	// Os slices vêm antes das structs: uma struct pode ter campo slice, e o
-	// slice só precisa do nome (typedef) do tipo dos elementos.
+	// Os slices vêm antes das structs e dos arrays: uma struct pode ter campo
+	// slice, e o slice só precisa do nome (typedef) do tipo dos elementos.
 	g.sliceTypedefs()
+	// Structs e arrays guardam uns aos outros por valor: cada um é definido
+	// depois dos que ele contém.
+	done := map[checker.Type]bool{}
 	for _, s := range g.info.Structs {
-		g.file = s.File
-		g.lineDirective(s.Decl.P)
-		g.raw("struct %s {\n", structCType(s))
-		for _, f := range s.Fields {
-			g.raw("    %s f_%s;\n", cType(f.Type), f.Name)
-		}
-		if len(s.Fields) == 0 {
-			// Struct vazia não é C padrão: um campo de preenchimento mantém
-			// o tipo válido e "{0}" como valor zero.
-			g.raw("    char mlc_empty;\n")
-		}
-		g.raw("};\n\n")
-		if !s.Resource { // struct com ponteiros donos não é comparada nem impressa
-			g.structEq(s)
-			g.structPrint(s)
-		}
+		g.valueType(s, done)
+	}
+	for _, a := range g.info.Arrays {
+		g.valueType(a, done)
 	}
 	g.slicePrints()
+}
+
+// valueType define a struct ou o array t (e antes, os que t contém por valor),
+// com as funções de igualdade e impressão.
+func (g *gen) valueType(t checker.Type, done map[checker.Type]bool) {
+	if done[t] {
+		return
+	}
+	done[t] = true
+	switch t := t.(type) {
+	case *checker.Struct:
+		for _, f := range t.Fields {
+			if isStruct(f.Type) || isArray(f.Type) {
+				g.valueType(f.Type, done)
+			}
+		}
+		g.structDef(t)
+	case *checker.Array:
+		if isStruct(t.Elem) || isArray(t.Elem) {
+			g.valueType(t.Elem, done)
+		}
+		g.arrayDef(t)
+	}
+}
+
+func (g *gen) structDef(s *checker.Struct) {
+	g.file = s.File
+	g.lineDirective(s.Decl.P)
+	g.raw("struct %s {\n", structCType(s))
+	for _, f := range s.Fields {
+		g.raw("    %s f_%s;\n", cType(f.Type), f.Name)
+	}
+	if len(s.Fields) == 0 {
+		// Struct vazia não é C padrão: um campo de preenchimento mantém
+		// o tipo válido e "{0}" como valor zero.
+		g.raw("    char mlc_empty;\n")
+	}
+	g.raw("};\n\n")
+	if !s.Resource { // struct com ponteiros donos não é comparada nem impressa
+		g.structEq(s)
+		g.structPrint(s)
+	}
 }
 
 func (g *gen) structEq(s *checker.Struct) {
@@ -75,6 +111,9 @@ func (g *gen) structPrint(s *checker.Struct) {
 
 // eqExpr compara dois valores do tipo t em C.
 func eqExpr(t checker.Type, a, b string) string {
+	if arr, ok := t.(*checker.Array); ok {
+		return fmt.Sprintf("mlc_eq_%s(%s, %s)", mangle(arr), a, b)
+	}
 	switch t := t.(type) {
 	case *checker.Struct:
 		return fmt.Sprintf("mlc_eq_%s(%s, %s)", t.CName, a, b)
@@ -87,6 +126,12 @@ func eqExpr(t checker.Type, a, b string) string {
 
 // printCall imprime um valor do tipo t, sem separador nem quebra de linha.
 func printCall(t checker.Type, v string) string {
+	if a, ok := t.(*checker.Array); ok {
+		return fmt.Sprintf("mlc_print_%s(%s)", mangle(a), v)
+	}
+	if s, ok := printNumber(t, v); ok {
+		return s
+	}
 	switch t := t.(type) {
 	case *checker.Slice:
 		return fmt.Sprintf("mlc_print_%s(%s)", sliceCType(t), v)
@@ -121,20 +166,4 @@ func (g *gen) composite(e *ast.CompositeLit) string {
 		inits[i] = fmt.Sprintf(".f_%s = %s", fi.Name, vals[i])
 	}
 	return sequence(pre, fmt.Sprintf("((%s){%s})", structCType(s), strings.Join(inits, ", ")))
-}
-
-// constLit escreve o valor de uma constante como literal C.
-func constLit(v any) string {
-	switch v := v.(type) {
-	case int64:
-		return intConst(v)
-	case bool:
-		if v {
-			return "true"
-		}
-		return "false"
-	case string:
-		return fmt.Sprintf("MLC_STR_LIT(%s, %d)", cString(v), len(v))
-	}
-	panic(fmt.Sprintf("codegen: constante de tipo inesperado %T", v))
 }

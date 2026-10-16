@@ -32,6 +32,10 @@ struct No {                    // campo dono: a lista é dona do próximo nó
 
 `alloc` encerra o programa com panic se faltar memória, para que `*T` nunca seja nulo. `free` de um `?*T` que vale `nil` não faz nada, como no C.
 
+## Memória sem heap: arrays
+
+Um array `[N]T` tem tamanho fixo, conhecido na compilação, e é um valor: vive na pilha (ou dentro de uma struct) e some quando o escopo termina, sem `alloc` nem `free`. É a forma mais explícita de memória: o tipo diz exatamente quantos bytes ocupa. Para não estourar a pilha, um array tem no máximo 1 MiB; para mais, use um slice.
+
 ## Slices
 
 ```

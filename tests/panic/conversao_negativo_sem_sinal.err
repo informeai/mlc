@@ -1,0 +1,1 @@
+panic: conversao_negativo_sem_sinal.mlc:3: valor -1 não cabe em uint16 (0 a 65535)

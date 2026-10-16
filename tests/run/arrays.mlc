@@ -1,0 +1,74 @@
+import "io"
+import "str"
+
+const N = 4
+
+struct Partida {
+    nome [8]byte
+    pontos [3]int
+}
+
+fn soma(s &[]int) int {
+    total := 0
+    for v in s {
+        total += v
+    }
+    return total
+}
+
+fn dobra(a &[N]int) {
+    for i := 0; i < len(a); i++ {
+        a[i] *= 2
+    }
+}
+
+// array por valor: a função recebe uma cópia
+fn zera(a [N]int) [N]int {
+    a[0] = 0
+    return a
+}
+
+fn main() {
+    a := [N]int{1, 2, 3, 4}
+    io.print(a, len(a), soma(&a), soma(&a[1:3]))
+    dobra(&a)
+    io.print(a)
+    b := zera(a)
+    io.print(a, b, a == b, a == [N]int{2, 4, 6, 8})
+
+    var vazio [3]bool
+    io.print(vazio)
+
+    m := [2][3]int{[3]int{1, 2, 3}, [3]int{4, 5, 6}}
+    m[1][2] = 60
+    total := 0
+    for linha in m {
+        for x in linha {
+            total += x
+        }
+    }
+    io.print(m, total)
+
+    // buffer de texto na pilha: sem alloc nem free
+    var buf [32]byte
+    k := str.copy(&buf, "olá, ")
+    k += str.put_int(&buf[k:], 42)
+    io.write_line(&buf[:k])
+
+    p := Partida{nome: [8]byte{}, pontos: [3]int{10, 20, 30}}
+    n := str.copy(&p.nome, "ana")
+    p.pontos[1] += 5
+    io.write(&p.nome[:n])
+    io.print("", soma(&p.pontos))
+
+    // array dentro de um objeto no heap
+    q := alloc(Partida)
+    q.pontos[2] = 7
+    io.print(q.pontos)
+    free(q)
+
+    fatias := alloc([][2]float64, 2)
+    fatias[1] = [2]float64{1.5, 2.5}
+    io.print(fatias)
+    free(fatias)
+}

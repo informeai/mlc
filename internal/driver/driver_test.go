@@ -137,10 +137,10 @@ fn main() {
 	}
 	for _, want := range []string{
 		"mlc_t_1 = mlc_fn_a(), mlc_fn_soma(mlc_t_1, mlc_fn_b())",
-		"mlc_t_3 = mlc_fn_a(), MLC_SUB(mlc_t_3, mlc_fn_b())",
+		"mlc_t_3 = mlc_fn_a(), mlc_sub_i64(mlc_t_3, mlc_fn_b(), __FILE__, __LINE__)",
 		// io.print calcula todos os argumentos antes de imprimir
 		"(mlc_t_2 = (mlc_t_1", "mlc_t_4 = (mlc_t_3",
-		"mlc_t_4 = (mlc_t_3 = mlc_fn_a(), MLC_SUB(mlc_t_3, mlc_fn_b())), mlc_io_print_int(mlc_t_2)",
+		"mlc_t_4 = (mlc_t_3 = mlc_fn_a(), mlc_sub_i64(mlc_t_3, mlc_fn_b(), __FILE__, __LINE__)), mlc_io_print_int((int64_t)(mlc_t_2))",
 	} {
 		if !strings.Contains(csrc, want) {
 			t.Errorf("C gerado não contém %q:\n%s", want, csrc)

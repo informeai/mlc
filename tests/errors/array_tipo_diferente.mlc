@@ -1,0 +1,7 @@
+// erro: comparação entre tipos diferentes: [3]int e [4]int
+import "io"
+fn main() {
+    a := [3]int{}
+    b := [4]int{}
+    io.print(a == b)
+}

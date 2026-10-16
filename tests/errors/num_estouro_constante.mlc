@@ -1,0 +1,5 @@
+// erro: estouro de inteiro na constante: constante 128 não cabe em int8
+const A int8 = 127
+const B = A + 1
+fn main() {
+}

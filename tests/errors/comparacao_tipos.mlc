@@ -1,4 +1,4 @@
-// erro: comparação entre tipos diferentes: string e int
+// erro: comparação entre tipos diferentes: string e constante inteira
 import "io"
 fn main() {
     io.print("a" == 1)

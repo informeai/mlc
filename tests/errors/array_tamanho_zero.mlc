@@ -1,0 +1,4 @@
+// erro: o tamanho de um array precisa ser maior que zero
+fn main() {
+    var a [0]int
+}

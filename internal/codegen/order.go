@@ -33,7 +33,7 @@ func (g *gen) effectful(e ast.Expr) bool {
 	case *ast.SliceExpr:
 		return true // pode dar panic fora dos limites
 	case *ast.BinaryExpr:
-		if _, arith := arithMacros[e.Op]; arith {
+		if _, isArith := opNames[e.Op]; isArith {
 			return true
 		}
 		return g.effectful(e.X) || g.effectful(e.Y)
@@ -53,14 +53,17 @@ func (g *gen) effectful(e ast.Expr) bool {
 
 // isLiteral diz se e é um valor fixo, que pode ser avaliado a qualquer momento.
 func (g *gen) isLiteral(e ast.Expr) bool {
+	if _, isConst := g.info.Values[e]; isConst {
+		return true
+	}
 	switch e := e.(type) {
 	case *ast.IntLit, *ast.StringLit:
 		return true
 	case *ast.SelectorExpr:
-		_, isConst := g.info.Consts[e]
+		_, isConst := g.info.Values[e]
 		return isConst
 	case *ast.Ident:
-		_, isConst := g.info.Consts[e]
+		_, isConst := g.info.Values[e]
 		return isConst || g.info.Locals[e] == nil // constante, true ou false
 	}
 	return false
@@ -122,9 +125,9 @@ func (g *gen) binary(e *ast.BinaryExpr, top bool) string {
 	bare := false // core é "x op y", sem parênteses próprios
 	t := g.info.Types[e.X]
 	switch {
-	case arithMacros[e.Op] != "":
-		core = fmt.Sprintf("%s(%s, %s)", arithMacros[e.Op], v[0], v[1])
-	case (e.Op == token.EQL || e.Op == token.NEQ) && (t == checker.String || isStruct(t)):
+	case opNames[e.Op] != "":
+		core = arith(e.Op, g.typeOf(e.X), v[0], v[1])
+	case (e.Op == token.EQL || e.Op == token.NEQ) && (t == checker.String || isStruct(t) || isArray(t)):
 		core = eqExpr(t, v[0], v[1])
 		if e.Op == token.NEQ {
 			core = "!" + core

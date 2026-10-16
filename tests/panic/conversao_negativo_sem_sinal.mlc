@@ -1,0 +1,5 @@
+fn main() {
+    n := -1
+    x := uint16(n)
+    n = int(x)
+}

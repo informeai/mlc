@@ -1,4 +1,4 @@
-// erro: estouro de inteiro na constante
-const N = 9223372036854775807 + 1
+// erro: constante 9223372036854775808 não cabe em int
+const N int = 9223372036854775807 + 1
 fn main() {
 }

@@ -1,0 +1,7 @@
+// erro: o índice precisa ser int, encontrado int32
+fn main() {
+    s := alloc([]int, 3)
+    var i int32 = 1
+    s[i] = 2
+    free(s)
+}

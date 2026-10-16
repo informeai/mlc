@@ -229,8 +229,15 @@ func (p *Parser) parseType() *ast.TypeExpr {
 		return &ast.TypeExpr{Name: name, P: pos}
 	case token.LBRACK:
 		p.next()
+		if p.tok.Kind == token.RBRACK {
+			p.next()
+			return &ast.TypeExpr{Mod: ast.TypeSlice, Elem: p.parseType(), P: pos}
+		}
+		// [N]T: o tamanho é uma expressão constante
+		var n ast.Expr
+		p.withLit(true, func() { n = p.parseExpr() })
 		p.expect(token.RBRACK)
-		return &ast.TypeExpr{Mod: ast.TypeSlice, Elem: p.parseType(), P: pos}
+		return &ast.TypeExpr{Mod: ast.TypeArray, Len: n, Elem: p.parseType(), P: pos}
 	case token.MUL:
 		p.next()
 		return &ast.TypeExpr{Mod: ast.TypePointer, Elem: p.parseType(), P: pos}
@@ -562,8 +569,14 @@ func (p *Parser) parsePostfix() ast.Expr {
 			call := &ast.CallExpr{Fun: x, Lparen: p.tok.Pos}
 			p.next()
 			if id, ok := x.(*ast.Ident); ok && id.Name == "alloc" && p.tok.Kind == token.LBRACK {
-				// alloc([]T, n): o primeiro argumento é um tipo
-				call.Args = append(call.Args, &ast.TypeArg{Type: p.parseType()})
+				// alloc([]T, n): o primeiro argumento é um tipo; alloc([3]int{...}),
+				// um literal de array
+				typ := p.parseType()
+				if typ.Mod == ast.TypeArray && p.tok.Kind == token.LBRACE {
+					call.Args = append(call.Args, p.arrayLitBody(typ))
+				} else {
+					call.Args = append(call.Args, &ast.TypeArg{Type: typ})
+				}
 				if p.tok.Kind == token.COMMA {
 					p.next()
 				}
@@ -646,6 +659,8 @@ func (p *Parser) parsePrimary() ast.Expr {
 	case token.CHAR:
 		p.next()
 		return &ast.CharLit{Value: t.Lit[0], P: t.Pos}
+	case token.LBRACK:
+		return p.parseArrayLit()
 	case token.LPAREN:
 		p.next()
 		var x ast.Expr
@@ -676,4 +691,34 @@ func (p *Parser) parsePub(f *ast.File) {
 	default:
 		p.errorf(pos, "pub só vale antes de fn, struct ou const")
 	}
+}
+
+// parseArrayLit lê "[3]int{1, 2, 3}". Como um tipo array sozinho nunca é uma
+// expressão, o '{' depois dele sempre abre o literal, mesmo no cabeçalho de
+// if, for e match.
+func (p *Parser) parseArrayLit() *ast.ArrayLit {
+	typ := p.parseType()
+	if typ.Mod != ast.TypeArray {
+		p.errorf(typ.P, "um literal começando com [ precisa de tamanho: [3]int{1, 2, 3}")
+	}
+	return p.arrayLitBody(typ)
+}
+
+// arrayLitBody lê os elementos {a, b, c} de um literal de array.
+func (p *Parser) arrayLitBody(typ *ast.TypeExpr) *ast.ArrayLit {
+	lit := &ast.ArrayLit{Type: typ, Lbrace: p.expect(token.LBRACE).Pos}
+	p.withLit(true, func() {
+		for p.tok.Kind != token.RBRACE {
+			lit.Elems = append(lit.Elems, p.parseExpr())
+			if p.tok.Kind == token.SEMICOLON && p.tok.Lit == "\n" {
+				p.errorf(p.tok.Pos, "falta ',' depois do elemento (num literal em várias linhas, todo elemento termina com vírgula)")
+			}
+			if p.tok.Kind != token.COMMA {
+				break
+			}
+			p.next()
+		}
+	})
+	p.expect(token.RBRACE)
+	return lit
 }

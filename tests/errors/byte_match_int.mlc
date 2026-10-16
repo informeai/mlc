@@ -1,8 +1,8 @@
-// erro: padrão do tipo int em match sobre byte
+// erro: constante 300 não cabe em byte (0 a 255)
 fn main() {
     c := 'x'
     match c {
-        120 => {}
+        300 => {}
         _ => {}
     }
 }

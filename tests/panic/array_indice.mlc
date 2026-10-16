@@ -1,0 +1,7 @@
+import "io"
+
+fn main() {
+    a := [3]int{1, 2, 3}
+    i := 3
+    io.print(a[i])
+}

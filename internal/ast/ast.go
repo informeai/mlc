@@ -69,6 +69,7 @@ type TypeExpr struct {
 	Module string // qualificador: "geometria" em geometria.Ponto
 	Mod    TypeMod
 	Elem   *TypeExpr // não nil quando Mod != TypeNamed
+	Len    Expr      // tamanho de [N]T
 	P      token.Pos
 }
 
@@ -80,6 +81,7 @@ const (
 	TypePointer         // *T
 	TypeNullPtr         // ?*T
 	TypeBorrow          // &T
+	TypeArray           // [N]T
 )
 
 func (n *Import) Pos() token.Pos   { return n.P }
@@ -329,3 +331,14 @@ type CharLit struct {
 func (n *CharLit) Pos() token.Pos { return n.P }
 
 func (*CharLit) exprNode() {}
+
+// ArrayLit é "[3]int{1, 2, 3}". Elems vazio significa o valor zero.
+type ArrayLit struct {
+	Type   *TypeExpr
+	Elems  []Expr
+	Lbrace token.Pos
+}
+
+func (n *ArrayLit) Pos() token.Pos { return n.Type.P }
+
+func (*ArrayLit) exprNode() {}

@@ -1,0 +1,5 @@
+fn main() {
+    var g uint64 = 18446744073709551615
+    n := int(g)
+    g = uint64(n)
+}

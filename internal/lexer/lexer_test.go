@@ -109,3 +109,20 @@ func TestCharLiterals(t *testing.T) {
 		}
 	}
 }
+
+func TestFloatLiterals(t *testing.T) {
+	for _, src := range []string{"1.5", "1e9", "2.5E-3", "7e+2", "0.0"} {
+		l := New("t.mlc", []byte(src))
+		tok := l.Next()
+		if tok.Kind != token.FLOAT || tok.Lit != src || len(l.Errors()) > 0 {
+			t.Errorf("%s: got %v %q, erros %v", src, tok.Kind, tok.Lit, l.Errors())
+		}
+	}
+	// "1e" sem dígitos não é expoente: é o número 1 seguido de letra
+	l := New("t.mlc", []byte("1e"))
+	for l.Next().Kind != token.EOF {
+	}
+	if len(l.Errors()) == 0 {
+		t.Error("1e: esperado erro de número malformado")
+	}
+}

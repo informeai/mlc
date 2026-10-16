@@ -13,7 +13,7 @@ package codegen
 
 import (
 	"fmt"
-	"math"
+	"math/big"
 	"strings"
 
 	"mlc/internal/ast"
@@ -78,9 +78,11 @@ func (g *gen) lineDirective(pos token.Pos) {
 
 func cType(t checker.Type) string {
 	switch t := t.(type) {
+	case *checker.Array:
+		return arrayCType(t)
 	case *checker.Basic:
-		if t == checker.Byte {
-			return "uint8_t"
+		if c, ok := numericC[checker.DefaultType(t)]; ok {
+			return c
 		}
 	case *checker.Slice:
 		return sliceCType(t)
@@ -190,7 +192,7 @@ func (g *gen) stmt(s ast.Stmt) {
 		}
 	case *ast.MatchStmt:
 		g.lineDirective(s.P)
-		if t := g.info.Types[s.Subject]; t == checker.Int || t == checker.Byte {
+		if checker.IsInteger(g.typeOf(s.Subject)) {
 			g.matchSwitch(s)
 		} else {
 			g.matchIfChain(s)
@@ -256,7 +258,7 @@ func (g *gen) matchSwitch(s *ast.MatchStmt) {
 			if p.Wildcard {
 				labels = append(labels, "default:")
 			} else {
-				labels = append(labels, "case "+intConst(g.info.Patterns[p].(int64))+":")
+				labels = append(labels, "case "+constant(g.info.Patterns[p], g.typeOf(s.Subject))+":")
 			}
 		}
 		g.line("%s {", strings.Join(labels, " "))
@@ -268,13 +270,6 @@ func (g *gen) matchSwitch(s *ast.MatchStmt) {
 	}
 	g.switches--
 	g.line("}")
-}
-
-func intConst(v int64) string {
-	if v == math.MinInt64 {
-		return "INT64_MIN" // -9223372036854775808 não é um literal válido em C
-	}
-	return fmt.Sprintf("INT64_C(%d)", v)
 }
 
 // matchIfChain emite match sobre string ou bool como cadeia de if/else. O
@@ -368,16 +363,17 @@ func (g *gen) simple(s ast.Stmt) string {
 		}
 		// x += v lê x antes de calcular v, da esquerda para a direita.
 		ops, v := g.operands([]ast.Expr{s.Lhs, s.Rhs})
-		return sequence(append(pre, ops...), fmt.Sprintf("%s = %s(%s, %s)", lhs, arithMacros[assignOps[s.Op]], v[0], v[1]))
+		return sequence(append(pre, ops...), lhs+" = "+arith(assignOps[s.Op], g.typeOf(s.Lhs), v[0], v[1]))
 	case *ast.IncDecStmt:
-		macro := "MLC_ADD"
+		op := token.ADD
 		if s.Op == token.DEC {
-			macro = "MLC_SUB"
+			op = token.SUB
 		}
 		pre := g.hoistIndex(s.X, false)
 		defer g.dropIndex(s.X)
 		x := g.expr(s.X)
-		return sequence(pre, fmt.Sprintf("%s = %s(%s, INT64_C(1))", x, macro, x))
+		t := g.typeOf(s.X)
+		return sequence(pre, x+" = "+arith(op, t, x, constant(big.NewInt(1), t)))
 	}
 	panic(fmt.Sprintf("codegen: comando simples desconhecido %T", s))
 }
@@ -392,8 +388,11 @@ var assignOps = map[token.Kind]token.Kind{
 }
 
 func zeroValue(t checker.Type) string {
-	if t == checker.Byte {
-		return "((uint8_t)0)"
+	if a, ok := t.(*checker.Array); ok {
+		return "((" + arrayCType(a) + "){0})"
+	}
+	if c, ok := numericC[t]; ok {
+		return "((" + c + ")0)"
 	}
 	if s, ok := t.(*checker.Slice); ok {
 		return "((" + sliceCType(s) + "){0})" // slice vazio
@@ -457,26 +456,14 @@ func (g *gen) ioPrint(call *ast.CallExpr) string {
 	return "(" + strings.Join(parts, ", ") + ")"
 }
 
-var arithMacros = map[token.Kind]string{
-	token.ADD: "MLC_ADD",
-	token.SUB: "MLC_SUB",
-	token.MUL: "MLC_MUL",
-	token.QUO: "MLC_DIV",
-	token.REM: "MLC_MOD",
-}
-
 func (g *gen) expr(e ast.Expr) string {
+	// Expressões constantes (literais, constantes, contas entre constantes)
+	// já foram calculadas pelo checker: viram um literal do tipo final.
+	if v, ok := g.info.Values[e]; ok {
+		return constant(v, g.typeOf(e))
+	}
 	switch e := e.(type) {
-	case *ast.IntLit:
-		return "INT64_C(" + e.Value + ")"
-	case *ast.StringLit:
-		return fmt.Sprintf("MLC_STR_LIT(%s, %d)", cString(e.Value), len(e.Value))
-	case *ast.CharLit:
-		return fmt.Sprintf("((uint8_t)%d)", e.Value)
 	case *ast.Ident:
-		if v, ok := g.info.Consts[e]; ok {
-			return constLit(v)
-		}
 		if l := g.info.Locals[e]; l != nil {
 			return l.CName
 		}
@@ -487,10 +474,15 @@ func (g *gen) expr(e ast.Expr) string {
 	case *ast.UnaryExpr:
 		switch e.Op {
 		case token.SUB:
-			return "MLC_NEG(" + g.expr(e.X) + ")"
+			return neg(g.typeOf(e.X), g.expr(e.X))
 		case token.MUL:
 			return "(*" + g.expr(e.X) + ")"
 		case token.AMP:
+			if _, at := g.arrayOf(e.X); at != nil {
+				if _, view := g.info.Types[e].(*checker.Borrow); view && !isArrayBorrow(g.info.Types[e]) {
+					return g.arrayView(e.X) // &a como &[]T
+				}
+			}
 			return g.borrow(e.X)
 		}
 		return "(!" + g.expr(e.X) + ")"
@@ -499,15 +491,14 @@ func (g *gen) expr(e ast.Expr) string {
 	case *ast.IndexExpr:
 		return g.index(e)
 	case *ast.SelectorExpr:
-		if v, ok := g.info.Consts[e]; ok {
-			return constLit(v) // geometria.PI
-		}
 		if isPointer(g.info.Types[e.X]) {
 			return g.expr(e.X) + "->f_" + e.Sel
 		}
 		return g.expr(e.X) + ".f_" + e.Sel
 	case *ast.CompositeLit:
 		return g.composite(e)
+	case *ast.ArrayLit:
+		return g.arrayLit(e)
 	case *ast.CallExpr:
 		callee := g.info.Calls[e]
 		if callee.Builtin == checker.IoPrint {
@@ -528,6 +519,9 @@ func (g *gen) expr(e ast.Expr) string {
 		case checker.Convert:
 			return g.convert(e, callee)
 		case checker.Len:
+			if a, at := g.arrayOf(e.Args[0]); at != nil {
+				return fmt.Sprintf("((void)%s, INT64_C(%d))", a, at.Len) // o tamanho é fixo; o array ainda é avaliado
+			}
 			return g.sliceVal(e.Args[0]) + ".len"
 		}
 		pre, args := g.operands(e.Args)

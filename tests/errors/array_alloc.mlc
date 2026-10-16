@@ -1,0 +1,5 @@
+// erro: ponteiro para array não é suportado
+fn main() {
+    p := alloc([3]int{1, 2, 3})
+    free(p)
+}

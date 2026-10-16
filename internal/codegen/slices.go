@@ -15,6 +15,12 @@ import (
 func sliceCType(s *checker.Slice) string { return "mlc_sl_" + mangle(s.Elem) }
 
 func mangle(t checker.Type) string {
+	if a, ok := t.(*checker.Array); ok {
+		return fmt.Sprintf("%d_%s", a.Len, mangle(a.Elem))
+	}
+	if s, ok := suffix[t]; ok && t != checker.Int && t != checker.Byte {
+		return s
+	}
 	switch t := t.(type) {
 	case *checker.Struct:
 		return "st_" + t.CName
@@ -73,6 +79,9 @@ func (g *gen) sliceVal(e ast.Expr) string {
 }
 
 func (g *gen) index(e *ast.IndexExpr) string {
+	if _, at := g.arrayOf(e.X); at != nil {
+		return g.arrayIndex(e)
+	}
 	s := g.sliceVal(e.X)
 	i, ok := g.indexOverride[e]
 	if !ok {
@@ -104,6 +113,10 @@ func (g *gen) allocSlice(e *ast.CallExpr, callee checker.Callee) string {
 // forIn traduz "for x in s": o slice é lido de novo a cada volta (ele é
 // sempre uma variável ou um campo), e x recebe uma cópia do elemento.
 func (g *gen) forIn(s *ast.ForStmt) {
+	if _, at := g.arrayOf(s.Iter); at != nil && g.info.Drains[s] == nil {
+		g.forInArray(s)
+		return
+	}
 	i := g.newName("mlc_i")
 	iter, drain := s.Iter, false
 	if d := g.info.Drains[s]; d != nil {
@@ -172,6 +185,9 @@ func (g *gen) realloc(e *ast.CallExpr, callee checker.Callee) string {
 // vive até o fim da chamada) apontando para os elementos de a até b-1. Os
 // limites são checados antes: 0 <= a <= b <= len(s).
 func (g *gen) subSlice(e *ast.SliceExpr) string {
+	if _, at := g.arrayOf(e.X); at != nil {
+		return g.arraySubSlice(e)
+	}
 	sv := g.sliceVal(e.X)
 	st := g.info.Types[e.X]
 	if b, ok := st.(*checker.Borrow); ok {
@@ -229,17 +245,4 @@ func (g *gen) takeReplace(e *ast.CallExpr, callee checker.Callee) string {
 		fmt.Sprintf("%s = %s.ptr[%s]", old, s, ti),
 		fmt.Sprintf("%s.ptr[%s] = %s", s, ti, put))
 	return sequence(parts, old)
-}
-
-// convert traduz int(x) e byte(x). byte(n) checa a faixa 0..255.
-func (g *gen) convert(e *ast.CallExpr, callee checker.Callee) string {
-	x := g.expr(e.Args[0])
-	from := g.info.Types[e.Args[0]]
-	switch {
-	case from == callee.Elem:
-		return x
-	case callee.Elem == checker.Byte:
-		return "mlc_to_byte(" + x + ", __FILE__, __LINE__)"
-	}
-	return "((int64_t)(" + x + "))"
 }

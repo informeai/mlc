@@ -2,5 +2,6 @@
 import "io"
 fn main() {
     s := "abc"
-    io.print(s[0] == 97)
+    n := 97
+    io.print(s[0] == n)
 }

@@ -1,0 +1,1 @@
+panic: conversao_uint64.mlc:3: valor 18446744073709551615 não cabe em int (0 a 9223372036854775807)

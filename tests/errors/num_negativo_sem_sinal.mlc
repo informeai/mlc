@@ -1,0 +1,4 @@
+// erro: constante -1 não cabe em uint64 (0 a 18446744073709551615)
+fn main() {
+    var a uint64 = -1
+}

@@ -1,0 +1,6 @@
+// erro: operador - não se aplica a uint32, que não tem sinal
+import "io"
+fn main() {
+    var u uint32 = 5
+    io.print(-u)
+}

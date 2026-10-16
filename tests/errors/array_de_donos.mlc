@@ -1,0 +1,5 @@
+// erro: arrays de ponteiros ainda não são suportados
+struct No { x int }
+fn main() {
+    var a [3]?*No
+}

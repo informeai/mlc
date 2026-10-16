@@ -1,0 +1,6 @@
+// erro: operador % não se aplica a float64 (só a inteiros)
+import "io"
+fn main() {
+    f := 2.5
+    io.print(f % 2.0)
+}

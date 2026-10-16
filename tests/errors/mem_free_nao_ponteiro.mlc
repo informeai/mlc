@@ -1,4 +1,4 @@
-// erro: free espera um ponteiro dono, encontrado int
+// erro: free espera um ponteiro dono, encontrado constante inteira
 fn main() {
     free(1)
 }

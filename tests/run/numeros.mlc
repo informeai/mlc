@@ -1,0 +1,89 @@
+import "io"
+import "str"
+
+const LIMITE = 100              // sem tipo: serve para int8 e para uint64
+const PI float64 = 3.14159
+const TAXA float32 = 0.1
+const GRANDE uint64 = 18446744073709551615
+const MASCARA = 255 * 2 - 255   // calculado na compilação: 255
+
+struct Pixel {
+    r byte
+    g byte
+    b byte
+    alfa float32
+}
+
+fn media(v &[]float64) float64 {
+    total := 0.0
+    for x in v {
+        total += x
+    }
+    return total / float64(len(v))
+}
+
+fn classe(n int32) string {
+    match n {
+        0 => return "zero"
+        1, 2, 3 => return "pequeno"
+        LIMITE => return "limite"
+        _ => return "outro"
+    }
+}
+
+fn main() {
+    var a int8 = 100
+    var b int8 = 27
+    io.print("int8:", a + b, a - b * 2, -a)
+
+    var u uint16 = 60000
+    io.print("uint16:", u + 5535, u / 7, u % 7)
+
+    var x int32 = LIMITE
+    io.print("int32:", x * 1000, classe(x), classe(2), classe(-5))
+
+    io.print("uint64:", GRANDE, GRANDE / 2)
+    io.print("constantes:", MASCARA, LIMITE)
+
+    var c byte = 200
+    io.print("byte:", c + 55, c / 3, 'a' + 1)
+
+    // decimais
+    r := 2.5
+    io.print("float64:", r * 2, PI * r * r, 1.0 / 3.0, 10.0 / 4.0, -r)
+    io.print("float32:", TAXA, TAXA * 3)
+    io.print("divisão de decimais por zero:", 1.0 / (r - r) > 1000.0)
+
+    // conversões explícitas
+    n := 7
+    io.print("conversões:", float64(n) / 2.0, int(PI * 100.0), int(-2.9), int32(n) * 3)
+    io.print(byte(65), int(c), uint64(n) * 2, float32(PI), int8(-128))
+
+    notas := alloc([]float64, 4)
+    notas[0] = 7.5
+    notas[1] = 8.0
+    notas[2] = 6.0
+    notas[3] = 9.25
+    io.print("média:", media(&notas), notas)
+    free(notas)
+
+    p := Pixel{r: 255, g: 128, b: 0, alfa: 0.5}
+    io.print("pixel:", p)
+
+    pequenos := alloc([]int16, 3)
+    pequenos[0] = -300
+    pequenos[1] = 300
+    pequenos[2] = pequenos[0] + pequenos[1]
+    io.print(pequenos)
+    free(pequenos)
+
+    buf := alloc([]byte, 32)
+    k := str.put_float(&buf, PI)
+    io.write_line(&buf[:k])
+    var lido float64
+    k = str.copy(&buf, "2.75")
+    if str.parse_float(&buf[:k], &lido) {
+        io.print("lido:", lido * 2.0)
+    }
+    free(buf)
+}

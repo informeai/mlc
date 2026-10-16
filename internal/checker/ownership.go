@@ -1096,6 +1096,11 @@ func (o *ownChecker) sliceAccess(e ast.Expr) {
 		o.read(e)
 		return
 	}
+	if t := pathType(k); !IsOwner(t) && !isBorrow(t) {
+		// array guardado num campo: é um valor, só o caminho até ele importa
+		o.reach(k, e.Pos())
+		return
+	}
 	o.reach(k, e.Pos())
 	o.check(k, e.Pos(), true)
 }

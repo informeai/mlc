@@ -1,0 +1,6 @@
+fn main() {
+    z := 0.0
+    f := z / z
+    n := int32(f)
+    f = float64(n)
+}

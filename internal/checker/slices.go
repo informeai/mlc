@@ -1,6 +1,8 @@
 package checker
 
 import (
+	"math/big"
+
 	"mlc/internal/ast"
 	"mlc/internal/token"
 )
@@ -75,9 +77,7 @@ func (c *checker) allocSlice(e *ast.CallExpr, ta *ast.TypeArg) Type {
 		c.errorf(e.Lparen, "alloc de slice precisa do tamanho: alloc(%s, n)", t)
 		return Invalid
 	}
-	if nt := c.value(e.Args[1]); nt != Int && nt != Invalid {
-		c.errorf(e.Args[1].Pos(), "o tamanho em alloc precisa ser int, encontrado %s", nt)
-	}
+	c.intValue(e.Args[1], "o tamanho em alloc")
 	if t == Invalid {
 		return Invalid
 	}
@@ -97,8 +97,15 @@ func (c *checker) lenCall(e *ast.CallExpr) Type {
 		return Invalid
 	}
 	t := c.value(e.Args[0])
+	if a, ok := arrayElem(t); ok {
+		c.info.Calls[e] = Callee{Builtin: Len}
+		if isPath(e.Args[0]) {
+			c.info.Values[e] = big.NewInt(a.Len) // conhecido na compilação
+		}
+		return Int
+	}
 	if _, ok := sliceElem(t); !ok && t != String && t != Invalid {
-		c.errorf(e.Args[0].Pos(), "len se aplica a slices e strings, não a %s", t)
+		c.errorf(e.Args[0].Pos(), "len se aplica a slices, arrays e strings, não a %s", t)
 	}
 	c.info.Calls[e] = Callee{Builtin: Len}
 	return Int
@@ -108,6 +115,10 @@ func (c *checker) lenCall(e *ast.CallExpr) Type {
 func (c *checker) index(e *ast.IndexExpr) Type {
 	bt := c.value(e.X)
 	c.indexValue(e.Index)
+	if a, ok := arrayElem(bt); ok {
+		c.checkArrayIndex(a, e.Index)
+		return a.Elem
+	}
 	if elem, ok := sliceElem(bt); ok {
 		return elem
 	}
@@ -122,15 +133,17 @@ func (c *checker) index(e *ast.IndexExpr) Type {
 }
 
 func (c *checker) indexValue(i ast.Expr) {
-	if t := c.value(i); t != Int && t != Invalid {
-		c.errorf(i.Pos(), "o índice precisa ser int, encontrado %s", t)
-	}
+	c.intValue(i, "o índice")
 }
 
 // targetIndex checa s[i] como destino de atribuição.
 func (c *checker) targetIndex(e *ast.IndexExpr) Type {
 	bt := c.value(e.X)
 	c.indexValue(e.Index)
+	if a, ok := arrayElem(bt); ok {
+		c.checkArrayIndex(a, e.Index)
+		return a.Elem
+	}
 	if elem, ok := sliceElem(bt); ok {
 		return elem
 	}
@@ -167,6 +180,12 @@ func (c *checker) checkForIn(s *ast.ForStmt) {
 	if iter != nil {
 		t = c.value(iter)
 		elem, ok = sliceElem(t)
+		if a, isArr := arrayElem(t); isArr {
+			elem, ok = a.Elem, true
+			if drain {
+				c.errorf(iter.Pos(), "drain serve para slices de donos; para percorrer %s, use for x in a", t)
+			}
+		}
 	}
 	switch {
 	case t == Invalid:
@@ -210,9 +229,7 @@ func (c *checker) reallocCall(e *ast.CallExpr) Type {
 		return Invalid
 	}
 	t := c.value(e.Args[0])
-	if nt := c.value(e.Args[1]); nt != Int && nt != Invalid {
-		c.errorf(e.Args[1].Pos(), "o tamanho em realloc precisa ser int, encontrado %s", nt)
-	}
+	c.intValue(e.Args[1], "o tamanho em realloc")
 	switch {
 	case t == Invalid:
 		return Invalid
@@ -242,9 +259,12 @@ func (c *checker) subSlice(e *ast.SliceExpr) Type {
 	if b, ok := bt.(*Borrow); ok {
 		bt = b.Elem
 	}
+	if a, ok := bt.(*Array); ok {
+		return c.borrowOf(c.sliceOf(a.Elem)) // parte de um array, vista como slice
+	}
 	s, ok := bt.(*Slice)
 	if !ok {
-		c.errorf(e.Lbrack, "sub-slice se aplica a slices, não a %s", bt)
+		c.errorf(e.Lbrack, "sub-slice se aplica a slices e arrays, não a %s", bt)
 		return Invalid
 	}
 	return c.borrowOf(s)
@@ -304,9 +324,10 @@ func (c *checker) replaceCall(e *ast.CallExpr) Type {
 		return Invalid
 	}
 	t := c.ownerElem(e.Args[0], "replace")
-	vt := c.value(e.Args[1])
 	if t != Invalid {
-		c.assignable(vt, t, e.Args[1].Pos(), "o valor de replace")
+		c.valueAs(e.Args[1], t, "o valor de replace")
+	} else {
+		c.value(e.Args[1])
 	}
 	c.info.Calls[e] = Callee{Builtin: Replace, Elem: t}
 	return t

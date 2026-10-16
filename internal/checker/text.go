@@ -32,6 +32,8 @@ var nativeSigs = map[string][]nativeSig{
 		{"eq", "mlc_str_eq", []string{"bytes", "string"}, "bool"},
 		{"eq_bytes", "mlc_str_eq_bytes", []string{"bytes", "bytes"}, "bool"},
 		{"parse_int", "mlc_str_parse_int", []string{"bytes", "&int"}, "bool"},
+		{"put_float", "mlc_str_put_float", []string{"bytes", "float64"}, "int"},
+		{"parse_float", "mlc_str_parse_float", []string{"bytes", "&float64"}, "bool"},
 	},
 	"io": {
 		{"write", "mlc_io_write", []string{"bytes"}, ""},
@@ -70,6 +72,10 @@ func (c *checker) nativeType(s string) Type {
 		return c.borrowOf(c.sliceOf(Byte))
 	case "&int":
 		return c.borrowOf(Int)
+	case "&float64":
+		return c.borrowOf(Float64)
+	case "float64":
+		return Float64
 	case "int":
 		return Int
 	case "bool":
@@ -82,39 +88,10 @@ func (c *checker) nativeType(s string) Type {
 	panic("checker: tipo nativo desconhecido " + s)
 }
 
-// conversion checa int(x) e byte(x). byte(n) com n fora de 0..255 dá panic
-// em tempo de execução.
-func (c *checker) conversion(e *ast.CallExpr, target Type) Type {
-	if len(e.Args) != 1 {
-		c.errorf(e.Lparen, "%s(x) recebe um valor", target)
-		c.checkArgs(e)
-		return Invalid
-	}
-	t := c.value(e.Args[0])
-	if t == Invalid {
-		return Invalid
-	}
-	numeric := func(t Type) bool { return t == Int || t == Byte }
-	if !numeric(t) || !numeric(target) {
-		c.errorf(e.Args[0].Pos(), "não é possível converter %s em %s", t, target)
-		return Invalid
-	}
-	c.info.Calls[e] = Callee{Builtin: Convert, Elem: target}
-	return target
-}
-
 func (c *checker) moduleFunc(e *ast.CallExpr, module, name string) (Type, bool) {
 	fn := c.nativeFunc(module, name)
 	if fn == nil {
 		return nil, false
 	}
 	return c.userCall(e, fn), true
-}
-
-// byteHint completa mensagens de aritmética com byte.
-func byteHint(x, y Type) string {
-	if x == Byte || y == Byte {
-		return " (converta com int(b) para fazer contas)"
-	}
-	return ""
 }

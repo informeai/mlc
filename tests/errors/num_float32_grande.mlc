@@ -1,0 +1,4 @@
+// erro: constante 1e+40 não cabe em float32
+fn main() {
+    var f float32 = 1e40
+}

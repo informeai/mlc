@@ -1,0 +1,7 @@
+// erro: match não se aplica a float64
+fn main() {
+    f := 1.5
+    match f {
+        _ => {}
+    }
+}

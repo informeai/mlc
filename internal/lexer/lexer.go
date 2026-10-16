@@ -215,6 +215,20 @@ func (l *Lexer) scanNumber(pos token.Pos) token.Token {
 			l.advance()
 		}
 	}
+	// expoente: 1e9, 2.5E-3
+	if c := l.peek(0); c == 'e' || c == 'E' {
+		sign := l.peek(1) == '+' || l.peek(1) == '-'
+		if isDigit(l.peek(1)) || (sign && isDigit(l.peek(2))) {
+			kind = token.FLOAT
+			l.advance()
+			if sign {
+				l.advance()
+			}
+			for l.off < len(l.src) && isDigit(l.src[l.off]) {
+				l.advance()
+			}
+		}
+	}
 	if l.off < len(l.src) && isLetter(l.src[l.off]) {
 		l.errorf(l.pos(), "número malformado: letra logo após %q", string(l.src[start:l.off]))
 		for l.off < len(l.src) && (isLetter(l.src[l.off]) || isDigit(l.src[l.off])) {

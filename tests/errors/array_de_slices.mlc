@@ -1,0 +1,4 @@
+// erro: arrays de []int ainda não são suportados: os elementos não podem ser donos
+fn main() {
+    var a [2][]int
+}

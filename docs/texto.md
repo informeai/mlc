@@ -32,8 +32,17 @@ fn main() {
 
 - `s[i]` numa `string` ou num `[]byte` dá um `byte`.
 - `len(s)` dá o tamanho em **bytes**: `len("olá")` é 4, porque `á` ocupa dois bytes em UTF-8.
-- `byte` não faz contas. Para isso, converta: `int(b)`; e de volta: `byte(n)`, que dá panic se `n` estiver fora de 0 a 255.
+- `byte` é um inteiro sem sinal de 8 bits: faz contas com outros `byte` (estouro dá panic), e converte com `int(b)` e `byte(n)`, que dá panic se `n` estiver fora de 0 a 255. Veja [tipos.md](tipos.md).
 - Bytes podem ser comparados (`==`, `<`, ...) e usados em `match` com literais: `'a', 'e' => ...`.
+
+Para buffers pequenos, um array `[N]byte` dispensa o `alloc` e o `free`: ele vive na pilha e `&buf` o empresta como `&[]byte`.
+
+```
+var buf [32]byte
+k := str.copy(&buf, "olá, ")
+k += str.put_int(&buf[k:], 42)
+io.write_line(&buf[:k])
+```
 
 ## Funções (`import "str"`)
 
@@ -46,6 +55,8 @@ fn main() {
 | `str.eq(a &[]byte, s string) bool` | `a` tem o mesmo texto que `s`? |
 | `str.eq_bytes(a &[]byte, b &[]byte) bool` | `a` e `b` têm o mesmo texto? |
 | `str.parse_int(s &[]byte, out &int) bool` | lê um inteiro decimal (com sinal opcional) de `s` inteiro; em caso de sucesso grava em `out` e devolve `true` |
+| `str.put_float(dst &[]byte, x float64) int` | escreve `x` com o menor número de dígitos que o representa exatamente (como o `io.print`) |
+| `str.parse_float(s &[]byte, out &float64) bool` | lê um decimal (`2.5`, `1e9`) de `s` inteiro |
 
 As funções que escrevem dão panic se o texto não couber em `dst`, com uma mensagem como `str.copy: o texto (3 bytes) não cabe no destino (2 bytes)`.
 

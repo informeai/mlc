@@ -1,0 +1,5 @@
+// erro: elemento 1: esperado int, encontrado string
+import "io"
+fn main() {
+    io.print([2]int{1, "dois"})
+}

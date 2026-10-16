@@ -84,14 +84,20 @@ const (
 	ctxElem                      // o T de *T
 	ctxBorrowElem                // o T de &T (aceita slices)
 	ctxSliceElem                 // o T de []T
+	ctxArrayElem                 // o T de [N]T
 )
 
 func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 	switch t.Mod {
 	case ast.TypeSlice:
 		return c.resolveSlice(t, ctx)
+	case ast.TypeArray:
+		return c.resolveArray(t, ctx)
 	case ast.TypePointer, ast.TypeNullPtr, ast.TypeBorrow:
 		switch {
+		case ctx == ctxArrayElem:
+			c.errorf(t.P, "arrays de ponteiros ainda não são suportados: os elementos não podem ser donos nem empréstimos")
+			return Invalid
 		case ctx == ctxSliceElem && t.Mod == ast.TypePointer:
 			c.errorf(t.P, "elementos de slice começam zerados (nil), então não podem ser *T: use []?*T")
 			return Invalid
@@ -300,13 +306,17 @@ func (c *checker) allocArg(a ast.Expr) (Type, bool) {
 	if _, isLit := a.(*ast.CompositeLit); isLit {
 		c.litOK = true // alloc(No{...}): o literal vai direto para a memória nova
 	}
-	t := c.value(a)
+	t := c.valueDefault(a)
 	if _, isLit := a.(*ast.CompositeLit); !isLit {
 		c.noCopy(t, a.Pos())
 	}
 	switch t.(type) {
 	case *Pointer, *Borrow:
 		c.errorf(a.Pos(), "ponteiro para ponteiro não é suportado")
+		return Invalid, false
+	}
+	if isArray(t) {
+		c.errorf(a.Pos(), "ponteiro para array não é suportado: use o array direto, ou alloc([]T, n)")
 		return Invalid, false
 	}
 	if t == NilType {
@@ -343,6 +353,13 @@ func (c *checker) borrowArg(a ast.Expr, want *Borrow, context string) {
 	if t == Invalid {
 		c.info.Types[a] = Invalid
 		return
+	}
+	if arr, ok := t.(*Array); ok {
+		if s, isSl := want.Elem.(*Slice); isSl && s.Elem == arr.Elem {
+			// &a, com a [N]T, empresta o array como &[]T
+			c.info.Types[a] = want
+			return
+		}
 	}
 	got := c.borrowOf(t)
 	c.info.Types[a] = got

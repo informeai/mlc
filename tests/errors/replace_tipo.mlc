@@ -1,4 +1,4 @@
-// erro: o valor de replace: esperado ?*Item, encontrado int
+// erro: o valor de replace: esperado ?*Item, encontrado constante inteira
 struct Item { peso int }
 fn main() {
     s := alloc([]?*Item, 2)

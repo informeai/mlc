@@ -1,4 +1,4 @@
-// erro: len se aplica a slices e strings, não a int
+// erro: len se aplica a slices, arrays e strings, não a constante inteira
 import "io"
 fn main() {
     io.print(len(3))

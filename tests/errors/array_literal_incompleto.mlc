@@ -1,0 +1,5 @@
+// erro: o literal de [3]int tem 2 elemento(s): liste os 3, ou use [3]int{} para o valor zero
+import "io"
+fn main() {
+    io.print([3]int{1, 2})
+}

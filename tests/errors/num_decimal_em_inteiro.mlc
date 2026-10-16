@@ -1,0 +1,4 @@
+// erro: constante decimal 2.5 não é inteira
+fn main() {
+    var n int = 2.5
+}

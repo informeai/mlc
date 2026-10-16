@@ -1,0 +1,8 @@
+// erro: argumento 1 de soma: esperado &[]int, encontrado &[3]bool
+fn soma(s &[]int) int {
+    return len(s)
+}
+fn main() {
+    a := [3]bool{}
+    soma(&a)
+}

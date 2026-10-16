@@ -1,0 +1,5 @@
+// erro: o tamanho de um array precisa ser uma constante inteira
+fn main() {
+    n := 3
+    var a [n]int
+}

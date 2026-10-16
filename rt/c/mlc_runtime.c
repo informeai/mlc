@@ -1,6 +1,8 @@
 #include "mlc_runtime.h"
 
+#include <float.h>
 #include <inttypes.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -85,12 +87,6 @@ void mlc_check_slice(int64_t lo, int64_t hi, int64_t len, const char *file, int 
     if (lo >= 0 && lo <= hi && hi <= len) return;
     char msg[128];
     snprintf(msg, sizeof msg, "sub-slice [%" PRId64 ":%" PRId64 "] fora dos limites (tamanho %" PRId64 ")", lo, hi, len);
-    mlc_panic(file, line, msg);
-}
-
-void mlc_panic_byte(int64_t v, const char *file, int line) {
-    char msg[96];
-    snprintf(msg, sizeof msg, "valor %" PRId64 " não cabe em byte (0 a 255)", v);
     mlc_panic(file, line, msg);
 }
 
@@ -191,4 +187,86 @@ int64_t mlc_io_read_line(mlc_sl_byte *dst, const char *file, int line) {
         dst->ptr[n++] = (uint8_t)c;
     }
     return n;
+}
+
+void mlc_io_print_uint(uint64_t v) { printf("%" PRIu64, v); }
+
+/* Escreve x com o menor número de dígitos que, lido de volta, dá o mesmo
+ * valor (como o Go imprime: 0.1, 3, 1e+21). digits é 17 para float64 e 9 para
+ * float32. Devolve o tamanho. */
+static int mlc_format_float(char *buf, size_t size, double x, int digits, int is_float32) {
+    if (isnan(x)) return snprintf(buf, size, "NaN");
+    if (isinf(x)) return snprintf(buf, size, x > 0 ? "+Inf" : "-Inf");
+    for (int p = 1; p <= digits; p++) {
+        int n = snprintf(buf, size, "%.*g", p, x);
+        double back = strtod(buf, NULL);
+        if (is_float32 ? (float)back == (float)x : back == x) return n;
+    }
+    return snprintf(buf, size, "%.*g", digits, x); /* NaN e infinitos */
+}
+
+void mlc_io_print_f64(double v) {
+    char buf[32];
+    mlc_format_float(buf, sizeof buf, v, 17, 0);
+    fputs(buf, stdout);
+}
+
+void mlc_io_print_f32(float v) {
+    char buf[32];
+    mlc_format_float(buf, sizeof buf, v, 9, 1);
+    fputs(buf, stdout);
+}
+
+int64_t mlc_conv_i(int64_t v, int64_t lo, int64_t hi, const char *type, const char *file, int line) {
+    if (v < lo || v > hi) {
+        char msg[160];
+        snprintf(msg, sizeof msg, "valor %" PRId64 " não cabe em %s (%" PRId64 " a %" PRId64 ")", v, type, lo, hi);
+        mlc_panic(file, line, msg);
+    }
+    return v;
+}
+
+uint64_t mlc_conv_u(uint64_t v, uint64_t hi, const char *type, const char *file, int line) {
+    if (v > hi) {
+        char msg[160];
+        snprintf(msg, sizeof msg, "valor %" PRIu64 " não cabe em %s (0 a %" PRIu64 ")", v, type, hi);
+        mlc_panic(file, line, msg);
+    }
+    return v;
+}
+
+double mlc_conv_f(double v, double lo, double hi, const char *type, const char *file, int line) {
+    if (!(v > lo && v < hi)) { /* NaN falha nas duas comparações */
+        char num[32], msg[160];
+        mlc_format_float(num, sizeof num, v, 17, 0);
+        snprintf(msg, sizeof msg, "valor %s não cabe em %s", num, type);
+        mlc_panic(file, line, msg);
+    }
+    return v;
+}
+
+float mlc_f64_to_f32(double v) {
+    if (v > FLT_MAX) return INFINITY;
+    if (v < -FLT_MAX) return -INFINITY;
+    return (float)v;
+}
+
+int64_t mlc_str_put_float(mlc_sl_byte *dst, double x, const char *file, int line) {
+    char tmp[32];
+    int len = mlc_format_float(tmp, sizeof tmp, x, 17, 0);
+    return mlc_put_bytes(dst, tmp, len, "str.put_float", file, line);
+}
+
+bool mlc_str_parse_float(mlc_sl_byte *s, double *out, const char *file, int line) {
+    (void)file;
+    (void)line;
+    char tmp[64];
+    if (s->len == 0 || s->len >= (int64_t)sizeof tmp) return false;
+    memcpy(tmp, s->ptr, (size_t)s->len);
+    tmp[s->len] = '\0';
+    char *end;
+    double v = strtod(tmp, &end);
+    if (end != tmp + s->len) return false; /* sobrou texto que não é número */
+    *out = v;
+    return true;
 }

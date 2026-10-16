@@ -1,0 +1,1 @@
+panic: conversao_decimal.mlc:3: valor 1e+30 não cabe em int

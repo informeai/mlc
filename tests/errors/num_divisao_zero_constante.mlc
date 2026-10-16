@@ -1,0 +1,5 @@
+// erro: divisão por zero na constante
+import "io"
+fn main() {
+    io.print(10 / 0)
+}

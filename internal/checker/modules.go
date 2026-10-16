@@ -134,7 +134,7 @@ func (c *checker) moduleConst(e *ast.SelectorExpr, m *module) Type {
 	case l != nil && !l.Pub:
 		c.errorf(e.SelPos, "%s.%s não é pública (declare com pub const)", m.name, e.Sel)
 	case l != nil:
-		c.info.Consts[e] = l.Const
+		c.info.Values[e] = l.Const
 		return l.Type
 	case m.funcs[e.Sel] != nil:
 		c.errorf(e.SelPos, "função %s.%s usada como valor (faltou chamar?)", m.name, e.Sel)
