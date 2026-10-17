@@ -233,6 +233,10 @@ Threads do sistema: `thread.spawn(f, ctx, stack)` e `thread.join(t)` (embutidas 
 
 Canais com capacidade fixa: `chan.new[T](n)`, as pontas `chan.Sender[T]` (`send`, `clone`, `close`) e `chan.Receiver[T]` (`recv`, `sender`, `clone`, `close`), e o resultado `chan.Recv[T] { Got(value T); Closed }`. Os valores passam por posse. Veja [concorrencia.md](concorrencia.md#canais-import-stdchan).
 
+### `std/mutex` e `std/atomic`
+
+`mutex.new(v)`, com `lock`/`get`/`unlock`/`wait`/`notify` e handles que precisam de `close`; `atomic.new_int` e `atomic.new_bool`, com `load`, `store`, `add`, `swap` e `compare_swap`. Veja [concorrencia.md](concorrencia.md#mutex-import-stdmutex).
+
 ### `std/time`
 
 | Função | O que faz |

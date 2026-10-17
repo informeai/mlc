@@ -143,6 +143,9 @@ func cType(t checker.Type) string {
 		if s.ChanEnd != 0 {
 			return "mlc_chan" // chan.Sender[T] e chan.Receiver[T]: o canal do runtime
 		}
+		if s.MutexKind != 0 {
+			return "mlc_mutex" // mutex.Mutex[T] e mutex.Guard[T]: o mutex do runtime
+		}
 		return structCType(s)
 	}
 	switch t {
@@ -645,6 +648,8 @@ func (g *gen) expr(e ast.Expr) string {
 			return g.threadJoin(e)
 		case checker.ChanOp:
 			return g.chanOp(e)
+		case checker.MutexOp:
+			return g.mutexOp(e)
 		}
 		switch callee.Builtin {
 		case checker.Alloc:
@@ -742,6 +747,8 @@ func (g *gen) dropHelpers() {
 		case *checker.Pointer:
 			if s, ok := tt.Elem.(*checker.Struct); ok && s.ChanEnd != 0 {
 				g.raw("    if (v != NULL) mlc_chan_close(v, %d);\n", s.ChanEnd) // drop de uma ponta de canal a fecha
+			} else if s, ok := tt.Elem.(*checker.Struct); ok && s.MutexKind == checker.MutexHandle {
+				g.raw("    if (v != NULL) mlc_mutex_close(v);\n") // drop de um handle de mutex o fecha
 			} else if s, ok := tt.Elem.(*checker.Struct); ok && s.Resource {
 				g.raw("    if (v != NULL) %s(v);\n", g.info.DropFree[s].CName)
 			} else {

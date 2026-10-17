@@ -219,7 +219,9 @@ Um `match` sobre `*e`, um campo ou um empréstimo **só lê**: os campos donos v
 
 Uma thread recebe o contexto **por posse** (`thread.spawn(f, ctx, stack)` move `ctx`) e devolve o resultado por posse no `thread.join`. A função da thread não recebe empréstimos e não há variáveis globais mutáveis, então duas threads nunca alcançam a mesma memória. O handle `*thread.Thread[R]` é um dono como um handle de C: precisa ir para `thread.join`, e o verificador cobra isso. O registro da thread é alocado no `spawn` e liberado no `join`, e a pilha tem o tamanho escrito no código.
 
-Um canal (`chan.new[T](n)`) aloca as `n` posições no início e nunca cresce. Cada ponta (`Sender`, `Receiver`) é um dono que precisa de `close()`. `send` move o valor para o canal e `recv` entrega a posse a quem recebe. O último `close` libera o canal e dá `drop` no que sobrou nele. Veja [concorrencia.md](concorrencia.md).
+Um canal (`chan.new[T](n)`) aloca as `n` posições no início e nunca cresce. Cada ponta (`Sender`, `Receiver`) é um dono que precisa de `close()`. `send` move o valor para o canal e `recv` entrega a posse a quem recebe. O último `close` libera o canal e dá `drop` no que sobrou nele.
+
+Um mutex (`mutex.new(v)`) é dono do valor. O guard de `lock()` é um dono que precisa de `unlock()`, e o valor só é alcançado por `g.get()`, um empréstimo do guard que não sobrevive ao `unlock`. O último `close` (de handles e guards) libera o valor. Veja [concorrencia.md](concorrencia.md).
 
 ## O que é proibido
 

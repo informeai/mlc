@@ -1,0 +1,19 @@
+// erro: vazamento: n (atomic.Int, linha
+import "std/atomic"
+import "std/io"
+import "std/mutex"
+import "std/thread"
+import "std/vec"
+
+fn takes(g *mutex.Guard[int]) {
+    g.unlock()
+}
+
+fn closes(m &mutex.Mutex[int]) {
+
+}
+
+fn main() {
+    n := atomic.new_int(0)
+    io.print(n.load())
+}

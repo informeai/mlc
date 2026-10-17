@@ -367,3 +367,33 @@ func TestNavigationChannels(t *testing.T) {
 		}
 	}
 }
+
+// Mutex: hover em mutex.new, nos métodos (inclusive get, que empresta) e nos tipos.
+func TestNavigationMutex(t *testing.T) {
+	src := "import \"std/mutex\"\n\nfn main() {\n    m := mutex.new(1)\n    g := m.lock()\n    x := g.get()\n    *x += 1\n    var h ?*mutex.Guard[int] = nil\n    if h == nil {\n    }\n    g.unlock()\n    m.close()\n}\n"
+	path := filepath.Join(t.TempDir(), "main.mlc")
+	os.WriteFile(path, []byte(src), 0o644)
+	read := driver.Overlay(nil)
+	for _, tc := range []struct{ at, hover string }{
+		{"mutex.«new(1)", "Aloca um mutex"},
+		{"m.«lock()", "Espera a trava"},
+		{"g.«get()", "Empresta o valor"},
+		{"g.«unlock()", "Destrava o mutex"},
+		{"?*mutex.«Guard[int]", "A trava de um mutex"},
+	} {
+		mark := strings.Index(tc.at, "«")
+		off := strings.Index(src, strings.Replace(tc.at, "«", "", 1)) + mark
+		prog := driver.Analyze(path, read)
+		if prog == nil {
+			t.Fatal("não analisou")
+		}
+		sym, _ := newNavigator(prog, read, []byte(src)).resolve(off)
+		if sym == nil {
+			t.Errorf("%q: nada encontrado", tc.at)
+			continue
+		}
+		if !strings.Contains(sym.code+"\n"+sym.doc, tc.hover) {
+			t.Errorf("%q: o hover não tem %q:\n%s\n%s", tc.at, tc.hover, sym.code, sym.doc)
+		}
+	}
+}

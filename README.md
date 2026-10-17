@@ -166,7 +166,7 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 - [x] **Enums com dados:** `enum Forma { Circulo(raio float64); Vazio }`, `match` com desestruturação e cobertura obrigatória, enums genéricos (`Resultado[T]`) com inferência pelo valor ou pelo contexto
 - [x] **Números:** `int8`, `int16`, `int32`, `uint16`, `uint32`, `uint64`, `float32`, `float64`; constantes sem tipo; conversões checadas. Veja [docs/tipos.md](docs/tipos.md)
 - [x] **Arrays `[N]T`:** tamanho fixo, por valor, na pilha ou em structs, sem `alloc`; `&a` empresta como `&[]T`
-- [x] **Biblioteca padrão** em MLC, importada com `std/`: `io`, `str`, `result`, `math`, `sort`, `text`, `vec`, `rand`, `os`, `fs`, `time`, `testing`, `thread`, `chan`. Nada aloca escondido; erros como `Result[T, E]`. Veja [docs/biblioteca.md](docs/biblioteca.md)
+- [x] **Biblioteca padrão** em MLC, importada com `std/`: `io`, `str`, `result`, `math`, `sort`, `text`, `vec`, `rand`, `os`, `fs`, `time`, `testing`, `thread`, `chan`, `mutex`, `atomic`. Nada aloca escondido; erros como `Result[T, E]`. Veja [docs/biblioteca.md](docs/biblioteca.md)
 - [x] **`mlc fmt`:** formatador canônico (4 espaços), preservando comentários e quebras de linha; `-l` lista, `-` usa a entrada padrão
 - [x] **Interfaces estáticas:** `interface`, `impl` (de uma linha, com bloco ou genérico) e `impl auto`; interfaces como restrição de genérico, com chamadas diretas (sem tabela de métodos). `io.print`/`io.printf`/`io.eprintf` sobre `io.Display`, com a formatação em MLC. Veja [docs/interfaces.md](docs/interfaces.md)
 - [x] **Bits e funções como valor:** `& | ^ << >>`, `^x`, aritmética que dá a volta (`+% -% *%`), literais `0xFF`, `0b1010`, `0o17`, `1_000_000`; tipos `fn(int) bool`, funções como valor e chamadas indiretas (sem closures, sem alocação). `std/rand` passou a ser MLC; novos `std/hash` e `sort.sort_by`. Veja [docs/tipos.md](docs/tipos.md)
@@ -191,5 +191,5 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 - [ ] **Concorrência:** threads do sistema criadas explicitamente, com a posse garantindo a ausência de data races. Veja [docs/concorrencia.md](docs/concorrencia.md)
   - [x] fase A: `thread.spawn(f, ctx, stack)` e `thread.join(t)`; o contexto e o resultado atravessam por movimento; a pilha tem tamanho explícito; todo `spawn` precisa de `join`
   - [x] fase B: canais com capacidade fixa (`std/chan`): `chan.new[T](n)`, pontas `Sender`/`Receiver` que precisam de `close()`, `recv` devolvendo `Got(v)`/`Closed`, `send` sem receptor liberando o valor, vários produtores e consumidores
-  - [ ] fase C: `Mutex[T]` com guard e atomics
+  - [x] fase C: `mutex.new(v)`, dono do valor, com `lock()` devolvendo um guard que precisa de `unlock()` e `get()` emprestando o valor só enquanto a trava existe; `wait`/`notify`; travar duas vezes na mesma thread dá panic; `atomic.Int` e `atomic.Bool`
   - [ ] fase D: threads com escopo que recebem empréstimos

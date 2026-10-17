@@ -35,6 +35,11 @@ type Struct struct {
 	ChanEnd  int
 	ChanElem Type
 
+	// MutexKind: num mutex.Mutex[T] ou mutex.Guard[T], qual dos dois é
+	// (MutexHandle, MutexGuard), e MutexElem o tipo do valor; 0 nas outras
+	MutexKind int
+	MutexElem Type
+
 	// Genéricos: Params na struct genérica (a declaração); Origin e Args numa
 	// instância (Par[int, string]).
 	Params      []*ast.TypeParam

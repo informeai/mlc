@@ -1,0 +1,19 @@
+// erro: um mutex vem de mutex.new (e um guard, de lock()), não de alloc
+import "std/atomic"
+import "std/io"
+import "std/mutex"
+import "std/thread"
+import "std/vec"
+
+fn takes(g *mutex.Guard[int]) {
+    g.unlock()
+}
+
+fn closes(m &mutex.Mutex[int]) {
+
+}
+
+fn main() {
+    m := alloc(mutex.Mutex[int])
+    m.close()
+}

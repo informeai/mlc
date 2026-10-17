@@ -351,6 +351,16 @@ func (o *ownChecker) leaks(ls []*Local, pos token.Pos, where string) {
 			if isThread(p) {
 				o.errorf(pos, "vazamento: a thread %s (linha %d) pode não ter sido esperada %s; passe-a a thread.join",
 					l.Name, o.origin[k].Line, where)
+			} else if isGuard(p) {
+				o.errorf(pos, "vazamento: o guard %s (linha %d) pode ainda estar travado %s; destrave com %s.unlock()",
+					l.Name, o.origin[k].Line, where, l.Name)
+			} else if isMutexType(p) {
+				o.errorf(pos, "vazamento: o mutex %s (linha %d) pode ainda estar aberto %s; feche com %s.close()",
+					l.Name, o.origin[k].Line, where, l.Name)
+			} else if st := p.Elem.(*Struct); st.mod != nil && st.mod.std && st.ChanEnd == 0 {
+				// handle da biblioteca padrão (atomic.Int): fecha com close()
+				o.errorf(pos, "vazamento: %s (%s, linha %d) pode ainda estar aberto %s; feche com %s.close()",
+					l.Name, st.Name, o.origin[k].Line, where, l.Name)
 			} else if isChanEnd(p) {
 				o.errorf(pos, "vazamento: a ponta de canal %s (linha %d) pode ainda estar aberta %s; feche com %s.close()",
 					l.Name, o.origin[k].Line, where, l.Name)
@@ -1049,6 +1059,9 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 	case ChanOp:
 		o.chanOp(e)
 		return
+	case MutexOp:
+		o.mutexOp(e)
+		return
 	case IoPrint, Len:
 		for _, a := range e.Args {
 			o.read(a)
@@ -1444,4 +1457,29 @@ func (o *ownChecker) chanOp(e *ast.CallExpr) {
 			}
 		}
 	})
+}
+
+// mutexOp trata mutex.new e os métodos de Mutex e Guard: close e unlock
+// consomem; new move o valor para dentro do mutex; os outros só usam.
+func (o *ownChecker) mutexOp(e *ast.CallExpr) {
+	plan := o.c.info.Mutexes[e]
+	if plan.Op == "new" {
+		if IsOwner(plan.Elem) {
+			o.consume(e.Args[0], plan.Elem, "o valor de mutex.new") // vai para dentro do mutex
+		} else {
+			o.read(e.Args[0])
+		}
+		return
+	}
+	recv := e.Fun.(*ast.SelectorExpr).X
+	if plan.Op == "close" || plan.Op == "unlock" {
+		t := o.c.info.Types[recv]
+		if b, ok := t.(*Borrow); ok {
+			o.errorf(recv.Pos(), "%s precisa do dono, e %s é um empréstimo (%s)", plan.Op, exprName(recv), b)
+			return
+		}
+		o.consume(recv, o.c.pointerTo(structBehind(t), false), plan.Op)
+		return
+	}
+	o.read(recv)
 }

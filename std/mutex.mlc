@@ -1,0 +1,33 @@
+// Mutex: um valor compartilhado entre threads, que só é tocado com a trava.
+//
+//     m := mutex.new(alloc(Conta{saldo: 0}))   // o valor vai para dentro do mutex
+//     t := thread.spawn(deposita, m.clone(), thread.STACK_64KB)
+//     g := m.lock()                             // espera a trava
+//     c := g.get()                              // &Conta, emprestado do guard
+//     c.saldo += 10
+//     g.unlock()                                // obrigatório; usar c depois é erro
+//     thread.join(t)
+//     m.close()
+//
+// mutex.new e os métodos são embutidos no compilador; o mutex fica no
+// runtime.
+//
+// mutex.new(v) *Mutex[T]    aloca o mutex com o valor v dentro (v é movido);
+//                           mutex.new[T](v) escolhe o tipo
+//
+// Mutex[T]:
+//   lock() *Guard[T]        espera a trava; travar de novo na mesma thread,
+//                           sem destravar, dá panic
+//   clone() *Mutex[T]       outro handle para o mesmo mutex (para outra thread)
+//   notify(), notify_all()  acordam quem espera em wait
+//   close()                 o último handle (e guard) a sair libera o valor
+//
+// Guard[T]:
+//   get() &T                empresta o valor; enquanto o empréstimo é usado, o
+//                           guard fica congelado
+//   wait()                  solta a trava, espera um notify e trava de novo
+//   notify(), notify_all()
+//   unlock()                destrava (consome o guard)
+//
+// O verificador cobra close em cada handle e unlock em cada guard. Um guard
+// é da thread que travou: não vai para outra thread, campos ou slices.

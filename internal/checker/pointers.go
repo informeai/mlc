@@ -140,6 +140,10 @@ func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 		if elem == Invalid {
 			return Invalid
 		}
+		if isGuard(elem) && (ctx == ctxField || ctx == ctxSliceElem) {
+			c.errorf(t.P, "um guard é da thread que travou o mutex: não pode ficar em campos nem em slices (que podem ir para outra thread)")
+			return Invalid
+		}
 		if t.Mod == ast.TypeBorrow {
 			return c.borrowOf(elem)
 		}
@@ -154,6 +158,13 @@ func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 			return Invalid
 		}
 		return th
+	case t.Module != "" && (t.Name == "Mutex" || t.Name == "Guard") && c.mod.uses[t.Module] != nil && c.mod.uses[t.Module].path == "std/mutex" && c.mod.uses[t.Module].std:
+		mt := c.mutexTypeExpr(t)
+		if mt != Invalid && ctx != ctxElem && ctx != ctxBorrowElem {
+			c.errorf(t.P, "%s só existe atrás de ponteiro (*%s, ?*%s)", mt, mt, mt)
+			return Invalid
+		}
+		return mt
 	case t.Module != "" && (t.Name == "Sender" || t.Name == "Receiver") && c.mod.uses[t.Module] != nil && c.mod.uses[t.Module].path == "std/chan" && c.mod.uses[t.Module].std:
 		ch := c.chanTypeExpr(t)
 		if ch != Invalid && ctx != ctxElem && ctx != ctxBorrowElem {
@@ -354,6 +365,10 @@ func (c *checker) builtinCall(e *ast.CallExpr, name string) (Type, bool) {
 				c.errorf(e.Args[0].Pos(), "%s é uma thread: espere por ela com thread.join, não com free", t)
 			} else if isChanEnd(tt) {
 				c.errorf(e.Args[0].Pos(), "%s é uma ponta de canal: feche com close(), não com free", t)
+			} else if isGuard(tt) {
+				c.errorf(e.Args[0].Pos(), "%s é um guard: destrave com unlock(), não com free", t)
+			} else if isMutexType(tt) {
+				c.errorf(e.Args[0].Pos(), "%s é um mutex: feche com close(), não com free", t)
 			} else if isExternStruct(tt.Elem) {
 				c.errorf(e.Args[0].Pos(), "%s é um handle de C: libere com a função de C que o fecha, não com free", t)
 			}
@@ -390,6 +405,9 @@ func (c *checker) allocArg(a ast.Expr) (Type, bool) {
 					return Invalid, false
 				case m.path == "std/chan" && (sel.Sel == "Sender" || sel.Sel == "Receiver"):
 					c.errorf(a.Pos(), "as pontas de canal vêm de chan.new, sender() e clone(), não de alloc")
+					return Invalid, false
+				case m.path == "std/mutex" && (sel.Sel == "Mutex" || sel.Sel == "Guard"):
+					c.errorf(a.Pos(), "um mutex vem de mutex.new (e um guard, de lock()), não de alloc")
 					return Invalid, false
 				}
 			}

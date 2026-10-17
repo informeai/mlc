@@ -1,0 +1,103 @@
+import "std/mutex"
+import "std/str"
+import "std/testing"
+import "std/thread"
+
+fn test_lock_get_unlock() {
+    m := mutex.new(41)
+    g := m.lock()
+    x := g.get()
+    *x += 1
+    g.unlock()
+    g2 := m.lock()
+    testing.eq_int(*g2.get(), 42)
+    g2.unlock()
+    m.close()
+}
+
+fn test_explicit_type() {
+    m := mutex.new[int](3)
+    g := m.lock()
+    testing.eq_int(*g.get(), 3)
+    g.unlock()
+    m.close()
+}
+
+fn test_owned_value_freed_on_last_close() {
+    b := alloc([]byte, 3)
+    str.copy(&b, "abc")
+    m := mutex.new(b) // b vai para dentro do mutex
+    m2 := m.clone()
+    m.close()
+    g := m2.lock()
+    testing.eq_str(g.get(), "abc")
+    g.unlock()
+    m2.close() // o último close libera o []byte
+}
+
+fn test_guard_keeps_mutex_alive() {
+    m := mutex.new(alloc([]byte, 4))
+    g := m.lock()
+    m.close() // o guard ainda mantém o mutex
+    testing.eq_int(len(*g.get()), 4)
+    g.unlock() // agora sim o valor é liberado
+}
+
+fn add_many(m *mutex.Mutex[int]) {
+    for i := 0; i < 1000; i++ {
+        g := m.lock()
+        x := g.get()
+        *x += 1
+        g.unlock()
+    }
+    m.close()
+}
+
+fn test_threads() {
+    m := mutex.new(0)
+    a := thread.spawn(add_many, m.clone(), thread.STACK_64KB)
+    b := thread.spawn(add_many, m.clone(), thread.STACK_64KB)
+    thread.join(a)
+    thread.join(b)
+    g := m.lock()
+    testing.eq_int(*g.get(), 2000)
+    g.unlock()
+    m.close()
+}
+
+fn test_double_lock_panics() {
+    testing.expect_panic()
+    m := mutex.new(0)
+    g1 := m.lock()
+    g2 := m.lock() // a mesma thread: panic em vez de travar para sempre
+    g2.unlock()
+    g1.unlock()
+    m.close()
+}
+
+fn is_ready(v &int) bool {
+    return *v > 0
+}
+
+fn waiter(m *mutex.Mutex[int]) int {
+    g := m.lock()
+    for !is_ready(g.get()) {
+        g.wait()
+    }
+    v := *g.get()
+    g.unlock()
+    m.close()
+    return v
+}
+
+fn test_wait_notify() {
+    m := mutex.new(0)
+    t := thread.spawn(waiter, m.clone(), thread.STACK_64KB)
+    g := m.lock()
+    x := g.get()
+    *x = 9
+    g.notify()
+    g.unlock()
+    testing.eq_int(thread.join(t), 9)
+    m.close()
+}

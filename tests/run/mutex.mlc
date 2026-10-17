@@ -1,0 +1,152 @@
+import "std/atomic"
+import "std/io"
+import "std/mutex"
+import "std/thread"
+import "std/vec"
+
+struct Account {
+    balance int
+    ops int
+}
+
+fn deposit(m *mutex.Mutex[*Account]) {
+    for i := 0; i < 2000; i++ {
+        g := m.lock()
+        a := g.get() // &Account, emprestado do guard
+        a.balance += 10
+        a.ops++
+        g.unlock()
+    }
+    m.close()
+}
+
+// fila simples protegida pelo mutex, com espera por notify
+struct Queue {
+    items []int
+    count int
+    done bool
+}
+
+fn (q *Queue) free() {
+    free(q.items)
+    free(q)
+}
+
+fn ready(q &Queue) bool {
+    return q.count > 0 || q.done
+}
+
+fn consume(m *mutex.Mutex[*Queue]) int {
+    total := 0
+    for {
+        g := m.lock()
+        for !ready(g.get()) {
+            g.wait() // solta a trava até alguém chamar notify
+        }
+        q := g.get()
+        empty := q.count == 0 // done e vazia: acabou
+        if !empty {
+            q.count--
+            total += q.items[q.count]
+        }
+        g.unlock() // depois do último uso de q
+        if empty {
+            break
+        }
+    }
+    m.close()
+    return total
+}
+
+fn count(n *atomic.Int) {
+    for i := 0; i < 5000; i++ {
+        n.add(1)
+    }
+    n.close()
+}
+
+// espera ativa pelo sinal (só para o teste)
+fn wait_flag(f *atomic.Bool) int {
+    for !f.load() {
+    }
+    f.close()
+    return 1
+}
+
+fn main() {
+    // várias threads mexendo na mesma conta, com a trava
+    m := mutex.new(alloc(Account{balance: 0, ops: 0}))
+    ts := alloc([]?*thread.Thread, 4)
+    for i := 0; i < len(ts); i++ {
+        old := replace(&ts[i], thread.spawn(deposit, m.clone(), thread.STACK_64KB))
+        if old != nil {
+            thread.join(old)
+        }
+    }
+    for t in drain(ts) {
+        if t != nil {
+            thread.join(t)
+        }
+    }
+    free(ts)
+    g := m.lock()
+    a := g.get()
+    io.print("saldo:", a.balance, "operações:", a.ops)
+    g.unlock()
+    m.close() // o último close libera a conta
+
+    // produtor e consumidor com wait e notify
+    q := mutex.new(alloc(Queue{items: alloc([]int, 100), count: 0, done: false}))
+    c := thread.spawn(consume, q.clone(), thread.STACK_64KB)
+    for i := 1; i <= 100; i++ {
+        pg := q.lock()
+        qq := pg.get()
+        qq.items[qq.count] = i
+        qq.count++
+        pg.notify()
+        pg.unlock()
+    }
+    fg := q.lock()
+    fq := fg.get()
+    fq.done = true
+    fg.notify_all()
+    fg.unlock()
+    io.print("consumido:", thread.join(c))
+    q.close()
+
+    // contador atômico
+    n := atomic.new_int(0)
+    cs := alloc([]?*thread.Thread, 4)
+    for i := 0; i < len(cs); i++ {
+        old := replace(&cs[i], thread.spawn(count, n.clone(), thread.STACK_64KB))
+        if old != nil {
+            thread.join(old)
+        }
+    }
+    for t in drain(cs) {
+        if t != nil {
+            thread.join(t)
+        }
+    }
+    free(cs)
+    io.print("contador:", n.load(), n.swap(7), n.compare_swap(7, 8), n.compare_swap(7, 9), n.load())
+    n.close()
+
+    // um sinal entre threads
+    flag := atomic.new_bool(false)
+    w := thread.spawn(wait_flag, flag.clone(), thread.STACK_16KB)
+    flag.store(true)
+    io.print("sinal:", thread.join(w))
+    flag.close()
+
+    // handles de mutex num Vec: o free do Vec fecha cada um
+    shared := mutex.new[int](5)
+    hs := vec.new[?*mutex.Mutex[int]](2)
+    hs.push(shared.clone())
+    hs.push(shared.clone())
+    hs.free()
+    sg := shared.lock()
+    io.print("valor:", *sg.get())
+    sg.unlock()
+    shared.close()
+}

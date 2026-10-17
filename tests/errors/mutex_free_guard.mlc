@@ -1,0 +1,21 @@
+// erro: é um guard: destrave com unlock(), não com free
+import "std/atomic"
+import "std/io"
+import "std/mutex"
+import "std/thread"
+import "std/vec"
+
+fn takes(g *mutex.Guard[int]) {
+    g.unlock()
+}
+
+fn closes(m &mutex.Mutex[int]) {
+
+}
+
+fn main() {
+    m := mutex.new(1)
+    g := m.lock()
+    free(g)
+    m.close()
+}

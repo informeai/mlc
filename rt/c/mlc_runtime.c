@@ -11,6 +11,7 @@
 #include <float.h>
 #include <inttypes.h>
 #include <math.h>
+#include <stddef.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -749,4 +750,154 @@ bool mlc_chan_recv(mlc_chan *c, void *out) {
     pthread_cond_signal(&c->not_full);
     pthread_mutex_unlock(&c->mu);
     return true;
+}
+
+/* std/mutex. O mutex guarda o valor logo depois do cabeçalho; a trava é do
+ * tipo que confere erros, então travar duas vezes na mesma thread dá panic em
+ * vez de travar o programa para sempre. Os handles e os guards são contados:
+ * o último a sair libera o valor (drop) e o mutex. */
+
+struct mlc_mutex {
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    _Atomic int64_t refs;
+    void (*drop)(void *);
+    _Alignas(max_align_t) unsigned char value[];
+};
+
+mlc_mutex *mlc_mutex_new(void *v, size_t size, void (*drop)(void *), const char *file, int line) {
+    mlc_mutex *m = mlc_alloc(sizeof *m + size, file, line);
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+    pthread_mutex_init(&m->mu, &attr);
+    pthread_mutexattr_destroy(&attr);
+    pthread_cond_init(&m->cv, NULL);
+    m->refs = 1;
+    m->drop = drop;
+    memcpy(m->value, v, size);
+    return m;
+}
+
+mlc_mutex *mlc_mutex_clone(mlc_mutex *m) {
+    m->refs++;
+    return m;
+}
+
+void mlc_mutex_close(mlc_mutex *m) {
+    if (--m->refs > 0) return;
+    if (m->drop) m->drop(m->value);
+    pthread_mutex_destroy(&m->mu);
+    pthread_cond_destroy(&m->cv);
+    mlc_free(m);
+}
+
+mlc_mutex *mlc_mutex_lock(mlc_mutex *m, const char *file, int line) {
+    m->refs++; /* o guard mantém o mutex vivo */
+    int err = pthread_mutex_lock(&m->mu);
+    if (err != 0) {
+        m->refs--;
+        mlc_panic(file, line, err == EDEADLK ? "mutex já travado por esta thread (destrave o guard antes de travar de novo)"
+                                             : "erro interno: lock falhou");
+    }
+    return m;
+}
+
+void mlc_mutex_unlock(mlc_mutex *m) {
+    pthread_mutex_unlock(&m->mu);
+    mlc_mutex_close(m);
+}
+
+void *mlc_mutex_value(mlc_mutex *m) { return m->value; }
+
+void mlc_mutex_wait(mlc_mutex *m) { pthread_cond_wait(&m->cv, &m->mu); }
+
+void mlc_mutex_notify(mlc_mutex *m, bool all) {
+    if (all) pthread_cond_broadcast(&m->cv);
+    else pthread_cond_signal(&m->cv);
+}
+
+/* std/atomic: um inteiro (ou bool) atômico, com os handles contados. */
+
+typedef struct mlc_atomic {
+    _Atomic int64_t v;
+    _Atomic int64_t refs;
+} mlc_atomic;
+
+mlc_atomic *mlc_std_atomic_new_int(int64_t v, const char *file, int line) {
+    mlc_atomic *a = mlc_alloc(sizeof *a, file, line);
+    a->v = v;
+    a->refs = 1;
+    return a;
+}
+
+mlc_atomic *mlc_std_atomic_new_bool(bool v, const char *file, int line) { return mlc_std_atomic_new_int(v, file, line); }
+
+static mlc_atomic *mlc_atomic_clone(mlc_atomic *a) {
+    a->refs++;
+    return a;
+}
+
+static void mlc_atomic_close(mlc_atomic *a) {
+    if (--a->refs == 0) mlc_free(a);
+}
+
+#define MLC_ATOMIC_HANDLE(kind)                                                              \
+    mlc_atomic *mlc_std_atomic_clone_##kind(mlc_atomic *a, const char *file, int line) {      \
+        (void)file;                                                                          \
+        (void)line;                                                                          \
+        return mlc_atomic_clone(a);                                                          \
+    }                                                                                        \
+    void mlc_std_atomic_close_##kind(mlc_atomic *a, const char *file, int line) {            \
+        (void)file;                                                                          \
+        (void)line;                                                                          \
+        mlc_atomic_close(a);                                                                 \
+    }
+MLC_ATOMIC_HANDLE(int)
+MLC_ATOMIC_HANDLE(bool)
+
+int64_t mlc_std_atomic_load_int(mlc_atomic *a, const char *file, int line) {
+    (void)file;
+    (void)line;
+    return atomic_load(&a->v);
+}
+
+void mlc_std_atomic_store_int(mlc_atomic *a, int64_t v, const char *file, int line) {
+    (void)file;
+    (void)line;
+    atomic_store(&a->v, v);
+}
+
+int64_t mlc_std_atomic_add_int(mlc_atomic *a, int64_t n, const char *file, int line) {
+    (void)file;
+    (void)line;
+    /* como as contas do MLC, estouro dá panic: confere antes de trocar */
+    int64_t old = atomic_load(&a->v);
+    for (;;) {
+        int64_t sum;
+        if (__builtin_add_overflow(old, n, &sum)) mlc_panic(file, line, "atomic.Int.add: estouro de int");
+        if (atomic_compare_exchange_weak(&a->v, &old, sum)) return sum;
+    }
+}
+
+int64_t mlc_std_atomic_swap_int(mlc_atomic *a, int64_t v, const char *file, int line) {
+    (void)file;
+    (void)line;
+    return atomic_exchange(&a->v, v);
+}
+
+bool mlc_std_atomic_cas_int(mlc_atomic *a, int64_t expected, int64_t v, const char *file, int line) {
+    (void)file;
+    (void)line;
+    return atomic_compare_exchange_strong(&a->v, &expected, v);
+}
+
+bool mlc_std_atomic_load_bool(mlc_atomic *a, const char *file, int line) { return mlc_std_atomic_load_int(a, file, line) != 0; }
+
+void mlc_std_atomic_store_bool(mlc_atomic *a, bool v, const char *file, int line) { mlc_std_atomic_store_int(a, v, file, line); }
+
+bool mlc_std_atomic_swap_bool(mlc_atomic *a, bool v, const char *file, int line) { return mlc_std_atomic_swap_int(a, v, file, line) != 0; }
+
+bool mlc_std_atomic_cas_bool(mlc_atomic *a, bool expected, bool v, const char *file, int line) {
+    return mlc_std_atomic_cas_int(a, expected, v, file, line);
 }

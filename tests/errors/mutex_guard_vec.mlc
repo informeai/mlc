@@ -1,0 +1,19 @@
+// erro: um guard precisa de unlock() na thread que travou
+import "std/atomic"
+import "std/io"
+import "std/mutex"
+import "std/thread"
+import "std/vec"
+
+fn takes(g *mutex.Guard[int]) {
+    g.unlock()
+}
+
+fn closes(m &mutex.Mutex[int]) {
+
+}
+
+fn main() {
+    v := vec.new[?*mutex.Guard[int]](2)
+    v.free()
+}

@@ -98,15 +98,28 @@ func (g *gen) threadJoin(e *ast.CallExpr) string {
 // chanDropName é a função void (*)(void *) que libera um valor do canal.
 func chanDropName(t checker.Type) string { return "mlc_chan_drop_" + mangle(t) }
 
-// chanDrops escreve as funções de drop dos canais de donos.
+// chanDrops escreve as funções de drop dos donos guardados em canais e
+// mutexes (o runtime as chama no último close).
 func (g *gen) chanDrops() {
-	done := map[string]bool{}
+	var elems []checker.Type
 	for _, p := range g.info.Chans {
-		if p.Op != "new" || !checker.IsOwner(p.Elem) || done[chanDropName(p.Elem)] {
+		if p.Op == "new" {
+			elems = append(elems, p.Elem)
+		}
+	}
+	for _, p := range g.info.Mutexes {
+		if p.Op == "new" {
+			elems = append(elems, p.Elem)
+		}
+	}
+	sort.Slice(elems, func(i, j int) bool { return chanDropName(elems[i]) < chanDropName(elems[j]) })
+	done := map[string]bool{}
+	for _, t := range elems {
+		if !checker.IsOwner(t) || done[chanDropName(t)] {
 			continue
 		}
-		done[chanDropName(p.Elem)] = true
-		g.raw("static void %s(void *p) { %s(*(%s *)p); }\n", chanDropName(p.Elem), dropName(p.Elem), cType(p.Elem))
+		done[chanDropName(t)] = true
+		g.raw("static void %s(void *p) { %s(*(%s *)p); }\n", chanDropName(t), dropName(t), cType(t))
 	}
 }
 
@@ -142,4 +155,44 @@ func (g *gen) chanOp(e *ast.CallExpr) string {
 			set, end, v, t, got.Tag, got.Name, got.Fields[0].Name, v, t, closed.Tag)
 	}
 	panic("codegen: operação de canal desconhecida " + p.Op)
+}
+
+// Mutex: o mutex fica no runtime (mlc_mutex), com o valor dentro; o handle
+// e o guard são mlc_mutex *. get empresta o valor que está no mutex.
+
+// mutexOp traduz mutex.new e os métodos de Mutex e Guard.
+func (g *gen) mutexOp(e *ast.CallExpr) string {
+	p := g.info.Mutexes[e]
+	if p.Op == "new" {
+		v := g.temp(p.Elem)
+		drop := "NULL"
+		if checker.IsOwner(p.Elem) {
+			drop = chanDropName(p.Elem)
+		}
+		return fmt.Sprintf("(%s = %s, mlc_mutex_new(&%s, sizeof(%s), %s, __FILE__, __LINE__))", v, g.expr(e.Args[0]), v, cType(p.Elem), drop)
+	}
+	m := g.temp(&checker.Pointer{Elem: &checker.Struct{MutexKind: checker.MutexHandle}})
+	set := fmt.Sprintf("%s = (mlc_mutex *)MLC_NONNULL(%s)", m, g.expr(e.Fun.(*ast.SelectorExpr).X))
+	switch p.Op {
+	case "lock":
+		return fmt.Sprintf("(%s, mlc_mutex_lock(%s, __FILE__, __LINE__))", set, m)
+	case "clone":
+		return fmt.Sprintf("(%s, mlc_mutex_clone(%s))", set, m)
+	case "close":
+		return fmt.Sprintf("(%s, mlc_mutex_close(%s))", set, m)
+	case "unlock":
+		return fmt.Sprintf("(%s, mlc_mutex_unlock(%s))", set, m)
+	case "wait":
+		return fmt.Sprintf("(%s, mlc_mutex_wait(%s))", set, m)
+	case "notify", "notify_all":
+		return fmt.Sprintf("(%s, mlc_mutex_notify(%s, %t))", set, m, p.Op == "notify_all")
+	case "get":
+		value := fmt.Sprintf("((%s *)mlc_mutex_value(%s))", cType(p.Elem), m)
+		if _, isPtr := p.Elem.(*checker.Pointer); isPtr {
+			// valor ponteiro: o empréstimo é do objeto apontado (nil dá panic)
+			return fmt.Sprintf("(%s, (%s)MLC_NONNULL(*%s))", set, cType(p.Elem), value)
+		}
+		return fmt.Sprintf("(%s, %s)", set, value)
+	}
+	panic("codegen: operação de mutex desconhecida " + p.Op)
 }

@@ -97,6 +97,7 @@ const (
 	ThreadSpawn         // thread.spawn(f, ctx, stack)
 	ThreadJoin          // thread.join(t)
 	ChanOp              // chan.new e os métodos das pontas de canal
+	MutexOp             // mutex.new e os métodos de Mutex e Guard
 )
 
 // Callee é o destino resolvido de uma chamada: uma função do usuário ou um builtin.
@@ -136,6 +137,7 @@ type Info struct {
 	Prints       map[*ast.CallExpr]*PrintPlan // io.print e io.printf reescritos
 	Spawns       map[*ast.CallExpr]*SpawnPlan // thread.spawn
 	Chans        map[*ast.CallExpr]*ChanPlan  // chan.new e os métodos das pontas
+	Mutexes      map[*ast.CallExpr]*MutexPlan // mutex.new e os métodos de Mutex e Guard
 	FuncRefs     map[ast.Expr]*Func           // funções usadas como valor
 	BorrowSrc    map[*Local]*Local            // variável emprestada → a origem (raiz)
 	BorrowView   map[*Local]bool              // a variável emprestada é uma visão (sub-slice)
@@ -186,6 +188,7 @@ type checker struct {
 	outHandles  map[*Pointer]*OutHandle
 	threads     map[Type]*Struct // thread.Thread[R], por R
 	chans       map[chanKey]*Struct
+	mutexes     map[mutexKey]*Struct
 	inExternC   bool           // resolvendo a assinatura de uma extern "C" fn (aceita &?*X)
 	probes      map[*Func]bool // instâncias de verificação de posse (T owned = []byte)
 	probing     bool           // checando uma delas
@@ -245,6 +248,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 			Prints:       map[*ast.CallExpr]*PrintPlan{},
 			Spawns:       map[*ast.CallExpr]*SpawnPlan{},
 			Chans:        map[*ast.CallExpr]*ChanPlan{},
+			Mutexes:      map[*ast.CallExpr]*MutexPlan{},
 			FuncRefs:     map[ast.Expr]*Func{},
 			BorrowSrc:    map[*Local]*Local{},
 			BorrowView:   map[*Local]bool{},
@@ -266,6 +270,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 		outHandles:  map[*Pointer]*OutHandle{},
 		threads:     map[Type]*Struct{},
 		chans:       map[chanKey]*Struct{},
+		mutexes:     map[mutexKey]*Struct{},
 		probes:      map[*Func]bool{},
 		probeBroken: map[*Func]bool{},
 		freeMissing: map[*Struct]bool{},
@@ -1056,6 +1061,9 @@ func (c *checker) call(e *ast.CallExpr) Type {
 			if kind := ioBuiltin(m, fun.Sel); kind != "" {
 				return c.ioPrint(e, kind)
 			}
+			if m.std && m.path == "std/mutex" && fun.Sel == "new" {
+				return c.mutexNew(e, nil)
+			}
 			if m.std && m.path == "std/chan" && fun.Sel == "new" {
 				c.errorf(fun.SelPos, "chan.new precisa do tipo dos valores: chan.new[int](16)")
 				c.checkArgs(e)
@@ -1103,6 +1111,9 @@ func (c *checker) call(e *ast.CallExpr) Type {
 		if sel, ok := base.(*ast.SelectorExpr); ok && sel.Sel == "new" {
 			if m := c.userModule(sel.X); m != nil && m.std && m.path == "std/chan" {
 				return c.chanNew(e, targs)
+			}
+			if m := c.userModule(sel.X); m != nil && m.std && m.path == "std/mutex" {
+				return c.mutexNew(e, targs)
 			}
 		}
 		if g := c.genericFuncOf(base); g != nil {

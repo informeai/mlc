@@ -63,6 +63,12 @@ func ownedPointee(t Type) (bool, string) {
 	if isChanEnd(t) {
 		return true, "" // drop fecha a ponta
 	}
+	if isGuard(t) {
+		return false, "um guard precisa de unlock() na thread que travou, e drop não sabe disso"
+	}
+	if isMutexType(t) {
+		return true, "" // drop fecha o handle do mutex
+	}
 	if isExternStruct(t) {
 		return false, "um handle de C precisa da função de C que o fecha, e drop não sabe qual é"
 	}

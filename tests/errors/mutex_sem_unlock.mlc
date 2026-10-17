@@ -1,0 +1,24 @@
+// erro: vazamento: o guard g
+import "std/atomic"
+import "std/io"
+import "std/mutex"
+import "std/thread"
+import "std/vec"
+
+fn takes(g *mutex.Guard[int]) {
+    g.unlock()
+}
+
+fn closes(m &mutex.Mutex[int]) {
+
+}
+
+fn main() {
+    m := mutex.new(1)
+    g := m.lock()
+    io.print(1)
+    if len("x") > 5 {
+        g.unlock()
+    }
+    m.close()
+}

@@ -1,0 +1,22 @@
+// erro: um guard não pode ir para outra thread
+import "std/atomic"
+import "std/io"
+import "std/mutex"
+import "std/thread"
+import "std/vec"
+
+fn takes(g *mutex.Guard[int]) {
+    g.unlock()
+}
+
+fn closes(m &mutex.Mutex[int]) {
+
+}
+
+fn main() {
+    m := mutex.new(1)
+    g := m.lock()
+    t := thread.spawn(takes, g, thread.STACK_64KB)
+    thread.join(t)
+    m.close()
+}

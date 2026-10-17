@@ -210,6 +210,19 @@ void mlc_chan_close(mlc_chan *c, int end);
 bool mlc_chan_send(mlc_chan *c, void *v);
 bool mlc_chan_recv(mlc_chan *c, void *out);
 
+/* Mutex (std/mutex): o valor fica dentro do mutex, e os handles e guards
+ * são contados (um guard mantém o mutex vivo até o unlock). */
+typedef struct mlc_mutex mlc_mutex;
+
+mlc_mutex *mlc_mutex_new(void *v, size_t size, void (*drop)(void *), const char *file, int line);
+mlc_mutex *mlc_mutex_clone(mlc_mutex *m);
+void mlc_mutex_close(mlc_mutex *m);
+mlc_mutex *mlc_mutex_lock(mlc_mutex *m, const char *file, int line);
+void mlc_mutex_unlock(mlc_mutex *m);
+void *mlc_mutex_value(mlc_mutex *m);
+void mlc_mutex_wait(mlc_mutex *m);
+void mlc_mutex_notify(mlc_mutex *m, bool all);
+
 /* Destinos do str.format (veja std/io.mlc, Writer). */
 int64_t mlc_sink_push(mlc_sl_byte *dst, const char *file, int line);
 int64_t mlc_sink_pop(int64_t sink, const char *file, int line);

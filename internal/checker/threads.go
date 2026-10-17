@@ -103,6 +103,9 @@ func (c *checker) threadSpawn(e *ast.CallExpr) Type {
 		ctx = Invalid
 	case isBorrow(ft.Result):
 		c.errorf(e.Args[0].Pos(), "a função da thread não pode devolver um empréstimo (%s)", ft.Result)
+	case isGuard(ctx) || isGuard(ft.Result):
+		c.errorf(e.Args[0].Pos(), "um guard não pode ir para outra thread: ele precisa ser destravado na thread que travou o mutex")
+		ctx = Invalid
 	}
 	if ctx == Invalid {
 		c.value(e.Args[1])

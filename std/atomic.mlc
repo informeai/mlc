@@ -1,0 +1,96 @@
+// Inteiros e bools atômicos, para contadores e sinais entre threads sem
+// mutex.
+//
+//     n := atomic.new_int(0)
+//     t := thread.spawn(conta, n.clone(), thread.STACK_64KB)   // outro handle, para a thread
+//     n.add(1)
+//     thread.join(t)
+//     io.print(n.load())
+//     n.close()
+//
+// new_int e new_bool alocam o valor; cada handle (os de clone também)
+// precisa de close(), e o último close libera. Todas as operações são
+// sequencialmente consistentes. add dá panic se estourar, como as contas do
+// MLC.
+
+pub extern "C" type Int
+
+pub extern "C" type Bool
+
+// new_int aloca um inteiro atômico com o valor v.
+pub extern fn new_int(v int) *Int
+
+// new_bool aloca um bool atômico com o valor v.
+pub extern fn new_bool(v bool) *Bool
+
+extern fn clone_int(a &Int) *Int
+extern fn close_int(a *Int)
+extern fn load_int(a &Int) int
+extern fn store_int(a &Int, v int)
+extern fn add_int(a &Int, n int) int
+extern fn swap_int(a &Int, v int) int
+extern fn cas_int(a &Int, expected int, v int) bool
+
+extern fn clone_bool(a &Bool) *Bool
+extern fn close_bool(a *Bool)
+extern fn load_bool(a &Bool) bool
+extern fn store_bool(a &Bool, v bool)
+extern fn swap_bool(a &Bool, v bool) bool
+extern fn cas_bool(a &Bool, expected bool, v bool) bool
+
+// clone devolve outro handle para o mesmo valor (para outra thread).
+pub fn (a &Int) clone() *Int {
+    return clone_int(a)
+}
+
+// close fecha o handle; o último libera o valor.
+pub fn (a *Int) close() {
+    close_int(a)
+}
+
+pub fn (a &Int) load() int {
+    return load_int(a)
+}
+
+pub fn (a &Int) store(v int) {
+    store_int(a, v)
+}
+
+// add soma n e devolve o valor novo.
+pub fn (a &Int) add(n int) int {
+    return add_int(a, n)
+}
+
+// swap troca pelo valor v e devolve o antigo.
+pub fn (a &Int) swap(v int) int {
+    return swap_int(a, v)
+}
+
+// compare_swap troca por v só se o valor for expected, e diz se trocou.
+pub fn (a &Int) compare_swap(expected int, v int) bool {
+    return cas_int(a, expected, v)
+}
+
+pub fn (a &Bool) clone() *Bool {
+    return clone_bool(a)
+}
+
+pub fn (a *Bool) close() {
+    close_bool(a)
+}
+
+pub fn (a &Bool) load() bool {
+    return load_bool(a)
+}
+
+pub fn (a &Bool) store(v bool) {
+    store_bool(a, v)
+}
+
+pub fn (a &Bool) swap(v bool) bool {
+    return swap_bool(a, v)
+}
+
+pub fn (a &Bool) compare_swap(expected bool, v bool) bool {
+    return cas_bool(a, expected, v)
+}

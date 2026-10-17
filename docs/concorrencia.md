@@ -8,7 +8,7 @@ O modelo vem em fases:
 |---|---|---|
 | A | `thread.spawn` e `thread.join`, com os dados atravessando por movimento | pronta |
 | B | canais com capacidade fixa (`std/chan`) | pronta |
-| C | `Mutex[T]` com guard, e atomics | a fazer |
+| C | `Mutex[T]` com guard, e atomics | pronta |
 | D | threads com escopo que recebem empréstimos | depois |
 
 ## Threads (`import "std/thread"`)
@@ -159,15 +159,94 @@ t := thread.spawn(work, w, thread.STACK_64KB)
 
 **Cuidado com deadlock.** Se o `main` envia todas as tarefas antes de ler os resultados, e o canal de resultados enche, os trabalhadores param no `send` e o `main` para no envio das tarefas. Dimensione os canais pelo padrão de uso, ou consuma os resultados em outra thread. O verificador não detecta isso.
 
+## Mutex (`import "std/mutex"`)
+
+Um mutex **é dono do valor** que protege: o valor só é alcançado com a trava.
+
+```
+struct Account {
+    balance int
+}
+
+fn deposit(m *mutex.Mutex[*Account]) {
+    g := m.lock()                // espera a trava; g é um *mutex.Guard[*Account]
+    a := g.get()                 // &Account, emprestado do guard
+    a.balance += 10
+    g.unlock()                   // obrigatório; usar a depois daqui é erro
+    m.close()
+}
+
+fn main() {
+    m := mutex.new(alloc(Account{balance: 0}))   // a conta vai para dentro do mutex
+    t := thread.spawn(deposit, m.clone(), thread.STACK_64KB)
+    thread.join(t)
+    m.close()                                     // o último close libera a conta
+}
+```
+
+| Operação | O que faz |
+|---|---|
+| `mutex.new(v) *mutex.Mutex[T]` | aloca o mutex com `v` dentro (`v` é movido); `mutex.new[T](v)` escolhe o tipo |
+| `m.lock() *mutex.Guard[T]` | espera a trava e devolve o guard |
+| `m.clone() *mutex.Mutex[T]` | outro handle para o mesmo mutex, para levar a outra thread |
+| `m.close()` | fecha o handle; o último a sair (handle ou guard) libera o valor |
+| `g.get() &T` | empresta o valor |
+| `g.unlock()` | destrava (consome o guard) |
+| `g.wait()` | solta a trava, espera um `notify` e trava de novo |
+| `notify()`, `notify_all()` | acordam quem espera em `wait` (no handle ou no guard) |
+
+- **A trava é um recurso.** O guard é um dono: esquecer o `unlock` é erro de compilação, como um vazamento.
+- **O valor só existe dentro do lock.** `get()` empresta do guard, e o guard fica congelado enquanto o empréstimo é usado. Por isso, usar o valor depois do `unlock` é erro de compilação. O empréstimo vale do `get` até o último uso no texto, então destrave depois do último uso, inclusive nos caminhos com `break`.
+- **O guard é da thread que travou.** Destravar em outra thread é comportamento indefinido no pthread, então o guard não vai para o contexto de um `spawn`, para canais, campos, slices ou coleções.
+- **O guard mantém o mutex vivo.** Fechar o último handle com um guard aberto é seguro: o valor só é liberado no `unlock`.
+- **Travar duas vezes na mesma thread** sem destravar dá panic com uma mensagem clara, em vez de travar o programa para sempre.
+- **Vários handles:** cada `clone()` precisa de `close()`. Num `Vec`, o `drop` de cada handle o fecha.
+
+### Esperar uma condição
+
+```
+fn ready(q &Queue) bool {
+    return q.count > 0 || q.done
+}
+
+g := m.lock()
+for !ready(g.get()) {     // o empréstimo de get() dura só a chamada
+    g.wait()
+}
+```
+
+Quem muda a condição chama `g.notify()` (ou `notify_all()`) antes do `unlock`.
+
+## Atomics (`import "std/atomic"`)
+
+Para contadores e sinais simples, sem mutex:
+
+```
+n := atomic.new_int(0)
+t := thread.spawn(count, n.clone(), thread.STACK_64KB)   // outro handle, para a thread
+n.add(1)
+thread.join(t)
+io.print(n.load())
+n.close()
+```
+
+| Tipo | Métodos |
+|---|---|
+| `atomic.Int` (de `atomic.new_int(v)`) | `load`, `store`, `add` (devolve o valor novo; estouro dá panic), `swap` (devolve o antigo), `compare_swap(esperado, novo) bool`, `clone`, `close` |
+| `atomic.Bool` (de `atomic.new_bool(v)`) | `load`, `store`, `swap`, `compare_swap`, `clone`, `close` |
+
+Todas as operações são sequencialmente consistentes. Cada handle precisa de `close()`, e o último libera o valor. O módulo é MLC comum, em [`std/atomic.mlc`](../std/atomic.mlc), sobre funções do runtime.
+
 ## O que o modelo garante
 
-- **Sem data race:** dados só chegam a outra thread por movimento (o contexto, o resultado, os valores de um canal).
-- **Sem thread esquecida nem canal esquecido:** todo `spawn` tem seu `join`, e toda ponta de canal, seu `close`.
+- **Sem data race:** dados só chegam a outra thread por movimento (o contexto, o resultado, os valores de um canal) ou dentro de um mutex, com a trava. Os atomics são a outra forma de compartilhar.
+- **Sem thread, canal, mutex ou trava esquecidos:** todo `spawn` tem seu `join`, toda ponta de canal e todo handle de mutex ou atomic, seu `close`, e todo guard, seu `unlock`.
+- **Sem uso do valor protegido fora da trava:** o empréstimo do `get()` não sobrevive ao `unlock`.
 - **Toda memória à vista:** o registro da thread (o contexto e o resultado) é alocado no `spawn` e liberado no `join`, e o tamanho da pilha está no código.
 
 ## O que não garante
 
-- **Deadlock.** Duas threads esperando uma pela outra (dois canais cheios, um `recv` com o próprio `Sender` aberto na mesma thread) travam o programa, e o verificador não impede.
+- **Deadlock.** Duas threads esperando uma pela outra (dois canais cheios, um `recv` com o próprio `Sender` aberto na mesma thread, dois mutex travados em ordens diferentes) travam o programa, e o verificador não impede. A única exceção é travar o mesmo mutex duas vezes na mesma thread, que dá panic.
 - **O que passa pela FFI.** Uma biblioteca de C que cria threads ou compartilha memória por conta própria fica fora da garantia.
 
 ## Como funciona
@@ -175,5 +254,7 @@ t := thread.spawn(work, w, thread.STACK_64KB)
 `thread.spawn` e `thread.join` são reescritos pelo compilador, como o `io.print`. Para cada tipo de função de thread, o C gerado ganha um registro (o `mlc_thread` do runtime, o resultado, a função e o contexto) e uma função de entrada que chama `f(ctx)` e guarda o resultado. O `spawn` aloca o registro com `mlc_alloc` e cria a thread com `pthread_create`, com o tamanho de pilha pedido. O `join` faz `pthread_join`, tira o resultado e libera o registro.
 
 Um canal é um buffer em anel no runtime, com uma trava e duas variáveis de condição (pthread). Cada ponta é um ponteiro para ele, e o runtime conta as pontas. `send` copia os bytes do valor para o anel e `recv` os copia para fora: a posse passa de um lado para o outro sem cópia escondida no heap. O `chan.new` entrega ao runtime a função que libera um valor do tipo, usada no último `close` e no `send` sem receptor.
+
+Um mutex é um `pthread_mutex_t` do tipo que confere erros, mais uma variável de condição e o valor, logo depois do cabeçalho. Handles e guards são contados com um atômico. `get()` devolve um ponteiro para o valor dentro do mutex, e o verificador faz dele um empréstimo do guard.
 
 O runtime é seguro para threads: o contador de alocações é atômico, e os destinos do `str.format` são por thread.

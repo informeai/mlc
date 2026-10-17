@@ -1,0 +1,53 @@
+import "std/atomic"
+import "std/testing"
+import "std/thread"
+
+fn test_int_ops() {
+    n := atomic.new_int(5)
+    testing.eq_int(n.load(), 5)
+    testing.eq_int(n.add(3), 8)
+    testing.eq_int(n.add(-10), -2)
+    n.store(100)
+    testing.eq_int(n.swap(1), 100)
+    testing.check(n.compare_swap(1, 2), "troca quando o valor é o esperado")
+    testing.check(!n.compare_swap(1, 3), "não troca quando não é")
+    testing.eq_int(n.load(), 2)
+    n.close()
+}
+
+fn test_bool_ops() {
+    b := atomic.new_bool(false)
+    testing.check(!b.load(), "começa false")
+    testing.check(!b.swap(true), "swap devolve o antigo")
+    testing.check(b.load(), "agora true")
+    testing.check(b.compare_swap(true, false), "troca de true para false")
+    b.store(true)
+    testing.check(b.load(), "store")
+    b.close()
+}
+
+fn bump(n *atomic.Int) {
+    for i := 0; i < 10000; i++ {
+        n.add(1)
+    }
+    n.close()
+}
+
+fn test_threads() {
+    n := atomic.new_int(0)
+    a := thread.spawn(bump, n.clone(), thread.STACK_64KB)
+    b := thread.spawn(bump, n.clone(), thread.STACK_64KB)
+    c := thread.spawn(bump, n.clone(), thread.STACK_64KB)
+    thread.join(a)
+    thread.join(b)
+    thread.join(c)
+    testing.eq_int(n.load(), 30000)
+    n.close()
+}
+
+fn test_add_overflow_panics() {
+    testing.expect_panic()
+    n := atomic.new_int(9223372036854775807)
+    n.add(1)
+    n.close()
+}

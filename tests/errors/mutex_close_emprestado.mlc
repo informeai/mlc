@@ -1,0 +1,19 @@
+// erro: close precisa do dono, e m é um empréstimo
+import "std/atomic"
+import "std/io"
+import "std/mutex"
+import "std/thread"
+import "std/vec"
+
+fn takes(g *mutex.Guard[int]) {
+    g.unlock()
+}
+
+fn closes(m &mutex.Mutex[int]) {
+    m.close()
+}
+
+fn main() {
+    m := mutex.new(1)
+    closes(&m)
+}
