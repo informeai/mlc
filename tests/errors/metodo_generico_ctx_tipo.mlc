@@ -1,0 +1,25 @@
+// erro: argumento 2 de K.run[int]: esperado fn(&int, int), encontrado fn(&bool, int)
+struct K {
+    n int
+}
+
+fn (k &K) run[C ref](ctx &C, f fn(&C, int)) {
+    f(ctx, k.n)
+}
+
+fn (k &K) make[R any]() R {
+    var r R
+    return r
+}
+
+fn step(c &int, x int) {
+}
+
+fn other(c &bool, x int) {
+}
+
+fn main() {
+    k := K{n: 1}
+    c := 0
+    k.run(&c, other)
+}

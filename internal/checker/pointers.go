@@ -205,6 +205,10 @@ func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 		if len(t.Args) > 0 {
 			c.errorf(t.P, "%s é um parâmetro de tipo e não recebe argumentos", t.Name)
 		}
+		if tv, ok := c.typeParams[t.Name].(*TypeVar); ok && tv.Constraint == "ref" && ctx != ctxBorrowElem {
+			c.errorf(t.P, "%s tem a restrição ref e só pode aparecer emprestado (&%s): o tipo pode ter donos e não ser copiável", t.Name, t.Name)
+			return Invalid
+		}
 		return c.typeParams[t.Name]
 	case basicTypes[t.Name] != nil:
 		if len(t.Args) > 0 {

@@ -129,6 +129,52 @@ fn partition_by[T any](s &[]T, less fn(&T, &T) bool) int {
     return i
 }
 
+// sort_by_with ordena s pela ordem de less, que recebe junto o contexto ctx:
+// para comparar consultando outra estrutura (os ids pela prioridade guardada
+// num map, por exemplo).
+pub fn sort_by_with[T owned, C ref](s &[]T, ctx &C, less fn(&C, &T, &T) bool) {
+    n := len(s)
+    if n <= 16 {
+        insertion_with(s, ctx, less)
+        return
+    }
+    p := partition_with(s, ctx, less)
+    sort_by_with(&s[:p], ctx, less)
+    sort_by_with(&s[p + 1:], ctx, less)
+}
+
+fn insertion_with[T owned, C ref](s &[]T, ctx &C, less fn(&C, &T, &T) bool) {
+    for i := 1; i < len(s); i++ {
+        if !less(ctx, &s[i], &s[i - 1]) {
+            continue
+        }
+        x := take(&s[i])
+        j := i - 1
+        for j >= 0 && less(ctx, &x, &s[j]) {
+            moved := take(&s[j])
+            gap := replace(&s[j + 1], moved)
+            drop(gap)
+            j--
+        }
+        gap := replace(&s[j + 1], x)
+        drop(gap)
+    }
+}
+
+fn partition_with[T owned, C ref](s &[]T, ctx &C, less fn(&C, &T, &T) bool) int {
+    last := len(s) - 1
+    swap(s, last / 2, last)
+    i := 0
+    for j := 0; j < last; j++ {
+        if less(ctx, &s[j], &s[last]) {
+            swap(s, i, j)
+            i++
+        }
+    }
+    swap(s, i, last)
+    return i
+}
+
 // is_sorted_by diz se s já está na ordem de less.
 pub fn is_sorted_by[T any](s &[]T, less fn(&T, &T) bool) bool {
     for i := 1; i < len(s); i++ {

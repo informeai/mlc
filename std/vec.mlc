@@ -95,6 +95,14 @@ pub fn (v &Vec[T]) last() &T {
     return &v.items[v.count - 1]
 }
 
+// each_with chama f com cada elemento, em ordem, passando junto o contexto
+// ctx (onde f guarda o que acumula).
+pub fn (v &Vec[T]) each_with[C ref](ctx &C, f fn(&C, &T)) {
+    for i := 0; i < v.count; i++ {
+        f(ctx, &v.items[i])
+    }
+}
+
 pub fn (v &Vec[T]) len() int {
     return v.count
 }

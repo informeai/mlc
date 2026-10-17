@@ -211,6 +211,23 @@ pub fn (m &Map[K, V]) each(f fn(&K, &V)) {
     }
 }
 
+// each_with chama f com cada entrada (em ordem qualquer), passando junto o
+// contexto ctx: é onde f guarda o que acumula, já que funções não capturam
+// variáveis.
+//
+//     struct Soma { total int }
+//     fn soma(s &Soma, k &[]byte, v &int) { s.total += *v }
+//
+//     var s Soma
+//     m.each_with(&s, soma)
+pub fn (m &Map[K, V]) each_with[C ref](ctx &C, f fn(&C, &K, &V)) {
+    for i := 0; i < len(m.state); i++ {
+        if m.state[i] == FULL {
+            f(ctx, &m.keys[i], &m.vals[i])
+        }
+    }
+}
+
 // next devolve a próxima posição ocupada a partir de i, ou -1. Com key_at e
 // value_at, percorre o mapa quando as chaves e os valores são copiáveis:
 //

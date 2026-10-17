@@ -1,0 +1,25 @@
+// erro: C tem a restrição ref e só pode aparecer emprestado (&C)
+struct K {
+    n int
+}
+
+fn (k &K) run[C ref](ctx &C, f fn(&C, int)) {
+    f(ctx, k.n)
+}
+
+fn (k &K) make[R any]() R {
+    var r R
+    return r
+}
+
+fn step(c &int, x int) {
+}
+
+fn other(c &bool, x int) {
+}
+
+fn bad[C ref](c C) {
+}
+
+fn main() {
+}

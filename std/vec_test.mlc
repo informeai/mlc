@@ -106,3 +106,20 @@ fn test_nested() {
     testing.eq_int(outer.at(2).get(2), 2)
     outer.free() // libera os vetores de dentro (drop)
 }
+
+fn longest(best &int, s &[]byte) {
+    if len(s) > *best {
+        *best = len(s)
+    }
+}
+
+fn test_each_with() {
+    v := vec.new[[]byte](2)
+    v.push(text("um"))
+    v.push(text("três"))
+    v.push(text("dois"))
+    best := 0
+    v.each_with(&best, longest)
+    testing.eq_int(best, 5) // "três" tem 5 bytes
+    v.free()
+}

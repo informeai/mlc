@@ -33,7 +33,11 @@ type TypeVar struct {
 
 func (t *TypeVar) String() string { return t.Name }
 
-var constraints = map[string]bool{"any": true, "comparable": true, "ordered": true, "number": true, "integer": true, "owned": true}
+var constraints = map[string]bool{"any": true, "comparable": true, "ordered": true, "number": true, "integer": true, "owned": true, "ref": true}
+
+// A restrição ref aceita qualquer tipo (inclusive structs com donos), porque
+// o parâmetro só aparece emprestado: &C. É a do contexto de um callback
+// (fn (m &Map[K, V]) each_with[C ref](ctx &C, f fn(&C, &K, &V))).
 
 // tvHas diz se t é um TypeVar cuja restrição permite a capacidade cap:
 // "eq" (==), "order" (<), "arith" (+ - * /) ou "mod" (%).
@@ -44,7 +48,7 @@ func tvHas(t Type, cap string) bool {
 	}
 	switch cap {
 	case "eq":
-		return tv.Constraint != "owned"
+		return tv.Constraint != "owned" && tv.Constraint != "ref"
 	case "order", "arith":
 		return tv.Constraint == "ordered" || tv.Constraint == "number" || tv.Constraint == "integer"
 	case "mod":
@@ -100,10 +104,12 @@ func anyAbstract(ts []Type) bool {
 func satisfies(t Type, c string) bool {
 	if tv, ok := t.(*TypeVar); ok {
 		switch c {
+		case "ref":
+			return true // ref aceita tudo
 		case "owned":
-			return true // todo tipo aceito por outra restrição é aceito por owned
+			return tv.Constraint != "ref" // todo tipo aceito por outra restrição (menos ref) é aceito por owned
 		case "any", "comparable":
-			return tv.Constraint != "owned"
+			return tv.Constraint != "owned" && tv.Constraint != "ref"
 		case "ordered", "number":
 			return tvHas(tv, "order")
 		}
@@ -112,6 +118,9 @@ func satisfies(t Type, c string) bool {
 	if c == "owned" {
 		ok, _ := ownedOK(t)
 		return ok
+	}
+	if c == "ref" {
+		return !isBorrow(t) && t != Void && t != NilType && t != Invalid && !isUntyped(t)
 	}
 	if IsOwner(t) || isBorrow(t) || isResource(t) || t == Void || t == NilType || t == Invalid || isUntyped(t) {
 		return false
@@ -231,6 +240,8 @@ func (c *checker) checkTypeArgs(what string, params []*ast.TypeParam, args []Typ
 				if _, why := ownedOK(args[i]); why != "" {
 					reason = " (" + why + ")"
 				}
+			case builtin == "ref" && isBorrow(args[i]):
+				reason = " (um empréstimo não pode ser argumento de tipo: o parâmetro já é usado como &" + p.Name + ")"
 			case builtin != "" && builtin != "owned" && !satisfies(args[i], builtin) && (IsOwner(args[i]) || isBorrow(args[i]) || isResource(args[i])):
 				reason = " (é dono: para aceitar donos, a restrição precisa ser owned)"
 			case iface != "" && (builtin == "" || satisfies(args[i], builtin)):
@@ -351,6 +362,14 @@ func (c *checker) instMethod(s *Struct, name string) *Func {
 		Method: true, recv: recvModeOf(d.Recv.Type),
 	}
 	s.Methods[name] = m
+	if len(d.TypeParams) > 0 {
+		// método com parâmetros de tipo próprios: um modelo, instanciado na chamada
+		c.withScope(origin.mod, binding, func() {
+			recv := &Local{Name: d.Recv.Name, CName: "l_" + d.Recv.Name, Type: c.recvType(s, m.recv), Pos: d.Recv.P, Param: true}
+			c.genericMethod(m, d, origin.mod, binding, recv)
+		})
+		return m
+	}
 	c.withScope(origin.mod, binding, func() {
 		recv := &Local{Name: d.Recv.Name, CName: "l_" + d.Recv.Name, Type: c.recvType(s, m.recv), Pos: d.Recv.P, Param: true}
 		c.signature(m, decl, recv)
@@ -539,6 +558,14 @@ func unify(p, a Type, vars map[*TypeVar]bool, bound map[*TypeVar]Type) {
 					unify(pt.Args[i], at.Args[i], vars, bound)
 				}
 			}
+		}
+	case *FuncType:
+		// fn(&C, &K) R contra a função passada: C vem do primeiro parâmetro dela
+		if at, ok := a.(*FuncType); ok && len(at.Params) == len(pt.Params) {
+			for i := range pt.Params {
+				unify(pt.Params[i], at.Params[i], vars, bound)
+			}
+			unify(pt.Result, at.Result, vars, bound)
 		}
 	}
 }
@@ -754,8 +781,128 @@ func (c *checker) collectGenericMethod(d *ast.FuncDecl, s *Struct, named *ast.Ty
 		for i, a := range named.Args {
 			binding[a.Name] = vars[i]
 		}
+		for k, v := range m.methodBinding {
+			binding[k] = v // os parâmetros de tipo do próprio método (each[C])
+		}
 		c.abstracts = append(c.abstracts, abstractCheck{m, binding})
 	}
+}
+
+// ---------- métodos genéricos ----------
+//
+//	fn (m &Map[K, V]) each[C any](ctx &C, f fn(&C, &K, &V))
+//
+// Um método pode ter parâmetros de tipo próprios, além dos da struct. O
+// método vira um modelo: na chamada, os tipos dele são deduzidos dos
+// argumentos (sem o receptor) ou escritos (m.each[Soma](...)), e cada
+// combinação é uma instância comum, checada e gerada como uma função
+// genérica.
+
+// genericMethod prepara m, de declaração d, como modelo de método genérico.
+// binding tem os tipos da struct (vazio numa struct comum).
+func (c *checker) genericMethod(m *Func, d *ast.FuncDecl, mod *module, binding map[string]Type, recv *Local) {
+	m.typeVars = c.typeVars(d.TypeParams)
+	m.instances = map[string]*Func{}
+	m.structBinding = binding
+	full := map[string]Type{}
+	for k, v := range binding {
+		full[k] = v
+	}
+	m.methodBinding = bind(d.TypeParams, m.typeVars)
+	for k, v := range m.methodBinding {
+		full[k] = v
+	}
+	c.withScope(mod, full, func() { c.signature(m, d, recv) })
+}
+
+// instGenericMethod devolve a instância do método genérico m com os tipos
+// args dos parâmetros dele.
+func (c *checker) instGenericMethod(m *Func, args []Type, pos token.Pos) *Func {
+	d := m.Decl
+	if !c.checkTypeArgs(m.Name, d.TypeParams, args, pos) {
+		return nil
+	}
+	display, key, mangled := typeList(args)
+	if inst, ok := m.instances[key]; ok {
+		return inst
+	}
+	recvT := m.Params[0].Type
+	concrete := !abstract(recvT) && !anyAbstract(args)
+	decl := d
+	if concrete {
+		decl = ast.Clone(d)
+	}
+	inst := &Func{
+		Name: m.Name + "[" + display + "]", Result: Void, Decl: decl,
+		CName: m.CName + "__" + mangled, File: m.File, Pub: m.Pub, mod: m.mod,
+		Method: true, recv: m.recv,
+	}
+	m.instances[key] = inst
+	binding := map[string]Type{}
+	for k, v := range m.structBinding {
+		binding[k] = v
+	}
+	for k, v := range bind(d.TypeParams, args) {
+		binding[k] = v
+	}
+	c.withScope(m.mod, binding, func() {
+		recv := &Local{Name: d.Recv.Name, CName: "l_" + d.Recv.Name, Type: recvT, Pos: d.Recv.P, Param: true}
+		c.signature(inst, decl, recv)
+	})
+	if concrete {
+		c.queue(inst, binding)
+	}
+	return inst
+}
+
+// genericMethodCall checa x.m(args) (ou x.m[T](args)) com m um método
+// genérico.
+func (c *checker) genericMethodCall(e *ast.CallExpr, sel *ast.SelectorExpr, t Type, s *Struct, m *Func, explicit []ast.Expr) Type {
+	recv := c.receiverArg(sel.X, t, s, m)
+	if recv == nil {
+		c.checkArgs(e)
+		return Invalid
+	}
+	var args []Type
+	if explicit != nil {
+		for _, x := range explicit {
+			args = append(args, c.exprType(x))
+		}
+	} else {
+		vars := map[*TypeVar]bool{}
+		for _, v := range m.typeVars {
+			vars[v.(*TypeVar)] = true
+		}
+		bound := map[*TypeVar]Type{}
+		saved := len(c.errs)
+		for i, a := range e.Args {
+			if i+1 >= len(m.Params) {
+				break
+			}
+			if at := c.peekType(a); !isUntyped(at) {
+				unify(m.Params[i+1].Type, at, vars, bound)
+			}
+		}
+		c.errs = c.errs[:saved] // os argumentos são checados de novo, com os tipos certos
+		for _, v := range m.typeVars {
+			bt := bound[v.(*TypeVar)]
+			if bt == nil {
+				c.errorf(e.Lparen, "não foi possível deduzir %s em %s: escreva os tipos, como %s[%s](...)", v, m.Name, sel.Sel, v)
+				c.checkArgs(e)
+				return Invalid
+			}
+			args = append(args, bt)
+		}
+	}
+	inst := c.instGenericMethod(m, args, e.Lparen)
+	if inst == nil {
+		c.checkArgs(e)
+		return Invalid
+	}
+	c.info.Recv[e] = recv
+	c.callArgs(e, inst, inst.Params[1:])
+	c.info.Calls[e] = Callee{Func: inst}
+	return inst.Result
 }
 
 // checkAbstracts checa o corpo das definições genéricas do módulo atual.

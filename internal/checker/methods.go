@@ -109,8 +109,18 @@ func (c *checker) collectMethod(d *ast.FuncDecl) {
 		Method: true, recv: mode,
 	}
 	recv := &Local{Name: d.Recv.Name, CName: "l_" + d.Recv.Name, Type: t, Pos: d.Recv.P, Param: true}
-	c.signature(fn, d, recv)
 	s.Methods[d.Name] = fn
+	if len(d.TypeParams) > 0 {
+		// método com parâmetros de tipo próprios: um modelo, instanciado na chamada
+		c.genericMethod(fn, d, c.mod, map[string]Type{}, recv)
+		full := map[string]Type{}
+		for k, v := range fn.methodBinding {
+			full[k] = v
+		}
+		c.abstracts = append(c.abstracts, abstractCheck{fn, full})
+		return
+	}
+	c.signature(fn, d, recv)
 	c.info.Funcs = append(c.info.Funcs, fn)
 }
 
@@ -158,6 +168,9 @@ func (c *checker) methodCall(e *ast.CallExpr, sel *ast.SelectorExpr) (Type, bool
 	}
 	if !m.Pub && m.mod != c.mod {
 		c.errorf(sel.SelPos, "o método %s não é público (declare com pub fn)", m.Name)
+	}
+	if m.typeVars != nil {
+		return c.genericMethodCall(e, sel, t, s, m, nil), true
 	}
 	recv := c.receiverArg(sel.X, t, s, m)
 	if recv == nil {

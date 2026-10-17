@@ -167,6 +167,7 @@ p := Par[int, string]{primeiro: 1, segundo: "um"}
   | `number` | números | o de `ordered` e `+`, `-`, `*`, `/` |
   | `integer` | inteiros | o de `number` e `%` |
   | `owned` | tipos sem posse **e** donos simples (`?*X`, `[]X`, com `X` sem donos) | mover, passar, devolver, `take`/`replace`/`drain` em `[]T`, `drop(x)`; **sem** cópia nem `==` |
+  | `ref` | qualquer tipo, inclusive structs com donos (menos empréstimos) | só emprestado: o parâmetro só aparece como `&T` (o contexto de um callback) |
 
 - **A definição é checada uma vez,** com `T` valendo só o que a restrição permite: `a < b` com `T any` é erro na própria definição, antes de qualquer uso.
 - **Cada uso com tipos concretos gera uma instância** (`maior[int]`, `Par[int, string]`): uma cópia checada com os tipos reais e compilada no C com nome próprio. Não há custo em tempo de execução. Um erro que só aparece com um tipo concreto (como `x + 300` com `T = int8`) aponta a linha da definição e diz qual instância falhou.
@@ -175,6 +176,34 @@ p := Par[int, string]{primeiro: 1, segundo: "um"}
 - **Métodos de struct genérica** nomeiam os parâmetros no receptor: `fn (v &Vetor[T]) adiciona(x T)`.
 - **Restrição no receptor:** `fn (v &Vec[T any]) get(i int) T` só existe nas instâncias em que `T` atende `any`. Chamar `get` num `Vec[[]byte]` é erro, com a sugestão de `take`/`put`.
 - Com as restrições comuns, argumentos de tipo não podem ser donos nem empréstimos (`*No`, `[]int`, `&T`). Para aceitar donos, use `owned`.
+- **Métodos com parâmetros de tipo próprios**, além dos da struct (veja abaixo).
+
+### Métodos genéricos e callbacks com contexto
+
+Funções como valor não capturam variáveis (não há closures, que guardariam estado escondido). Para um callback acumular alguma coisa, quem chama passa o **contexto** junto, e a função o recebe emprestado:
+
+```
+pub fn (m &Map[K, V]) each_with[C ref](ctx &C, f fn(&C, &K, &V))
+
+struct Totals {
+    sum int
+    count int
+}
+
+fn add(t &Totals, k &int, v &int) {
+    t.sum += *v
+    t.count++
+}
+
+var t Totals
+m.each_with(&t, add)          // C deduzido: Totals
+m.each_with[Totals](&t, add)  // ou escrito
+```
+
+- Um método pode ter parâmetros de tipo próprios (`each_with[C ref]`), além dos da struct. Eles são deduzidos dos argumentos da chamada (sem o receptor) ou escritos (`m.each_with[Totals](...)`), e cada combinação gera uma instância, como uma função genérica. Vale também em structs comuns (`fn (c &Clock) run[C ref](...)`).
+- **`ref`** é a restrição do contexto: aceita qualquer tipo (inclusive structs com donos, como um `vec` onde o callback guarda resultados), porque o parâmetro só aparece emprestado. Usar `C` por valor no corpo é erro.
+- O contexto é emprestado durante a chamada: a função pode alterá-lo, mas não guardá-lo. A memória é de quem chama (na pilha, com `var`, ou com `alloc`), e nada é alocado escondido.
+- Na biblioteca: `map.each_with`, `vec.each_with`, `sort.sort_by_with`, `slices.index_by` e `slices.count_by`.
 
 ### Donos em genéricos: `owned`
 

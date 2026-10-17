@@ -123,3 +123,16 @@ fn test_fill() {
     slices.fill(&a, 7)
     testing.check(a == [4]int{7, 7, 7, 7}, "preenchido")
 }
+
+fn above(limit &int, x &int) bool {
+    return *x > *limit
+}
+
+fn test_index_by_count_by() {
+    a := [6]int{3, 9, 1, 12, 7, 15}
+    limit := 8
+    testing.eq_int(slices.index_by(&a, &limit, above), 1)
+    testing.eq_int(slices.count_by(&a, &limit, above), 3)
+    limit = 100
+    testing.eq_int(slices.index_by(&a, &limit, above), -1)
+}

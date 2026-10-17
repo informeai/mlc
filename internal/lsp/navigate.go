@@ -917,6 +917,7 @@ var builtinDocs = map[string][2]string{
 	"ordered":          {"ordered", "Restrição de genérico: números, que aceitam `<`, `>` e as contas."},
 	"number":           {"number", "Restrição de genérico: números (inteiros e reais), com `+ - * /`."},
 	"integer":          {"integer", "Restrição de genérico: inteiros, inclusive com `%`."},
+	"ref":              {"ref", "Restrição de genérico: aceita qualquer tipo, inclusive structs com donos, porque o parâmetro só aparece emprestado (`&C`). É a do contexto de um callback: `each_with[C ref](ctx &C, f fn(&C, ...))`."},
 	"owned":            {"owned", "Restrição de genérico: aceita os tipos sem dono e os donos simples (`?*X`, `[]X`). Dentro do corpo, um valor `T` é tratado como dono: atribuir move, e todo valor precisa de destino (mover, guardar ou `drop`)."},
 	"drop":             {"drop(x)", "Em código genérico, consome `x`: libera se for dono (`free`) e não faz nada se não for (T = int numa instância)."},
 }

@@ -67,6 +67,7 @@ Ordenam no lugar um `&[]T` (um slice emprestado, ou um array com `&a`). A ordem 
 | `reverse[T owned](s &[]T)` | inverte a ordem |
 | `swap[T owned](s &[]T, i int, j int)` | troca dois elementos (por posse) |
 | `sort_by[T any](s &[]T, less fn(&T, &T) bool)` | ordena pela função `less` (para structs ou outra ordem) |
+| `sort_by_with(s, &ctx, less)` | ordena por `less(&ctx, &a, &b)`, que consulta o contexto (os ids pela prioridade guardada num `map`, por exemplo) |
 | `is_sorted_by[T any](s &[]T, less fn(&T, &T) bool) bool` | já está na ordem de `less`? |
 
 ### `std/cmp`
@@ -86,6 +87,7 @@ Operações sobre `&[]T` que comparam por empréstimo (servem para donos e para 
 | `binary_search(s, &x) int` | num slice ordenado: a posição de `x`, ou `-1` |
 | `min_index(s) int`, `max_index(s) int` | o menor e o maior (o primeiro, no empate); `-1` se vazio |
 | `dedup(s) int` | num slice ordenado, junta os únicos em `s[:n]` (as repetições ficam depois, nada é liberado) |
+| `index_by(s, &ctx, pred) int`, `count_by(s, &ctx, pred) int` | pelo resultado de `pred(&ctx, &x)`: o contexto leva o que procurar (um limite, um nome) |
 | `fill(s, x)` | põe `x` em todas as posições (só para tipos copiáveis) |
 
 ### `std/text`
@@ -183,6 +185,7 @@ nomes.free()               // libera cada nome (drop) e o vetor
 | `free()` | qualquer | libera cada elemento (`drop`) e o vetor |
 | `get(i) T` | só copiável (`any`) | devolve uma cópia |
 | `at(i) &T`, `last() &T` | qualquer | empresta o elemento sem tirá-lo; o vetor fica congelado enquanto o empréstimo é usado |
+| `each_with(&ctx, f fn(&C, &T))` | qualquer | chama `f` com cada elemento, em ordem, e o contexto |
 
 Os índices são checados: fora de `0..len-1`, panic.
 
@@ -271,6 +274,7 @@ conta.free()                              // libera cada chave e o mapa
 | `remove(k &K) bool` | qualquer | apaga a entrada (libera chave e valor) |
 | `len() int`, `clear()`, `free()` | qualquer | tamanho; `clear` e `free` liberam as entradas |
 | `each(f fn(&K, &V))` | qualquer | chama `f` com cada entrada |
+| `each_with(&ctx, f fn(&C, &K, &V))` | qualquer | o mesmo, com um contexto onde `f` acumula (somas, contagens, um `vec` de resultados) |
 | `next(i) int`, `key_at(i) K`, `value_at(i) V` | `key_at`: `K` copiável; `value_at`: `V` copiável | percorrer: `for i := m.next(0); i >= 0; i = m.next(i + 1)` |
 
 ### `std/os`

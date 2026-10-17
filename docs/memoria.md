@@ -215,6 +215,10 @@ Uma variante de enum pode guardar donos (`BadDigit(at int, msg []byte)`). O enum
 
 Um `match` sobre `*e`, um campo ou um empréstimo **só lê**: os campos donos vêm como empréstimos (`&[]byte`), com as mesmas regras de [Devolver e guardar empréstimos](#devolver-e-guardar-empréstimos). Não há `try`: propagar um erro é um `return` escrito, e a posse viaja com o valor. Veja [tipos.md](tipos.md#enums-com-donos).
 
+## Callbacks com contexto
+
+Funções como valor não capturam variáveis. Para um callback guardar estado, quem chama passa o contexto junto (`m.each_with(&ctx, f)`, com `f fn(&C, &K, &V)`). O contexto é um empréstimo durante a chamada: a função pode alterá-lo, não guardá-lo, e a memória dele é de quem chama, com as regras de sempre. É o que uma closure faria, com o estado à vista. Veja [tipos.md](tipos.md#métodos-genéricos-e-callbacks-com-contexto).
+
 ## Threads
 
 Uma thread recebe o contexto **por posse** (`thread.spawn(f, ctx, stack)` move `ctx`) e devolve o resultado por posse no `thread.join`. A função da thread não recebe empréstimos e não há variáveis globais mutáveis, então duas threads nunca alcançam a mesma memória. O handle `*thread.Thread[R]` é um dono como um handle de C: precisa ir para `thread.join`, e o verificador cobra isso. O registro da thread é alocado no `spawn` e liberado no `join`, e a pilha tem o tamanho escrito no código.

@@ -123,6 +123,28 @@ pub fn dedup[T owned + cmp.Eq](s &[]T) int {
     return w
 }
 
+// index_by devolve a posição do primeiro elemento para o qual pred devolve
+// true, ou -1. pred recebe junto o contexto ctx (o que procurar, um limite).
+pub fn index_by[T owned, C ref](s &[]T, ctx &C, pred fn(&C, &T) bool) int {
+    for i := 0; i < len(s); i++ {
+        if pred(ctx, &s[i]) {
+            return i
+        }
+    }
+    return -1
+}
+
+// count_by diz para quantos elementos pred devolve true.
+pub fn count_by[T owned, C ref](s &[]T, ctx &C, pred fn(&C, &T) bool) int {
+    n := 0
+    for i := 0; i < len(s); i++ {
+        if pred(ctx, &s[i]) {
+            n++
+        }
+    }
+    return n
+}
+
 // fill põe x em todas as posições (só para T copiável).
 pub fn fill[T any](s &[]T, x T) {
     for i := 0; i < len(s); i++ {

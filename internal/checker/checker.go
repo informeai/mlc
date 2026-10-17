@@ -61,21 +61,23 @@ type Local struct {
 }
 
 type Func struct {
-	Name      string
-	CName     string // nome no C gerado (mlc_fn_...)
-	File      string // arquivo da declaração
-	Pub       bool
-	mod       *module
-	Params    []*Local
-	Result    Type
-	Decl      *ast.FuncDecl    // nil numa função nativa
-	Native    string           // nome no runtime C, numa função nativa (str.copy)
-	Method    bool             // método: Params[0] é o receptor
-	typeVars  []Type           // função genérica: os parâmetros de tipo (checagem abstrata)
-	instances map[string]*Func // função genérica: instâncias já criadas
-	recv      recvMode
-	queued    bool   // instância de genérico: checada por checkInstances
-	CSym      string // extern "C" fn: o nome do símbolo em C
+	Name     string
+	CName    string // nome no C gerado (mlc_fn_...)
+	File     string // arquivo da declaração
+	Pub      bool
+	mod      *module
+	Params   []*Local
+	Result   Type
+	Decl     *ast.FuncDecl // nil numa função nativa
+	Native   string        // nome no runtime C, numa função nativa (str.copy)
+	Method   bool          // método: Params[0] é o receptor
+	typeVars []Type        // função genérica: os parâmetros de tipo (checagem abstrata)
+	// método genérico (each[C]): os tipos da struct e os do próprio método
+	structBinding, methodBinding map[string]Type
+	instances                    map[string]*Func // função genérica: instâncias já criadas
+	recv                         recvMode
+	queued                       bool   // instância de genérico: checada por checkInstances
+	CSym                         string // extern "C" fn: o nome do símbolo em C
 	// BorrowFrom: numa função que devolve &T, o parâmetro (1 + índice) de onde
 	// o empréstimo vem; 0 se não devolve empréstimo
 	BorrowFrom int
@@ -1148,6 +1150,19 @@ func (c *checker) call(e *ast.CallExpr) Type {
 	case *ast.IndexExpr, *ast.IndexListExpr:
 		// f[int](args): argumentos de tipo explícitos
 		base, targs := splitIndex(fun)
+		if sel, ok := base.(*ast.SelectorExpr); ok && c.userModule(sel.X) == nil {
+			// x.m[T](args): método genérico com os tipos escritos
+			t := c.value(sel.X)
+			if s := structBehind(t); s != nil {
+				m := s.Methods[sel.Sel]
+				if m == nil && s.Origin != nil {
+					m = c.instMethod(s, sel.Sel)
+				}
+				if m != nil && m.typeVars != nil {
+					return c.genericMethodCall(e, sel, t, s, m, targs)
+				}
+			}
+		}
 		if sel, ok := base.(*ast.SelectorExpr); ok && sel.Sel == "new" {
 			if m := c.userModule(sel.X); m != nil && m.std && m.path == "std/chan" {
 				return c.chanNew(e, targs)

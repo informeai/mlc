@@ -889,7 +889,7 @@ func (p *Parser) parseTypeParams() []*ast.TypeParam {
 	for {
 		name := p.expect(token.IDENT)
 		if p.tok.Kind != token.IDENT {
-			p.unexpected("esperado a restrição do parâmetro de tipo (any, comparable, ordered, number, integer ou uma interface)")
+			p.unexpected("esperado a restrição do parâmetro de tipo (any, comparable, ordered, number, integer, owned, ref ou uma interface)")
 		}
 		constraint := ""
 		for {
