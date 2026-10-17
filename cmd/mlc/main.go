@@ -22,9 +22,10 @@ import (
 const usage = `mlc — compilador da linguagem MLC (My Lang C)
 
 Uso:
-  mlc build [-o saida] [-emit-c] [-L dir] arquivo.mlc   compila para um executável
-  mlc run [-L dir] arquivo.mlc [argumentos]             compila e executa
-                                       (-L: pasta das bibliotecas de C de link "nome")
+  mlc build [-o saida] [-emit-c] [-I dir] [-L dir] arquivo.mlc   compila para um executável
+  mlc run [-I dir] [-L dir] arquivo.mlc [argumentos]             compila e executa
+      -I: pasta onde procurar os imports (além da do arquivo, de lib/ e de MLC_PATH)
+      -L: pasta onde procurar as bibliotecas de C de link "nome"
   mlc fmt [-l] [arquivos ou pastas]            formata no lugar (padrão: a pasta atual)
   mlc fmt -                                    formata a entrada padrão na saída padrão
   mlc lsp                                      servidor de linguagem (LSP) para editores
@@ -63,9 +64,11 @@ func build(args []string) int {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
 	out := fs.String("o", "", "caminho do executável (padrão: nome do arquivo sem .mlc)")
 	emitC := fs.Bool("emit-c", false, "imprime o C gerado em vez de compilar")
-	var libDirs dirList
+	var libDirs, importDirs dirList
 	fs.Var(&libDirs, "L", "pasta onde procurar as bibliotecas de C (pode repetir)")
+	fs.Var(&importDirs, "I", "pasta onde procurar os imports (pode repetir)")
 	fs.Parse(args)
+	opts := driver.Options{LibDirs: libDirs, ImportDirs: importDirs}
 	if fs.NArg() != 1 {
 		fmt.Fprint(os.Stderr, usage)
 		return 2
@@ -78,7 +81,7 @@ func build(args []string) int {
 	}
 
 	if *emitC {
-		csrc, err := driver.Compile(path, src)
+		csrc, err := driver.CompileOpts(path, src, os.ReadFile, opts)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
@@ -90,7 +93,7 @@ func build(args []string) int {
 	if *out == "" {
 		*out = strings.TrimSuffix(filepath.Base(path), ".mlc")
 	}
-	if err := driver.BuildOpts(path, src, *out, os.ReadFile, driver.Options{LibDirs: libDirs}); err != nil {
+	if err := driver.BuildOpts(path, src, *out, os.ReadFile, opts); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
@@ -99,8 +102,9 @@ func build(args []string) int {
 
 func run(args []string) int {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
-	var libDirs dirList
+	var libDirs, importDirs dirList
 	fs.Var(&libDirs, "L", "pasta onde procurar as bibliotecas de C (pode repetir)")
+	fs.Var(&importDirs, "I", "pasta onde procurar os imports (pode repetir)")
 	fs.Parse(args) // para no primeiro argumento que não é opção: o arquivo
 	args = fs.Args()
 	if len(args) < 1 {
@@ -121,7 +125,7 @@ func run(args []string) int {
 	defer os.RemoveAll(dir)
 
 	exe := filepath.Join(dir, strings.TrimSuffix(filepath.Base(path), ".mlc"))
-	if err := driver.BuildOpts(path, src, exe, os.ReadFile, driver.Options{LibDirs: libDirs}); err != nil {
+	if err := driver.BuildOpts(path, src, exe, os.ReadFile, driver.Options{LibDirs: libDirs, ImportDirs: importDirs}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}

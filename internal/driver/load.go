@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"mlc/internal/ast"
@@ -29,14 +31,44 @@ type loader struct {
 	state map[string]int // 1: carregando; 2: pronto
 	stack []string       // imports sendo carregados, para descrever ciclos
 	errs  []token.Error
+	dirs  []string // onde procurar os imports, em ordem (SearchDirs)
 }
 
-func load(file string, src []byte, read Loader) ([]checker.Source, []token.Error) {
+// SearchDirs devolve as pastas onde um import "x/y" é procurado, em ordem:
+// a do arquivo principal, a pasta lib/ ao lado dele (bibliotecas copiadas
+// para o projeto), as pastas de -I e as de MLC_PATH (separadas por : ).
+// Vale a primeira que tiver o arquivo.
+func SearchDirs(root string, importDirs []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(d string) {
+		if d == "" {
+			return
+		}
+		d = filepath.Clean(d)
+		if !seen[d] {
+			seen[d] = true
+			out = append(out, d)
+		}
+	}
+	add(root)
+	add(filepath.Join(root, "lib"))
+	for _, d := range importDirs {
+		add(d)
+	}
+	for _, d := range filepath.SplitList(os.Getenv("MLC_PATH")) {
+		add(d)
+	}
+	return out
+}
+
+func load(file string, src []byte, read Loader, importDirs ...string) ([]checker.Source, []token.Error) {
 	f, errs := parser.ParseFile(file, src)
 	if len(errs) > 0 {
 		return nil, errs
 	}
-	l := &loader{root: filepath.Dir(file), read: read, state: map[string]int{}}
+	root := filepath.Dir(file)
+	l := &loader{root: root, read: read, state: map[string]int{}, dirs: SearchDirs(root, importDirs)}
 	l.imports(file, f)
 	if len(l.errs) > 0 {
 		return nil, l.errs
@@ -74,14 +106,23 @@ func (l *loader) visit(from string, imp *ast.Import) {
 		return
 	}
 	isStd := strings.HasPrefix(imp.Path, "std/")
-	name := filepath.Join(l.root, filepath.FromSlash(imp.Path)+".mlc")
-	read := l.read
+	var name string
+	var src []byte
+	var err error
 	if isStd {
 		// biblioteca padrão: embutida no compilador
 		name = imp.Path + ".mlc"
-		read = func(string) ([]byte, error) { return std.FS.ReadFile(strings.TrimPrefix(name, "std/")) }
+		src, err = std.FS.ReadFile(strings.TrimPrefix(name, "std/"))
+	} else {
+		// a primeira pasta de busca que tiver o arquivo
+		err = fs.ErrNotExist
+		for _, d := range l.dirs {
+			name = filepath.Join(d, filepath.FromSlash(imp.Path)+".mlc")
+			if src, err = l.read(name); err == nil || !errors.Is(err, fs.ErrNotExist) {
+				break
+			}
+		}
 	}
-	src, err := read(name)
 	if err != nil {
 		if isStd {
 			l.errorf(from, imp.P, "a biblioteca padrão não tem o módulo %q", imp.Path)
@@ -90,7 +131,12 @@ func (l *loader) visit(from string, imp *ast.Import) {
 			if _, err := std.FS.ReadFile(imp.Path + ".mlc"); err == nil {
 				hint = fmt.Sprintf(" (para o da biblioteca padrão: import \"std/%s\")", imp.Path)
 			}
-			l.errorf(from, imp.P, "módulo desconhecido %q: arquivo %s não encontrado%s", imp.Path, name, hint)
+			var where []string
+			for _, d := range l.dirs {
+				where = append(where, strconv.Quote(d))
+			}
+			l.errorf(from, imp.P, "módulo desconhecido %q: arquivo %s.mlc não encontrado (procurado em %s; outras pastas: -I ou MLC_PATH)%s",
+				imp.Path, imp.Path, strings.Join(where, ", "), hint)
 		} else {
 			l.errorf(from, imp.P, "não foi possível ler %s: %v", name, err)
 		}

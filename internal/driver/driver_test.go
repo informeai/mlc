@@ -203,3 +203,61 @@ func TestLinkErrors(t *testing.T) {
 		}
 	}
 }
+
+// TestImportSearch: um import é procurado na pasta do arquivo principal, em
+// lib/ ao lado dele, nas pastas de -I e nas de MLC_PATH, nessa ordem; os
+// imports de dentro de uma biblioteca seguem a mesma busca.
+func TestImportSearch(t *testing.T) {
+	root := t.TempDir()
+	write := func(path, src string) {
+		full := filepath.Join(root, path)
+		os.MkdirAll(filepath.Dir(full), 0o755)
+		if err := os.WriteFile(full, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("proj/main.mlc", `import "std/io"
+import "util"
+import "texto"
+import "json/parse"
+import "dup"
+
+fn main() {
+    io.print(util.um(), texto.dois(), parse.tres(), dup.qual())
+}
+`)
+	write("proj/lib/util.mlc", "pub fn um() int {\n    return 1\n}\n")
+	write("proj/dup.mlc", "pub fn qual() string {\n    return \"projeto\"\n}\n")
+	write("extra/texto.mlc", "pub fn dois() int {\n    return 2\n}\n")
+	write("shared/json/parse.mlc", "import \"json/lexer\"\n\npub fn tres() int {\n    return lexer.um() + 2\n}\n")
+	write("shared/json/lexer.mlc", "pub fn um() int {\n    return 1\n}\n")
+	write("shared/dup.mlc", "pub fn qual() string {\n    return \"MLC_PATH\"\n}\n")
+	t.Setenv("MLC_PATH", filepath.Join(root, "nada")+string(os.PathListSeparator)+filepath.Join(root, "shared"))
+
+	mainPath := filepath.Join(root, "proj", "main.mlc")
+	src, _ := os.ReadFile(mainPath)
+	exe := filepath.Join(root, "prog")
+	opts := Options{ImportDirs: []string{filepath.Join(root, "extra")}}
+	if err := BuildOpts(mainPath, src, exe, os.ReadFile, opts); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(exe).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(out)); got != "1 2 3 projeto" {
+		t.Errorf("saída %q, esperado \"1 2 3 projeto\"", got)
+	}
+
+	// sem o -I, o módulo texto não é achado, e a mensagem diz onde procurou
+	err = BuildOpts(mainPath, src, exe, os.ReadFile, Options{})
+	if err == nil || !strings.Contains(err.Error(), `arquivo texto.mlc não encontrado (procurado em`) || !strings.Contains(err.Error(), "shared") {
+		t.Errorf("esperado erro de módulo desconhecido com as pastas, veio %v", err)
+	}
+
+	// o diagnóstico do editor acha lib/ e MLC_PATH (o -I é só da linha de comando)
+	write("proj/main2.mlc", "import \"std/io\"\nimport \"util\"\nimport \"json/parse\"\n\nfn main() {\n    io.print(util.um(), parse.tres())\n}\n")
+	if errs := Diagnose(filepath.Join(root, "proj", "main2.mlc"), Overlay(nil)); len(errs) != 0 {
+		t.Errorf("o diagnóstico não achou os módulos: %v", errs)
+	}
+}

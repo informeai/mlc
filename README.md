@@ -40,6 +40,7 @@ bin/mlc run exemplo.mlc                  # compila e executa
 bin/mlc build -o exemplo exemplo.mlc     # gera o executável
 bin/mlc build -emit-c exemplo.mlc        # mostra o C gerado
 bin/mlc build -L /opt/lib prog.mlc       # -L: onde procurar as bibliotecas de C de link "nome"
+bin/mlc build -I ~/mlc-libs prog.mlc     # -I: onde procurar os imports, além do projeto
 bin/mlc fmt .                            # formata os .mlc da pasta (no lugar)
 bin/mlc fmt -l .                         # só lista os que mudariam
 make test                                # roda os testes
@@ -49,6 +50,17 @@ make check                               # gofmt, mlc fmt -l, go vet e testes
 ## Formatação (`mlc fmt`)
 
 `mlc fmt` reescreve os arquivos na forma canônica, como o `gofmt`: indentação de 4 espaços, um espaço em volta dos operadores binários e depois das vírgulas, nenhum depois de operador unário (`-x`, `*p`, `&s`), comentários de fim de linha alinhados. As quebras de linha, os parênteses e os comentários de quem escreveu são mantidos; linhas em branco seguidas viram uma só. Um arquivo com erro de sintaxe não é formatado. `mlc fmt -` lê da entrada padrão e escreve na saída padrão (para editores).
+
+## Bibliotecas
+
+Um `import "json/parse"` procura `json/parse.mlc` nesta ordem, e vale a primeira pasta que tiver o arquivo:
+
+1. a pasta do arquivo principal;
+2. a pasta `lib/` ao lado dele (bibliotecas copiadas para dentro do projeto);
+3. as pastas de `-I` (`mlc build -I dir`, `mlc run -I dir`);
+4. as pastas da variável `MLC_PATH`, separadas por `:` (bibliotecas compartilhadas entre projetos).
+
+Os imports de dentro de uma biblioteca seguem a mesma busca, então uma biblioteca em `~/mlc-libs/json/` importa as próprias partes como `import "json/lexer"`. O LSP usa `lib/` e `MLC_PATH`, então o editor acha as mesmas bibliotecas. `import "std/..."` é sempre a biblioteca padrão, embutida no `mlc`.
 
 ## Editores
 
@@ -161,7 +173,7 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 
 - [x] **Donos aninhados:** `Vec[?*vec.Vec[int]]`, `Map[[]byte, ?*vec.Vec[[]byte]]`, `Vec[[][]byte]` e árvores (`Vec[?*Valor]` dentro de `Valor`); structs com donos se liberam com `fn (x *X) free()`, que o `drop` genérico chama. Enums com dados donos ficaram para o item de erros com conteúdo. Veja [docs/tipos.md](docs/tipos.md)
 - [x] **FFI para bibliotecas do usuário:** `extern "C" fn` em qualquer arquivo, com a fronteira conferida (números, `string`, `&[]T`, `&T` e handles `extern "C" type`, que o verificador obriga a fechar); `link "nome"` e `-L`; erros de ligação apontados como erro do programa. Veja [docs/ffi.md](docs/ffi.md)
-- [ ] **Caminho de busca de bibliotecas:** reaproveitar bibliotecas entre projetos (por exemplo `MLC_PATH` ou uma pasta `lib/`), além dos imports relativos ao `main.mlc` e do `std/` embutido
+- [x] **Caminho de busca de bibliotecas:** imports procurados na pasta do projeto, em `lib/`, nas pastas de `-I` e nas de `MLC_PATH`. Veja [Bibliotecas](#bibliotecas)
 - [ ] **Formatação para buffer:** `str.format(dst, "...", x)`, um `io.Writer` que escreve num `[]byte` e especificadores de formato (`{:x}`, `{:.2}`, largura)
 - [ ] **Callbacks com contexto:** métodos com parâmetros de tipo próprios (como `each[C](ctx &C, f fn(&C, &K, &V))`) ou funções sem captura no heap
 - [ ] **Erros com conteúdo:** enums com dados donos (mensagens alocadas) e um atalho de propagação (como `try`)

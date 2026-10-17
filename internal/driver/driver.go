@@ -33,14 +33,20 @@ func Compile(file string, src []byte) (string, error) {
 
 // CompileWith é Compile com outra forma de ler os arquivos importados.
 func CompileWith(file string, src []byte, read Loader) (string, error) {
-	csrc, _, err := compile(file, src, read)
+	csrc, _, err := compile(file, src, read, Options{})
+	return csrc, err
+}
+
+// CompileOpts é CompileWith com opções (as pastas de -I).
+func CompileOpts(file string, src []byte, read Loader, opts Options) (string, error) {
+	csrc, _, err := compile(file, src, read, opts)
 	return csrc, err
 }
 
 // compile traduz o programa para C e devolve também as bibliotecas de C
 // pedidas com link "nome".
-func compile(file string, src []byte, read Loader) (string, []string, error) {
-	srcs, errs := load(file, src, read)
+func compile(file string, src []byte, read Loader, opts Options) (string, []string, error) {
+	srcs, errs := load(file, src, read, opts.ImportDirs...)
 	if len(errs) > 0 {
 		return "", nil, Errors(errs)
 	}
@@ -57,7 +63,8 @@ var extraCFlags []string
 
 // Options ajusta a construção do executável.
 type Options struct {
-	LibDirs []string // -L: pastas onde procurar as bibliotecas de C de link "nome"
+	LibDirs    []string // -L: pastas onde procurar as bibliotecas de C de link "nome"
+	ImportDirs []string // -I: pastas onde procurar os imports (além de lib/ e MLC_PATH)
 }
 
 // Build compila src até um executável em out. O compilador C é o da
@@ -84,7 +91,7 @@ func (e *LinkError) Error() string {
 // compilação (uma falha aí é bug do mlc, porque o checker aceitou o
 // programa) e a ligação com as bibliotecas (uma falha aí é do programa).
 func BuildOpts(file string, src []byte, out string, read Loader, opts Options) error {
-	csrc, links, err := compile(file, src, read)
+	csrc, links, err := compile(file, src, read, opts)
 	if err != nil {
 		return err
 	}
