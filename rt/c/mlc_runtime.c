@@ -6,7 +6,10 @@
 
 #include "mlc_runtime.h"
 
+#include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <spawn.h>
 #include <stdarg.h>
 #include <float.h>
 #include <inttypes.h>
@@ -17,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -385,6 +389,264 @@ bool mlc_std_fs_exists(mlc_sl_byte *path, const char *file, int line) {
     char p[4096];
     struct stat st;
     return mlc_cpath(p, sizeof p, path) && stat(p, &st) == 0;
+}
+
+/* Erros de fs portáveis: os números do errno que mudam entre sistemas viram
+ * constantes do MLC (veja std/fs.mlc). */
+static int64_t mlc_fs_err(int e) {
+    if (e == ENOTEMPTY) return -1001; /* fs.NOT_EMPTY */
+    return -e;
+}
+
+/* Um arquivo aberto: o descritor do sistema. */
+typedef struct mlc_file {
+    int fd;
+} mlc_file;
+
+mlc_file *mlc_std_fs_open(mlc_sl_byte *path, int64_t mode, int64_t *err, const char *file, int line) {
+    char p[4096];
+    *err = 0;
+    if (!mlc_cpath(p, sizeof p, path)) {
+        *err = ENAMETOOLONG;
+        return NULL;
+    }
+    int flags;
+    switch (mode) {
+    case 0: flags = O_RDONLY; break;                     /* fs.READ */
+    case 1: flags = O_WRONLY | O_CREAT | O_TRUNC; break; /* fs.WRITE */
+    case 2: flags = O_WRONLY | O_CREAT | O_APPEND; break; /* fs.APPEND */
+    case 3: flags = O_RDWR | O_CREAT; break;             /* fs.READ_WRITE */
+    default: mlc_panic(file, line, "fs.open: modo desconhecido (use fs.READ, fs.WRITE, fs.APPEND ou fs.READ_WRITE)");
+    }
+    int fd = open(p, flags | O_CLOEXEC, 0644);
+    if (fd < 0) {
+        *err = -mlc_fs_err(errno);
+        return NULL;
+    }
+    mlc_file *f = mlc_alloc(sizeof *f, file, line);
+    f->fd = fd;
+    return f;
+}
+
+int64_t mlc_std_fs_file_read(mlc_file *f, mlc_sl_byte *dst, const char *file, int line) {
+    (void)file;
+    (void)line;
+    for (;;) {
+        ssize_t n = read(f->fd, dst->ptr, (size_t)dst->len);
+        if (n >= 0) return n;
+        if (errno != EINTR) return mlc_fs_err(errno);
+    }
+}
+
+int64_t mlc_std_fs_file_write(mlc_file *f, mlc_sl_byte *data, const char *file, int line) {
+    (void)file;
+    (void)line;
+    int64_t done = 0;
+    while (done < data->len) {
+        ssize_t n = write(f->fd, data->ptr + done, (size_t)(data->len - done));
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            return mlc_fs_err(errno);
+        }
+        done += n;
+    }
+    return done;
+}
+
+int64_t mlc_std_fs_file_seek(mlc_file *f, int64_t pos, const char *file, int line) {
+    (void)file;
+    (void)line;
+    off_t r = pos >= 0 ? lseek(f->fd, (off_t)pos, SEEK_SET) : lseek(f->fd, 0, SEEK_END);
+    return r < 0 ? mlc_fs_err(errno) : (int64_t)r;
+}
+
+void mlc_std_fs_file_close(mlc_file *f, const char *file, int line) {
+    (void)file;
+    (void)line;
+    close(f->fd);
+    mlc_free(f);
+}
+
+/* Um diretório aberto. */
+typedef struct mlc_dir {
+    DIR *d;
+} mlc_dir;
+
+mlc_dir *mlc_std_fs_open_dir(mlc_sl_byte *path, int64_t *err, const char *file, int line) {
+    char p[4096];
+    *err = 0;
+    if (!mlc_cpath(p, sizeof p, path)) {
+        *err = ENAMETOOLONG;
+        return NULL;
+    }
+    DIR *d = opendir(p);
+    if (d == NULL) {
+        *err = -mlc_fs_err(errno);
+        return NULL;
+    }
+    mlc_dir *r = mlc_alloc(sizeof *r, file, line);
+    r->d = d;
+    return r;
+}
+
+/* O próximo nome (sem . e ..), ou -1 no fim. */
+int64_t mlc_std_fs_dir_next(mlc_dir *d, mlc_sl_byte *dst, const char *file, int line) {
+    for (;;) {
+        struct dirent *e = readdir(d->d);
+        if (e == NULL) return -1;
+        if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
+        int64_t n = mlc_copy_cstr(dst, e->d_name);
+        if (n < 0) {
+            char msg[160];
+            snprintf(msg, sizeof msg, "fs.Dir.next: o nome tem %zu bytes e o buffer, %" PRId64 " (um [256]byte sempre basta)",
+                     strlen(e->d_name), dst->len);
+            mlc_panic(file, line, msg);
+        }
+        return n;
+    }
+}
+
+void mlc_std_fs_dir_close(mlc_dir *d, const char *file, int line) {
+    (void)file;
+    (void)line;
+    closedir(d->d);
+    mlc_free(d);
+}
+
+/* stat: tamanho, se é diretório e a data de modificação (ms desde 1970). */
+int64_t mlc_std_fs_stat_raw(mlc_sl_byte *path, int64_t *size, bool *is_dir, int64_t *modified, const char *file, int line) {
+    (void)file;
+    (void)line;
+    char p[4096];
+    struct stat st;
+    if (!mlc_cpath(p, sizeof p, path)) return -ENAMETOOLONG;
+    if (stat(p, &st) != 0) return mlc_fs_err(errno);
+    *size = (int64_t)st.st_size;
+    *is_dir = S_ISDIR(st.st_mode);
+#ifdef __APPLE__
+    *modified = (int64_t)st.st_mtimespec.tv_sec * 1000 + st.st_mtimespec.tv_nsec / 1000000;
+#else
+    *modified = (int64_t)st.st_mtim.tv_sec * 1000 + st.st_mtim.tv_nsec / 1000000;
+#endif
+    return 0;
+}
+
+int64_t mlc_std_fs_mkdir_raw(mlc_sl_byte *path, const char *file, int line) {
+    (void)file;
+    (void)line;
+    char p[4096];
+    if (!mlc_cpath(p, sizeof p, path)) return -ENAMETOOLONG;
+    return mkdir(p, 0755) == 0 ? 0 : mlc_fs_err(errno);
+}
+
+int64_t mlc_std_fs_remove_dir_raw(mlc_sl_byte *path, const char *file, int line) {
+    (void)file;
+    (void)line;
+    char p[4096];
+    if (!mlc_cpath(p, sizeof p, path)) return -ENAMETOOLONG;
+    return rmdir(p) == 0 ? 0 : mlc_fs_err(errno);
+}
+
+int64_t mlc_std_fs_rename_raw(mlc_sl_byte *from, mlc_sl_byte *to, const char *file, int line) {
+    (void)file;
+    (void)line;
+    char a[4096], b[4096];
+    if (!mlc_cpath(a, sizeof a, from) || !mlc_cpath(b, sizeof b, to)) return -ENAMETOOLONG;
+    return rename(a, b) == 0 ? 0 : mlc_fs_err(errno);
+}
+
+/* std/os: ambiente e diretório atual. */
+int64_t mlc_std_os_setenv_raw(mlc_str name, mlc_sl_byte *value, const char *file, int line) {
+    (void)file;
+    (void)line;
+    char n[256], v[4096];
+    if (name.len <= 0 || name.len >= (int64_t)sizeof n || value->len >= (int64_t)sizeof v) return -2; /* TOO_LONG */
+    memcpy(n, name.ptr, (size_t)name.len);
+    n[name.len] = '\0';
+    if (value->len > 0) memcpy(v, value->ptr, (size_t)value->len);
+    v[value->len] = '\0';
+    return setenv(n, v, 1) == 0 ? 0 : -errno;
+}
+
+int64_t mlc_std_os_cwd_raw(mlc_sl_byte *dst, const char *file, int line) {
+    (void)file;
+    (void)line;
+    char buf[4096];
+    if (getcwd(buf, sizeof buf) == NULL) return -errno;
+    return mlc_copy_cstr(dst, buf);
+}
+
+int64_t mlc_std_os_chdir_raw(mlc_sl_byte *path, const char *file, int line) {
+    (void)file;
+    (void)line;
+    char p[4096];
+    if (!mlc_cpath(p, sizeof p, path)) return -ENAMETOOLONG;
+    return chdir(p) == 0 ? 0 : -errno;
+}
+
+/* std/process: roda um programa. args tem os argumentos separados por '\0'
+ * (count deles, o primeiro é o programa, procurado no PATH). Com capture, a
+ * saída padrão do programa vai para out; o que não couber é lido e
+ * descartado, e o resultado é -1000 (TOO_BIG). status recebe o código de
+ * saída (128 + o sinal, se o programa morreu por sinal). */
+extern char **environ;
+
+int64_t mlc_std_process_run_raw(mlc_sl_byte *args, int64_t count, mlc_sl_byte *out, bool capture, int64_t *status,
+                                const char *file, int line) {
+    char *argv[256];
+    char buf[8193];
+    if (count < 1 || count > 255 || args->len > 8192) mlc_panic(file, line, "process: argumentos demais");
+    memcpy(buf, args->ptr, (size_t)args->len);
+    buf[args->len] = '\0';
+    int64_t at = 0;
+    for (int64_t i = 0; i < count; i++) {
+        argv[i] = buf + at;
+        at += (int64_t)strlen(buf + at) + 1;
+    }
+    argv[count] = NULL;
+    int fds[2] = {-1, -1};
+    posix_spawn_file_actions_t fa;
+    posix_spawn_file_actions_init(&fa);
+    if (capture) {
+        if (pipe(fds) != 0) {
+            posix_spawn_file_actions_destroy(&fa);
+            return -errno;
+        }
+        posix_spawn_file_actions_adddup2(&fa, fds[1], 1);
+        posix_spawn_file_actions_addclose(&fa, fds[0]);
+        posix_spawn_file_actions_addclose(&fa, fds[1]);
+    }
+    fflush(stdout); /* a saída do programa não passa na frente da nossa */
+    pid_t pid;
+    int err = posix_spawnp(&pid, argv[0], &fa, NULL, argv, environ);
+    posix_spawn_file_actions_destroy(&fa);
+    if (capture) close(fds[1]);
+    if (err != 0) {
+        if (capture) close(fds[0]);
+        return -err;
+    }
+    int64_t got = 0;
+    bool overflow = false;
+    if (capture) {
+        char tmp[4096];
+        for (;;) {
+            ssize_t n = read(fds[0], tmp, sizeof tmp);
+            if (n < 0 && errno == EINTR) continue;
+            if (n <= 0) break;
+            int64_t room = out->len - got;
+            int64_t k = n < room ? n : room;
+            if (k > 0) memcpy(out->ptr + got, tmp, (size_t)k);
+            got += k;
+            if (k < n) overflow = true;
+        }
+        close(fds[0]);
+    }
+    int st = 0;
+    while (waitpid(pid, &st, 0) < 0) {
+        if (errno != EINTR) return -errno;
+    }
+    *status = WIFEXITED(st) ? WEXITSTATUS(st) : WIFSIGNALED(st) ? 128 + WTERMSIG(st) : 1;
+    return overflow ? -1000 : got;
 }
 
 /* std/time */
@@ -901,3 +1163,13 @@ bool mlc_std_atomic_swap_bool(mlc_atomic *a, bool v, const char *file, int line)
 bool mlc_std_atomic_cas_bool(mlc_atomic *a, bool expected, bool v, const char *file, int line) {
     return mlc_std_atomic_cas_int(a, expected, v, file, line);
 }
+
+void mlc_std_process_fail(mlc_str msg, const char *file, int line) {
+    char buf[256];
+    snprintf(buf, sizeof buf, "%.*s", (int)msg.len, msg.ptr);
+    mlc_panic(file, line, buf);
+}
+
+void mlc_std_args_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
+
+void mlc_std_bytes_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }

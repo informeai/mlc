@@ -59,3 +59,169 @@ fn test_missing_file() {
     }
     free(p)
 }
+
+fn tmp(dst &[]byte, name string) int {
+    n := str.copy(dst, "/tmp/mlc-std-fs-test-")
+    return n + str.copy(&dst[n:], name)
+}
+
+fn test_open_write_read_in_chunks() {
+    var p [128]byte
+    n := tmp(&p, "chunks.txt")
+    err := 0
+    f := fs.open(&p[:n], fs.WRITE, &err)
+    if f == nil {
+        testing.fail("open para escrever falhou")
+        return
+    }
+    var line [16]byte
+    for i := 0; i < 100; i++ {
+        k := str.format(&line, "{:03}\n", i)
+        match f.write(&line[:k]) {
+            Ok(w) => testing.eq_int(w, 4)
+            Err(code) => testing.eq_int(code, 0)
+        }
+    }
+    f.close()
+    g := fs.open(&p[:n], fs.READ, &err)
+    if g == nil {
+        testing.fail("open para ler falhou")
+        return
+    }
+    var buf [7]byte // pedaços que não coincidem com as linhas
+    total := 0
+    lines := 0
+    for {
+        match g.read(&buf) {
+            Ok(k) => {
+                if k == 0 {
+                    break
+                }
+                total += k
+                for i := 0; i < k; i++ {
+                    if buf[i] == '\n' {
+                        lines++
+                    }
+                }
+            }
+            Err(code) => {
+                testing.eq_int(code, 0)
+                break
+            }
+        }
+    }
+    g.close()
+    testing.eq_int(total, 400)
+    testing.eq_int(lines, 100)
+    fs.remove_file(&p[:n])
+}
+
+fn test_append_and_seek() {
+    var p [128]byte
+    n := tmp(&p, "seek.txt")
+    var d [8]byte
+    k := str.copy(&d, "abc")
+    fs.write_file(&p[:n], &d[:k])
+    err := 0
+    a := fs.open(&p[:n], fs.APPEND, &err)
+    if a != nil {
+        k = str.copy(&d, "def")
+        a.write(&d[:k])
+        a.close()
+    }
+    rw := fs.open(&p[:n], fs.READ_WRITE, &err)
+    if rw == nil {
+        testing.fail("open READ_WRITE falhou")
+        return
+    }
+    match rw.seek(-1) {
+        Ok(end) => testing.eq_int(end, 6) // seek negativo vai para o fim
+        Err(code) => testing.eq_int(code, 0)
+    }
+    rw.seek(2)
+    k = str.copy(&d, "X")
+    rw.write(&d[:k])
+    rw.seek(0)
+    var all [16]byte
+    match rw.read(&all) {
+        Ok(r) => testing.eq_str(&all[:r], "abXdef")
+        Err(code) => testing.eq_int(code, 0)
+    }
+    rw.close()
+    fs.remove_file(&p[:n])
+}
+
+fn test_open_missing() {
+    var p [128]byte
+    n := tmp(&p, "nao-existe.txt")
+    err := 0
+    f := fs.open(&p[:n], fs.READ, &err)
+    testing.check(f == nil, "arquivo inexistente: nil")
+    testing.eq_int(err, fs.NOT_FOUND)
+    if f != nil {
+        f.close()
+    }
+}
+
+fn test_dirs() {
+    var p [128]byte
+    n := tmp(&p, "dir")
+    match fs.mkdir(&p[:n]) {
+        Ok(_) => {}
+        Err(code) => testing.eq_int(code, 0)
+    }
+    match fs.mkdir(&p[:n]) {
+        Ok(_) => testing.fail("mkdir duas vezes")
+        Err(code) => testing.eq_int(code, fs.EXISTS)
+    }
+    var f [160]byte
+    k := str.copy_bytes(&f, &p[:n])
+    k += str.copy(&f[k:], "/a.txt")
+    var data [4]byte
+    dn := str.copy(&data, "oi")
+    fs.write_file(&f[:k], &data[:dn])
+    var info fs.Info
+    match fs.stat(&p[:n], &info) {
+        Ok(_) => testing.check(info.is_dir, "é diretório")
+        Err(code) => testing.eq_int(code, 0)
+    }
+    match fs.stat(&f[:k], &info) {
+        Ok(_) => {
+            testing.check(!info.is_dir, "é arquivo")
+            testing.eq_int(info.size, 2)
+        }
+        Err(code) => testing.eq_int(code, 0)
+    }
+    match fs.remove_dir(&p[:n]) {
+        Ok(_) => testing.fail("remove_dir com arquivo dentro")
+        Err(code) => testing.eq_int(code, fs.NOT_EMPTY)
+    }
+    err := 0
+    d := fs.open_dir(&p[:n], &err)
+    count := 0
+    if d != nil {
+        var name [256]byte
+        for {
+            m := d.next(&name)
+            if m < 0 {
+                break
+            }
+            testing.eq_str(&name[:m], "a.txt")
+            count++
+        }
+        d.close()
+    }
+    testing.eq_int(count, 1)
+    var g [160]byte
+    j := str.copy_bytes(&g, &p[:n])
+    j += str.copy(&g[j:], "/b.txt")
+    match fs.rename(&f[:k], &g[:j]) {
+        Ok(_) => testing.check(fs.exists(&g[:j]) && !fs.exists(&f[:k]), "renomeado")
+        Err(code) => testing.eq_int(code, 0)
+    }
+    fs.remove_file(&g[:j])
+    match fs.remove_dir(&p[:n]) {
+        Ok(_) => testing.check(!fs.exists(&p[:n]), "diretório apagado")
+        Err(code) => testing.eq_int(code, 0)
+    }
+}

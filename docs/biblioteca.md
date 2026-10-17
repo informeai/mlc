@@ -82,7 +82,51 @@ Funções sobre `&[]byte` que não alocam. As que procuram devolvem um índice, 
 | `count_byte(s, b) int` | quantas vezes `b` aparece |
 | `trim_start(s) int`, `trim_end(s) int` | onde o texto começa e termina sem espaços: `&s[trim_start(s):trim_end(s)]` |
 | `field_end(s, sep, start) int` | onde termina o campo que começa em `start` (a posição do próximo `sep`, ou `len(s)`) |
+| `split_next(s, sep, &pos) Span` | o próximo campo separado por `sep` (`&s[f.start:f.end]`) e avança `pos`; acabou quando `pos > len(s)`. Campos vazios contam |
+| `word_next(s, &pos) Span` | a próxima palavra (separada por espaços); um `Span` vazio no fim |
 | `to_upper(s)`, `to_lower(s)` | trocam a caixa no lugar (ASCII) |
+
+```
+pos := 0
+for pos <= len(line) {
+    f := text.split_next(&line, ',', &pos)
+    ... &line[f.start:f.end] ...
+}
+```
+
+### `std/utf8`
+
+| Função | O que faz |
+|---|---|
+| `decode(s, i) Rune` | o caractere que começa em `s[i]`: `r.code` e `r.size` (1 a 4 bytes). Bytes inválidos dão `INVALID` (U+FFFD) com tamanho 1 |
+| `count(s) int` | quantos caracteres (cada byte inválido conta como um) |
+| `valid(s) bool` | `s` é UTF-8 válido? (formas longas demais e surrogates não são) |
+| `encode(dst, code) int` | escreve o caractere no começo de `dst` e devolve quantos bytes usou |
+
+### `std/bytes`
+
+Texto que cresce, com o crescimento à vista em [`std/bytes.mlc`](../std/bytes.mlc), como o `vec`: `new` aloca, `reserve` dobra a capacidade com `realloc`.
+
+```
+b := bytes.new(64)
+b.push_str("total: ")
+b.push_int(42)
+b.reserve(str.format_len(" ({:.1}%)", p))          // formatar direto no Buf
+b.len += str.format(&b.data[b.len:], " ({:.1}%)", p)
+io.write_line(&b.data[:b.len])                     // o texto é &b.data[:b.len]
+b.free()
+```
+
+| Método | O que faz |
+|---|---|
+| `bytes.new(cap) *Buf` | aloca um `Buf` vazio |
+| `reserve(n)` | garante espaço para mais `n` bytes |
+| `push_byte`, `push_str`, `push_bytes`, `push_int` | acrescentam no fim |
+| `truncate(n)`, `clear()` | encurtam o texto (a capacidade fica) |
+| `eq(s string) bool` | compara com um texto |
+| `free()` | libera |
+
+O texto é `&b.data[:b.len]` (os campos são públicos): um método não pode devolver esse sub-slice, porque a visão é criada na hora.
 
 ### `std/vec`
 
@@ -190,8 +234,66 @@ conta.free()                              // libera cada chave e o mapa
 | `arg_count() int` | quantos argumentos o programa recebeu (o 0 é o nome dele) |
 | `arg(i int, dst &[]byte) Result[int, int]` | copia o argumento `i` para `dst` |
 | `getenv(name string, dst &[]byte) Result[int, int]` | copia o valor da variável de ambiente |
+| `setenv(name string, value &[]byte) Result[int, int]` | define a variável de ambiente (vale também para os programas rodados com `std/process`) |
+| `cwd(dst) Result[int, int]` | copia o diretório atual |
+| `chdir(path) Result[int, int]` | muda o diretório atual |
 | `exit(code int)` | encerra o programa |
 | `NOT_FOUND`, `TOO_LONG` | códigos de erro: não existe; não cabe em `dst` |
+
+### `std/args`
+
+Opções de linha de comando sem alocação: o argumento atual fica num buffer dentro do `Args` (na pilha), e os valores vão para buffers de quem chama.
+
+```
+a := args.new()
+for a.next() {
+    if a.is("-v", "--verbose") {
+        verbose = true
+    } else if a.value("-o", "--out", &out, &out_n) {   // -o arq, --out arq, --out=arq
+        if out_n < 0 { ... faltou o valor ... }
+    } else if a.int_value("-n", "", &n, &ok) {
+        if !ok { ... não é um número ... }
+    } else if a.is_option() {
+        ... opção desconhecida ...
+    } else {
+        k := a.text(&file)                              // posicional
+    }
+}
+```
+
+| Método | O que faz |
+|---|---|
+| `args.new() Args` | começa a ler os argumentos (sem o nome do programa) |
+| `next() bool` | avança; depois de `--`, tudo é posicional |
+| `is(short, long string) bool` | o argumento é essa opção? (`""` para não ter uma das formas) |
+| `value(short, long, dst, &n) bool` | opção com valor; `n` recebe o tamanho, ou `-1` se o valor faltou |
+| `int_value(short, long, &v, &ok) bool` | opção com valor inteiro |
+| `is_option() bool` | parece uma opção ainda não reconhecida |
+| `text(dst) int` | copia o argumento atual |
+
+### `std/process`
+
+Roda outros programas, sem shell (os argumentos vão direto, sem `*` nem `$VAR` e sem risco de injeção). Os argumentos ficam num buffer fixo dentro do `Cmd`, e a saída capturada vai para um buffer de quem chama.
+
+```
+c := process.cmd("git")
+c.arg("log")
+c.arg_bytes(&branch[:n])
+var out [65536]byte
+status := 0
+match c.run(&out, &status) {
+    Ok(k) => io.write(&out[:k])          // status tem o código de saída
+    Err(code) => ...                     // NOT_FOUND, TOO_BIG
+}
+```
+
+| Declaração | O que faz |
+|---|---|
+| `cmd(name string) Cmd` | começa a linha de comando (o programa é procurado no `PATH`) |
+| `arg(s string)`, `arg_bytes(b)` | acrescentam argumentos (até 8 KB e 255 argumentos) |
+| `run(out, &status) Result[int, int]` | roda e espera; a saída padrão vai para `out`, o erro padrão continua no terminal |
+| `run_inherit(&status) Result[int, int]` | roda com a saída indo direto para o terminal |
+| `NOT_FOUND`, `TOO_BIG`, `TOO_LONG` | o programa não existe; a saída não coube (o resto foi descartado e o programa rodou até o fim); os argumentos não cabem |
 
 ### `std/fs`
 
@@ -219,6 +321,52 @@ match fs.file_size(caminho) {
 | `append_file(path, data) Result[int, int]` | acrescenta no fim (cria se preciso) |
 | `remove_file(path) Result[int, int]` | apaga o arquivo |
 | `exists(path) bool` | o caminho existe? |
+| `stat(path, &info) Result[int, int]` | preenche um `fs.Info` (`size`, `is_dir`, `modified_ms`) |
+| `mkdir(path)`, `remove_dir(path)`, `rename(from, to)` | diretórios e nomes (`remove_dir` exige o diretório vazio) |
+| `EXISTS`, `NOT_DIR`, `IS_DIR`, `NOT_EMPTY` | mais códigos de erro, iguais em todos os sistemas |
+
+**Arquivos abertos**, para ler e escrever em pedaços (arquivos grandes, logs):
+
+```
+err := 0
+f := fs.open(&path, fs.READ, &err)          // nil, com o código em err, se falhar
+if f != nil {
+    var buf [4096]byte
+    for {
+        match f.read(&buf) {
+            Ok(n) => {
+                if n == 0 { break }          // fim do arquivo
+                ... &buf[:n] ...
+            }
+            Err(_) => break
+        }
+    }
+    f.close()                                // o verificador cobra este close
+}
+```
+
+| Declaração | O que faz |
+|---|---|
+| `open(path, mode, &err) ?*File` | modos `READ`, `WRITE` (cria ou esvazia), `APPEND`, `READ_WRITE` (cria se preciso, sem esvaziar) |
+| `f.read(dst) Result[int, int]` | lê até `len(dst)` bytes; `Ok(0)` é o fim |
+| `f.write(data) Result[int, int]` | escreve tudo |
+| `f.seek(pos) Result[int, int]` | vai para `pos` (do começo); com `pos` negativo, para o fim |
+| `f.close()` | fecha |
+
+**Diretórios:**
+
+```
+d := fs.open_dir(&path, &err)
+if d != nil {
+    var name [256]byte                       // um [256]byte sempre basta
+    for {
+        n := d.next(&name)                   // -1 quando acabam; sem . e ..
+        if n < 0 { break }
+        ... &name[:n] ...
+    }
+    d.close()
+}
+```
 | `NOT_FOUND` (2), `DENIED` (13), `TOO_BIG` (1000) | códigos de erro; os demais são o `errno` do sistema |
 
 ### `std/testing`

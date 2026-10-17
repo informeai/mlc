@@ -1,0 +1,85 @@
+// Texto (ou bytes) que cresce. É uma das partes da biblioteca que aloca, e a
+// alocação está visível aqui: new aloca, e reserve dobra a capacidade com
+// realloc quando falta espaço.
+//
+//     b := bytes.new(64)
+//     b.push_str("total: ")
+//     b.push_int(42)
+//     b.reserve(str.format_len(" ({:.1}%)", p))          // formatar direto no Buf
+//     b.len += str.format(&b.data[b.len:], " ({:.1}%)", p)
+//     io.write_line(&b.data[:b.len])                     // o texto é &b.data[:b.len]
+//     b.free()
+import "std/str"
+
+pub struct Buf {
+    data []byte // a capacidade é len(data); o texto é data[:len]
+    len int
+}
+
+// new aloca um Buf vazio com espaço para cap bytes.
+pub fn new(cap int) *Buf {
+    return alloc(Buf{data: alloc([]byte, cap), len: 0})
+}
+
+// reserve garante espaço para mais n bytes, dobrando a capacidade (realloc)
+// até caber.
+pub fn (b &Buf) reserve(n int) {
+    need := b.len + n
+    if need <= len(b.data) {
+        return
+    }
+    size := len(b.data) * 2
+    if size < 16 {
+        size = 16
+    }
+    for size < need {
+        size = size * 2
+    }
+    b.data = realloc(b.data, size)
+}
+
+pub fn (b &Buf) push_byte(c byte) {
+    b.reserve(1)
+    b.data[b.len] = c
+    b.len++
+}
+
+pub fn (b &Buf) push_str(s string) {
+    b.reserve(len(s))
+    b.len += str.copy(&b.data[b.len:], s)
+}
+
+pub fn (b &Buf) push_bytes(s &[]byte) {
+    b.reserve(len(s))
+    b.len += str.copy_bytes(&b.data[b.len:], s)
+}
+
+pub fn (b &Buf) push_int(n int) {
+    b.reserve(str.int_len(n))
+    b.len += str.put_int(&b.data[b.len:], n)
+}
+
+// truncate encurta o texto para n bytes (n <= len).
+pub fn (b &Buf) truncate(n int) {
+    if n < 0 || n > b.len {
+        fail("bytes.Buf.truncate: tamanho fora do texto")
+    }
+    b.len = n
+}
+
+// clear esvazia o texto, mantendo a capacidade.
+pub fn (b &Buf) clear() {
+    b.len = 0
+}
+
+// eq diz se o texto é s.
+pub fn (b &Buf) eq(s string) bool {
+    return str.eq(&b.data[:b.len], s)
+}
+
+pub fn (b *Buf) free() {
+    free(b.data)
+    free(b)
+}
+
+extern fn fail(msg string)

@@ -70,3 +70,41 @@ fn test_case() {
     testing.eq_str(&b[:n], "olá, mlc 1")
     free(b)
 }
+
+fn test_split_next() {
+    b := alloc([]byte, 16)
+    n := str.copy(&b, "a,bc,,d")
+    pos := 0
+    var got [4]int // o tamanho de cada campo
+    k := 0
+    for pos <= n {
+        f := text.split_next(&b[:n], ',', &pos)
+        if k == 1 {
+            testing.eq_str(&b[f.start:f.end], "bc")
+        }
+        got[k] = f.end - f.start
+        k++
+    }
+    testing.eq_int(k, 4)
+    testing.check(got == [4]int{1, 2, 0, 1}, "campos a, bc, (vazio), d")
+    free(b)
+}
+
+fn test_word_next() {
+    b := alloc([]byte, 32)
+    n := str.copy(&b, "  um\tdois \n tres  ")
+    count := 0
+    pos := 0
+    for {
+        w := text.word_next(&b[:n], &pos)
+        if w.start == w.end {
+            break
+        }
+        count++
+        if count == 2 {
+            testing.eq_str(&b[w.start:w.end], "dois")
+        }
+    }
+    testing.eq_int(count, 3)
+    free(b)
+}

@@ -22,6 +22,26 @@ pub fn getenv(name string, dst &[]byte) result.Result[int, int] {
     return wrap(getenv_copy(name, dst))
 }
 
+extern fn setenv_raw(name string, value &[]byte) int
+extern fn cwd_raw(dst &[]byte) int
+extern fn chdir_raw(path &[]byte) int
+
+// setenv define a variável de ambiente name (vale para este programa e para
+// os que ele rodar com std/process).
+pub fn setenv(name string, value &[]byte) result.Result[int, int] {
+    return wrap(setenv_raw(name, value))
+}
+
+// cwd copia o diretório atual para dst.
+pub fn cwd(dst &[]byte) result.Result[int, int] {
+    return wrap(cwd_raw(dst))
+}
+
+// chdir muda o diretório atual.
+pub fn chdir(path &[]byte) result.Result[int, int] {
+    return wrap(chdir_raw(path))
+}
+
 // exit encerra o programa com o código dado, sem voltar.
 pub extern fn exit(code int)
 

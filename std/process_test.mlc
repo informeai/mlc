@@ -1,0 +1,72 @@
+import "std/process"
+import "std/testing"
+
+fn test_capture_output() {
+    c := process.cmd("echo")
+    c.arg("olá")
+    c.arg("mundo")
+    var out [64]byte
+    status := -1
+    match c.run(&out, &status) {
+        Ok(n) => testing.eq_str(&out[:n], "olá mundo\n")
+        Err(code) => testing.eq_int(code, 0)
+    }
+    testing.eq_int(status, 0)
+}
+
+fn test_exit_status() {
+    c := process.cmd("sh")
+    c.arg("-c")
+    c.arg("exit 7")
+    status := 0
+    match c.run_inherit(&status) {
+        Ok(_) => testing.eq_int(status, 7)
+        Err(code) => testing.eq_int(code, 0)
+    }
+}
+
+fn test_arguments_are_not_shell() {
+    c := process.cmd("echo")
+    c.arg("$HOME *") // sem shell: chega como está
+    var out [32]byte
+    status := 0
+    match c.run(&out, &status) {
+        Ok(n) => testing.eq_str(&out[:n], "$HOME *\n")
+        Err(code) => testing.eq_int(code, 0)
+    }
+}
+
+fn test_arg_bytes() {
+    var b [8]byte
+    b[0] = 'x'
+    b[1] = 'y'
+    c := process.cmd("echo")
+    c.arg_bytes(&b[:2])
+    var out [8]byte
+    status := 0
+    match c.run(&out, &status) {
+        Ok(n) => testing.eq_str(&out[:n], "xy\n")
+        Err(code) => testing.eq_int(code, 0)
+    }
+}
+
+fn test_not_found() {
+    c := process.cmd("programa-que-nao-existe-mlc")
+    status := 0
+    match c.run_inherit(&status) {
+        Ok(_) => testing.fail("o programa não existe")
+        Err(code) => testing.eq_int(code, process.NOT_FOUND)
+    }
+}
+
+fn test_output_too_big() {
+    c := process.cmd("echo")
+    c.arg("um texto maior que o buffer")
+    var out [4]byte
+    status := 0
+    match c.run(&out, &status) {
+        Ok(_) => testing.fail("a saída não cabe")
+        Err(code) => testing.eq_int(code, process.TOO_BIG)
+    }
+    testing.eq_int(status, 0) // o programa rodou até o fim
+}

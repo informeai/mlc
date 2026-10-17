@@ -1,0 +1,144 @@
+// Argumentos de linha de comando: opções (-v, --verbose, -o arq,
+// --out=arq) e argumentos posicionais. O argumento atual fica num buffer
+// fixo dentro do Args, na pilha de quem chama; os valores são copiados para
+// buffers de quem chama. Nada aloca.
+//
+//     a := args.new()
+//     verbose := false
+//     var out [256]byte
+//     out_n := 0
+//     for a.next() {
+//         if a.is("-v", "--verbose") {
+//             verbose = true
+//         } else if a.value("-o", "--out", &out, &out_n) {
+//             if out_n < 0 { ... faltou o valor ... }
+//         } else if a.is_option() {
+//             ... opção desconhecida: a.text(&buf) ...
+//         } else {
+//             n := a.text(&file)            // posicional
+//         }
+//     }
+//
+// Depois de "--", tudo é posicional (para nomes que começam com -).
+import "std/os"
+import "std/result"
+import "std/str"
+
+pub struct Args {
+    cur [4096]byte // o argumento atual
+    n int
+    i int     // o índice do próximo argumento
+    rest bool // já passou do "--"
+    used bool // o atual já foi reconhecido (is, value)
+}
+
+// new começa a ler os argumentos do programa (o 0, o nome dele, fica de fora).
+pub fn new() Args {
+    var a Args
+    a.i = 1
+    return a
+}
+
+// next avança para o próximo argumento e diz se há um. Um "--" é pulado e
+// faz o resto ser posicional.
+pub fn (a &Args) next() bool {
+    for {
+        if !a.load(a.i) {
+            return false
+        }
+        a.i++
+        a.used = false
+        if !a.rest && str.eq(&a.cur[:a.n], "--") {
+            a.rest = true
+            continue
+        }
+        return true
+    }
+}
+
+fn (a &Args) load(i int) bool {
+    match os.arg(i, &a.cur) {
+        Ok(n) => {
+            a.n = n
+            return true
+        }
+        Err(code) => {
+            if code == os.TOO_LONG {
+                fail("args: um argumento passa de 4096 bytes")
+            }
+            return false
+        }
+    }
+}
+
+// is diz se o argumento atual é a opção short ou long ("" para não ter uma
+// das formas).
+pub fn (a &Args) is(short string, long string) bool {
+    if a.rest {
+        return false
+    }
+    if a.matches(short, long) {
+        a.used = true
+        return true
+    }
+    return false
+}
+
+// matches diz se o argumento atual é exatamente short ou long.
+fn (a &Args) matches(short string, long string) bool {
+    return (len(short) > 0 && str.eq(&a.cur[:a.n], short)) || (len(long) > 0 && str.eq(&a.cur[:a.n], long))
+}
+
+// value reconhece uma opção com valor: "-o arq", "--out arq" ou
+// "--out=arq". Se for ela, copia o valor para dst, põe o tamanho em n (-1 se
+// o valor faltou) e devolve true. Um valor maior que dst dá panic.
+pub fn (a &Args) value(short string, long string, dst &[]byte, n &int) bool {
+    if a.rest {
+        return false
+    }
+    if len(long) > 0 && a.n > len(long) && a.cur[len(long)] == '=' && str.eq(&a.cur[:len(long)], long) {
+        *n = str.copy_bytes(dst, &a.cur[len(long) + 1:a.n])
+        a.used = true
+        return true
+    }
+    if !a.matches(short, long) {
+        return false
+    }
+    a.used = true
+    *n = -1
+    if a.i < os.arg_count() {
+        match os.arg(a.i, dst) {
+            Ok(k) => {
+                *n = k
+                a.i++
+            }
+            Err(_) => fail("args: o valor da opção não cabe no buffer")
+        }
+    }
+    return true
+}
+
+// is_option diz se o argumento atual parece uma opção (começa com - e não é
+// só "-"), ainda não reconhecida por is ou value.
+pub fn (a &Args) is_option() bool {
+    return !a.rest && !a.used && a.n > 1 && a.cur[0] == '-'
+}
+
+// text copia o argumento atual para dst e devolve o tamanho.
+pub fn (a &Args) text(dst &[]byte) int {
+    return str.copy_bytes(dst, &a.cur[:a.n])
+}
+
+// int_value é value para um número: põe o valor em v e devolve true se a
+// opção é esta. ok fica false se o valor faltou ou não é um inteiro.
+pub fn (a &Args) int_value(short string, long string, v &int, ok &bool) bool {
+    var buf [32]byte
+    n := 0
+    if !a.value(short, long, &buf, &n) {
+        return false
+    }
+    *ok = n >= 0 && str.parse_int(&buf[:n], v)
+    return true
+}
+
+extern fn fail(msg string)

@@ -1,0 +1,58 @@
+import "std/str"
+import "std/testing"
+import "std/utf8"
+
+fn test_decode() {
+    var b [16]byte
+    n := str.copy(&b, "aé€😀")
+    s := &b[:n]
+    r := utf8.decode(s, 0)
+    testing.eq_int(r.code, int('a'))
+    testing.eq_int(r.size, 1)
+    r = utf8.decode(s, 1)
+    testing.eq_int(r.code, 0xE9)
+    testing.eq_int(r.size, 2)
+    r = utf8.decode(s, 3)
+    testing.eq_int(r.code, 0x20AC)
+    testing.eq_int(r.size, 3)
+    r = utf8.decode(s, 6)
+    testing.eq_int(r.code, 0x1F600)
+    testing.eq_int(r.size, 4)
+}
+
+fn test_count_and_valid() {
+    var b [16]byte
+    n := str.copy(&b, "maçã")
+    testing.eq_int(utf8.count(&b[:n]), 4)
+    testing.check(utf8.valid(&b[:n]), "válido")
+    testing.check(!utf8.valid(&b[:n - 1]), "cortado no meio de um caractere")
+    b[0] = 0xFF
+    testing.check(!utf8.valid(&b[:n]), "byte inválido")
+    testing.eq_int(utf8.count(&b[:n]), 4) // o inválido conta como um
+}
+
+fn test_invalid_forms() {
+    var b [4]byte
+    b[0] = 0xC0 // forma longa demais de '/'
+    b[1] = 0xAF
+    r := utf8.decode(&b[:2], 0)
+    testing.eq_int(r.code, utf8.INVALID)
+    testing.eq_int(r.size, 1)
+    b[0] = 0xED // surrogate (U+D800)
+    b[1] = 0xA0
+    b[2] = 0x80
+    testing.eq_int(utf8.decode(&b[:3], 0).code, utf8.INVALID)
+}
+
+fn test_encode_round_trip() {
+    var b [4]byte
+    codes := [5]int{0x41, 0xE9, 0x20AC, 0x1F600, 0x10FFFF}
+    for c in codes {
+        n := utf8.encode(&b, c)
+        r := utf8.decode(&b[:n], 0)
+        testing.eq_int(r.code, c)
+        testing.eq_int(r.size, n)
+    }
+    testing.eq_int(utf8.encode(&b, 0xD800), 3) // inválido vira U+FFFD
+    testing.eq_int(utf8.decode(&b[:3], 0).code, utf8.INVALID)
+}

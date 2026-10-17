@@ -1,0 +1,88 @@
+// Rodar outros programas. Os argumentos ficam num buffer fixo dentro do
+// Cmd (na pilha de quem chama), e a saída capturada vai para um buffer de
+// quem chama: nada aloca.
+//
+//     c := process.cmd("ls")
+//     c.arg("-l")
+//     c.arg_bytes(&dir[:n])
+//     var out [4096]byte
+//     status := 0
+//     match c.run(&out, &status) {
+//         Ok(n) => io.write(&out[:n])       // status tem o código de saída
+//         Err(code) => ...                  // NOT_FOUND, TOO_BIG, ...
+//     }
+//
+// O programa é procurado no PATH. Os argumentos vão direto para ele, sem
+// shell: nada de * nem $VAR, e nenhum risco de injeção.
+import "std/result"
+
+pub const NOT_FOUND = 2   // o programa não existe (ENOENT)
+pub const TOO_BIG = 1000  // a saída não coube no buffer (o resto foi descartado)
+pub const TOO_LONG = 1001 // os argumentos não cabem no Cmd
+
+// Cmd é a linha de comando: o programa e os argumentos, separados por zero.
+pub struct Cmd {
+    buf [8192]byte
+    n int
+    count int
+}
+
+extern fn run_raw(args &[]byte, count int, out &[]byte, capture bool, status &int) int
+
+// cmd começa uma linha de comando com o programa name.
+pub fn cmd(name string) Cmd {
+    var c Cmd
+    c.arg(name)
+    return c
+}
+
+// arg acrescenta um argumento. Se não couber (8 KB no total, 255
+// argumentos), dá panic.
+pub fn (c &Cmd) arg(s string) {
+    if c.n + len(s) + 1 > len(c.buf) || c.count == 255 {
+        fail("process: os argumentos não cabem no Cmd (8 KB, 255 argumentos)")
+    }
+    for i := 0; i < len(s); i++ {
+        c.buf[c.n] = s[i]
+        c.n++
+    }
+    c.buf[c.n] = 0
+    c.n++
+    c.count++
+}
+
+// arg_bytes acrescenta um argumento que está num buffer.
+pub fn (c &Cmd) arg_bytes(b &[]byte) {
+    if c.n + len(b) + 1 > len(c.buf) || c.count == 255 {
+        fail("process: os argumentos não cabem no Cmd (8 KB, 255 argumentos)")
+    }
+    for i := 0; i < len(b); i++ {
+        c.buf[c.n] = b[i]
+        c.n++
+    }
+    c.buf[c.n] = 0
+    c.n++
+    c.count++
+}
+
+// run roda o programa, espera ele terminar e põe o código de saída em
+// status. A saída padrão vai para out (Ok tem quantos bytes); o erro padrão
+// continua indo para o terminal.
+pub fn (c &Cmd) run(out &[]byte, status &int) result.Result[int, int] {
+    return wrap(run_raw(&c.buf[:c.n], c.count, out, true, status))
+}
+
+// run_inherit roda o programa com a saída indo direto para o terminal.
+pub fn (c &Cmd) run_inherit(status &int) result.Result[int, int] {
+    var none [1]byte
+    return wrap(run_raw(&c.buf[:c.n], c.count, &none[:0], false, status))
+}
+
+extern fn fail(msg string)
+
+fn wrap(n int) result.Result[int, int] {
+    if n < 0 {
+        return result.Result.Err(-n)
+    }
+    return result.Result.Ok(n)
+}

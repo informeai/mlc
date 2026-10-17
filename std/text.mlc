@@ -116,3 +116,48 @@ pub fn to_lower(s &[]byte) {
         }
     }
 }
+
+// Span é um pedaço de um texto: &s[span.start:span.end].
+pub struct Span {
+    start int
+    end int
+}
+
+// split_next devolve o próximo campo de s separado por sep, a partir de
+// *pos, e avança *pos para depois do separador. Os campos vazios contam
+// ("a,,b" tem três). Quando *pos passa de len(s), acabou:
+//
+//     pos := 0
+//     for pos <= len(line) {
+//         f := text.split_next(&line, ',', &pos)
+//         ... &line[f.start:f.end] ...
+//     }
+pub fn split_next(s &[]byte, sep byte, pos &int) Span {
+    start := *pos
+    end := field_end(s, sep, start)
+    *pos = end + 1
+    return Span{start: start, end: end}
+}
+
+// word_next devolve a próxima palavra (separada por espaços, tabs ou quebras
+// de linha) a partir de *pos, e avança *pos. Sem mais palavras, devolve um
+// Span vazio com start == len(s):
+//
+//     pos := 0
+//     for {
+//         w := text.word_next(&line, &pos)
+//         if w.start == w.end { break }
+//         ... &line[w.start:w.end] ...
+//     }
+pub fn word_next(s &[]byte, pos &int) Span {
+    i := *pos
+    for i < len(s) && is_space(s[i]) {
+        i++
+    }
+    j := i
+    for j < len(s) && !is_space(s[j]) {
+        j++
+    }
+    *pos = j
+    return Span{start: i, end: j}
+}

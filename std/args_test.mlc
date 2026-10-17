@@ -1,0 +1,9 @@
+import "std/args"
+import "std/testing"
+
+// O programa de teste roda sem argumentos (o mlc test passa só o índice do
+// teste, que o runtime esconde); tests/run/ferramenta testa as opções.
+fn test_no_arguments() {
+    a := args.new()
+    testing.check(!a.next(), "sem argumentos")
+}

@@ -28,7 +28,11 @@ func buildAndRun(t *testing.T, path string) (stdout, stderr string, code int) {
 		t.Fatalf("build falhou:\n%v", err)
 	}
 	var out, errOut bytes.Buffer
-	cmd := exec.Command(exe)
+	var args []string // x.args, se existir: os argumentos, um por linha
+	if b, err := os.ReadFile(strings.TrimSuffix(path, ".mlc") + ".args"); err == nil {
+		args = strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")
+	}
+	cmd := exec.Command(exe, args...)
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	// x.in, se existir, vira a entrada padrão do programa
 	if in, err := os.ReadFile(strings.TrimSuffix(path, ".mlc") + ".in"); err == nil {

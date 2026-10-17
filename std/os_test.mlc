@@ -1,4 +1,5 @@
 import "std/os"
+import "std/str"
 import "std/testing"
 
 fn test_args() {
@@ -30,4 +31,32 @@ fn test_getenv() {
         Err(code) => testing.eq_int(code, 0)
     }
     free(buf)
+}
+
+fn test_setenv() {
+    var v [16]byte
+    n := str.copy(&v, "valor-mlc")
+    match os.setenv("MLC_TESTE_SETENV", &v[:n]) {
+        Ok(_) => {}
+        Err(code) => testing.eq_int(code, 0)
+    }
+    var out [32]byte
+    match os.getenv("MLC_TESTE_SETENV", &out) {
+        Ok(k) => testing.eq_str(&out[:k], "valor-mlc")
+        Err(code) => testing.eq_int(code, 0)
+    }
+}
+
+fn test_cwd_chdir() {
+    var p [8]byte
+    n := str.copy(&p, "/tmp")
+    match os.chdir(&p[:n]) {
+        Ok(_) => {}
+        Err(code) => testing.eq_int(code, 0)
+    }
+    var out [4096]byte
+    match os.cwd(&out) {
+        Ok(k) => testing.check(k >= 4, "cwd tem o caminho") // no macOS, /tmp é /private/tmp
+        Err(code) => testing.eq_int(code, 0)
+    }
 }

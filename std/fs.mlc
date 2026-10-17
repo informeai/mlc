@@ -1,13 +1,25 @@
-// Arquivos. O conteúdo é lido e escrito em buffers de quem chama: para ler um
-// arquivo inteiro, pergunte o tamanho (file_size) e aloque o buffer.
+// Arquivos e diretórios. O conteúdo é lido e escrito em buffers de quem
+// chama: para ler um arquivo inteiro, pergunte o tamanho (file_size) e aloque
+// o buffer; para arquivos grandes, abra com open e leia em pedaços.
 // Os caminhos são []byte (por exemplo, vindos de os.arg); para um literal,
 // copie-o antes com str.copy.
 import "std/result"
 
-// códigos de erro (os números são os do sistema, errno)
-pub const NOT_FOUND = 2  // ENOENT
-pub const DENIED = 13    // EACCES
-pub const TOO_BIG = 1000 // o arquivo não cabe no buffer
+// códigos de erro (os números são os do sistema, errno, menos os que mudam
+// entre sistemas, que ganham um número do MLC)
+pub const NOT_FOUND = 2    // ENOENT
+pub const DENIED = 13      // EACCES
+pub const EXISTS = 17      // EEXIST
+pub const NOT_DIR = 20     // ENOTDIR
+pub const IS_DIR = 21      // EISDIR
+pub const TOO_BIG = 1000   // o arquivo não cabe no buffer
+pub const NOT_EMPTY = 1001 // o diretório não está vazio
+
+// modos de open
+pub const READ = 0       // só leitura
+pub const WRITE = 1      // cria ou esvazia, e escreve
+pub const APPEND = 2     // cria se preciso, e escreve no fim
+pub const READ_WRITE = 3 // cria se preciso, lê e escreve (sem esvaziar)
 
 extern fn size_raw(path &[]byte) int
 extern fn read_raw(path &[]byte, dst &[]byte) int
@@ -46,4 +58,116 @@ fn wrap(n int) result.Result[int, int] {
         return result.Result.Err(-n)
     }
     return result.Result.Ok(n)
+}
+
+// ---------- arquivos abertos ----------
+
+// File é um arquivo aberto (um handle): precisa de close().
+//
+//     err := 0
+//     f := fs.open(&path, fs.READ, &err)
+//     if f == nil { ... err tem o código ... }
+//     var buf [4096]byte
+//     for {
+//         match f.read(&buf) {
+//             Ok(n) => { if n == 0 { break }  ... &buf[:n] ... }
+//             Err(code) => break
+//         }
+//     }
+//     f.close()
+pub extern "C" type File
+
+// open abre o arquivo no modo dado (READ, WRITE, APPEND, READ_WRITE). Se não
+// conseguir, devolve nil e põe o código de erro em err.
+pub extern fn open(path &[]byte, mode int, err &int) ?*File
+
+extern fn file_read(f &File, dst &[]byte) int
+extern fn file_write(f &File, data &[]byte) int
+extern fn file_seek(f &File, pos int) int
+extern fn file_close(f *File)
+
+// read lê até len(dst) bytes no começo de dst; Ok(0) é o fim do arquivo.
+pub fn (f &File) read(dst &[]byte) result.Result[int, int] {
+    return wrap(file_read(f, dst))
+}
+
+// write escreve todos os bytes de data.
+pub fn (f &File) write(data &[]byte) result.Result[int, int] {
+    return wrap(file_write(f, data))
+}
+
+// seek vai para a posição pos (em bytes, do começo); com pos negativo, vai
+// para o fim. Devolve a posição nova.
+pub fn (f &File) seek(pos int) result.Result[int, int] {
+    return wrap(file_seek(f, pos))
+}
+
+// close fecha o arquivo.
+pub fn (f *File) close() {
+    file_close(f)
+}
+
+// ---------- diretórios ----------
+
+// Dir é um diretório aberto (um handle): precisa de close().
+//
+//     d := fs.open_dir(&path, &err)
+//     var name [256]byte
+//     for {
+//         n := d.next(&name)
+//         if n < 0 { break }
+//         ... &name[:n] ...
+//     }
+//     d.close()
+pub extern "C" type Dir
+
+// open_dir abre o diretório para listar. Se não conseguir, devolve nil e
+// põe o código de erro em err.
+pub extern fn open_dir(path &[]byte, err &int) ?*Dir
+
+extern fn dir_next(d &Dir, dst &[]byte) int
+extern fn dir_close(d *Dir)
+
+// next copia o próximo nome (sem . e ..) para name e devolve o tamanho, ou
+// -1 quando acabam. A ordem é a do sistema. Um [256]byte sempre basta.
+pub fn (d &Dir) next(name &[]byte) int {
+    return dir_next(d, name)
+}
+
+pub fn (d *Dir) close() {
+    dir_close(d)
+}
+
+// ---------- informações e operações ----------
+
+// Info descreve um arquivo ou diretório.
+pub struct Info {
+    size int
+    is_dir bool
+    modified_ms int // data de modificação, em milissegundos desde 1970
+}
+
+extern fn stat_raw(path &[]byte, size &int, is_dir &bool, modified &int) int
+extern fn mkdir_raw(path &[]byte) int
+extern fn remove_dir_raw(path &[]byte) int
+extern fn rename_raw(from &[]byte, to &[]byte) int
+
+// stat preenche info com os dados do caminho.
+pub fn stat(path &[]byte, info &Info) result.Result[int, int] {
+    return wrap(stat_raw(path, &info.size, &info.is_dir, &info.modified_ms))
+}
+
+// mkdir cria o diretório (o pai precisa existir).
+pub fn mkdir(path &[]byte) result.Result[int, int] {
+    return wrap(mkdir_raw(path))
+}
+
+// remove_dir apaga o diretório, que precisa estar vazio (senão, NOT_EMPTY).
+pub fn remove_dir(path &[]byte) result.Result[int, int] {
+    return wrap(remove_dir_raw(path))
+}
+
+// rename muda o nome (ou o lugar) de um arquivo ou diretório.
+pub fn rename(from &[]byte, to &[]byte) result.Result[int, int] {
+    return wrap(rename_raw(from, to))
 }

@@ -1,0 +1,7 @@
+olá     | 3 caracteres, 4 bytes
+maçã    | 4 caracteres, 6 bytes
+opção desconhecida: --desconhecida
+-w      | 2 caracteres, 2 bytes
+verbose=true width=20
+olá;maçã;-w
+campos: 3
