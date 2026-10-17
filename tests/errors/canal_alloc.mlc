@@ -1,0 +1,16 @@
+// erro: as pontas de canal vêm de chan.new, sender() e clone(), não de alloc
+import "std/chan"
+import "std/io"
+
+struct P {
+    x int
+}
+
+fn closes(tx &chan.Sender[int]) {
+
+}
+
+fn main() {
+    tx := alloc(chan.Sender[int])
+    tx.close()
+}

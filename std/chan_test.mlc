@@ -1,0 +1,140 @@
+import "std/chan"
+import "std/str"
+import "std/testing"
+import "std/thread"
+
+fn test_send_recv_same_thread() {
+    rx := chan.new[int](4)
+    tx := rx.sender()
+    testing.check(tx.send(1), "send com receptor aberto")
+    testing.check(tx.send(2), "send com receptor aberto")
+    match rx.recv() {
+        Got(n) => testing.eq_int(n, 1) // a ordem de chegada é a de envio
+        Closed => testing.fail("fechado cedo demais")
+    }
+    match rx.recv() {
+        Got(n) => testing.eq_int(n, 2)
+        Closed => testing.fail("fechado cedo demais")
+    }
+    tx.close()
+    match rx.recv() {
+        Got(_) => testing.fail("não havia mais valores")
+        Closed => {}
+    }
+    rx.close()
+}
+
+fn test_closed_without_senders() {
+    rx := chan.new[int](1)
+    match rx.recv() {
+        Got(_) => testing.fail("sem Sender, recv devolve Closed")
+        Closed => {}
+    }
+    rx.close()
+}
+
+fn test_send_without_receiver() {
+    rx := chan.new[[]byte](2)
+    tx := rx.sender()
+    rx.close()
+    testing.check(!tx.send(alloc([]byte, 8)), "sem Receiver, send devolve false (e libera o valor)")
+    tx.close()
+}
+
+fn test_leftovers_are_dropped() {
+    rx := chan.new[[]byte](3)
+    tx := rx.sender()
+    tx.send(alloc([]byte, 1))
+    tx.send(alloc([]byte, 2))
+    tx.close()
+    rx.close() // o último close libera os dois que sobraram
+}
+
+fn count_to(tx *chan.Sender[int]) {
+    for i := 1; i <= 1000; i++ {
+        tx.send(i)
+    }
+    tx.close()
+}
+
+fn test_blocking_with_small_capacity() {
+    rx := chan.new[int](1) // o produtor espera a cada valor
+    t := thread.spawn(count_to, rx.sender(), thread.STACK_64KB)
+    total := 0
+    for {
+        match rx.recv() {
+            Got(n) => total += n
+            Closed => break
+        }
+    }
+    rx.close()
+    thread.join(t)
+    testing.eq_int(total, 500500)
+}
+
+fn test_many_producers() {
+    rx := chan.new[int](8)
+    tx := rx.sender()
+    a := thread.spawn(count_to, tx.clone(), thread.STACK_64KB)
+    b := thread.spawn(count_to, tx.clone(), thread.STACK_64KB)
+    tx.close()
+    total := 0
+    for {
+        match rx.recv() {
+            Got(n) => total += n
+            Closed => break
+        }
+    }
+    rx.close()
+    thread.join(a)
+    thread.join(b)
+    testing.eq_int(total, 1001000)
+}
+
+fn drain_count(rx *chan.Receiver[int]) int {
+    n := 0
+    for {
+        match rx.recv() {
+            Got(_) => n++
+            Closed => break
+        }
+    }
+    rx.close()
+    return n
+}
+
+fn test_many_consumers() {
+    rx := chan.new[int](8)
+    tx := rx.sender()
+    a := thread.spawn(drain_count, rx.clone(), thread.STACK_64KB)
+    b := thread.spawn(drain_count, rx.clone(), thread.STACK_64KB)
+    rx.close()
+    for i := 0; i < 500; i++ {
+        tx.send(i)
+    }
+    tx.close()
+    testing.eq_int(thread.join(a) + thread.join(b), 500) // cada valor chega a um consumidor só
+}
+
+fn test_owned_messages() {
+    rx := chan.new[[]byte](2)
+    tx := rx.sender()
+    b := alloc([]byte, 3)
+    str.copy(&b, "abc")
+    tx.send(b) // b foi movida para o canal
+    tx.close()
+    match rx.recv() {
+        Got(m) => {
+            testing.eq_str(&m, "abc")
+            free(m)
+        }
+        Closed => testing.fail("a mensagem não chegou")
+    }
+    rx.close()
+}
+
+fn test_zero_capacity() {
+    testing.expect_panic()
+    rx := chan.new[int](0)
+    rx.close()
+}

@@ -1,0 +1,17 @@
+// erro: vazamento: o ponteiro dono devolvido aqui é descartado
+import "std/chan"
+import "std/io"
+
+struct P {
+    x int
+}
+
+fn closes(tx &chan.Sender[int]) {
+
+}
+
+fn main() {
+    rx := chan.new[[]byte](2)
+    rx.recv()
+    rx.close()
+}

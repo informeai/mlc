@@ -259,8 +259,8 @@ func (n *navigator) resolveIdent(tok token.Token, before []token.Token) *symbol 
 	// nome qualificado por um módulo: geometria.Ponto em tipos e literais
 	if k := len(before); k >= 2 && before[k-1].Kind == token.PERIOD && before[k-2].Kind == token.IDENT {
 		if m := n.moduleByName(before[k-2].Lit); m != nil {
-			if m.Path == "std/thread" && tok.Lit == "Thread" {
-				d := builtinDocs["Thread"]
+			if (m.Path == "std/thread" && tok.Lit == "Thread") || (m.Path == "std/chan" && (tok.Lit == "Sender" || tok.Lit == "Receiver")) {
+				d := builtinDocs[tok.Lit]
 				s := n.moduleSymbol(m.Path)
 				if s == nil {
 					return &symbol{code: d[0], doc: d[1], noDef: true}
@@ -330,6 +330,15 @@ func (n *navigator) calleeSymbol(call *ast.CallExpr) *symbol {
 	c, ok := info.Calls[call]
 	if !ok {
 		return nil
+	}
+	if c.Builtin == checker.ChanOp {
+		d := builtinDocs["chan."+info.Chans[call].Op]
+		s := n.moduleSymbol("std/chan")
+		if s == nil {
+			return &symbol{code: d[0], doc: d[1], noDef: true}
+		}
+		s.code, s.doc = d[0], d[1]
+		return s
 	}
 	if c.Builtin == checker.ThreadSpawn || c.Builtin == checker.ThreadJoin {
 		d := builtinDocs["spawn"]
@@ -837,48 +846,56 @@ func formatDoc(lines []string) string {
 
 // builtinDocs descreve o que não tem declaração em arquivo.
 var builtinDocs = map[string][2]string{
-	"alloc":      {"alloc(T) *T · alloc(valor) *T · alloc([]T, n) []T", "Aloca no heap. Devolve um dono, que precisa ser liberado com `free` (o compilador confere)."},
-	"free":       {"free(p)", "Libera um ponteiro ou slice dono. Depois disso a variável não pode mais ser usada."},
-	"realloc":    {"realloc(s []T, n int) []T", "Muda o tamanho de um slice dono: consome `s` e devolve outro; as posições novas vêm zeradas."},
-	"len":        {"len(s) int", "Tamanho de um slice, array ou string (em bytes)."},
-	"take":       {"take(&s[i]) ?*T", "Tira o dono da posição `i` de um slice de donos, deixando `nil` no lugar."},
-	"replace":    {"replace(&s[i], v) ?*T", "Põe `v` na posição `i` e devolve o dono que estava lá."},
-	"drain":      {"for x in drain(s)", "Percorre um slice de donos tirando cada elemento; cada `x` precisa ser liberado ou movido."},
-	"print":      {"io.print(a, b, ...)", "Escreve os valores separados por espaço e termina a linha. Cada valor precisa implementar `io.Display` e é escrito pelo seu método `write`, sobre um `io.Writer` com buffer na pilha (sem alocação). O compilador só reescreve a chamada."},
-	"eprint":     {"io.eprint(a, b, ...)", "Como `io.print`, mas no erro padrão."},
-	"printf":     {"io.printf(\"x = {}\\n\", x)", "Escreve o formato trocando cada `{}` por um valor (que precisa implementar `io.Display`); `{{` e `}}` escrevem chaves. O formato é uma string literal, conferida na compilação: a quantidade de `{}` precisa bater com a de valores. Especificações: `{:x}` `{:X}` `{:b}` `{:o}` `{:#x}` (inteiros), `{:.2}` (reais), `{:8}` `{:<8}` `{:>8}` `{:^8}` `{:*^8}` (largura em caracteres), `{:08}` (zeros), `{:s}` (os bytes de um `[]byte` como texto)."},
-	"Thread":     {"thread.Thread[R]", "Handle de uma thread criada por `thread.spawn`, cuja função devolve `R` (`thread.Thread` quando não devolve nada). Só existe atrás de ponteiro e não aceita `free`: precisa ir para `thread.join`."},
-	"spawn":      {"thread.spawn(f fn(C) R, ctx C, stack int) *thread.Thread[R]", "Cria uma thread que roda `f(ctx)`. O contexto é **movido** para a thread, e `stack` é o tamanho da pilha em bytes (pelo menos 16 KB, como `thread.STACK_64KB`). O handle devolvido precisa ir para `thread.join` (o compilador confere)."},
-	"join":       {"thread.join(t *thread.Thread[R]) R", "Espera a thread terminar e devolve o resultado de `f`, cuja posse volta para quem chamou. Libera o registro da thread."},
-	"format":     {"str.format(&dst, \"x = {}\", x) int", "Escreve o formato em `dst`, como `io.printf`, e devolve quantos bytes usou; dá panic se não couber. Não aloca: para saber o tamanho antes, use `str.format_len`."},
-	"format_len": {"str.format_len(\"x = {}\", x) int", "Quantos bytes o formato ocupa, sem escrever nada: `n := str.format_len(...)`, `b := alloc([]byte, n)`, `str.format(&b, ...)`."},
-	"eprintf":    {"io.eprintf(\"erro: {}\\n\", e)", "Como `io.printf`, mas no erro padrão."},
-	"int":        {"int", "Inteiro com sinal de 64 bits. Estouro dá panic."},
-	"int8":       {"int8", "Inteiro com sinal de 8 bits (-128 a 127)."},
-	"int16":      {"int16", "Inteiro com sinal de 16 bits."},
-	"int32":      {"int32", "Inteiro com sinal de 32 bits."},
-	"int64":      {"int64", "Inteiro com sinal de 64 bits (o mesmo que `int`)."},
-	"uint8":      {"uint8", "Inteiro sem sinal de 8 bits (o mesmo que `byte`)."},
-	"uint16":     {"uint16", "Inteiro sem sinal de 16 bits."},
-	"uint32":     {"uint32", "Inteiro sem sinal de 32 bits."},
-	"uint64":     {"uint64", "Inteiro sem sinal de 64 bits."},
-	"byte":       {"byte", "Um byte, de 0 a 255. Literal: `'a'`."},
-	"float32":    {"float32", "Real de precisão simples (IEEE 754)."},
-	"float64":    {"float64", "Real de precisão dupla (IEEE 754)."},
-	"bool":       {"bool", "`true` ou `false`."},
-	"string":     {"string", "Texto fixo do programa (literais). Não aloca e não precisa de `free`."},
-	"nil":        {"nil", "Ponteiro nulo; só cabe em `?*T`."},
-	"auto":       {"impl auto io.Display for T", "Gera o método `write` de uma struct ou enum, no formato `{1 2}` / `Circulo(2)`. Cada campo precisa implementar `io.Display`."},
-	"Self":       {"Self", "Numa interface, o tipo que a implementa."},
-	"true":       {"true", "Valor verdadeiro de `bool`."},
-	"false":      {"false", "Valor falso de `bool`."},
-	"any":        {"any", "Restrição de genérico: qualquer tipo que não seja dono."},
-	"comparable": {"comparable", "Restrição de genérico: tipos que aceitam `==` e `!=`."},
-	"ordered":    {"ordered", "Restrição de genérico: números, que aceitam `<`, `>` e as contas."},
-	"number":     {"number", "Restrição de genérico: números (inteiros e reais), com `+ - * /`."},
-	"integer":    {"integer", "Restrição de genérico: inteiros, inclusive com `%`."},
-	"owned":      {"owned", "Restrição de genérico: aceita os tipos sem dono e os donos simples (`?*X`, `[]X`). Dentro do corpo, um valor `T` é tratado como dono: atribuir move, e todo valor precisa de destino (mover, guardar ou `drop`)."},
-	"drop":       {"drop(x)", "Em código genérico, consome `x`: libera se for dono (`free`) e não faz nada se não for (T = int numa instância)."},
+	"alloc":       {"alloc(T) *T · alloc(valor) *T · alloc([]T, n) []T", "Aloca no heap. Devolve um dono, que precisa ser liberado com `free` (o compilador confere)."},
+	"free":        {"free(p)", "Libera um ponteiro ou slice dono. Depois disso a variável não pode mais ser usada."},
+	"realloc":     {"realloc(s []T, n int) []T", "Muda o tamanho de um slice dono: consome `s` e devolve outro; as posições novas vêm zeradas."},
+	"len":         {"len(s) int", "Tamanho de um slice, array ou string (em bytes)."},
+	"take":        {"take(&s[i]) ?*T", "Tira o dono da posição `i` de um slice de donos, deixando `nil` no lugar."},
+	"replace":     {"replace(&s[i], v) ?*T", "Põe `v` na posição `i` e devolve o dono que estava lá."},
+	"drain":       {"for x in drain(s)", "Percorre um slice de donos tirando cada elemento; cada `x` precisa ser liberado ou movido."},
+	"print":       {"io.print(a, b, ...)", "Escreve os valores separados por espaço e termina a linha. Cada valor precisa implementar `io.Display` e é escrito pelo seu método `write`, sobre um `io.Writer` com buffer na pilha (sem alocação). O compilador só reescreve a chamada."},
+	"eprint":      {"io.eprint(a, b, ...)", "Como `io.print`, mas no erro padrão."},
+	"printf":      {"io.printf(\"x = {}\\n\", x)", "Escreve o formato trocando cada `{}` por um valor (que precisa implementar `io.Display`); `{{` e `}}` escrevem chaves. O formato é uma string literal, conferida na compilação: a quantidade de `{}` precisa bater com a de valores. Especificações: `{:x}` `{:X}` `{:b}` `{:o}` `{:#x}` (inteiros), `{:.2}` (reais), `{:8}` `{:<8}` `{:>8}` `{:^8}` `{:*^8}` (largura em caracteres), `{:08}` (zeros), `{:s}` (os bytes de um `[]byte` como texto)."},
+	"Thread":      {"thread.Thread[R]", "Handle de uma thread criada por `thread.spawn`, cuja função devolve `R` (`thread.Thread` quando não devolve nada). Só existe atrás de ponteiro e não aceita `free`: precisa ir para `thread.join`."},
+	"Sender":      {"chan.Sender[T]", "Ponta de canal que envia (`send`, `clone`, `close`). Só existe atrás de ponteiro; precisa de `close()` (o compilador confere)."},
+	"Receiver":    {"chan.Receiver[T]", "Ponta de canal que recebe (`recv`, `sender`, `clone`, `close`). Só existe atrás de ponteiro; precisa de `close()` (o compilador confere)."},
+	"chan.new":    {"chan.new[T](cap int) *chan.Receiver[T]", "Aloca um canal com `cap` posições (pelo menos 1) e devolve a ponta que recebe. Crie as pontas que enviam com `rx.sender()`. O canal é liberado no último `close`."},
+	"chan.send":   {"tx.send(v T) bool", "Move `v` para o canal; espera se ele estiver cheio. Sem nenhum `Receiver` aberto, libera `v` e devolve `false`."},
+	"chan.recv":   {"rx.recv() chan.Recv[T]", "Espera um valor: `Got(v)`, com a posse de `v`, ou `Closed`, quando todos os `Sender` fecharam e o canal esvaziou."},
+	"chan.sender": {"rx.sender() *chan.Sender[T]", "Cria uma ponta que envia para este canal. Ela precisa de `close()`."},
+	"chan.clone":  {"x.clone()", "Outra ponta do mesmo lado (vários produtores ou vários consumidores). Ela precisa de `close()`."},
+	"chan.close":  {"x.close()", "Fecha a ponta (consome). O último `close` do canal libera o canal e o que sobrou nele."},
+	"spawn":       {"thread.spawn(f fn(C) R, ctx C, stack int) *thread.Thread[R]", "Cria uma thread que roda `f(ctx)`. O contexto é **movido** para a thread, e `stack` é o tamanho da pilha em bytes (pelo menos 16 KB, como `thread.STACK_64KB`). O handle devolvido precisa ir para `thread.join` (o compilador confere)."},
+	"join":        {"thread.join(t *thread.Thread[R]) R", "Espera a thread terminar e devolve o resultado de `f`, cuja posse volta para quem chamou. Libera o registro da thread."},
+	"format":      {"str.format(&dst, \"x = {}\", x) int", "Escreve o formato em `dst`, como `io.printf`, e devolve quantos bytes usou; dá panic se não couber. Não aloca: para saber o tamanho antes, use `str.format_len`."},
+	"format_len":  {"str.format_len(\"x = {}\", x) int", "Quantos bytes o formato ocupa, sem escrever nada: `n := str.format_len(...)`, `b := alloc([]byte, n)`, `str.format(&b, ...)`."},
+	"eprintf":     {"io.eprintf(\"erro: {}\\n\", e)", "Como `io.printf`, mas no erro padrão."},
+	"int":         {"int", "Inteiro com sinal de 64 bits. Estouro dá panic."},
+	"int8":        {"int8", "Inteiro com sinal de 8 bits (-128 a 127)."},
+	"int16":       {"int16", "Inteiro com sinal de 16 bits."},
+	"int32":       {"int32", "Inteiro com sinal de 32 bits."},
+	"int64":       {"int64", "Inteiro com sinal de 64 bits (o mesmo que `int`)."},
+	"uint8":       {"uint8", "Inteiro sem sinal de 8 bits (o mesmo que `byte`)."},
+	"uint16":      {"uint16", "Inteiro sem sinal de 16 bits."},
+	"uint32":      {"uint32", "Inteiro sem sinal de 32 bits."},
+	"uint64":      {"uint64", "Inteiro sem sinal de 64 bits."},
+	"byte":        {"byte", "Um byte, de 0 a 255. Literal: `'a'`."},
+	"float32":     {"float32", "Real de precisão simples (IEEE 754)."},
+	"float64":     {"float64", "Real de precisão dupla (IEEE 754)."},
+	"bool":        {"bool", "`true` ou `false`."},
+	"string":      {"string", "Texto fixo do programa (literais). Não aloca e não precisa de `free`."},
+	"nil":         {"nil", "Ponteiro nulo; só cabe em `?*T`."},
+	"auto":        {"impl auto io.Display for T", "Gera o método `write` de uma struct ou enum, no formato `{1 2}` / `Circulo(2)`. Cada campo precisa implementar `io.Display`."},
+	"Self":        {"Self", "Numa interface, o tipo que a implementa."},
+	"true":        {"true", "Valor verdadeiro de `bool`."},
+	"false":       {"false", "Valor falso de `bool`."},
+	"any":         {"any", "Restrição de genérico: qualquer tipo que não seja dono."},
+	"comparable":  {"comparable", "Restrição de genérico: tipos que aceitam `==` e `!=`."},
+	"ordered":     {"ordered", "Restrição de genérico: números, que aceitam `<`, `>` e as contas."},
+	"number":      {"number", "Restrição de genérico: números (inteiros e reais), com `+ - * /`."},
+	"integer":     {"integer", "Restrição de genérico: inteiros, inclusive com `%`."},
+	"owned":       {"owned", "Restrição de genérico: aceita os tipos sem dono e os donos simples (`?*X`, `[]X`). Dentro do corpo, um valor `T` é tratado como dono: atribuir move, e todo valor precisa de destino (mover, guardar ou `drop`)."},
+	"drop":        {"drop(x)", "Em código genérico, consome `x`: libera se for dono (`free`) e não faz nada se não for (T = int numa instância)."},
 }
 
 // ---------- arquivos da biblioteca padrão no disco ----------

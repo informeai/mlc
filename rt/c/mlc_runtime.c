@@ -659,3 +659,94 @@ int64_t mlc_std_thread_cpu_count(const char *file, int line) {
     return 1;
 #endif
 }
+
+/* std/chan. Um canal é um buffer em anel de cap posições de elem bytes,
+ * protegido por uma trava. send copia o valor para o anel (a posse passa ao
+ * canal) e recv o copia para fora (a posse passa a quem recebe). As pontas
+ * são contadas: sem Sender aberto, recv num canal vazio devolve "fechado";
+ * sem Receiver aberto, send libera o valor (drop) e devolve false. O último
+ * close libera o que sobrou no anel e o próprio canal. O canal e o anel são
+ * alocados com mlc_alloc no chan.new, então contam como alocações. */
+
+struct mlc_chan {
+    pthread_mutex_t mu;
+    pthread_cond_t not_empty, not_full;
+    int64_t cap, head, count, senders, receivers;
+    size_t elem;
+    void (*drop)(void *);
+    unsigned char *buf;
+};
+
+mlc_chan *mlc_chan_new(int64_t cap, size_t elem, void (*drop)(void *), const char *file, int line) {
+    if (cap < 1) mlc_panic(file, line, "chan.new: a capacidade precisa ser pelo menos 1");
+    mlc_chan *c = mlc_alloc(sizeof *c, file, line);
+    c->buf = mlc_alloc_array(cap, elem > 0 ? elem : 1, file, line);
+    pthread_mutex_init(&c->mu, NULL);
+    pthread_cond_init(&c->not_empty, NULL);
+    pthread_cond_init(&c->not_full, NULL);
+    c->cap = cap;
+    c->elem = elem;
+    c->drop = drop;
+    c->receivers = 1;
+    return c;
+}
+
+mlc_chan *mlc_chan_add(mlc_chan *c, int end) {
+    pthread_mutex_lock(&c->mu);
+    if (end == 1) c->senders++;
+    else c->receivers++;
+    pthread_mutex_unlock(&c->mu);
+    return c;
+}
+
+void mlc_chan_close(mlc_chan *c, int end) {
+    pthread_mutex_lock(&c->mu);
+    if (end == 1) {
+        c->senders--;
+        pthread_cond_broadcast(&c->not_empty); /* quem espera em recv pode ver o fim */
+    } else {
+        c->receivers--;
+        pthread_cond_broadcast(&c->not_full); /* quem espera em send desiste */
+    }
+    bool last = c->senders == 0 && c->receivers == 0;
+    pthread_mutex_unlock(&c->mu);
+    if (!last) return;
+    for (int64_t i = 0; i < c->count; i++) {
+        if (c->drop) c->drop(c->buf + (size_t)((c->head + i) % c->cap) * c->elem);
+    }
+    pthread_mutex_destroy(&c->mu);
+    pthread_cond_destroy(&c->not_empty);
+    pthread_cond_destroy(&c->not_full);
+    mlc_free(c->buf);
+    mlc_free(c);
+}
+
+bool mlc_chan_send(mlc_chan *c, void *v) {
+    pthread_mutex_lock(&c->mu);
+    while (c->count == c->cap && c->receivers > 0) pthread_cond_wait(&c->not_full, &c->mu);
+    if (c->receivers == 0) {
+        pthread_mutex_unlock(&c->mu);
+        if (c->drop) c->drop(v); /* ninguém mais recebe: o valor é liberado */
+        return false;
+    }
+    memcpy(c->buf + (size_t)((c->head + c->count) % c->cap) * c->elem, v, c->elem);
+    c->count++;
+    pthread_cond_signal(&c->not_empty);
+    pthread_mutex_unlock(&c->mu);
+    return true;
+}
+
+bool mlc_chan_recv(mlc_chan *c, void *out) {
+    pthread_mutex_lock(&c->mu);
+    while (c->count == 0 && c->senders > 0) pthread_cond_wait(&c->not_empty, &c->mu);
+    if (c->count == 0) {
+        pthread_mutex_unlock(&c->mu);
+        return false; /* todos os Sender fecharam e o canal esvaziou */
+    }
+    memcpy(out, c->buf + (size_t)c->head * c->elem, c->elem);
+    c->head = (c->head + 1) % c->cap;
+    c->count--;
+    pthread_cond_signal(&c->not_full);
+    pthread_mutex_unlock(&c->mu);
+    return true;
+}

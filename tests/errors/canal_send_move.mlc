@@ -1,0 +1,21 @@
+// erro: b já foi liberada ou movida
+import "std/chan"
+import "std/io"
+
+struct P {
+    x int
+}
+
+fn closes(tx &chan.Sender[int]) {
+
+}
+
+fn main() {
+    rx := chan.new[[]byte](2)
+    tx := rx.sender()
+    b := alloc([]byte, 2)
+    tx.send(b)
+    io.print(len(b))
+    tx.close()
+    rx.close()
+}

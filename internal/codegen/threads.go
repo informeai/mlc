@@ -89,3 +89,57 @@ func (g *gen) threadJoin(e *ast.CallExpr) string {
 	res := g.temp(r)
 	return fmt.Sprintf("(%s, %s = ((%s *)%s)->result, mlc_free(%s), %s)", parts, res, g.joins[cType(r)], t, t, res)
 }
+
+// Canais: o canal fica no runtime (mlc_chan) e cada ponta é um mlc_chan *.
+// Os valores passam pelo canal como bytes; um dono que sobra no canal (ou
+// que um send sem receptor descarta) é liberado pela função de drop do tipo,
+// que o chan.new entrega ao runtime.
+
+// chanDropName é a função void (*)(void *) que libera um valor do canal.
+func chanDropName(t checker.Type) string { return "mlc_chan_drop_" + mangle(t) }
+
+// chanDrops escreve as funções de drop dos canais de donos.
+func (g *gen) chanDrops() {
+	done := map[string]bool{}
+	for _, p := range g.info.Chans {
+		if p.Op != "new" || !checker.IsOwner(p.Elem) || done[chanDropName(p.Elem)] {
+			continue
+		}
+		done[chanDropName(p.Elem)] = true
+		g.raw("static void %s(void *p) { %s(*(%s *)p); }\n", chanDropName(p.Elem), dropName(p.Elem), cType(p.Elem))
+	}
+}
+
+// chanOp traduz chan.new e os métodos das pontas.
+func (g *gen) chanOp(e *ast.CallExpr) string {
+	p := g.info.Chans[e]
+	if p.Op == "new" {
+		drop := "NULL"
+		if checker.IsOwner(p.Elem) {
+			drop = chanDropName(p.Elem)
+		}
+		return fmt.Sprintf("mlc_chan_new(%s, sizeof(%s), %s, __FILE__, __LINE__)", g.expr(e.Args[0]), cType(p.Elem), drop)
+	}
+	recvExpr := e.Fun.(*ast.SelectorExpr).X
+	end := g.temp(&checker.Pointer{Elem: &checker.Struct{ChanEnd: p.End}})
+	set := fmt.Sprintf("%s = (mlc_chan *)MLC_NONNULL(%s)", end, g.expr(recvExpr))
+	switch p.Op {
+	case "close":
+		return fmt.Sprintf("(%s, mlc_chan_close(%s, %d))", set, end, p.End)
+	case "sender":
+		return fmt.Sprintf("(%s, mlc_chan_add(%s, %d))", set, end, checker.ChanSender)
+	case "clone":
+		return fmt.Sprintf("(%s, mlc_chan_add(%s, %d))", set, end, p.End)
+	case "send":
+		v := g.temp(p.Elem)
+		return fmt.Sprintf("(%s, %s = %s, mlc_chan_send(%s, &%s))", set, v, g.expr(e.Args[0]), end, v)
+	case "recv":
+		en := p.Recv.(*checker.Enum)
+		got, closed := en.Variants[0], en.Variants[1]
+		v := g.temp(p.Elem)
+		t := enumCType(en)
+		return fmt.Sprintf("(%s, mlc_chan_recv(%s, &%s) ? ((%s){.tag = %d, .u.v_%s = {.f_%s = %s}}) : ((%s){.tag = %d}))",
+			set, end, v, t, got.Tag, got.Name, got.Fields[0].Name, v, t, closed.Tag)
+	}
+	panic("codegen: operação de canal desconhecida " + p.Op)
+}

@@ -30,6 +30,11 @@ type Struct struct {
 	// tem); nil nas outras structs
 	ThreadResult Type
 
+	// ChanEnd: num chan.Sender[T] ou chan.Receiver[T], qual ponta é
+	// (ChanSender, ChanReceiver), e ChanElem o tipo dos valores; 0 nas outras
+	ChanEnd  int
+	ChanElem Type
+
 	// Genéricos: Params na struct genérica (a declaração); Origin e Args numa
 	// instância (Par[int, string]).
 	Params      []*ast.TypeParam

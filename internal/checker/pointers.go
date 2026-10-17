@@ -154,6 +154,13 @@ func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 			return Invalid
 		}
 		return th
+	case t.Module != "" && (t.Name == "Sender" || t.Name == "Receiver") && c.mod.uses[t.Module] != nil && c.mod.uses[t.Module].path == "std/chan" && c.mod.uses[t.Module].std:
+		ch := c.chanTypeExpr(t)
+		if ch != Invalid && ctx != ctxElem && ctx != ctxBorrowElem {
+			c.errorf(t.P, "%s é uma ponta de canal: só existe atrás de ponteiro (*%s, ?*%s)", ch, ch, ch)
+			return Invalid
+		}
+		return ch
 	case t.Module != "":
 		// tipo de outro arquivo: geometria.Ponto
 		if m := c.mod.uses[t.Module]; m != nil && m.ifaces[t.Name] != nil {
@@ -345,6 +352,8 @@ func (c *checker) builtinCall(e *ast.CallExpr, name string) (Type, bool) {
 		case *Pointer:
 			if isThread(tt) {
 				c.errorf(e.Args[0].Pos(), "%s é uma thread: espere por ela com thread.join, não com free", t)
+			} else if isChanEnd(tt) {
+				c.errorf(e.Args[0].Pos(), "%s é uma ponta de canal: feche com close(), não com free", t)
 			} else if isExternStruct(tt.Elem) {
 				c.errorf(e.Args[0].Pos(), "%s é um handle de C: libere com a função de C que o fecha, não com free", t)
 			}
@@ -371,6 +380,21 @@ func (c *checker) builtinCall(e *ast.CallExpr, name string) (Type, bool) {
 // allocArg resolve o argumento de alloc: um nome de tipo (memória zerada) ou
 // um valor inicial.
 func (c *checker) allocArg(a ast.Expr) (Type, bool) {
+	// handles da biblioteca padrão: thread.Thread[R], chan.Sender[T], ...
+	if base, _ := splitIndex(a); base != nil {
+		if sel, ok := base.(*ast.SelectorExpr); ok {
+			if m := c.userModule(sel.X); m != nil && m.std {
+				switch {
+				case m.path == "std/thread" && sel.Sel == "Thread":
+					c.errorf(a.Pos(), "thread.Thread vem de thread.spawn, não de alloc")
+					return Invalid, false
+				case m.path == "std/chan" && (sel.Sel == "Sender" || sel.Sel == "Receiver"):
+					c.errorf(a.Pos(), "as pontas de canal vêm de chan.new, sender() e clone(), não de alloc")
+					return Invalid, false
+				}
+			}
+		}
+	}
 	switch a.(type) {
 	case *ast.IndexExpr, *ast.IndexListExpr:
 		// alloc(Par[int, string]): struct genérica, memória zerada
@@ -389,10 +413,6 @@ func (c *checker) allocArg(a ast.Expr) (Type, bool) {
 	if sel, ok := a.(*ast.SelectorExpr); ok && c.userModule(sel.X) != nil {
 		// alloc(geometria.Ponto): struct de outro arquivo, memória zerada
 		m := c.userModule(sel.X)
-		if m.std && m.path == "std/thread" && sel.Sel == "Thread" {
-			c.errorf(a.Pos(), "thread.Thread vem de thread.spawn, não de alloc")
-			return Invalid, false
-		}
 		if s := m.structs[sel.Sel]; s != nil {
 			if !s.Pub {
 				c.errorf(sel.SelPos, "%s.%s não é pública (declare com pub struct)", m.name, sel.Sel)

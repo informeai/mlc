@@ -79,6 +79,7 @@ func Generate(file string, f *ast.File, info *checker.Info) string {
 		g.raw("static MLC_MAYBE_UNUSED %s;\n", signature(fn)) // instâncias podem ficar sem uso
 	}
 	g.dropHelpers()
+	g.chanDrops()
 	g.raw("\n")
 	for _, fn := range info.Funcs {
 		g.function(fn)
@@ -138,6 +139,9 @@ func cType(t checker.Type) string {
 	if s, ok := t.(*checker.Struct); ok {
 		if s.ThreadResult != nil {
 			return "mlc_thread" // thread.Thread[R]: o registro do runtime
+		}
+		if s.ChanEnd != 0 {
+			return "mlc_chan" // chan.Sender[T] e chan.Receiver[T]: o canal do runtime
 		}
 		return structCType(s)
 	}
@@ -639,6 +643,8 @@ func (g *gen) expr(e ast.Expr) string {
 			return g.threadSpawn(e)
 		case checker.ThreadJoin:
 			return g.threadJoin(e)
+		case checker.ChanOp:
+			return g.chanOp(e)
 		}
 		switch callee.Builtin {
 		case checker.Alloc:
@@ -734,7 +740,9 @@ func (g *gen) dropHelpers() {
 		g.raw("static void %s(%s v) {\n", dropName(t), cType(t))
 		switch tt := t.(type) {
 		case *checker.Pointer:
-			if s, ok := tt.Elem.(*checker.Struct); ok && s.Resource {
+			if s, ok := tt.Elem.(*checker.Struct); ok && s.ChanEnd != 0 {
+				g.raw("    if (v != NULL) mlc_chan_close(v, %d);\n", s.ChanEnd) // drop de uma ponta de canal a fecha
+			} else if s, ok := tt.Elem.(*checker.Struct); ok && s.Resource {
 				g.raw("    if (v != NULL) %s(v);\n", g.info.DropFree[s].CName)
 			} else {
 				g.raw("    mlc_free(v);\n")

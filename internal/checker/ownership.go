@@ -351,6 +351,9 @@ func (o *ownChecker) leaks(ls []*Local, pos token.Pos, where string) {
 			if isThread(p) {
 				o.errorf(pos, "vazamento: a thread %s (linha %d) pode não ter sido esperada %s; passe-a a thread.join",
 					l.Name, o.origin[k].Line, where)
+			} else if isChanEnd(p) {
+				o.errorf(pos, "vazamento: a ponta de canal %s (linha %d) pode ainda estar aberta %s; feche com %s.close()",
+					l.Name, o.origin[k].Line, where, l.Name)
 			} else {
 				o.errorf(pos, "vazamento: o handle de C %s (linha %d) pode ainda estar aberto %s; passe-o à função de C que o fecha",
 					l.Name, o.origin[k].Line, where)
@@ -1043,6 +1046,9 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 		p := o.c.info.Types[e.Args[0]].(*Pointer)
 		o.consume(e.Args[0], o.c.pointerTo(p.Elem, false), "thread.join")
 		return
+	case ChanOp:
+		o.chanOp(e)
+		return
 	case IoPrint, Len:
 		for _, a := range e.Args {
 			o.read(a)
@@ -1408,4 +1414,34 @@ func (o *ownChecker) outArg(a ast.Expr, fn string, borrowedRoots map[*Local]bool
 		o.errorf(a.Pos(), "%s é usada de duas formas na mesma chamada", k.root.Name)
 	}
 	*outs = append(*outs, k)
+}
+
+// chanOp trata chan.new e os métodos das pontas: close consome a ponta; send
+// move o valor para o canal; os outros só usam a ponta.
+func (o *ownChecker) chanOp(e *ast.CallExpr) {
+	plan := o.c.info.Chans[e]
+	if plan.Op == "new" {
+		o.read(e.Args[0])
+		return
+	}
+	recv := e.Fun.(*ast.SelectorExpr).X
+	if plan.Op == "close" {
+		end := o.c.info.Types[recv]
+		if b, ok := end.(*Borrow); ok {
+			o.errorf(recv.Pos(), "close precisa da ponta de canal (a posse), e %s é um empréstimo (%s)", exprName(recv), b)
+			return
+		}
+		o.consume(recv, o.c.pointerTo(structBehind(end), false), "close")
+		return
+	}
+	o.deferMoves(func() {
+		o.read(recv)
+		if plan.Op == "send" {
+			if IsOwner(plan.Elem) {
+				o.consume(e.Args[0], plan.Elem, "o valor de send") // vai para o canal
+			} else {
+				o.read(e.Args[0])
+			}
+		}
+	})
 }

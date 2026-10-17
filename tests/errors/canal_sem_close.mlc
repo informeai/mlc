@@ -1,0 +1,19 @@
+// erro: vazamento: a ponta de canal rx
+import "std/chan"
+import "std/io"
+
+struct P {
+    x int
+}
+
+fn closes(tx &chan.Sender[int]) {
+
+}
+
+fn main() {
+    rx := chan.new[int](2)
+    io.print(1)
+    if len("x") > 5 {
+        rx.close()
+    }
+}

@@ -1,0 +1,16 @@
+// erro: chan.Sender[int] é uma ponta de canal: só existe atrás de ponteiro
+import "std/chan"
+import "std/io"
+
+struct P {
+    x int
+}
+
+fn closes(tx &chan.Sender[int]) {
+
+}
+
+fn main() {
+    var s chan.Sender[int]
+    io.print(1)
+}

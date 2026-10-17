@@ -119,6 +119,9 @@ func (c *checker) collectMethod(d *ast.FuncDecl) {
 func (c *checker) methodCall(e *ast.CallExpr, sel *ast.SelectorExpr) (Type, bool) {
 	t := c.value(sel.X)
 	s := structBehind(t)
+	if s != nil && s.ChanEnd != 0 {
+		return c.chanMethod(e, sel, t, s), true
+	}
 	if s == nil {
 		// int, []T, parâmetros de tipo...: só métodos de impl
 		return c.implMethodCall(e, sel, t)

@@ -1,0 +1,19 @@
+// erro: chan.Sender[int] não tem método recv
+import "std/chan"
+import "std/io"
+
+struct P {
+    x int
+}
+
+fn closes(tx &chan.Sender[int]) {
+
+}
+
+fn main() {
+    rx := chan.new[int](2)
+    tx := rx.sender()
+    io.print(tx.recv())
+    tx.close()
+    rx.close()
+}

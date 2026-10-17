@@ -96,6 +96,7 @@ const (
 	Drop                // drop(x): libera x se for dono (código genérico)
 	ThreadSpawn         // thread.spawn(f, ctx, stack)
 	ThreadJoin          // thread.join(t)
+	ChanOp              // chan.new e os métodos das pontas de canal
 )
 
 // Callee é o destino resolvido de uma chamada: uma função do usuário ou um builtin.
@@ -134,6 +135,7 @@ type Info struct {
 	Calls        map[*ast.CallExpr]Callee
 	Prints       map[*ast.CallExpr]*PrintPlan // io.print e io.printf reescritos
 	Spawns       map[*ast.CallExpr]*SpawnPlan // thread.spawn
+	Chans        map[*ast.CallExpr]*ChanPlan  // chan.new e os métodos das pontas
 	FuncRefs     map[ast.Expr]*Func           // funções usadas como valor
 	BorrowSrc    map[*Local]*Local            // variável emprestada → a origem (raiz)
 	BorrowView   map[*Local]bool              // a variável emprestada é uma visão (sub-slice)
@@ -183,10 +185,11 @@ type checker struct {
 	funcTypes   map[string]*FuncType
 	outHandles  map[*Pointer]*OutHandle
 	threads     map[Type]*Struct // thread.Thread[R], por R
-	inExternC   bool             // resolvendo a assinatura de uma extern "C" fn (aceita &?*X)
-	probes      map[*Func]bool   // instâncias de verificação de posse (T owned = []byte)
-	probing     bool             // checando uma delas
-	muted       bool             // erros silenciados (tipos de uma instância de verificação)
+	chans       map[chanKey]*Struct
+	inExternC   bool           // resolvendo a assinatura de uma extern "C" fn (aceita &?*X)
+	probes      map[*Func]bool // instâncias de verificação de posse (T owned = []byte)
+	probing     bool           // checando uma delas
+	muted       bool           // erros silenciados (tipos de uma instância de verificação)
 	mutedErrs   int
 	probeBroken map[*Func]bool
 	inReceiver  bool       // resolvendo o tipo do receptor de um método
@@ -241,6 +244,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 			Calls:        map[*ast.CallExpr]Callee{},
 			Prints:       map[*ast.CallExpr]*PrintPlan{},
 			Spawns:       map[*ast.CallExpr]*SpawnPlan{},
+			Chans:        map[*ast.CallExpr]*ChanPlan{},
 			FuncRefs:     map[ast.Expr]*Func{},
 			BorrowSrc:    map[*Local]*Local{},
 			BorrowView:   map[*Local]bool{},
@@ -261,6 +265,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 		funcTypes:   map[string]*FuncType{},
 		outHandles:  map[*Pointer]*OutHandle{},
 		threads:     map[Type]*Struct{},
+		chans:       map[chanKey]*Struct{},
 		probes:      map[*Func]bool{},
 		probeBroken: map[*Func]bool{},
 		freeMissing: map[*Struct]bool{},
@@ -1051,6 +1056,11 @@ func (c *checker) call(e *ast.CallExpr) Type {
 			if kind := ioBuiltin(m, fun.Sel); kind != "" {
 				return c.ioPrint(e, kind)
 			}
+			if m.std && m.path == "std/chan" && fun.Sel == "new" {
+				c.errorf(fun.SelPos, "chan.new precisa do tipo dos valores: chan.new[int](16)")
+				c.checkArgs(e)
+				return Invalid
+			}
 			switch threadBuiltin(m, fun.Sel) {
 			case "spawn":
 				return c.threadSpawn(e)
@@ -1090,6 +1100,11 @@ func (c *checker) call(e *ast.CallExpr) Type {
 	case *ast.IndexExpr, *ast.IndexListExpr:
 		// f[int](args): argumentos de tipo explícitos
 		base, targs := splitIndex(fun)
+		if sel, ok := base.(*ast.SelectorExpr); ok && sel.Sel == "new" {
+			if m := c.userModule(sel.X); m != nil && m.std && m.path == "std/chan" {
+				return c.chanNew(e, targs)
+			}
+		}
 		if g := c.genericFuncOf(base); g != nil {
 			return c.genericCall(e, g, targs)
 		}

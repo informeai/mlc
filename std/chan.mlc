@@ -1,0 +1,46 @@
+// Canais com capacidade fixa, para passar valores de uma thread para outra
+// por posse.
+//
+//     rx := chan.new[[]byte](16)    // aloca o canal (16 posições)
+//     tx := rx.sender()             // uma ponta que envia, ligada ao canal
+//     t := thread.spawn(produz, tx, thread.STACK_64KB)
+//     for {
+//         match rx.recv() {
+//             Got(msg) => {
+//                 io.write_line(&msg)
+//                 free(msg)         // a mensagem agora é deste lado
+//             }
+//             Closed => break       // todos os Sender fecharam
+//         }
+//     }
+//     rx.close()
+//     thread.join(t)
+//
+// chan.new e os métodos abaixo são embutidos no compilador; o canal fica no
+// runtime. Cada ponta é um dono: precisa de close(), e o verificador cobra
+// isso. O canal é liberado no último close (com drop no que sobrou nele).
+//
+// chan.new[T](cap) *Receiver[T]  aloca o canal com cap posições (cap >= 1)
+//
+// Receiver[T]:
+//   recv() Recv[T]       espera um valor: Got(v), com a posse de v, ou
+//                        Closed, quando todos os Sender fecharam e o canal
+//                        esvaziou
+//   sender() *Sender[T]  cria uma ponta que envia
+//   clone() *Receiver[T] outra ponta que recebe (vários consumidores)
+//   close()
+//
+// Sender[T]:
+//   send(v T) bool       move v para o canal; espera se estiver cheio.
+//                        Sem nenhum Receiver aberto, libera v (drop) e
+//                        devolve false
+//   clone() *Sender[T]   outra ponta que envia (vários produtores)
+//   close()
+//
+// Não há canal sem limite: crescer sozinho seria alocação escondida.
+
+// Recv é o resultado de recv.
+pub enum Recv[T owned] {
+    Got(value T)
+    Closed
+}

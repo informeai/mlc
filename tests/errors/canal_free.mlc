@@ -1,0 +1,16 @@
+// erro: é uma ponta de canal: feche com close(), não com free
+import "std/chan"
+import "std/io"
+
+struct P {
+    x int
+}
+
+fn closes(tx &chan.Sender[int]) {
+
+}
+
+fn main() {
+    rx := chan.new[int](2)
+    free(rx)
+}

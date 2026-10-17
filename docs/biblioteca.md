@@ -229,6 +229,10 @@ Verificações para os testes rodados com `mlc test` (`check`, `fail`, `eq_int`,
 
 Threads do sistema: `thread.spawn(f, ctx, stack)` e `thread.join(t)` (embutidas no compilador), `thread.cpu_count()` e as constantes `STACK_16KB` a `STACK_8MB`. O contexto vai para a thread por posse, e o resultado volta pelo `join`. Veja [concorrencia.md](concorrencia.md).
 
+### `std/chan`
+
+Canais com capacidade fixa: `chan.new[T](n)`, as pontas `chan.Sender[T]` (`send`, `clone`, `close`) e `chan.Receiver[T]` (`recv`, `sender`, `clone`, `close`), e o resultado `chan.Recv[T] { Got(value T); Closed }`. Os valores passam por posse. Veja [concorrencia.md](concorrencia.md#canais-import-stdchan).
+
 ### `std/time`
 
 | Função | O que faz |

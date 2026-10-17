@@ -336,3 +336,34 @@ func TestNavigationThreads(t *testing.T) {
 		}
 	}
 }
+
+// Canais: hover nos métodos das pontas, em chan.new e nos tipos.
+func TestNavigationChannels(t *testing.T) {
+	src := "import \"std/chan\"\n\nfn main() {\n    rx := chan.new[int](4)\n    tx := rx.sender()\n    tx.send(1)\n    var u ?*chan.Sender[int] = nil\n    match rx.recv() {\n        Got(n) => tx.send(n)\n        Closed => {}\n    }\n    if u == nil {\n    }\n    tx.close()\n    rx.close()\n}\n"
+	path := filepath.Join(t.TempDir(), "main.mlc")
+	os.WriteFile(path, []byte(src), 0o644)
+	read := driver.Overlay(nil)
+	for _, tc := range []struct{ at, hover string }{
+		{"chan.«new[int]", "Aloca um canal"},
+		{"rx.«sender()", "Cria uma ponta que envia"},
+		{"tx.«send(1)", "Move `v` para o canal"},
+		{"rx.«recv()", "Got(v)"},
+		{"tx.«close()", "Fecha a ponta"},
+		{"?*chan.«Sender[int]", "Ponta de canal que envia"},
+	} {
+		mark := strings.Index(tc.at, "«")
+		off := strings.Index(src, strings.Replace(tc.at, "«", "", 1)) + mark
+		prog := driver.Analyze(path, read)
+		if prog == nil {
+			t.Fatal("não analisou")
+		}
+		sym, _ := newNavigator(prog, read, []byte(src)).resolve(off)
+		if sym == nil {
+			t.Errorf("%q: nada encontrado", tc.at)
+			continue
+		}
+		if !strings.Contains(sym.code+"\n"+sym.doc, tc.hover) {
+			t.Errorf("%q: o hover não tem %q:\n%s\n%s", tc.at, tc.hover, sym.code, sym.doc)
+		}
+	}
+}

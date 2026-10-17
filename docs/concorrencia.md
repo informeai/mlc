@@ -7,7 +7,7 @@ O modelo vem em fases:
 | Fase | Conteúdo | Situação |
 |---|---|---|
 | A | `thread.spawn` e `thread.join`, com os dados atravessando por movimento | pronta |
-| B | canais com capacidade fixa (`std/chan`) | a fazer |
+| B | canais com capacidade fixa (`std/chan`) | pronta |
 | C | `Mutex[T]` com guard, e atomics | a fazer |
 | D | threads com escopo que recebem empréstimos | depois |
 
@@ -71,19 +71,109 @@ for t in drain(ts) {
 free(ts)
 ```
 
+## Canais (`import "std/chan"`)
+
+Um canal passa valores de uma thread para outra **por posse**. Ele é usado por várias threads ao mesmo tempo, mas no MLC cada coisa tem um dono só. Por isso o canal tem **pontas**, e cada ponta é um dono:
+
+```
+rx := chan.new[[]byte](16)    // aloca o canal (16 posições) e devolve a ponta que recebe
+tx := rx.sender()             // uma ponta que envia, ligada ao mesmo canal
+tx2 := tx.clone()             // mais um produtor
+```
+
+```
+fn produce(tx *chan.Sender[[]byte]) {
+    for i := 0; i < 3; i++ {
+        b := alloc([]byte, str.format_len("pedido {}", i))
+        str.format(&b, "pedido {}", i)
+        if !tx.send(b) {          // b foi movida; false: ninguém mais recebe
+            break
+        }
+    }
+    tx.close()                    // obrigatório: sem ele, o consumidor esperaria para sempre
+}
+
+fn main() {
+    rx := chan.new[[]byte](4)
+    t := thread.spawn(produce, rx.sender(), thread.STACK_64KB)
+    for {
+        match rx.recv() {
+            Got(b) => {
+                io.write_line(&b)
+                free(b)                // a mensagem agora é deste lado
+            }
+            Closed => break
+        }
+    }
+    rx.close()
+    thread.join(t)
+}
+```
+
+| Operação | O que faz | Memória | Bloqueia |
+|---|---|---|---|
+| `chan.new[T](n) *chan.Receiver[T]` | cria o canal, com `n >= 1` posições | aloca as `n` posições e o cabeçalho | não |
+| `rx.sender() *chan.Sender[T]` | uma ponta que envia | nada (só conta a ponta) | não |
+| `tx.clone()`, `rx.clone()` | outra ponta do mesmo lado (vários produtores ou consumidores) | nada | não |
+| `tx.send(v) bool` | move `v` para o canal | `v` passa ao canal | se estiver cheio |
+| `rx.recv() chan.Recv[T]` | `Got(v)`, com a posse de `v`, ou `Closed` | `v` passa a quem recebe | se estiver vazio e houver `Sender` aberto |
+| `x.close()` | fecha a ponta (consome) | o último `close` libera o canal e dá `drop` no que sobrou nele | não |
+
+- **Toda ponta precisa de `close()`**, e o verificador cobra como cobra um `free`. Ela não aceita `free` nem `alloc`. Numa struct com pontas, o `free` da struct fecha as pontas (a regra de donos aninhados). Num `Vec`, o `drop` de cada ponta a fecha.
+- **`recv` devolve um enum com dados donos**, `chan.Recv[T] { Got(value T); Closed }`. O `match` consome o resultado, e o verificador obriga a tratar a mensagem recebida.
+- **`Closed`** chega quando todos os `Sender` foram fechados e o canal esvaziou, inclusive se nenhum `Sender` foi criado ainda. Crie as pontas que enviam antes de começar a receber.
+- **`send` sem nenhum `Receiver` aberto** libera o valor (`drop`) e devolve `false`, para o produtor parar. Nada vaza.
+- **Não há canal sem limite.** Um canal cheio faz o `send` esperar, o que dá controle de fluxo. Um canal que crescesse sozinho seria alocação escondida.
+
+### Vários trabalhadores
+
+O `spawn` recebe um contexto só. Para levar várias pontas, elas vão juntas numa struct:
+
+```
+struct Worker {
+    jobs *chan.Receiver[int]
+    results *chan.Sender[int]
+}
+
+fn (w *Worker) free() {
+    w.jobs.close()
+    w.results.close()
+    free(w)
+}
+
+fn work(w *Worker) {
+    for {
+        match w.jobs.recv() {
+            Got(n) => w.results.send(n * n)
+            Closed => break
+        }
+    }
+    w.free()
+}
+```
+
+```
+w := alloc(Worker{jobs: jobs.clone(), results: results.sender()})
+t := thread.spawn(work, w, thread.STACK_64KB)
+```
+
+**Cuidado com deadlock.** Se o `main` envia todas as tarefas antes de ler os resultados, e o canal de resultados enche, os trabalhadores param no `send` e o `main` para no envio das tarefas. Dimensione os canais pelo padrão de uso, ou consuma os resultados em outra thread. O verificador não detecta isso.
+
 ## O que o modelo garante
 
-- **Sem data race:** dados só chegam a outra thread por movimento (o contexto, o resultado).
-- **Sem thread esquecida:** todo `spawn` tem seu `join`.
+- **Sem data race:** dados só chegam a outra thread por movimento (o contexto, o resultado, os valores de um canal).
+- **Sem thread esquecida nem canal esquecido:** todo `spawn` tem seu `join`, e toda ponta de canal, seu `close`.
 - **Toda memória à vista:** o registro da thread (o contexto e o resultado) é alocado no `spawn` e liberado no `join`, e o tamanho da pilha está no código.
 
 ## O que não garante
 
-- **Deadlock.** Ainda não há como duas threads esperarem uma pela outra, mas isso passa a ser possível com canais e `Mutex`, e o verificador não impede.
+- **Deadlock.** Duas threads esperando uma pela outra (dois canais cheios, um `recv` com o próprio `Sender` aberto na mesma thread) travam o programa, e o verificador não impede.
 - **O que passa pela FFI.** Uma biblioteca de C que cria threads ou compartilha memória por conta própria fica fora da garantia.
 
 ## Como funciona
 
 `thread.spawn` e `thread.join` são reescritos pelo compilador, como o `io.print`. Para cada tipo de função de thread, o C gerado ganha um registro (o `mlc_thread` do runtime, o resultado, a função e o contexto) e uma função de entrada que chama `f(ctx)` e guarda o resultado. O `spawn` aloca o registro com `mlc_alloc` e cria a thread com `pthread_create`, com o tamanho de pilha pedido. O `join` faz `pthread_join`, tira o resultado e libera o registro.
+
+Um canal é um buffer em anel no runtime, com uma trava e duas variáveis de condição (pthread). Cada ponta é um ponteiro para ele, e o runtime conta as pontas. `send` copia os bytes do valor para o anel e `recv` os copia para fora: a posse passa de um lado para o outro sem cópia escondida no heap. O `chan.new` entrega ao runtime a função que libera um valor do tipo, usada no último `close` e no `send` sem receptor.
 
 O runtime é seguro para threads: o contador de alocações é atômico, e os destinos do `str.format` são por thread.

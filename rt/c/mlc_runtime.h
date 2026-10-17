@@ -200,6 +200,16 @@ typedef struct mlc_thread {
 void mlc_thread_start(mlc_thread *t, void (*run)(mlc_thread *), int64_t stack, const char *file, int line);
 void mlc_thread_join(mlc_thread *t, const char *file, int line);
 
+/* Canais (std/chan): o canal fica aqui; cada ponta do MLC é um ponteiro
+ * para ele, e as pontas são contadas. end: 1 Sender, 2 Receiver. */
+typedef struct mlc_chan mlc_chan;
+
+mlc_chan *mlc_chan_new(int64_t cap, size_t elem, void (*drop)(void *), const char *file, int line);
+mlc_chan *mlc_chan_add(mlc_chan *c, int end);
+void mlc_chan_close(mlc_chan *c, int end);
+bool mlc_chan_send(mlc_chan *c, void *v);
+bool mlc_chan_recv(mlc_chan *c, void *out);
+
 /* Destinos do str.format (veja std/io.mlc, Writer). */
 int64_t mlc_sink_push(mlc_sl_byte *dst, const char *file, int line);
 int64_t mlc_sink_pop(int64_t sink, const char *file, int line);

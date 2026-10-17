@@ -60,6 +60,9 @@ func ownedPointee(t Type) (bool, string) {
 	if isThread(t) {
 		return false, "uma thread precisa de thread.join, e drop não sabe esperar por ela"
 	}
+	if isChanEnd(t) {
+		return true, "" // drop fecha a ponta
+	}
 	if isExternStruct(t) {
 		return false, "um handle de C precisa da função de C que o fecha, e drop não sabe qual é"
 	}
