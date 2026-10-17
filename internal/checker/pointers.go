@@ -147,6 +147,13 @@ func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 	}
 	var s *Struct
 	switch {
+	case t.Module != "" && t.Name == "Thread" && c.mod.uses[t.Module] != nil && c.mod.uses[t.Module].path == "std/thread" && c.mod.uses[t.Module].std:
+		th := c.threadTypeExpr(t)
+		if th != Invalid && ctx != ctxElem && ctx != ctxBorrowElem {
+			c.errorf(t.P, "%s é um handle: só existe atrás de ponteiro (*%s, ?*%s)", th, th, th)
+			return Invalid
+		}
+		return th
 	case t.Module != "":
 		// tipo de outro arquivo: geometria.Ponto
 		if m := c.mod.uses[t.Module]; m != nil && m.ifaces[t.Name] != nil {
@@ -318,6 +325,10 @@ func (c *checker) builtinCall(e *ast.CallExpr, name string) (Type, bool) {
 		if elem == Invalid {
 			return Invalid, true
 		}
+		if isThread(elem) {
+			c.errorf(e.Args[0].Pos(), "%s vem de thread.spawn, não de alloc", elem)
+			return Invalid, true
+		}
 		if isExternStruct(elem) {
 			c.errorf(e.Args[0].Pos(), "%s é um tipo de C opaco: os valores vêm de funções de C, não de alloc", elem)
 			return Invalid, true
@@ -332,7 +343,9 @@ func (c *checker) builtinCall(e *ast.CallExpr, name string) (Type, bool) {
 		}
 		switch t := c.value(e.Args[0]); tt := t.(type) {
 		case *Pointer:
-			if isExternStruct(tt.Elem) {
+			if isThread(tt) {
+				c.errorf(e.Args[0].Pos(), "%s é uma thread: espere por ela com thread.join, não com free", t)
+			} else if isExternStruct(tt.Elem) {
 				c.errorf(e.Args[0].Pos(), "%s é um handle de C: libere com a função de C que o fecha, não com free", t)
 			}
 		case *Slice:
@@ -376,6 +389,10 @@ func (c *checker) allocArg(a ast.Expr) (Type, bool) {
 	if sel, ok := a.(*ast.SelectorExpr); ok && c.userModule(sel.X) != nil {
 		// alloc(geometria.Ponto): struct de outro arquivo, memória zerada
 		m := c.userModule(sel.X)
+		if m.std && m.path == "std/thread" && sel.Sel == "Thread" {
+			c.errorf(a.Pos(), "thread.Thread vem de thread.spawn, não de alloc")
+			return Invalid, false
+		}
 		if s := m.structs[sel.Sel]; s != nil {
 			if !s.Pub {
 				c.errorf(sel.SelPos, "%s.%s não é pública (declare com pub struct)", m.name, sel.Sel)

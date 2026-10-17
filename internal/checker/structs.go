@@ -26,6 +26,10 @@ type Struct struct {
 	// existe atrás de ponteiro, como handle
 	Extern bool
 
+	// ThreadResult: num thread.Thread[R], o tipo do resultado (Void se não
+	// tem); nil nas outras structs
+	ThreadResult Type
+
 	// Genéricos: Params na struct genérica (a declaração); Origin e Args numa
 	// instância (Par[int, string]).
 	Params      []*ast.TypeParam

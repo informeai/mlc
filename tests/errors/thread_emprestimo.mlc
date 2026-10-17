@@ -1,0 +1,22 @@
+// erro: a função da thread não pode receber um empréstimo (&int)
+import "std/io"
+import "std/thread"
+import "std/vec"
+
+fn sum(p []int) int {
+    n := len(p)
+    free(p)
+    return n
+}
+
+fn by_ref(p &int) {
+}
+
+fn two(a int, b int) {
+}
+
+fn main() {
+    x := 1
+    t := thread.spawn(by_ref, &x, thread.STACK_64KB)
+    thread.join(t)
+}

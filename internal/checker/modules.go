@@ -136,7 +136,7 @@ func (c *checker) moduleCall(e *ast.CallExpr, m *module, sel *ast.SelectorExpr) 
 func (c *checker) moduleConst(e *ast.SelectorExpr, m *module) Type {
 	l := m.global.names[e.Sel]
 	switch {
-	case ioBuiltin(m, e.Sel) != "":
+	case ioBuiltin(m, e.Sel) != "" || threadBuiltin(m, e.Sel) != "":
 		c.errorf(e.SelPos, "%s.%s só pode ser usado como chamada", m.name, e.Sel)
 	case l != nil && !l.Pub:
 		c.errorf(e.SelPos, "%s.%s não é pública (declare com pub const)", m.name, e.Sel)

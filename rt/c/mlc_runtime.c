@@ -1,5 +1,8 @@
-/* clock_gettime, nanosleep e afins exigem POSIX, que -std=c11 esconde. */
+/* clock_gettime, nanosleep e afins exigem POSIX, que -std=c11 esconde;
+ * _SC_NPROCESSORS_ONLN (thread.cpu_count) é extensão do Linux e do macOS. */
 #define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE
+#define _DARWIN_C_SOURCE
 
 #include "mlc_runtime.h"
 
@@ -8,13 +11,17 @@
 #include <float.h>
 #include <inttypes.h>
 #include <math.h>
+#include <pthread.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <unistd.h>
 
-static int64_t mlc_test_failures = 0;        /* verificações que falharam no teste */
-static bool mlc_test_panic_expected = false; /* testing.expect_panic() */
+/* Atômicos: os testes e as alocações podem acontecer em várias threads. */
+static _Atomic int64_t mlc_test_failures = 0;        /* verificações que falharam no teste */
+static _Atomic bool mlc_test_panic_expected = false; /* testing.expect_panic() */
 
 void mlc_panic(const char *file, int line, const char *msg) {
     fflush(stdout);
@@ -27,7 +34,7 @@ void mlc_panic(const char *file, int line, const char *msg) {
     exit(2);
 }
 
-static int64_t mlc_live_allocs = 0;
+static _Atomic int64_t mlc_live_allocs = 0;
 
 void *mlc_alloc(size_t size, const char *file, int line) {
     void *p = calloc(1, size);
@@ -46,7 +53,7 @@ void mlc_check_allocs(void) {
     if (mlc_live_allocs != 0) {
         fflush(stdout);
         fprintf(stderr, "mlc: erro interno: %" PRId64 " alocação(ões) sem free no fim do programa (o verificador de posse deveria ter impedido)\n",
-                mlc_live_allocs);
+                (int64_t)mlc_live_allocs);
         exit(3);
     }
 }
@@ -444,8 +451,9 @@ typedef struct {
     int64_t cap, len, needed;
 } mlc_sink;
 
-static mlc_sink mlc_sinks[64];
-static int64_t mlc_sink_depth = 0;
+/* Por thread: cada thread tem os próprios str.format em andamento. */
+static _Thread_local mlc_sink mlc_sinks[64];
+static _Thread_local int64_t mlc_sink_depth = 0;
 
 int64_t mlc_sink_push(mlc_sl_byte *dst, const char *file, int line) {
     if (mlc_sink_depth == (int64_t)(sizeof mlc_sinks / sizeof mlc_sinks[0]))
@@ -608,4 +616,46 @@ void mlc_std_testing_expect_panic(const char *file, int line) {
     (void)file;
     (void)line;
     mlc_test_panic_expected = true;
+}
+
+/* std/thread. O registro da thread (contexto, resultado e o mlc_thread no
+ * começo) é alocado pelo código gerado com mlc_alloc e liberado no join; a
+ * pilha é do sistema (pthread), com o tamanho pedido no spawn. */
+
+static void *mlc_thread_entry(void *p) {
+    mlc_thread *t = p;
+    t->run(t);
+    return NULL;
+}
+
+void mlc_thread_start(mlc_thread *t, void (*run)(mlc_thread *), int64_t stack, const char *file, int line) {
+    if (stack < 16384) mlc_panic(file, line, "thread.spawn: a pilha precisa ter pelo menos 16 KB (thread.STACK_64KB, por exemplo)");
+    long page = sysconf(_SC_PAGESIZE);
+    if (page <= 0) page = 4096;
+    size_t size = (size_t)((stack + page - 1) / page * page); /* o macOS exige múltiplo da página */
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    if (pthread_attr_setstacksize(&attr, size) != 0) {
+        pthread_attr_destroy(&attr);
+        mlc_panic(file, line, "thread.spawn: tamanho de pilha recusado pelo sistema");
+    }
+    t->run = run;
+    int err = pthread_create(&t->th, &attr, mlc_thread_entry, t);
+    pthread_attr_destroy(&attr);
+    if (err != 0) mlc_panic(file, line, "thread.spawn: o sistema não criou a thread (limite de threads ou de memória)");
+}
+
+void mlc_thread_join(mlc_thread *t, const char *file, int line) {
+    if (pthread_join(t->th, NULL) != 0) mlc_panic(file, line, "erro interno: thread.join falhou");
+}
+
+int64_t mlc_std_thread_cpu_count(const char *file, int line) {
+    (void)file;
+    (void)line;
+#ifdef _SC_NPROCESSORS_ONLN
+    long n = sysconf(_SC_NPROCESSORS_ONLN);
+    return n > 0 ? n : 1;
+#else
+    return 1;
+#endif
 }

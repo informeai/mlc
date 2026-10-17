@@ -307,3 +307,32 @@ func TestNavigationFormat(t *testing.T) {
 		}
 	}
 }
+
+// thread.spawn e thread.join: hover com a documentação e definição no std/thread.
+func TestNavigationThreads(t *testing.T) {
+	src := "import \"std/thread\"\n\nfn sq(n int) int {\n    return n * n\n}\n\nfn main() {\n    t := thread.spawn(sq, 3, thread.STACK_64KB)\n    r := thread.join(t)\n    var u ?*thread.Thread[int] = nil\n    if r > 0 && u == nil {\n    }\n}\n"
+	path := filepath.Join(t.TempDir(), "main.mlc")
+	os.WriteFile(path, []byte(src), 0o644)
+	read := driver.Overlay(nil)
+	for _, tc := range []struct{ at, hover string }{
+		{"thread.«spawn(sq", "O contexto é **movido**"},
+		{"thread.«join(t)", "Espera a thread terminar"},
+		{"thread.«STACK_64KB", "STACK_64KB"},
+		{"?*thread.«Thread[int]", "Handle de uma thread"},
+	} {
+		mark := strings.Index(tc.at, "«")
+		off := strings.Index(src, strings.Replace(tc.at, "«", "", 1)) + mark
+		prog := driver.Analyze(path, read)
+		if prog == nil {
+			t.Fatal("não analisou")
+		}
+		sym, _ := newNavigator(prog, read, []byte(src)).resolve(off)
+		if sym == nil {
+			t.Errorf("%q: nada encontrado", tc.at)
+			continue
+		}
+		if !strings.Contains(sym.code+"\n"+sym.doc, tc.hover) {
+			t.Errorf("%q: o hover não tem %q:\n%s\n%s", tc.at, tc.hover, sym.code, sym.doc)
+		}
+	}
+}

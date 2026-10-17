@@ -225,6 +225,10 @@ match fs.file_size(caminho) {
 
 Verificações para os testes rodados com `mlc test` (`check`, `fail`, `eq_int`, `eq_uint`, `eq_bool`, `eq_float`, `near`, `eq_str`, `eq_bytes`, `expect_panic`). São `extern fn`, para que a falha aponte a linha do teste. Veja [testes.md](testes.md).
 
+### `std/thread`
+
+Threads do sistema: `thread.spawn(f, ctx, stack)` e `thread.join(t)` (embutidas no compilador), `thread.cpu_count()` e as constantes `STACK_16KB` a `STACK_8MB`. O contexto vai para a thread por posse, e o resultado volta pelo `join`. Veja [concorrencia.md](concorrencia.md).
+
 ### `std/time`
 
 | Função | O que faz |

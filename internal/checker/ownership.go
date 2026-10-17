@@ -348,8 +348,13 @@ func (o *ownChecker) leaks(ls []*Local, pos token.Pos, where string) {
 			continue
 		}
 		if p, ok := l.Type.(*Pointer); ok && isExternStruct(p.Elem) {
-			o.errorf(pos, "vazamento: o handle de C %s (linha %d) pode ainda estar aberto %s; passe-o à função de C que o fecha",
-				l.Name, o.origin[k].Line, where)
+			if isThread(p) {
+				o.errorf(pos, "vazamento: a thread %s (linha %d) pode não ter sido esperada %s; passe-a a thread.join",
+					l.Name, o.origin[k].Line, where)
+			} else {
+				o.errorf(pos, "vazamento: o handle de C %s (linha %d) pode ainda estar aberto %s; passe-o à função de C que o fecha",
+					l.Name, o.origin[k].Line, where)
+			}
 			if o.muted == 0 {
 				o.st[k] = sDead
 			}
@@ -1021,6 +1026,22 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 		return
 	case Convert:
 		o.read(e.Args[0])
+		return
+	case ThreadSpawn:
+		plan := o.c.info.Spawns[e]
+		o.deferMoves(func() {
+			o.read(e.Args[0])
+			if IsOwner(plan.Ctx) {
+				o.consume(e.Args[1], plan.Ctx, "o contexto de thread.spawn") // vai para a thread
+			} else {
+				o.read(e.Args[1])
+			}
+			o.read(e.Args[2])
+		})
+		return
+	case ThreadJoin:
+		p := o.c.info.Types[e.Args[0]].(*Pointer)
+		o.consume(e.Args[0], o.c.pointerTo(p.Elem, false), "thread.join")
 		return
 	case IoPrint, Len:
 		for _, a := range e.Args {

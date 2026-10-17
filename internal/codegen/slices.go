@@ -51,15 +51,20 @@ func mangle(t checker.Type) string {
 func (g *gen) sliceTypedefs() {
 	// primeiro os nomes, depois os tipos fn (que podem receber slices) e só
 	// então os corpos (um slice pode ter elementos fn)
+	// tipos diferentes no MLC podem ser o mesmo no C ([]?*thread.Thread[int]
+	// e []?*thread.Thread[[]byte]): cada nome sai uma vez só
+	named, defined := map[string]bool{}, map[string]bool{}
 	for _, s := range g.info.Slices {
-		if s.Elem != checker.Byte { // mlc_sl_byte vem do runtime, que também o usa
-			g.raw("typedef struct %s %s;\n", sliceCType(s), sliceCType(s))
+		if name := sliceCType(s); s.Elem != checker.Byte && !named[name] { // mlc_sl_byte vem do runtime, que também o usa
+			named[name] = true
+			g.raw("typedef struct %s %s;\n", name, name)
 		}
 	}
 	g.funcTypedefs()
 	for _, s := range g.info.Slices {
-		if s.Elem != checker.Byte {
-			g.raw("struct %s { %s *ptr; int64_t len; };\n", sliceCType(s), cType(s.Elem))
+		if name := sliceCType(s); s.Elem != checker.Byte && !defined[name] {
+			defined[name] = true
+			g.raw("struct %s { %s *ptr; int64_t len; };\n", name, cType(s.Elem))
 		}
 	}
 	if len(g.info.Slices) > 0 {

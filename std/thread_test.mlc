@@ -1,0 +1,104 @@
+import "std/str"
+import "std/testing"
+import "std/thread"
+
+fn square(n int) int {
+    return n * n
+}
+
+fn test_spawn_join_result() {
+    t := thread.spawn(square, 12, thread.STACK_64KB)
+    testing.eq_int(thread.join(t), 144)
+}
+
+fn fill(b []byte) []byte {
+    for i := 0; i < len(b); i++ {
+        b[i] = 'x'
+    }
+    return b
+}
+
+fn test_ownership_round_trip() {
+    b := alloc([]byte, 4)
+    t := thread.spawn(fill, b, thread.STACK_64KB) // b vai para a thread
+    back := thread.join(t)                        // e volta preenchido
+    testing.eq_str(&back, "xxxx")
+    free(back)
+}
+
+fn nothing(n int) {
+    if n < 0 {
+        testing.fail("nunca")
+    }
+}
+
+fn test_no_result() {
+    t := thread.spawn(nothing, 1, thread.STACK_16KB)
+    thread.join(t)
+}
+
+fn checks_in_thread(n int) {
+    testing.eq_int(n, 5) // as verificações valem dentro de threads
+}
+
+fn test_check_inside_thread() {
+    t := thread.spawn(checks_in_thread, 5, thread.STACK_64KB)
+    thread.join(t)
+}
+
+fn many(n int) int {
+    total := 0
+    for i := 0; i < n; i++ {
+        t := thread.spawn(square, i, thread.STACK_16KB)
+        total += thread.join(t)
+    }
+    return total
+}
+
+fn test_threads_spawning_threads() {
+    t := thread.spawn(many, 10, thread.STACK_64KB)
+    testing.eq_int(thread.join(t), 285)
+}
+
+fn format_in_thread(n int) []byte {
+    b := alloc([]byte, 16)
+    k := str.format(&b, "{:>5}", n)
+    out := alloc([]byte, k)
+    str.copy_bytes(&out, &b[:k])
+    free(b)
+    return out
+}
+
+fn test_format_in_threads() {
+    a := thread.spawn(format_in_thread, 1, thread.STACK_64KB)
+    b := thread.spawn(format_in_thread, 22, thread.STACK_64KB)
+    ra := thread.join(a)
+    rb := thread.join(b)
+    testing.eq_str(&ra, "    1")
+    testing.eq_str(&rb, "   22")
+    free(ra)
+    free(rb)
+}
+
+fn boom(n int) int {
+    b := alloc([]int, 2)
+    x := b[n] // índice fora: panic dentro da thread
+    free(b)
+    return x
+}
+
+fn test_panic_in_thread_ends_program() {
+    testing.expect_panic()
+    t := thread.spawn(boom, 5, thread.STACK_64KB)
+    testing.eq_int(thread.join(t), 0)
+}
+
+fn test_small_stack() {
+    testing.expect_panic()
+    t := thread.spawn(square, 1, 1024)
+    testing.eq_int(thread.join(t), 1)
+}
+
+fn test_cpu_count() {
+    testing.check(thread.cpu_count() >= 1, "pelo menos um processador")
+}

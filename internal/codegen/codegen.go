@@ -34,6 +34,9 @@ type gen struct {
 	// índice com efeito seja calculado uma vez só em s[f()] += 1.
 	indexOverride map[*ast.IndexExpr]string
 	temps         []string // declarações das temporárias da função em geração
+
+	joins      map[string]string // thread.join: o começo dos registros, pelo tipo C do resultado
+	spawnNames map[int]string    // thread.spawn: o registro, pelo ID do tipo da função
 }
 
 // loopCtx acompanha um laço em geração. Um break do MLC dentro de um switch
@@ -71,6 +74,7 @@ func Generate(file string, f *ast.File, info *checker.Info) string {
 		}
 		g.raw("extern %s %s(%s) __asm__(MLC_SYM(%q));\n", cFFIType(fn.Result), fn.CName, strings.Join(params, ", "), fn.CSym)
 	}
+	g.threadDefs()
 	for _, fn := range info.Funcs {
 		g.raw("static MLC_MAYBE_UNUSED %s;\n", signature(fn)) // instâncias podem ficar sem uso
 	}
@@ -132,6 +136,9 @@ func cType(t checker.Type) string {
 		return funcCType(t)
 	}
 	if s, ok := t.(*checker.Struct); ok {
+		if s.ThreadResult != nil {
+			return "mlc_thread" // thread.Thread[R]: o registro do runtime
+		}
 		return structCType(s)
 	}
 	switch t {
@@ -388,6 +395,11 @@ func (g *gen) ifStmt(s *ast.IfStmt) {
 func (g *gen) simple(s ast.Stmt) string {
 	switch s := s.(type) {
 	case *ast.ExprStmt:
+		if call, ok := s.X.(*ast.CallExpr); ok && g.info.Calls[call].Builtin != checker.NoBuiltin && g.typeOf(s.X) != checker.Void {
+			// thread.join(t) ou str.format_len(...) como comando: o valor
+			// (o último da expressão com vírgulas) é descartado
+			return "(void)" + g.expr(s.X)
+		}
 		return g.expr(s.X)
 	case *ast.VarDecl:
 		l := g.info.Decls[s]
@@ -620,8 +632,13 @@ func (g *gen) expr(e ast.Expr) string {
 		return g.arrayLit(e)
 	case *ast.CallExpr:
 		callee := g.info.Calls[e]
-		if callee.Builtin == checker.IoPrint {
+		switch callee.Builtin {
+		case checker.IoPrint:
 			return g.ioPrint(e)
+		case checker.ThreadSpawn:
+			return g.threadSpawn(e)
+		case checker.ThreadJoin:
+			return g.threadJoin(e)
 		}
 		switch callee.Builtin {
 		case checker.Alloc:

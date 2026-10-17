@@ -57,6 +57,9 @@ func ownedOK(t Type) (bool, string) {
 
 // ownedPointee confere o tipo apontado por um ?*X usado como T owned.
 func ownedPointee(t Type) (bool, string) {
+	if isThread(t) {
+		return false, "uma thread precisa de thread.join, e drop não sabe esperar por ela"
+	}
 	if isExternStruct(t) {
 		return false, "um handle de C precisa da função de C que o fecha, e drop não sabe qual é"
 	}

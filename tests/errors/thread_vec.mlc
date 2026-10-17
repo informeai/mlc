@@ -1,0 +1,21 @@
+// erro: uma thread precisa de thread.join, e drop não sabe esperar por ela
+import "std/io"
+import "std/thread"
+import "std/vec"
+
+fn sum(p []int) int {
+    n := len(p)
+    free(p)
+    return n
+}
+
+fn by_ref(p &int) {
+}
+
+fn two(a int, b int) {
+}
+
+fn main() {
+    v := vec.new[?*thread.Thread](2)
+    v.free()
+}

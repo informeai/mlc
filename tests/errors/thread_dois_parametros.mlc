@@ -1,0 +1,21 @@
+// erro: a função da thread recebe um parâmetro, o contexto
+import "std/io"
+import "std/thread"
+import "std/vec"
+
+fn sum(p []int) int {
+    n := len(p)
+    free(p)
+    return n
+}
+
+fn by_ref(p &int) {
+}
+
+fn two(a int, b int) {
+}
+
+fn main() {
+    t := thread.spawn(two, 1, thread.STACK_64KB)
+    thread.join(t)
+}

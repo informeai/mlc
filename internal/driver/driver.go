@@ -163,7 +163,7 @@ func buildC(csrc string, links []string, out string, opts Options) error {
 	var objs []string
 	for _, name := range []string{"program", "mlc_runtime"} {
 		obj := filepath.Join(dir, name+".o")
-		args := append([]string{"-std=c11", "-O2", "-Wall", "-Wno-unused-function"}, extraCFlags...)
+		args := append([]string{"-std=c11", "-O2", "-Wall", "-Wno-unused-function", "-pthread"}, extraCFlags...)
 		args = append(args, "-I", dir, "-c", "-o", obj, filepath.Join(dir, name+".c"))
 		output, err := exec.Command(cc, args...).CombinedOutput()
 		if err != nil {
@@ -176,7 +176,7 @@ func buildC(csrc string, links []string, out string, opts Options) error {
 		}
 		objs = append(objs, obj)
 	}
-	args := append([]string{"-o", out}, objs...)
+	args := append([]string{"-pthread", "-o", out}, objs...)
 	for _, d := range opts.LibDirs {
 		args = append(args, "-L", d)
 	}

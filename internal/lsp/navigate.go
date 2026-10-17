@@ -259,6 +259,15 @@ func (n *navigator) resolveIdent(tok token.Token, before []token.Token) *symbol 
 	// nome qualificado por um módulo: geometria.Ponto em tipos e literais
 	if k := len(before); k >= 2 && before[k-1].Kind == token.PERIOD && before[k-2].Kind == token.IDENT {
 		if m := n.moduleByName(before[k-2].Lit); m != nil {
+			if m.Path == "std/thread" && tok.Lit == "Thread" {
+				d := builtinDocs["Thread"]
+				s := n.moduleSymbol(m.Path)
+				if s == nil {
+					return &symbol{code: d[0], doc: d[1], noDef: true}
+				}
+				s.code, s.doc = d[0], d[1]
+				return s
+			}
 			return n.declNamed(m, tok.Lit)
 		}
 	}
@@ -321,6 +330,18 @@ func (n *navigator) calleeSymbol(call *ast.CallExpr) *symbol {
 	c, ok := info.Calls[call]
 	if !ok {
 		return nil
+	}
+	if c.Builtin == checker.ThreadSpawn || c.Builtin == checker.ThreadJoin {
+		d := builtinDocs["spawn"]
+		if c.Builtin == checker.ThreadJoin {
+			d = builtinDocs["join"]
+		}
+		s := n.moduleSymbol("std/thread")
+		if s == nil {
+			return &symbol{code: d[0], doc: d[1], noDef: true}
+		}
+		s.code, s.doc = d[0], d[1]
+		return s
 	}
 	if c.Builtin == checker.IoPrint {
 		d := builtinDocs["print"]
@@ -826,6 +847,9 @@ var builtinDocs = map[string][2]string{
 	"print":      {"io.print(a, b, ...)", "Escreve os valores separados por espaço e termina a linha. Cada valor precisa implementar `io.Display` e é escrito pelo seu método `write`, sobre um `io.Writer` com buffer na pilha (sem alocação). O compilador só reescreve a chamada."},
 	"eprint":     {"io.eprint(a, b, ...)", "Como `io.print`, mas no erro padrão."},
 	"printf":     {"io.printf(\"x = {}\\n\", x)", "Escreve o formato trocando cada `{}` por um valor (que precisa implementar `io.Display`); `{{` e `}}` escrevem chaves. O formato é uma string literal, conferida na compilação: a quantidade de `{}` precisa bater com a de valores. Especificações: `{:x}` `{:X}` `{:b}` `{:o}` `{:#x}` (inteiros), `{:.2}` (reais), `{:8}` `{:<8}` `{:>8}` `{:^8}` `{:*^8}` (largura em caracteres), `{:08}` (zeros), `{:s}` (os bytes de um `[]byte` como texto)."},
+	"Thread":     {"thread.Thread[R]", "Handle de uma thread criada por `thread.spawn`, cuja função devolve `R` (`thread.Thread` quando não devolve nada). Só existe atrás de ponteiro e não aceita `free`: precisa ir para `thread.join`."},
+	"spawn":      {"thread.spawn(f fn(C) R, ctx C, stack int) *thread.Thread[R]", "Cria uma thread que roda `f(ctx)`. O contexto é **movido** para a thread, e `stack` é o tamanho da pilha em bytes (pelo menos 16 KB, como `thread.STACK_64KB`). O handle devolvido precisa ir para `thread.join` (o compilador confere)."},
+	"join":       {"thread.join(t *thread.Thread[R]) R", "Espera a thread terminar e devolve o resultado de `f`, cuja posse volta para quem chamou. Libera o registro da thread."},
 	"format":     {"str.format(&dst, \"x = {}\", x) int", "Escreve o formato em `dst`, como `io.printf`, e devolve quantos bytes usou; dá panic se não couber. Não aloca: para saber o tamanho antes, use `str.format_len`."},
 	"format_len": {"str.format_len(\"x = {}\", x) int", "Quantos bytes o formato ocupa, sem escrever nada: `n := str.format_len(...)`, `b := alloc([]byte, n)`, `str.format(&b, ...)`."},
 	"eprintf":    {"io.eprintf(\"erro: {}\\n\", e)", "Como `io.printf`, mas no erro padrão."},

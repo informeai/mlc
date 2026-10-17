@@ -1,0 +1,36 @@
+// Threads do sistema operacional, com a posse garantindo que duas threads
+// nunca mexem na mesma memória.
+//
+//     fn soma(parte []int) int {
+//         t := 0
+//         for x in parte { t += x }
+//         free(parte)
+//         return t
+//     }
+//
+//     t := thread.spawn(soma, metade, thread.STACK_64KB)   // metade é movida
+//     r := thread.join(t)                                  // o resultado volta
+//
+// thread.spawn(f, ctx, stack) e thread.join(t) são embutidas no compilador:
+//
+// - f é uma função fn(C) ou fn(C) R (sem closure). Ela recebe o contexto
+//   por posse e não pode receber empréstimos: tudo que a thread usa entra
+//   no contexto (junte várias coisas numa struct).
+// - ctx é movido para a thread; depois do spawn, quem chamou não o tem mais.
+// - stack é o tamanho da pilha da thread, em bytes (pelo menos 16 KB): a
+//   memória da pilha é escolhida por quem cria a thread, como todo o resto.
+// - spawn devolve um *thread.Thread[R] (*thread.Thread se f não devolve
+//   nada). O handle não aceita free: o verificador cobra que ele vá para
+//   thread.join, que espera a thread, devolve o resultado (a posse volta) e
+//   libera o registro da thread.
+//
+// Um panic em qualquer thread encerra o programa inteiro.
+
+pub const STACK_16KB = 16384
+pub const STACK_64KB = 65536
+pub const STACK_256KB = 262144
+pub const STACK_1MB = 1048576
+pub const STACK_8MB = 8388608
+
+// cpu_count diz quantos processadores o sistema tem disponíveis.
+pub extern fn cpu_count() int

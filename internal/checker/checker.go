@@ -84,16 +84,18 @@ type Func struct {
 type Builtin int
 
 const (
-	NoBuiltin Builtin = iota
-	IoPrint           // io.print
-	Alloc             // alloc(T) ou alloc(valor)
-	Free              // free(p)
-	Len               // len(s)
-	Realloc           // realloc(s, n)
-	Take              // take(&s[i])
-	Replace           // replace(&s[i], v)
-	Convert           // int(x), byte(x)
-	Drop              // drop(x): libera x se for dono (código genérico)
+	NoBuiltin   Builtin = iota
+	IoPrint             // io.print
+	Alloc               // alloc(T) ou alloc(valor)
+	Free                // free(p)
+	Len                 // len(s)
+	Realloc             // realloc(s, n)
+	Take                // take(&s[i])
+	Replace             // replace(&s[i], v)
+	Convert             // int(x), byte(x)
+	Drop                // drop(x): libera x se for dono (código genérico)
+	ThreadSpawn         // thread.spawn(f, ctx, stack)
+	ThreadJoin          // thread.join(t)
 )
 
 // Callee é o destino resolvido de uma chamada: uma função do usuário ou um builtin.
@@ -131,6 +133,7 @@ type Info struct {
 	Drains       map[*ast.ForStmt]ast.Expr  // for x in drain(s): o slice esvaziado
 	Calls        map[*ast.CallExpr]Callee
 	Prints       map[*ast.CallExpr]*PrintPlan // io.print e io.printf reescritos
+	Spawns       map[*ast.CallExpr]*SpawnPlan // thread.spawn
 	FuncRefs     map[ast.Expr]*Func           // funções usadas como valor
 	BorrowSrc    map[*Local]*Local            // variável emprestada → a origem (raiz)
 	BorrowView   map[*Local]bool              // a variável emprestada é uma visão (sub-slice)
@@ -179,10 +182,11 @@ type checker struct {
 	autos       []autoImpl // impl auto do arquivo atual, para conferir os campos
 	funcTypes   map[string]*FuncType
 	outHandles  map[*Pointer]*OutHandle
-	inExternC   bool           // resolvendo a assinatura de uma extern "C" fn (aceita &?*X)
-	probes      map[*Func]bool // instâncias de verificação de posse (T owned = []byte)
-	probing     bool           // checando uma delas
-	muted       bool           // erros silenciados (tipos de uma instância de verificação)
+	threads     map[Type]*Struct // thread.Thread[R], por R
+	inExternC   bool             // resolvendo a assinatura de uma extern "C" fn (aceita &?*X)
+	probes      map[*Func]bool   // instâncias de verificação de posse (T owned = []byte)
+	probing     bool             // checando uma delas
+	muted       bool             // erros silenciados (tipos de uma instância de verificação)
 	mutedErrs   int
 	probeBroken map[*Func]bool
 	inReceiver  bool       // resolvendo o tipo do receptor de um método
@@ -236,6 +240,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 			Drains:       map[*ast.ForStmt]ast.Expr{},
 			Calls:        map[*ast.CallExpr]Callee{},
 			Prints:       map[*ast.CallExpr]*PrintPlan{},
+			Spawns:       map[*ast.CallExpr]*SpawnPlan{},
 			FuncRefs:     map[ast.Expr]*Func{},
 			BorrowSrc:    map[*Local]*Local{},
 			BorrowView:   map[*Local]bool{},
@@ -255,6 +260,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 		paramIfaces: map[*ast.TypeParam]*Interface{},
 		funcTypes:   map[string]*FuncType{},
 		outHandles:  map[*Pointer]*OutHandle{},
+		threads:     map[Type]*Struct{},
 		probes:      map[*Func]bool{},
 		probeBroken: map[*Func]bool{},
 		freeMissing: map[*Struct]bool{},
@@ -1044,6 +1050,12 @@ func (c *checker) call(e *ast.CallExpr) Type {
 		if m := c.userModule(fun.X); m != nil {
 			if kind := ioBuiltin(m, fun.Sel); kind != "" {
 				return c.ioPrint(e, kind)
+			}
+			switch threadBuiltin(m, fun.Sel) {
+			case "spawn":
+				return c.threadSpawn(e)
+			case "join":
+				return c.threadJoin(e)
 			}
 			return c.moduleCall(e, m, fun)
 		}

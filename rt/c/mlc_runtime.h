@@ -2,6 +2,12 @@
 #ifndef MLC_RUNTIME_H
 #define MLC_RUNTIME_H
 
+/* pthread_t e afins são POSIX, que -std=c11 esconde. */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
+#include <pthread.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -184,6 +190,15 @@ float mlc_f64_to_f32(double v);
 
 /* Argumentos da linha de comando, guardados pelo main gerado para std/os. */
 void mlc_args_init(int argc, char **argv);
+
+/* Threads (std/thread): o começo do registro de cada thread. */
+typedef struct mlc_thread {
+    pthread_t th;
+    void (*run)(struct mlc_thread *);
+} mlc_thread;
+
+void mlc_thread_start(mlc_thread *t, void (*run)(mlc_thread *), int64_t stack, const char *file, int line);
+void mlc_thread_join(mlc_thread *t, const char *file, int line);
 
 /* Destinos do str.format (veja std/io.mlc, Writer). */
 int64_t mlc_sink_push(mlc_sl_byte *dst, const char *file, int line);

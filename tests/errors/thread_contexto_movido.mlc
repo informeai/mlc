@@ -1,0 +1,23 @@
+// erro: a já foi liberada ou movida
+import "std/io"
+import "std/thread"
+import "std/vec"
+
+fn sum(p []int) int {
+    n := len(p)
+    free(p)
+    return n
+}
+
+fn by_ref(p &int) {
+}
+
+fn two(a int, b int) {
+}
+
+fn main() {
+    a := alloc([]int, 3)
+    t := thread.spawn(sum, a, thread.STACK_64KB)
+    io.print(len(a))
+    io.print(thread.join(t))
+}

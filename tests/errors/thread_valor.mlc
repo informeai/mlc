@@ -1,0 +1,21 @@
+// erro: thread.Thread é um handle: só existe atrás de ponteiro
+import "std/io"
+import "std/thread"
+import "std/vec"
+
+fn sum(p []int) int {
+    n := len(p)
+    free(p)
+    return n
+}
+
+fn by_ref(p &int) {
+}
+
+fn two(a int, b int) {
+}
+
+fn main() {
+    var t thread.Thread
+    io.print(1)
+}
