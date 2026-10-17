@@ -1,4 +1,5 @@
-// Relógio e espera.
+// Relógio, espera e datas.
+import "std/str"
 
 // now_ms devolve o horário atual em milissegundos desde 1970 (UTC).
 pub extern fn now_ms() int
@@ -8,3 +9,206 @@ pub extern fn now_ms() int
 pub extern fn mono_ns() int
 
 pub extern fn sleep_ms(ms int)
+
+// ---------- datas ----------
+//
+//     d := time.utc(time.now_ms())        // ou time.local(...), no fuso do sistema
+//     io.print(d.year, d.month, d.day)
+//     var buf [32]byte
+//     n := time.iso(&buf, &d)              // 2026-10-17T14:05:09Z
+//     ms := 0
+//     ok := time.parse_iso(&buf[:n], &ms)  // e de volta
+//
+// As contas são no calendário gregoriano, para qualquer ano, sem alocar.
+
+// Date é um instante decomposto. offset_min é o fuso (minutos a leste de
+// UTC: -180 em Brasília); weekday vai de 0 (domingo) a 6.
+pub struct Date {
+    year int
+    month int // 1 a 12
+    day int   // 1 a 31
+    hour int
+    minute int
+    second int
+    ms int
+    weekday int
+    offset_min int
+}
+
+extern fn local_offset(ms int) int
+
+// utc decompõe ms (milissegundos desde 1970, como now_ms) em UTC.
+pub fn utc(ms int) Date {
+    return split(ms, 0)
+}
+
+// local decompõe ms no fuso do sistema (com horário de verão, se houver).
+pub fn local(ms int) Date {
+    return split(ms, local_offset(ms) / 60)
+}
+
+fn split(ms int, offset_min int) Date {
+    t := ms + offset_min * 60000
+    days := floor_div(t, 86400000)
+    rest := t - days * 86400000
+    var d Date
+    civil(days, &d)
+    d.hour = rest / 3600000
+    d.minute = rest / 60000 % 60
+    d.second = rest / 1000 % 60
+    d.ms = rest % 1000
+    d.weekday = int(floor_mod(days + 4, 7)) // 1970-01-01 foi quinta
+    d.offset_min = offset_min
+    return d
+}
+
+// to_ms converte a data (no fuso offset_min dela) em milissegundos desde
+// 1970.
+pub fn to_ms(d &Date) int {
+    days := days_from_civil(d.year, d.month, d.day)
+    return days * 86400000 + d.hour * 3600000 + d.minute * 60000 + d.second * 1000 + d.ms - d.offset_min * 60000
+}
+
+// iso escreve a data no formato ISO 8601 (2026-10-17T14:05:09Z, com .123 se
+// houver milissegundos e com o fuso, como -03:00, se não for UTC) e devolve
+// quantos bytes usou (até 29: um [32]byte basta).
+pub fn iso(dst &[]byte, d &Date) int {
+    n := str.format(dst, "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}", d.year, d.month, d.day, d.hour, d.minute, d.second)
+    if d.ms != 0 {
+        n += str.format(&dst[n:], ".{:03}", d.ms)
+    }
+    if d.offset_min == 0 {
+        n += str.copy(&dst[n:], "Z")
+    } else {
+        sign := "+"
+        off := d.offset_min
+        if off < 0 {
+            sign = "-"
+            off = -off
+        }
+        n += str.format(&dst[n:], "{}{:02}:{:02}", sign, off / 60, off % 60)
+    }
+    return n
+}
+
+// parse_iso lê uma data ISO 8601 (YYYY-MM-DDTHH:MM:SS, com .mmm opcional e
+// Z ou ±HH:MM; só a data, YYYY-MM-DD, vale meia-noite UTC) e põe o instante
+// em ms. Devolve false se o texto não for uma data válida.
+pub fn parse_iso(s &[]byte, ms &int) bool {
+    var d Date
+    if len(s) < 10 || !digits(s, 0, 4, &d.year) || s[4] != '-' || !digits(s, 5, 2, &d.month) || s[7] != '-' || !digits(s, 8, 2, &d.day) {
+        return false
+    }
+    i := 10
+    if i < len(s) {
+        if len(s) < 19 || (s[10] != 'T' && s[10] != ' ') || !digits(s, 11, 2, &d.hour) || s[13] != ':' || !digits(s, 14, 2, &d.minute) || s[16] != ':' || !digits(s, 17, 2, &d.second) {
+            return false
+        }
+        i = 19
+        if i < len(s) && s[i] == '.' {
+            if !digits(s, i + 1, 3, &d.ms) {
+                return false
+            }
+            i += 4
+        }
+        if i < len(s) && s[i] == 'Z' {
+            i++
+        } else if i < len(s) && (s[i] == '+' || s[i] == '-') {
+            h := 0
+            m := 0
+            if !digits(s, i + 1, 2, &h) || i + 3 >= len(s) || s[i + 3] != ':' || !digits(s, i + 4, 2, &m) {
+                return false
+            }
+            d.offset_min = h * 60 + m
+            if s[i] == '-' {
+                d.offset_min = -d.offset_min
+            }
+            i += 6
+        }
+    }
+    if i != len(s) || d.month < 1 || d.month > 12 || d.day < 1 || d.day > days_in_month(d.year, d.month) || d.hour > 23 || d.minute > 59 || d.second > 59 {
+        return false
+    }
+    *ms = to_ms(&d)
+    return true
+}
+
+// days_in_month diz quantos dias o mês tem (fevereiro com os anos bissextos).
+pub fn days_in_month(year int, month int) int {
+    if month == 2 {
+        if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) {
+            return 29
+        }
+        return 28
+    }
+    if month == 4 || month == 6 || month == 9 || month == 11 {
+        return 30
+    }
+    return 31
+}
+
+// digits lê n dígitos de s a partir de at.
+fn digits(s &[]byte, at int, n int, out &int) bool {
+    if at + n > len(s) {
+        return false
+    }
+    v := 0
+    for k := 0; k < n; k++ {
+        c := s[at + k]
+        if c < '0' || c > '9' {
+            return false
+        }
+        v = v * 10 + int(c) - int('0')
+    }
+    *out = v
+    return true
+}
+
+// civil converte dias desde 1970 em ano, mês e dia (algoritmo de Howard
+// Hinnant, válido para qualquer ano).
+fn civil(days int, d &Date) {
+    z := days + 719468
+    era := floor_div(z, 146097)
+    doe := z - era * 146097
+    yoe := (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    doy := doe - (365 * yoe + yoe / 4 - yoe / 100)
+    mp := (5 * doy + 2) / 153
+    d.day = doy - (153 * mp + 2) / 5 + 1
+    if mp < 10 {
+        d.month = mp + 3
+    } else {
+        d.month = mp - 9
+    }
+    d.year = yoe + era * 400
+    if d.month <= 2 {
+        d.year++
+    }
+}
+
+fn days_from_civil(year int, month int, day int) int {
+    y := year
+    if month <= 2 {
+        y--
+    }
+    era := floor_div(y, 400)
+    yoe := y - era * 400
+    mp := month + 9
+    if month > 2 {
+        mp = month - 3
+    }
+    doy := (153 * mp + 2) / 5 + day - 1
+    doe := yoe * 365 + yoe / 4 - yoe / 100 + doy
+    return era * 146097 + doe - 719468
+}
+
+fn floor_div(a int, b int) int {
+    q := a / b
+    if (a % b != 0) && ((a < 0) != (b < 0)) {
+        q--
+    }
+    return q
+}
+
+fn floor_mod(a int, b int) int {
+    return a - floor_div(a, b) * b
+}

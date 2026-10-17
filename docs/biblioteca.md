@@ -392,3 +392,89 @@ Canais com capacidade fixa: `chan.new[T](n)`, as pontas `chan.Sender[T]` (`send`
 | `now_ms() int` | milissegundos desde 1970 (relógio de parede) |
 | `mono_ns() int` | nanossegundos de um relógio monotônico, para medir intervalos |
 | `sleep_ms(ms int)` | espera |
+| `utc(ms) Date`, `local(ms) Date` | decompõem um instante em UTC ou no fuso do sistema |
+| `to_ms(&d) int` | de volta para milissegundos (no fuso da data) |
+| `iso(dst, &d) int` | escreve ISO 8601: `2026-10-17T14:05:09Z`, com `.123` e `-03:00` quando houver |
+| `parse_iso(s, &ms) bool` | lê ISO 8601 (com `T` ou espaço, milissegundos e fuso opcionais, ou só a data) |
+| `days_in_month(ano, mês) int` | com os anos bissextos |
+
+`Date` tem `year`, `month` (1 a 12), `day`, `hour`, `minute`, `second`, `ms`, `weekday` (0 é domingo) e `offset_min` (o fuso, em minutos a leste de UTC). As contas são do calendário gregoriano para qualquer ano, em MLC, sem alocar.
+
+```
+d := time.local(time.now_ms())
+var buf [32]byte
+n := time.iso(&buf, &d)                     // 2026-10-17T11:05:09-03:00
+```
+
+### `std/net`
+
+TCP com handles que o verificador obriga a fechar. Os dados passam por buffers de quem chama.
+
+```
+err := 0
+l := net.listen(&host, 8080, &err)          // host vazio: todas as interfaces; porta 0: o sistema escolhe
+for {
+    c := l.accept(&err)
+    if c == nil { break }
+    t := thread.spawn(handle, c, thread.STACK_64KB)   // uma thread por conexão
+    thread.join(t)
+}
+l.close()
+```
+
+| Declaração | O que faz |
+|---|---|
+| `listen(host, port, &err) ?*Listener` | escuta em `host:port` |
+| `l.accept(&err) ?*Conn` | espera a próxima conexão |
+| `l.port() int` | a porta (útil com a porta 0) |
+| `connect(host, port, &err) ?*Conn` | conecta (nomes são resolvidos, IPv4 e IPv6) |
+| `c.read(dst) Result[int, int]` | lê o que chegar; `Ok(0)`: o outro lado fechou |
+| `c.write(data) Result[int, int]` | manda tudo |
+| `c.set_timeout(ms) Result[int, int]` | limite de espera de `read` e `write` (erro `TIMEOUT`) |
+| `c.shutdown() Result[int, int]` | avisa que não vai mandar mais nada (o outro lado lê `Ok(0)`) |
+| `close()` | fecha o listener ou a conexão |
+| `REFUSED`, `NO_HOST`, `IN_USE`, `TIMEOUT`, `RESET` | códigos de erro iguais em todos os sistemas |
+
+Escrever numa conexão que o outro lado fechou devolve `RESET`, em vez de encerrar o programa com `SIGPIPE`. `tests/run/servidor.mlc` tem um serviço completo: uma thread por conexão, pedido e resposta em JSON.
+
+### `std/json`
+
+JSON sem alocação: um leitor que devolve um token por vez, sem árvore. Quem lê decide o que guardar e onde alocar.
+
+```
+r := json.reader()
+for {
+    match r.next(&doc) {
+        Key(a, b) => {
+            if str.eq(&doc[a:b], "name") {
+                match r.next(&doc) {
+                    String(x, y) => n := json.unescape(&name, &doc[x:y])
+                    _ => ...
+                }
+            } else {
+                r.skip(&doc)                    // ignora o valor desta chave
+            }
+        }
+        End => break
+        Error(pos) => ...                       // texto inválido em pos
+        _ => {}
+    }
+}
+```
+
+| Declaração | O que faz |
+|---|---|
+| `reader() Reader` | começa a ler (o estado fica na pilha) |
+| `r.next(s) Token` | o próximo token: `ObjectStart`, `ObjectEnd`, `ArrayStart`, `ArrayEnd`, `Key(a, b)`, `String(a, b)`, `Number(a, b)`, `True`, `False`, `Null`, `End` ou `Error(at)` |
+| `r.skip(s) bool` | pula o próximo valor inteiro (objetos e arrays com tudo dentro) |
+| `unescape(dst, raw) int` | tira os escapes de uma string (`\n`, `\u00e9`, pares de surrogates); um `dst` do tamanho de `raw` sempre basta |
+| `escape(dst, s) int`, `escape_len(s) int` | põem os escapes, para montar JSON com `str.format` |
+
+`&doc[a:b]` é o conteúdo de uma string (sem as aspas, com os escapes) ou o texto de um número (para `str.parse_int` ou `str.parse_float`). O leitor confere a estrutura e a gramática, e aceita até 64 níveis de profundidade.
+
+Para escrever:
+
+```
+n := json.escape(&esc, &name[:k])
+m := str.format(&out, "{{\"name\": \"{:s}\", \"age\": {}}}", &esc[:n], 30)
+```

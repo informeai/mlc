@@ -14,12 +14,17 @@
 #include <float.h>
 #include <inttypes.h>
 #include <math.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <stddef.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -1173,3 +1178,223 @@ void mlc_std_process_fail(mlc_str msg, const char *file, int line) {
 void mlc_std_args_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
 
 void mlc_std_bytes_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
+
+/* std/net: TCP. Cada handle guarda o descritor do socket. Os erros que mudam
+ * entre sistemas viram códigos do MLC (veja std/net.mlc); os outros são o
+ * errno. Escrever num socket fechado do outro lado devolve erro em vez de
+ * matar o programa com SIGPIPE. */
+
+typedef struct mlc_sock {
+    int fd;
+} mlc_sock;
+
+static int64_t mlc_net_err(int e) {
+    switch (e) {
+    case ECONNREFUSED: return 2001; /* net.REFUSED */
+    case EADDRINUSE: return 2003;   /* net.IN_USE */
+    case ETIMEDOUT:
+    case EAGAIN: return 2004; /* net.TIMEOUT (SO_RCVTIMEO devolve EAGAIN) */
+    case ECONNRESET:
+    case EPIPE: return 2005; /* net.RESET */
+    }
+    return e;
+}
+
+static int mlc_net_host(char *out, size_t cap, mlc_sl_byte *host) {
+    if (host->len >= (int64_t)cap) return 0;
+    if (host->len > 0) memcpy(out, host->ptr, (size_t)host->len);
+    out[host->len] = '\0';
+    return 1;
+}
+
+static void mlc_net_nosigpipe(int fd) {
+#ifdef SO_NOSIGPIPE
+    int one = 1;
+    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof one);
+#else
+    (void)fd;
+#endif
+}
+
+static mlc_sock *mlc_net_wrap(int fd, const char *file, int line) {
+    mlc_sock *s = mlc_alloc(sizeof *s, file, line);
+    s->fd = fd;
+    return s;
+}
+
+/* Resolve host:port (host vazio: todas as interfaces, para listen). */
+static int mlc_net_resolve(mlc_sl_byte *host, int64_t port, bool passive, struct addrinfo **res, int64_t *err) {
+    char h[256], p[16];
+    if (!mlc_net_host(h, sizeof h, host) || port < 0 || port > 65535) {
+        *err = EINVAL;
+        return 0;
+    }
+    snprintf(p, sizeof p, "%d", (int)port);
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    if (passive) hints.ai_flags = AI_PASSIVE;
+    int r = getaddrinfo(h[0] ? h : NULL, p, &hints, res);
+    if (r != 0) {
+        *err = 2002; /* net.NO_HOST */
+        return 0;
+    }
+    return 1;
+}
+
+mlc_sock *mlc_std_net_listen(mlc_sl_byte *host, int64_t port, int64_t *err, const char *file, int line) {
+    struct addrinfo *res;
+    *err = 0;
+    if (!mlc_net_resolve(host, port, true, &res, err)) return NULL;
+    int fd = -1;
+    int last = 0;
+    for (struct addrinfo *a = res; a != NULL; a = a->ai_next) {
+        fd = socket(a->ai_family, a->ai_socktype, a->ai_protocol);
+        if (fd < 0) {
+            last = errno;
+            continue;
+        }
+        int one = 1;
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+        if (bind(fd, a->ai_addr, a->ai_addrlen) == 0 && listen(fd, 128) == 0) break;
+        last = errno;
+        close(fd);
+        fd = -1;
+    }
+    freeaddrinfo(res);
+    if (fd < 0) {
+        *err = mlc_net_err(last);
+        return NULL;
+    }
+    return mlc_net_wrap(fd, file, line);
+}
+
+mlc_sock *mlc_std_net_accept_raw(mlc_sock *l, int64_t *err, const char *file, int line) {
+    *err = 0;
+    for (;;) {
+        int fd = accept(l->fd, NULL, NULL);
+        if (fd >= 0) {
+            mlc_net_nosigpipe(fd);
+            return mlc_net_wrap(fd, file, line);
+        }
+        if (errno != EINTR) {
+            *err = mlc_net_err(errno);
+            return NULL;
+        }
+    }
+}
+
+int64_t mlc_std_net_port_raw(mlc_sock *l, const char *file, int line) {
+    (void)file;
+    (void)line;
+    struct sockaddr_storage ss;
+    socklen_t n = sizeof ss;
+    if (getsockname(l->fd, (struct sockaddr *)&ss, &n) != 0) return -1;
+    if (ss.ss_family == AF_INET) return ntohs(((struct sockaddr_in *)&ss)->sin_port);
+    if (ss.ss_family == AF_INET6) return ntohs(((struct sockaddr_in6 *)&ss)->sin6_port);
+    return -1;
+}
+
+mlc_sock *mlc_std_net_connect(mlc_sl_byte *host, int64_t port, int64_t *err, const char *file, int line) {
+    struct addrinfo *res;
+    *err = 0;
+    if (!mlc_net_resolve(host, port, false, &res, err)) return NULL;
+    int fd = -1;
+    int last = 0;
+    for (struct addrinfo *a = res; a != NULL; a = a->ai_next) {
+        fd = socket(a->ai_family, a->ai_socktype, a->ai_protocol);
+        if (fd < 0) {
+            last = errno;
+            continue;
+        }
+        int r;
+        do {
+            r = connect(fd, a->ai_addr, a->ai_addrlen);
+        } while (r != 0 && errno == EINTR);
+        if (r == 0) break;
+        last = errno;
+        close(fd);
+        fd = -1;
+    }
+    freeaddrinfo(res);
+    if (fd < 0) {
+        *err = mlc_net_err(last);
+        return NULL;
+    }
+    mlc_net_nosigpipe(fd);
+    int one = 1;
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
+    return mlc_net_wrap(fd, file, line);
+}
+
+int64_t mlc_std_net_read_raw(mlc_sock *c, mlc_sl_byte *dst, const char *file, int line) {
+    (void)file;
+    (void)line;
+    for (;;) {
+        ssize_t n = recv(c->fd, dst->ptr, (size_t)dst->len, 0);
+        if (n >= 0) return n;
+        if (errno != EINTR) return -mlc_net_err(errno);
+    }
+}
+
+int64_t mlc_std_net_write_raw(mlc_sock *c, mlc_sl_byte *data, const char *file, int line) {
+    (void)file;
+    (void)line;
+#ifdef MSG_NOSIGNAL
+    int flags = MSG_NOSIGNAL;
+#else
+    int flags = 0;
+#endif
+    int64_t done = 0;
+    while (done < data->len) {
+        ssize_t n = send(c->fd, data->ptr + done, (size_t)(data->len - done), flags);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            return -mlc_net_err(errno);
+        }
+        done += n;
+    }
+    return done;
+}
+
+int64_t mlc_std_net_timeout_raw(mlc_sock *c, int64_t ms, const char *file, int line) {
+    (void)file;
+    (void)line;
+    struct timeval tv;
+    tv.tv_sec = (time_t)(ms / 1000);
+    tv.tv_usec = (suseconds_t)((ms % 1000) * 1000);
+    if (setsockopt(c->fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv) != 0) return -errno;
+    if (setsockopt(c->fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv) != 0) return -errno;
+    return 0;
+}
+
+int64_t mlc_std_net_shutdown_raw(mlc_sock *c, const char *file, int line) {
+    (void)file;
+    (void)line;
+    return shutdown(c->fd, SHUT_WR) == 0 ? 0 : -mlc_net_err(errno);
+}
+
+void mlc_std_net_close_raw(mlc_sock *s, const char *file, int line) {
+    (void)file;
+    (void)line;
+    close(s->fd);
+    mlc_free(s);
+}
+
+void mlc_std_net_close_listener(mlc_sock *s, const char *file, int line) { mlc_std_net_close_raw(s, file, line); }
+
+/* std/time: o deslocamento do fuso local (segundos a leste de UTC) no
+ * instante ms. */
+int64_t mlc_std_time_local_offset(int64_t ms, const char *file, int line) {
+    (void)file;
+    (void)line;
+    time_t t = (time_t)(ms / 1000);
+    struct tm lt;
+    if (localtime_r(&t, &lt) == NULL) return 0;
+#if defined(__APPLE__) || defined(__USE_MISC) || defined(_DEFAULT_SOURCE)
+    return (int64_t)lt.tm_gmtoff;
+#else
+    return 0;
+#endif
+}

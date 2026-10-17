@@ -1,0 +1,184 @@
+import "std/io"
+import "std/json"
+import "std/str"
+import "std/testing"
+import "std/utf8"
+
+fn doc(dst &[]byte, s string) int {
+    return str.copy(dst, s)
+}
+
+// tokens escreve os tokens do documento, um por linha, num buffer.
+fn tokens(s &[]byte, out &[]byte) int {
+    r := json.reader()
+    n := 0
+    for {
+        t := r.next(s)
+        n += str.format(&out[n:], "{} ", t)
+        match t {
+            End => return n
+            Error(_) => return n
+            _ => {}
+        }
+    }
+}
+
+fn test_tokens() {
+    var d [128]byte
+    k := doc(&d, "{\"a\": [1, -2.5e3, true, null], \"b\": {\"c\": \"x\"}, \"d\": false}")
+    var out [512]byte
+    n := tokens(&d[:k], &out)
+    testing.eq_str(&out[:n], "ObjectStart Key(2, 3) ArrayStart Number(7, 8) Number(10, 16) True Null ArrayEnd Key(32, 33) ObjectStart Key(38, 39) String(43, 44) ObjectEnd Key(49, 50) False ObjectEnd End ")
+}
+
+fn test_scalars_at_top_level() {
+    var d [32]byte
+    var out [128]byte
+    k := doc(&d, "  42  ")
+    n := tokens(&d[:k], &out)
+    testing.eq_str(&out[:n], "Number(2, 4) End ")
+    k = doc(&d, "\"oi\"")
+    n = tokens(&d[:k], &out)
+    testing.eq_str(&out[:n], "String(1, 3) End ")
+    k = doc(&d, "[]")
+    n = tokens(&d[:k], &out)
+    testing.eq_str(&out[:n], "ArrayStart ArrayEnd End ")
+    k = doc(&d, "{}")
+    n = tokens(&d[:k], &out)
+    testing.eq_str(&out[:n], "ObjectStart ObjectEnd End ")
+}
+
+fn is_error(s string) bool {
+    var d [64]byte
+    k := doc(&d, s)
+    r := json.reader()
+    for {
+        match r.next(&d[:k]) {
+            End => return false
+            Error(_) => return true
+            _ => {}
+        }
+    }
+}
+
+fn test_invalid_documents() {
+    testing.check(is_error(""), "vazio")
+    testing.check(is_error("{"), "objeto aberto")
+    testing.check(is_error("[1,]"), "vírgula sobrando")
+    testing.check(is_error("[1 2]"), "falta vírgula")
+    testing.check(is_error("{\"a\" 1}"), "falta dois-pontos")
+    testing.check(is_error("{1: 2}"), "chave que não é string")
+    testing.check(is_error("[1}"), "fechamento trocado")
+    testing.check(is_error("01"), "zero à esquerda")
+    testing.check(is_error("1."), "ponto sem casas")
+    testing.check(is_error("-"), "só o sinal")
+    testing.check(is_error("tru"), "literal cortado")
+    testing.check(is_error("\"a\\x\""), "escape desconhecido")
+    testing.check(is_error("\"a\\u12g4\""), "\\u com letra inválida")
+    testing.check(is_error("\"sem fim"), "string sem fim")
+    testing.check(is_error("1 2"), "dois valores no topo")
+    testing.check(!is_error("[1, {\"a\": [true]}]"), "válido")
+}
+
+fn test_error_position() {
+    var d [16]byte
+    k := doc(&d, "[1, x]")
+    r := json.reader()
+    r.next(&d[:k])
+    r.next(&d[:k])
+    match r.next(&d[:k]) {
+        Error(at) => testing.eq_int(at, 4)
+        _ => testing.fail("esperado erro")
+    }
+}
+
+fn test_depth_limit() {
+    var d [80]byte
+    for i := 0; i < 65; i++ {
+        d[i] = '['
+    }
+    testing.check(is_error_bytes(&d[:65]), "65 níveis passam do limite")
+}
+
+fn is_error_bytes(s &[]byte) bool {
+    r := json.reader()
+    for {
+        match r.next(s) {
+            End => return false
+            Error(_) => return true
+            _ => {}
+        }
+    }
+}
+
+fn test_skip_unwanted_values() {
+    var d [128]byte
+    k := doc(&d, "{\"skip\": {\"x\": [1, 2, {\"y\": 3}]}, \"id\": 7, \"also\": [4]}")
+    s := &d[:k]
+    r := json.reader()
+    id := 0
+    keys := 0
+    r.next(s) // ObjectStart
+    for {
+        match r.next(s) {
+            Key(a, b) => {
+                keys++
+                if str.eq(&s[a:b], "id") {
+                    match r.next(s) {
+                        Number(x, y) => str.parse_int(&s[x:y], &id)
+                        _ => testing.fail("id devia ser número")
+                    }
+                } else {
+                    testing.check(r.skip(s), "skip de um valor válido")
+                }
+            }
+            ObjectEnd => break
+            _ => {
+                testing.fail("token inesperado")
+                break
+            }
+        }
+    }
+    testing.eq_int(id, 7)
+    testing.eq_int(keys, 3)
+}
+
+fn test_unescape() {
+    var d [64]byte
+    k := doc(&d, "a\\n\\\"b\\\\c\\u00e9\\ud83d\\ude00\\/")
+    var out [64]byte
+    n := json.unescape(&out, &d[:k])
+    testing.eq_str(&out[:n], "a\n\"b\\cé😀/")
+    k = doc(&d, "\\ud800x") // surrogate sozinho
+    n = json.unescape(&out, &d[:k])
+    testing.eq_int(n, 4) // U+FFFD (3 bytes) e x
+    testing.eq_int(utf8.decode(&out[:n], 0).code, utf8.INVALID)
+    testing.eq_int(int(out[3]), int('x'))
+}
+
+fn test_escape_round_trip() {
+    var s [32]byte
+    k := doc(&s, "diz \"oi\"\n\ttab\\")
+    var e [64]byte
+    n := json.escape(&e, &s[:k])
+    testing.eq_int(n, json.escape_len(&s[:k]))
+    testing.eq_str(&e[:n], "diz \\\"oi\\\"\\n\\ttab\\\\")
+    var back [32]byte
+    m := json.unescape(&back, &e[:n])
+    testing.eq_bytes(&back[:m], &s[:k])
+    s[0] = 1 // caractere de controle vira \u0001
+    n = json.escape(&e, &s[:1])
+    testing.eq_str(&e[:n], "\\u0001")
+}
+
+fn test_build_document_with_format() {
+    var name [16]byte
+    k := doc(&name, "Ana \"A\"")
+    var esc [32]byte
+    n := json.escape(&esc, &name[:k])
+    var out [64]byte
+    m := str.format(&out, "{{\"name\": \"{:s}\", \"age\": {}}}", &esc[:n], 30)
+    testing.eq_str(&out[:m], "{\"name\": \"Ana \\\"A\\\"\", \"age\": 30}")
+    testing.check(!is_error_bytes(&out[:m]), "o documento montado é válido")
+    io.print("") // usa io (o Display dos tokens)
+}

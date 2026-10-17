@@ -1,0 +1,4 @@
+{"hello": "Ana", "square": 9, "at": "2023-11-17T22:13:20Z"}
+{"hello": "Zé \"Z\"", "square": 144, "at": "2023-11-26T22:13:20Z"}
+{"error": "pedido inválido"}
+atendidos: 3

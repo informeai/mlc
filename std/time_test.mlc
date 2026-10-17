@@ -1,3 +1,4 @@
+import "std/str"
 import "std/testing"
 import "std/time"
 
@@ -7,4 +8,79 @@ fn test_clocks() {
     time.sleep_ms(5)
     b := time.mono_ns()
     testing.check(b - a >= 5_000_000, "sleep_ms(5) espera pelo menos 5 ms")
+}
+
+fn test_utc_known_dates() {
+    d := time.utc(0)
+    testing.eq_int(d.year, 1970)
+    testing.eq_int(d.month, 1)
+    testing.eq_int(d.day, 1)
+    testing.eq_int(d.weekday, 4) // quinta
+    d = time.utc(1_700_000_000_123)
+    testing.eq_int(d.year, 2023)
+    testing.eq_int(d.month, 11)
+    testing.eq_int(d.day, 14)
+    testing.eq_int(d.hour, 22)
+    testing.eq_int(d.minute, 13)
+    testing.eq_int(d.second, 20)
+    testing.eq_int(d.ms, 123)
+    testing.eq_int(d.weekday, 2) // terça
+    d = time.utc(-1)             // 1969-12-31T23:59:59.999
+    testing.eq_int(d.year, 1969)
+    testing.eq_int(d.day, 31)
+    testing.eq_int(d.ms, 999)
+}
+
+fn test_leap_years() {
+    testing.eq_int(time.days_in_month(2024, 2), 29)
+    testing.eq_int(time.days_in_month(1900, 2), 28)
+    testing.eq_int(time.days_in_month(2000, 2), 29)
+    testing.eq_int(time.days_in_month(2023, 4), 30)
+    var buf [32]byte
+    n := str.copy(&buf, "2024-02-29T12:00:00Z")
+    ms := 0
+    testing.check(time.parse_iso(&buf[:n], &ms), "29 de fevereiro de 2024 existe")
+    n = str.copy(&buf, "2023-02-29T12:00:00Z")
+    testing.check(!time.parse_iso(&buf[:n], &ms), "29 de fevereiro de 2023 não existe")
+}
+
+fn test_iso_round_trip() {
+    var buf [32]byte
+    d := time.utc(1_700_000_000_123)
+    n := time.iso(&buf, &d)
+    testing.eq_str(&buf[:n], "2023-11-14T22:13:20.123Z")
+    ms := 0
+    testing.check(time.parse_iso(&buf[:n], &ms), "lê de volta")
+    testing.eq_int(ms, 1_700_000_000_123)
+    d.offset_min = -180
+    d.ms = 0
+    n = time.iso(&buf, &d)
+    testing.eq_str(&buf[:n], "2023-11-14T22:13:20-03:00")
+    testing.check(time.parse_iso(&buf[:n], &ms), "com fuso")
+    testing.eq_int(ms, 1_700_000_000_000 + 3 * 3600000) // 22:13 em -03:00 é 01:13 UTC
+}
+
+fn test_parse_iso_forms() {
+    var buf [32]byte
+    ms := 0
+    n := str.copy(&buf, "2000-01-01")
+    testing.check(time.parse_iso(&buf[:n], &ms), "só a data")
+    testing.eq_int(ms, 946684800000)
+    n = str.copy(&buf, "2000-01-01 00:00:01")
+    testing.check(time.parse_iso(&buf[:n], &ms), "com espaço")
+    testing.eq_int(ms, 946684801000)
+    n = str.copy(&buf, "2000-13-01")
+    testing.check(!time.parse_iso(&buf[:n], &ms), "mês 13")
+    n = str.copy(&buf, "2000-01-01T25:00:00Z")
+    testing.check(!time.parse_iso(&buf[:n], &ms), "hora 25")
+    n = str.copy(&buf, "ontem")
+    testing.check(!time.parse_iso(&buf[:n], &ms), "texto qualquer")
+}
+
+fn test_to_ms_and_local() {
+    now := time.now_ms()
+    d := time.local(now)
+    testing.eq_int(time.to_ms(&d), now) // o fuso volta certo
+    u := time.utc(now)
+    testing.eq_int(time.to_ms(&u), now)
 }

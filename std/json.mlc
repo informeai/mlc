@@ -1,0 +1,442 @@
+// JSON sem alocação: um leitor que percorre o texto e devolve um token por
+// vez, e funções para tirar e pôr escapes. Não há árvore: quem lê decide o
+// que guardar e onde alocar.
+//
+//     r := json.reader()
+//     for {
+//         match r.next(&doc) {
+//             Key(a, b) => {
+//                 if str.eq(&doc[a:b], "name") { ... o próximo token é o valor ... }
+//                 else { r.skip(&doc) }              // ignora o valor desta chave
+//             }
+//             String(a, b) => {
+//                 n := json.unescape(&buf, &doc[a:b]) // tira os escapes (\n, é)
+//             }
+//             Number(a, b) => str.parse_int(&doc[a:b], &v)
+//             End => break
+//             Error(pos) => { ... texto inválido em pos ... }
+//             _ => {}
+//         }
+//     }
+//
+// O leitor confere a estrutura (chaves e valores alternados, vírgulas,
+// fechamentos) e a gramática dos números, strings e literais. A profundidade
+// vai até 64 níveis.
+import "std/io"
+import "std/str"
+import "std/utf8"
+
+// Token é o que o leitor encontra. Os pares (a, b) são posições no texto:
+// &doc[a:b] é o conteúdo de uma string (sem as aspas e com os escapes como
+// estão) ou o texto de um número.
+pub enum Token {
+    ObjectStart
+    ObjectEnd
+    ArrayStart
+    ArrayEnd
+    Key(a int, b int)
+    String(a int, b int)
+    Number(a int, b int)
+    True
+    False
+    Null
+    End           // o documento acabou
+    Error(at int) // texto inválido na posição at
+}
+
+impl auto io.Display for Token
+
+const VALUE = 0       // espera um valor
+const ARRAY_FIRST = 1 // depois de [: um valor ou ]
+const KEY_FIRST = 2   // depois de {: uma chave ou }
+const KEY = 3         // depois de uma vírgula num objeto: uma chave
+const AFTER = 4       // depois de um valor: vírgula ou fechamento
+const DONE = 5        // o valor do documento acabou
+const FAILED = 6
+
+// Reader é o estado da leitura (na pilha de quem chama).
+pub struct Reader {
+    pos int
+    stack [64]byte // { ou [ de cada nível aberto
+    depth int
+    state int
+}
+
+// reader começa a ler um documento.
+pub fn reader() Reader {
+    var r Reader
+    return r
+}
+
+// next devolve o próximo token de s (sempre o mesmo texto, do começo ao
+// fim). Depois de End ou Error, continua devolvendo o mesmo.
+pub fn (r &Reader) next(s &[]byte) Token {
+    for {
+        r.skip_space(s)
+        if r.state == FAILED {
+            return Token.Error(r.pos)
+        }
+        if r.state == DONE {
+            if r.pos < len(s) {
+                return r.fail()
+            }
+            return Token.End
+        }
+        if r.state == AFTER {
+            if r.depth == 0 {
+                r.state = DONE
+                continue
+            }
+            if r.pos == len(s) {
+                return r.fail()
+            }
+            c := s[r.pos]
+            top := r.stack[r.depth - 1]
+            if c == ',' {
+                r.pos++
+                if top == '{' {
+                    r.state = KEY
+                } else {
+                    r.state = VALUE
+                }
+                continue
+            }
+            return r.close(c, top)
+        }
+        if r.pos == len(s) {
+            return r.fail()
+        }
+        c := s[r.pos]
+        if r.state == ARRAY_FIRST && c == ']' {
+            return r.close(c, '[')
+        }
+        if r.state == KEY_FIRST && c == '}' {
+            return r.close(c, '{')
+        }
+        if r.state == KEY_FIRST || r.state == KEY {
+            return r.read_key(s)
+        }
+        return r.value(s)
+    }
+}
+
+// skip pula o próximo valor inteiro (com tudo que houver dentro, se for um
+// objeto ou array). Serve depois de uma chave que não interessa. Devolve
+// false se o texto for inválido.
+pub fn (r &Reader) skip(s &[]byte) bool {
+    depth := r.depth
+    first := true
+    for first || r.depth > depth {
+        first = false
+        match r.next(s) {
+            Error(_) => return false
+            End => return false
+            _ => {}
+        }
+    }
+    return true
+}
+
+fn (r &Reader) fail() Token {
+    r.state = FAILED
+    return Token.Error(r.pos)
+}
+
+fn (r &Reader) skip_space(s &[]byte) {
+    for r.pos < len(s) && (s[r.pos] == ' ' || s[r.pos] == '\t' || s[r.pos] == '\n' || s[r.pos] == '\r') {
+        r.pos++
+    }
+}
+
+// close trata } e ] contra o nível aberto (top).
+fn (r &Reader) close(c byte, top byte) Token {
+    if c == '}' && top == '{' {
+        r.pos++
+        r.depth--
+        r.state = AFTER
+        return Token.ObjectEnd
+    }
+    if c == ']' && top == '[' {
+        r.pos++
+        r.depth--
+        r.state = AFTER
+        return Token.ArrayEnd
+    }
+    return r.fail()
+}
+
+fn (r &Reader) open(c byte) bool {
+    if r.depth == len(r.stack) {
+        return false
+    }
+    r.stack[r.depth] = c
+    r.depth++
+    r.pos++
+    return true
+}
+
+fn (r &Reader) read_key(s &[]byte) Token {
+    if s[r.pos] != '"' {
+        return r.fail()
+    }
+    a := r.pos + 1
+    b := scan_string(s, a)
+    if b < 0 {
+        return r.fail()
+    }
+    r.pos = b + 1
+    r.skip_space(s)
+    if r.pos == len(s) || s[r.pos] != ':' {
+        return r.fail()
+    }
+    r.pos++
+    r.state = VALUE
+    return Token.Key(a, b)
+}
+
+fn (r &Reader) value(s &[]byte) Token {
+    c := s[r.pos]
+    if c == '{' {
+        if !r.open(c) {
+            return r.fail()
+        }
+        r.state = KEY_FIRST
+        return Token.ObjectStart
+    }
+    if c == '[' {
+        if !r.open(c) {
+            return r.fail()
+        }
+        r.state = ARRAY_FIRST
+        return Token.ArrayStart
+    }
+    if c == '"' {
+        a := r.pos + 1
+        b := scan_string(s, a)
+        if b < 0 {
+            return r.fail()
+        }
+        r.pos = b + 1
+        r.state = AFTER
+        return Token.String(a, b)
+    }
+    if c == '-' || (c >= '0' && c <= '9') {
+        a := r.pos
+        b := scan_number(s, a)
+        if b < 0 {
+            return r.fail()
+        }
+        r.pos = b
+        r.state = AFTER
+        return Token.Number(a, b)
+    }
+    if r.literal(s, "true") {
+        return Token.True
+    }
+    if r.literal(s, "false") {
+        return Token.False
+    }
+    if r.literal(s, "null") {
+        return Token.Null
+    }
+    return r.fail()
+}
+
+fn (r &Reader) literal(s &[]byte, word string) bool {
+    if r.pos + len(word) > len(s) || !str.eq(&s[r.pos:r.pos + len(word)], word) {
+        return false
+    }
+    r.pos += len(word)
+    r.state = AFTER
+    return true
+}
+
+// scan_string acha as aspas que fecham a string que começa em a (depois das
+// aspas de abertura), conferindo os escapes; -1 se for inválida.
+fn scan_string(s &[]byte, a int) int {
+    i := a
+    for i < len(s) {
+        c := s[i]
+        if c == '"' {
+            return i
+        }
+        if c < 0x20 {
+            return -1 // caractere de controle sem escape
+        }
+        if c == '\\' {
+            i++
+            if i == len(s) {
+                return -1
+            }
+            e := s[i]
+            if e == 'u' {
+                if i + 4 >= len(s) {
+                    return -1
+                }
+                for k := 1; k <= 4; k++ {
+                    if hex(s[i + k]) < 0 {
+                        return -1
+                    }
+                }
+                i += 4
+            } else if e != '"' && e != '\\' && e != '/' && e != 'b' && e != 'f' && e != 'n' && e != 'r' && e != 't' {
+                return -1
+            }
+        }
+        i++
+    }
+    return -1
+}
+
+// scan_number confere a gramática de um número que começa em a e devolve
+// onde ele termina; -1 se for inválido.
+fn scan_number(s &[]byte, a int) int {
+    i := a
+    if s[i] == '-' {
+        i++
+    }
+    if i == len(s) || s[i] < '0' || s[i] > '9' {
+        return -1
+    }
+    if s[i] == '0' {
+        i++ // sem zeros à esquerda
+    } else {
+        i = skip_digits(s, i)
+    }
+    if i < len(s) && s[i] == '.' {
+        i++
+        if i == len(s) || s[i] < '0' || s[i] > '9' {
+            return -1
+        }
+        i = skip_digits(s, i)
+    }
+    if i < len(s) && (s[i] == 'e' || s[i] == 'E') {
+        i++
+        if i < len(s) && (s[i] == '+' || s[i] == '-') {
+            i++
+        }
+        if i == len(s) || s[i] < '0' || s[i] > '9' {
+            return -1
+        }
+        i = skip_digits(s, i)
+    }
+    return i
+}
+
+fn skip_digits(s &[]byte, i int) int {
+    for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+        i++
+    }
+    return i
+}
+
+fn hex(c byte) int {
+    if c >= '0' && c <= '9' {
+        return int(c) - int('0')
+    }
+    if c >= 'a' && c <= 'f' {
+        return int(c) - int('a') + 10
+    }
+    if c >= 'A' && c <= 'F' {
+        return int(c) - int('A') + 10
+    }
+    return -1
+}
+
+fn hex4(s &[]byte, i int) int {
+    return (hex(s[i]) << 12) | (hex(s[i + 1]) << 8) | (hex(s[i + 2]) << 4) | hex(s[i + 3])
+}
+
+// unescape copia o conteúdo de uma string (de um token String ou Key) para
+// dst, trocando os escapes pelos caracteres (é vira é, com os pares de
+// surrogates juntados). Devolve quantos bytes usou. O texto nunca cresce,
+// então um dst do tamanho de raw sempre basta. Um surrogate sozinho vira
+// U+FFFD.
+pub fn unescape(dst &[]byte, raw &[]byte) int {
+    n := 0
+    i := 0
+    for i < len(raw) {
+        c := raw[i]
+        if c != '\\' {
+            dst[n] = c
+            n++
+            i++
+            continue
+        }
+        e := raw[i + 1]
+        i += 2
+        if e == 'u' {
+            code := hex4(raw, i)
+            i += 4
+            if code >= 0xD800 && code <= 0xDBFF && i + 5 < len(raw) && raw[i] == '\\' && raw[i + 1] == 'u' {
+                low := hex4(raw, i + 2)
+                if low >= 0xDC00 && low <= 0xDFFF {
+                    code = 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00)
+                    i += 6
+                }
+            }
+            n += utf8.encode(&dst[n:], code)
+            continue
+        }
+        b := e
+        if e == 'b' {
+            b = 8
+        } else if e == 'f' {
+            b = 12
+        } else if e == 'n' {
+            b = '\n'
+        } else if e == 'r' {
+            b = '\r'
+        } else if e == 't' {
+            b = '\t'
+        }
+        dst[n] = b
+        n++
+    }
+    return n
+}
+
+// escape_len diz quantos bytes escape vai usar para s.
+pub fn escape_len(s &[]byte) int {
+    n := 0
+    for c in s {
+        if c == '"' || c == '\\' || c == '\n' || c == '\r' || c == '\t' || c == 8 || c == 12 {
+            n += 2
+        } else if c < 0x20 {
+            n += 6
+        } else {
+            n++
+        }
+    }
+    return n
+}
+
+// escape escreve s em dst com os escapes de JSON (sem as aspas em volta) e
+// devolve quantos bytes usou. Para montar um documento, junte com
+// str.format: str.format(&out, "{{\"name\": \"{:s}\"}}", &esc[:n]).
+pub fn escape(dst &[]byte, s &[]byte) int {
+    n := 0
+    for c in s {
+        if c == '"' || c == '\\' {
+            dst[n] = '\\'
+            dst[n + 1] = c
+            n += 2
+        } else if c == '\n' {
+            n += str.copy(&dst[n:], "\\n")
+        } else if c == '\r' {
+            n += str.copy(&dst[n:], "\\r")
+        } else if c == '\t' {
+            n += str.copy(&dst[n:], "\\t")
+        } else if c == 8 {
+            n += str.copy(&dst[n:], "\\b")
+        } else if c == 12 {
+            n += str.copy(&dst[n:], "\\f")
+        } else if c < 0x20 {
+            n += str.format(&dst[n:], "\\u{:04x}", int(c))
+        } else {
+            dst[n] = c
+            n++
+        }
+    }
+    return n
+}

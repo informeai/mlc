@@ -1,0 +1,107 @@
+// TCP. Servidores e clientes com handles que o verificador obriga a fechar;
+// os dados passam por buffers de quem chama, sem alocar.
+//
+//     var host [16]byte
+//     err := 0
+//     l := net.listen(&host[:0], 8080, &err)       // host vazio: todas as interfaces
+//     for {
+//         c := l.accept(&err)
+//         if c == nil { break }
+//         t := thread.spawn(handle, c, thread.STACK_64KB)   // uma thread por conexão
+//         thread.join(t)
+//     }
+//     l.close()
+//
+//     fn handle(c *net.Conn) {
+//         var buf [4096]byte
+//         match c.read(&buf) {
+//             Ok(n) => c.write(&buf[:n])       // n == 0: o outro lado fechou
+//             Err(code) => {}
+//         }
+//         c.close()
+//     }
+//
+// O host é um nome ou endereço (localhost, 127.0.0.1, ::1, exemplo.com).
+// Escrever numa conexão que o outro lado fechou devolve RESET, em vez de
+// encerrar o programa.
+import "std/result"
+
+// códigos de erro (os outros são o errno do sistema)
+pub const REFUSED = 2001 // ninguém escuta nessa porta
+pub const NO_HOST = 2002 // o nome não foi encontrado
+pub const IN_USE = 2003  // a porta já está em uso
+pub const TIMEOUT = 2004 // passou do tempo de set_timeout
+pub const RESET = 2005   // o outro lado fechou ou derrubou a conexão
+
+// Listener espera conexões numa porta (um handle): precisa de close().
+pub extern "C" type Listener
+
+// Conn é uma conexão TCP (um handle): precisa de close().
+pub extern "C" type Conn
+
+// listen escuta em host:port (host vazio: todas as interfaces; porta 0: o
+// sistema escolhe, veja Listener.port). Se não conseguir, devolve nil e põe
+// o código em err.
+pub extern fn listen(host &[]byte, port int, err &int) ?*Listener
+
+// connect abre uma conexão com host:port. Se não conseguir, devolve nil e
+// põe o código em err (REFUSED, NO_HOST, ...).
+pub extern fn connect(host &[]byte, port int, err &int) ?*Conn
+
+extern fn accept_raw(l &Listener, err &int) ?*Conn
+extern fn port_raw(l &Listener) int
+extern fn close_listener(l *Listener)
+extern fn read_raw(c &Conn, dst &[]byte) int
+extern fn write_raw(c &Conn, data &[]byte) int
+extern fn timeout_raw(c &Conn, ms int) int
+extern fn shutdown_raw(c &Conn) int
+extern fn close_raw(c *Conn)
+
+// accept espera a próxima conexão. Se falhar, devolve nil e põe o código em
+// err.
+pub fn (l &Listener) accept(err &int) ?*Conn {
+    return accept_raw(l, err)
+}
+
+// port diz em que porta o listener está (útil com porta 0).
+pub fn (l &Listener) port() int {
+    return port_raw(l)
+}
+
+pub fn (l *Listener) close() {
+    close_listener(l)
+}
+
+// read lê o que chegar, até len(dst) bytes; Ok(0) quer dizer que o outro
+// lado fechou.
+pub fn (c &Conn) read(dst &[]byte) result.Result[int, int] {
+    return wrap(read_raw(c, dst))
+}
+
+// write manda todos os bytes de data.
+pub fn (c &Conn) write(data &[]byte) result.Result[int, int] {
+    return wrap(write_raw(c, data))
+}
+
+// set_timeout limita, em milissegundos, quanto read e write esperam (0: sem
+// limite). Passado o tempo, o erro é TIMEOUT.
+pub fn (c &Conn) set_timeout(ms int) result.Result[int, int] {
+    return wrap(timeout_raw(c, ms))
+}
+
+// shutdown avisa o outro lado que não vai mandar mais nada (o read dele
+// recebe Ok(0)); ainda dá para ler.
+pub fn (c &Conn) shutdown() result.Result[int, int] {
+    return wrap(shutdown_raw(c))
+}
+
+pub fn (c *Conn) close() {
+    close_raw(c)
+}
+
+fn wrap(n int) result.Result[int, int] {
+    if n < 0 {
+        return result.Result.Err(-n)
+    }
+    return result.Result.Ok(n)
+}

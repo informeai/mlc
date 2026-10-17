@@ -1,0 +1,201 @@
+import "std/net"
+import "std/str"
+import "std/testing"
+import "std/thread"
+
+fn localhost(dst &[]byte) int {
+    return str.copy(dst, "127.0.0.1")
+}
+
+// eco: devolve tudo que chegar até o outro lado fechar
+fn echo_once(l *net.Listener) int {
+    err := 0
+    total := 0
+    c := l.accept(&err)
+    if c != nil {
+        var buf [16]byte
+        for {
+            match c.read(&buf) {
+                Ok(n) => {
+                    if n == 0 {
+                        break
+                    }
+                    total += n
+                    c.write(&buf[:n])
+                }
+                Err(_) => break
+            }
+        }
+        c.close()
+    }
+    l.close()
+    return total
+}
+
+fn test_echo() {
+    var h [16]byte
+    hn := localhost(&h)
+    err := 0
+    l := net.listen(&h[:hn], 0, &err)
+    if l == nil {
+        testing.fail("listen falhou")
+        return
+    }
+    port := l.port()
+    testing.check(port > 0, "o sistema escolheu uma porta")
+    t := thread.spawn(echo_once, l, thread.STACK_64KB)
+    c := net.connect(&h[:hn], port, &err)
+    if c == nil {
+        testing.fail("connect falhou")
+        thread.join(t)
+        return
+    }
+    var msg [64]byte
+    k := str.copy(&msg, "uma mensagem maior que o buffer do servidor")
+    match c.write(&msg[:k]) {
+        Ok(w) => testing.eq_int(w, k)
+        Err(code) => testing.eq_int(code, 0)
+    }
+    c.shutdown() // o servidor recebe Ok(0) e devolve o resto
+    var back [64]byte
+    got := 0
+    for {
+        match c.read(&back[got:]) {
+            Ok(n) => {
+                if n == 0 {
+                    break
+                }
+                got += n
+            }
+            Err(_) => break
+        }
+    }
+    c.close()
+    testing.eq_bytes(&back[:got], &msg[:k])
+    testing.eq_int(thread.join(t), k)
+}
+
+fn test_refused() {
+    var h [16]byte
+    hn := localhost(&h)
+    err := 0
+    l := net.listen(&h[:hn], 0, &err)
+    if l == nil {
+        testing.fail("listen falhou")
+        return
+    }
+    port := l.port()
+    l.close() // ninguém mais escuta nessa porta
+    c := net.connect(&h[:hn], port, &err)
+    testing.check(c == nil, "sem servidor, connect falha")
+    testing.eq_int(err, net.REFUSED)
+    if c != nil {
+        c.close()
+    }
+}
+
+fn test_port_in_use() {
+    var h [16]byte
+    hn := localhost(&h)
+    err := 0
+    a := net.listen(&h[:hn], 0, &err)
+    if a == nil {
+        testing.fail("listen falhou")
+        return
+    }
+    b := net.listen(&h[:hn], a.port(), &err)
+    testing.check(b == nil, "a porta já está em uso")
+    testing.eq_int(err, net.IN_USE)
+    if b != nil {
+        b.close()
+    }
+    a.close()
+}
+
+fn test_no_host() {
+    var h [64]byte
+    hn := str.copy(&h, "host-que-nao-existe.invalid")
+    err := 0
+    c := net.connect(&h[:hn], 80, &err)
+    testing.check(c == nil, "nome inexistente")
+    testing.eq_int(err, net.NO_HOST)
+    if c != nil {
+        c.close()
+    }
+}
+
+// aceita e fica parado, sem responder
+fn silent(l *net.Listener) {
+    err := 0
+    c := l.accept(&err)
+    if c != nil {
+        var buf [8]byte
+        c.read(&buf) // espera o cliente fechar
+        c.close()
+    }
+    l.close()
+}
+
+fn test_timeout() {
+    var h [16]byte
+    hn := localhost(&h)
+    err := 0
+    l := net.listen(&h[:hn], 0, &err)
+    if l == nil {
+        testing.fail("listen falhou")
+        return
+    }
+    port := l.port()
+    t := thread.spawn(silent, l, thread.STACK_64KB)
+    c := net.connect(&h[:hn], port, &err)
+    if c != nil {
+        c.set_timeout(50)
+        var buf [8]byte
+        match c.read(&buf) {
+            Ok(_) => testing.fail("o servidor não manda nada")
+            Err(code) => testing.eq_int(code, net.TIMEOUT)
+        }
+        c.close()
+    }
+    thread.join(t)
+}
+
+// fecha a conexão sem ler nada
+fn close_at_once(l *net.Listener) {
+    err := 0
+    c := l.accept(&err)
+    if c != nil {
+        c.close()
+    }
+    l.close()
+}
+
+fn test_write_after_peer_closed() {
+    var h [16]byte
+    hn := localhost(&h)
+    err := 0
+    l := net.listen(&h[:hn], 0, &err)
+    if l == nil {
+        testing.fail("listen falhou")
+        return
+    }
+    port := l.port()
+    t := thread.spawn(close_at_once, l, thread.STACK_64KB)
+    c := net.connect(&h[:hn], port, &err)
+    thread.join(t)
+    if c != nil {
+        var data [4096]byte
+        failed := false
+        for i := 0; i < 100 && !failed; i++ {
+            match c.write(&data) {
+                Ok(_) => {}
+                Err(code) => {
+                    testing.eq_int(code, net.RESET) // e não morre por SIGPIPE
+                    failed = true
+                }
+            }
+        }
+        testing.check(failed, "escrever numa conexão fechada falha")
+        c.close()
+    }
+}
