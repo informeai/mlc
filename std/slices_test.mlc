@@ -1,0 +1,125 @@
+import "std/cmp"
+import "std/slices"
+import "std/sort"
+import "std/str"
+import "std/testing"
+
+fn test_index_contains_count() {
+    a := [6]int{4, 8, 15, 16, 23, 8}
+    x := 8
+    testing.eq_int(slices.index(&a, &x), 1)
+    testing.check(slices.contains(&a, &x), "contém 8")
+    testing.eq_int(slices.count(&a, &x), 2)
+    x = 42
+    testing.eq_int(slices.index(&a, &x), -1)
+    testing.check(!slices.contains(&a, &x), "não contém 42")
+    testing.eq_int(slices.index(&a[:0], &x), -1)
+}
+
+fn test_equal() {
+    a := [3]int{1, 2, 3}
+    b := [3]int{1, 2, 3}
+    c := [3]int{1, 2, 4}
+    testing.check(slices.equal(&a, &b), "iguais")
+    testing.check(!slices.equal(&a, &c), "diferentes")
+    testing.check(!slices.equal(&a, &b[:2]), "tamanhos diferentes")
+}
+
+fn test_search() {
+    a := [6]int{1, 3, 3, 5, 9, 12}
+    x := 3
+    testing.eq_int(slices.search(&a, &x), 1) // a primeira posição do 3
+    x = 4
+    testing.eq_int(slices.search(&a, &x), 3) // onde entraria
+    x = 100
+    testing.eq_int(slices.search(&a, &x), 6)
+    x = 0
+    testing.eq_int(slices.search(&a, &x), 0)
+    x = 9
+    testing.eq_int(slices.binary_search(&a, &x), 4)
+    x = 10
+    testing.eq_int(slices.binary_search(&a, &x), -1)
+}
+
+fn test_search_large() {
+    s := alloc([]int, 1000)
+    for i := 0; i < len(s); i++ {
+        s[i] = i * 2
+    }
+    for i := 0; i < len(s); i++ {
+        x := i * 2
+        testing.eq_int(slices.binary_search(&s, &x), i)
+        x++
+        testing.eq_int(slices.binary_search(&s, &x), -1) // os ímpares não estão
+    }
+    free(s)
+}
+
+fn test_min_max() {
+    a := [5]float64{2.5, -1.0, 7.0, -1.0, 7.0}
+    testing.eq_int(slices.min_index(&a), 1) // o primeiro, no empate
+    testing.eq_int(slices.max_index(&a), 2)
+    testing.eq_int(slices.min_index(&a[:0]), -1)
+}
+
+struct Task {
+    priority int
+    name string
+}
+
+impl auto cmp.Eq for Task
+impl auto cmp.Ord for Task
+
+fn test_structs() {
+    ts := [3]Task{Task{priority: 2, name: "b"}, Task{priority: 1, name: "a"}, Task{priority: 3, name: "c"}}
+    t := Task{priority: 1, name: "a"}
+    testing.eq_int(slices.index(&ts, &t), 1)
+    testing.eq_int(slices.max_index(&ts), 2)
+    sort.sort(&ts)
+    t = Task{priority: 2, name: "b"}
+    testing.eq_int(slices.binary_search(&ts, &t), 1)
+}
+
+fn text(s string) []byte {
+    b := alloc([]byte, len(s))
+    str.copy(&b, s)
+    return b
+}
+
+fn test_owned_elements() {
+    words := alloc([][]byte, 5)
+    names := [5]string{"pera", "uva", "pera", "abacaxi", "uva"}
+    for i := 0; i < len(words); i++ {
+        old := replace(&words[i], text(names[i]))
+        free(old)
+    }
+    w := text("uva")
+    testing.eq_int(slices.count(&words, &w), 2)
+    sort.sort(&words)
+    n := slices.dedup(&words) // os únicos em words[:n]
+    testing.eq_int(n, 3)
+    testing.eq_str(&words[0], "abacaxi")
+    testing.eq_str(&words[1], "pera")
+    testing.eq_str(&words[2], "uva")
+    testing.eq_int(slices.binary_search(&words[:n], &w), 2)
+    free(w)
+    for x in drain(words) {
+        free(x) // as repetições também estão no slice
+    }
+    free(words)
+}
+
+fn test_dedup() {
+    a := [8]int{1, 1, 2, 3, 3, 3, 4, 4}
+    n := slices.dedup(&a)
+    testing.eq_int(n, 4)
+    want := [4]int{1, 2, 3, 4}
+    testing.check(slices.equal(&a[:n], &want), "únicos no começo")
+    testing.eq_int(slices.dedup(&a[:0]), 0)
+}
+
+fn test_fill() {
+    var a [4]int
+    slices.fill(&a, 7)
+    testing.check(a == [4]int{7, 7, 7, 7}, "preenchido")
+}

@@ -1,3 +1,4 @@
+import "std/hash"
 import "std/map"
 import "std/str"
 import "std/testing"
@@ -144,4 +145,49 @@ fn bench_map_put_get_1000(b &testing.B) {
         }
         m.free()
     }
+}
+
+struct Point {
+    x int
+    y int
+}
+
+impl auto hash.Hash for Point
+
+fn test_struct_keys() {
+    m := map.new[Point, int](4)
+    for x := 0; x < 20; x++ {
+        for y := 0; y < 20; y++ {
+            m.put(Point{x: x, y: y}, x * 100 + y)
+        }
+    }
+    testing.eq_int(m.len(), 400)
+    k := Point{x: 7, y: 13}
+    testing.eq_int(m.get_or(&k, -1), 713)
+    m.put(Point{x: 7, y: 13}, 0) // a mesma chave: substitui
+    testing.eq_int(m.len(), 400)
+    testing.eq_int(m.get_or(&k, -1), 0)
+    k = Point{x: 20, y: 0}
+    testing.check(!m.has(&k), "chave que não existe")
+    m.free()
+}
+
+enum Cell {
+    Wall
+    Floor(cost int)
+}
+
+impl auto hash.Hash for Cell
+
+fn test_enum_keys() {
+    m := map.new[Cell, int](4)
+    m.put(Cell.Wall, 1)
+    m.put(Cell.Floor(3), 2)
+    m.put(Cell.Floor(4), 3)
+    f := Cell.Floor(4)
+    testing.eq_int(m.get_or(&f, 0), 3)
+    w := Cell.Wall
+    testing.eq_int(m.get_or(&w, 0), 1)
+    testing.eq_int(m.len(), 3)
+    m.free()
 }

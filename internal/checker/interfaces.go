@@ -238,7 +238,15 @@ func (c *checker) collectImpls(f *ast.File) {
 		}
 		if bad {
 			for _, d := range a.im.decls {
-				d.Body.Stmts = nil // sem erros em cascata no código gerado
+				// sem erros em cascata no código gerado: o corpo fica vazio
+				// (ou só devolve o zero do eq e do cmp)
+				d.Body.Stmts = nil
+				switch d.Name {
+				case "cmp":
+					d.Body.Stmts = []ast.Stmt{&ast.ReturnStmt{Value: &ast.IntLit{Value: "0", P: d.P}, P: d.P}}
+				case "eq":
+					d.Body.Stmts = []ast.Stmt{&ast.ReturnStmt{Value: &ast.Ident{Name: "false", P: d.P}, P: d.P}}
+				}
 			}
 		}
 	}
@@ -286,7 +294,9 @@ func (c *checker) collectImpl(d *ast.ImplDecl) {
 		im.instances = map[string]*Impl{}
 	}
 	var t Type
-	c.withScope(c.mod, binding, func() { t = c.resolveType(d.Type, ctxVar) })
+	// como o tipo de um &T: os métodos recebem &Self, então structs com donos
+	// (que só existem atrás de ponteiro) também implementam
+	c.withScope(c.mod, binding, func() { t = c.resolveType(d.Type, ctxBorrowElem) })
 	if t == Invalid {
 		return
 	}
@@ -699,13 +709,30 @@ func (c *checker) implMethodCall(e *ast.CallExpr, sel *ast.SelectorExpr, t Type)
 // para enums). O código gerado é checado como se tivesse sido escrito no
 // impl, e os erros apontam para a linha do impl.
 func (c *checker) autoMethods(d *ast.ImplDecl, iface *Interface, t Type) []*ast.FuncDecl {
-	if iface.Name != "Display" || iface.mod.path != "std/io" {
-		c.errorf(d.P, "impl auto só existe para io.Display")
+	isCmp := iface.mod.std && iface.mod.path == "std/cmp" && (iface.Name == "Eq" || iface.Name == "Ord")
+	isHash := iface.mod.std && iface.mod.path == "std/hash" && iface.Name == "Hash"
+	if !isCmp && !isHash && (iface.Name != "Display" || iface.mod.path != "std/io") {
+		c.errorf(d.P, "impl auto só existe para io.Display, cmp.Eq, cmp.Ord e hash.Hash")
 		return nil
 	}
 	if d.Block {
 		c.errorf(d.P, "impl auto não tem bloco: o método é gerado")
 		return nil
+	}
+	if isCmp {
+		return c.autoCmp(d, iface.Name == "Ord", t, "")
+	}
+	if isHash {
+		mix := "mix64"
+		if c.mod != iface.mod {
+			mix = iface.mod.name + ".mix64"
+		}
+		hashSrc, ok := autoHash(d, t, mix)
+		if !ok {
+			c.errorf(d.P, "impl auto só vale para structs e enums; para %s, escreva os métodos hash e eq num bloco", t)
+			return nil
+		}
+		return c.autoCmp(d, false, t, hashSrc) // o eq, junto com o hash
 	}
 	writer := "Writer"
 	if c.mod != iface.mod {
@@ -754,6 +781,148 @@ func (c *checker) autoMethods(d *ast.ImplDecl, iface *Interface, t Type) []*ast.
 	}
 	setPositions(reflect.ValueOf(f.Funcs[0]), d.P)
 	return f.Funcs
+}
+
+// autoCmp gera o eq (cmp.Eq) ou o cmp (cmp.Ord) de um impl auto. Numa
+// struct, campo a campo, na ordem da declaração. Num enum, primeiro a
+// variante (na ordem da declaração), depois os campos dela.
+//
+// extra é o código de outro método gerado junto (o hash de hash.Hash).
+func (c *checker) autoCmp(d *ast.ImplDecl, ord bool, t Type, extra string) []*ast.FuncDecl {
+	name, result := "eq", "bool"
+	if ord {
+		name, result = "cmp", "int"
+	}
+	var src strings.Builder
+	src.WriteString(extra)
+	fmt.Fprintf(&src, "fn (self &%s) %s(other &%s) %s {\n", typeString(d.Type), name, typeString(d.Type), result)
+	// compare escreve a comparação de dois valores (a e b já emprestados ou
+	// lugares), com retorno antecipado quando decide
+	compare := func(indent, a, b string) {
+		if ord {
+			fmt.Fprintf(&src, "%smlc_c := %s.cmp(%s)\n%sif mlc_c != 0 {\n%s    return mlc_c\n%s}\n", indent, a, b, indent, indent, indent)
+		} else {
+			fmt.Fprintf(&src, "%sif !%s.eq(%s) {\n%s    return false\n%s}\n", indent, a, b, indent, indent)
+		}
+	}
+	same := "true"
+	if ord {
+		same = "0"
+	}
+	switch t := t.(type) {
+	case *Struct:
+		for _, f := range t.Fields {
+			// cada comparação num bloco, para o mlc_c de cada campo
+			src.WriteString("    {\n")
+			compare("        ", "self."+f.Name, "&other."+f.Name)
+			src.WriteString("    }\n")
+		}
+		fmt.Fprintf(&src, "    return %s\n", same)
+	case *Enum:
+		src.WriteString("    match *self {\n")
+		for _, v := range t.Variants {
+			var as, bs []string
+			for k := range v.Fields {
+				as = append(as, fmt.Sprintf("mlc_a%d", k))
+				bs = append(bs, fmt.Sprintf("mlc_b%d", k))
+			}
+			pat := func(names []string) string {
+				if len(names) == 0 {
+					return v.Name
+				}
+				return v.Name + "(" + strings.Join(names, ", ") + ")"
+			}
+			fmt.Fprintf(&src, "        %s => {\n            match *other {\n                %s => {\n", pat(as), pat(bs))
+			for k, f := range v.Fields {
+				b := "&" + bs[k]
+				if IsOwner(f.Type) {
+					b = bs[k] // o campo dono já vem emprestado no match que só lê
+				}
+				src.WriteString("                    {\n")
+				compare("                        ", as[k], b)
+				src.WriteString("                    }\n")
+			}
+			fmt.Fprintf(&src, "                    return %s\n                }\n", same)
+			if len(t.Variants) > 1 {
+				src.WriteString("                _ => {}\n")
+			}
+			src.WriteString("            }\n        }\n")
+		}
+		src.WriteString("    }\n")
+		if !ord {
+			src.WriteString("    return false // variantes diferentes\n")
+		} else {
+			// variantes diferentes: a ordem da declaração decide
+			rank := func(v string) {
+				fmt.Fprintf(&src, "    match *%s {\n", v)
+				for k, vr := range t.Variants {
+					p := vr.Name
+					if len(vr.Fields) > 0 {
+						p += "(" + strings.TrimSuffix(strings.Repeat("_, ", len(vr.Fields)), ", ") + ")"
+					}
+					fmt.Fprintf(&src, "        %s => mlc_%s = %d\n", p, v, k)
+				}
+				src.WriteString("    }\n")
+			}
+			src.WriteString("    mlc_self := 0\n")
+			rank("self")
+			src.WriteString("    mlc_other := 0\n")
+			rank("other")
+			src.WriteString("    return mlc_self - mlc_other\n")
+		}
+	default:
+		c.errorf(d.P, "impl auto só vale para structs e enums; para %s, escreva o método %s num bloco", t, name)
+		return nil
+	}
+	src.WriteString("}\n")
+	f, errs := parser.ParseFile(c.mod.file, []byte(src.String()))
+	if len(errs) > 0 || len(f.Funcs) == 0 {
+		c.errorf(d.P, "erro interno ao gerar o impl auto: %v\n%s", errs, src.String())
+		return nil
+	}
+	for _, fn := range f.Funcs {
+		setPositions(reflect.ValueOf(fn), d.P)
+	}
+	return f.Funcs
+}
+
+// autoHash gera o hash de um impl auto hash.Hash: combina o hash de cada
+// campo (numa struct) ou a variante e os campos dela (num enum), como o hash
+// dos slices, e termina com mix64.
+func autoHash(d *ast.ImplDecl, t Type, mix string) (string, bool) {
+	var src strings.Builder
+	fmt.Fprintf(&src, "fn (self &%s) hash() uint64 {\n    var mlc_h uint64 = 0xCBF2_9CE4_8422_2325\n", typeString(d.Type))
+	combine := func(indent, v string) {
+		fmt.Fprintf(&src, "%smlc_h = (mlc_h ^ %s.hash()) *%% 0x0000_0100_0000_01B3\n", indent, v)
+	}
+	switch t := t.(type) {
+	case *Struct:
+		for _, f := range t.Fields {
+			combine("    ", "self."+f.Name)
+		}
+	case *Enum:
+		src.WriteString("    match *self {\n")
+		for k, v := range t.Variants {
+			var binds []string
+			for i := range v.Fields {
+				binds = append(binds, fmt.Sprintf("mlc_a%d", i))
+			}
+			p := v.Name
+			if len(binds) > 0 {
+				p += "(" + strings.Join(binds, ", ") + ")"
+			}
+			fmt.Fprintf(&src, "        %s => {\n            mlc_h = (mlc_h ^ %d) *%% 0x0000_0100_0000_01B3\n", p, k)
+			for _, b := range binds {
+				combine("            ", b)
+			}
+			src.WriteString("        }\n")
+		}
+		src.WriteString("    }\n")
+	default:
+		return "", false
+	}
+	fmt.Fprintf(&src, "    return %s(mlc_h)\n}\n\n", mix)
+	return src.String(), true
 }
 
 // setPositions põe todas as posições de um nó gerado em p.

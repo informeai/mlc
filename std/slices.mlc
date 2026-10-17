@@ -1,0 +1,131 @@
+// Operações sobre slices (e arrays, via &a), sem alocar. Usam a igualdade
+// de cmp.Eq e a ordem de cmp.Ord, então servem para números, string, slices
+// ([]byte) e structs com impl cmp.Eq / cmp.Ord (ou impl auto). Os elementos
+// são comparados por empréstimo, sem cópias, e podem ser donos.
+//
+//     if slices.contains(&nomes, &procurado) { ... }
+//     i := slices.binary_search(&ordenados, &x)    // em um slice ordenado
+//     m := slices.max_index(&notas)
+import "std/cmp"
+import "std/sort"
+
+// index devolve a posição do primeiro elemento igual a x, ou -1.
+pub fn index[T owned + cmp.Eq](s &[]T, x &T) int {
+    for i := 0; i < len(s); i++ {
+        if s[i].eq(x) {
+            return i
+        }
+    }
+    return -1
+}
+
+// contains diz se algum elemento é igual a x.
+pub fn contains[T owned + cmp.Eq](s &[]T, x &T) bool {
+    return index(s, x) >= 0
+}
+
+// count diz quantos elementos são iguais a x.
+pub fn count[T owned + cmp.Eq](s &[]T, x &T) int {
+    n := 0
+    for i := 0; i < len(s); i++ {
+        if s[i].eq(x) {
+            n++
+        }
+    }
+    return n
+}
+
+// equal diz se a e b têm o mesmo tamanho e os mesmos elementos, na mesma
+// ordem.
+pub fn equal[T owned + cmp.Eq](a &[]T, b &[]T) bool {
+    if len(a) != len(b) {
+        return false
+    }
+    for i := 0; i < len(a); i++ {
+        if !a[i].eq(&b[i]) {
+            return false
+        }
+    }
+    return true
+}
+
+// search devolve a primeira posição de um slice ordenado cujo elemento não
+// é menor que x: onde x está, ou onde ele entraria (len(s) se for maior que
+// todos).
+pub fn search[T owned + cmp.Ord](s &[]T, x &T) int {
+    lo := 0
+    hi := len(s)
+    for lo < hi {
+        mid := lo + (hi - lo) / 2
+        if s[mid].cmp(x) < 0 {
+            lo = mid + 1
+        } else {
+            hi = mid
+        }
+    }
+    return lo
+}
+
+// binary_search devolve a posição de x num slice ordenado, ou -1.
+pub fn binary_search[T owned + cmp.Ord](s &[]T, x &T) int {
+    i := search(s, x)
+    if i < len(s) && s[i].cmp(x) == 0 {
+        return i
+    }
+    return -1
+}
+
+// min_index devolve a posição do menor elemento (o primeiro, se houver
+// empate), ou -1 num slice vazio.
+pub fn min_index[T owned + cmp.Ord](s &[]T) int {
+    if len(s) == 0 {
+        return -1
+    }
+    m := 0
+    for i := 1; i < len(s); i++ {
+        if s[i].cmp(&s[m]) < 0 {
+            m = i
+        }
+    }
+    return m
+}
+
+// max_index devolve a posição do maior elemento (o primeiro, se houver
+// empate), ou -1 num slice vazio.
+pub fn max_index[T owned + cmp.Ord](s &[]T) int {
+    if len(s) == 0 {
+        return -1
+    }
+    m := 0
+    for i := 1; i < len(s); i++ {
+        if s[i].cmp(&s[m]) > 0 {
+            m = i
+        }
+    }
+    return m
+}
+
+// dedup junta no começo de um slice ordenado um elemento de cada valor e
+// devolve quantos são: os únicos ficam em s[:n] e as repetições, depois.
+// Nada é liberado (os elementos só trocam de lugar), então, com donos, o
+// slice inteiro continua precisando ser liberado como antes.
+pub fn dedup[T owned + cmp.Eq](s &[]T) int {
+    if len(s) == 0 {
+        return 0
+    }
+    w := 1
+    for i := 1; i < len(s); i++ {
+        if !s[i].eq(&s[w - 1]) {
+            sort.swap(s, w, i)
+            w++
+        }
+    }
+    return w
+}
+
+// fill põe x em todas as posições (só para T copiável).
+pub fn fill[T any](s &[]T, x T) {
+    for i := 0; i < len(s); i++ {
+        s[i] = x
+    }
+}

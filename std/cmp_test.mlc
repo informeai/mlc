@@ -1,0 +1,133 @@
+import "std/cmp"
+import "std/str"
+import "std/testing"
+
+fn test_builtin_ord() {
+    a := 3
+    b := 5
+    testing.check(a.cmp(&b) < 0 && b.cmp(&a) > 0 && a.cmp(&a) == 0, "int")
+    x := -1.5
+    y := 2.0
+    testing.check(x.cmp(&y) < 0, "float64")
+    f := false
+    t := true
+    testing.check(f.cmp(&t) < 0, "false antes de true")
+    var u uint64 = 18446744073709551615
+    var v uint64 = 1
+    testing.check(u.cmp(&v) > 0, "uint64 grande")
+}
+
+fn test_string_order() {
+    a := "abc"
+    b := "abd"
+    c := "ab"
+    d := "B"
+    testing.check(a.cmp(&b) < 0, "abc < abd")
+    testing.check(c.cmp(&a) < 0, "prefixo vem antes")
+    testing.check(d.cmp(&a) < 0, "maiúsculas antes (ordem de bytes)")
+    testing.check(a.eq(&a) && !a.eq(&b), "eq")
+}
+
+fn test_slices_lexicographic() {
+    p := [3]int{1, 2, 3}
+    q := [3]int{1, 3, 0}
+    testing.check(p.cmp(&q) < 0, "o primeiro diferente decide")
+    r := [2]int{1, 2}
+    testing.check(r.cmp(&p) < 0, "o mais curto vem antes")
+    b1 := alloc([]byte, 3)
+    b2 := alloc([]byte, 3)
+    str.copy(&b1, "abc")
+    str.copy(&b2, "abc")
+    testing.check(b1.eq(&b2) && b1.cmp(&b2) == 0, "[]byte igual")
+    b2[2] = 'a'
+    testing.check(b2.cmp(&b1) < 0, "[]byte em ordem de bytes")
+    free(b1)
+    free(b2)
+}
+
+struct Version {
+    major int
+    minor int
+}
+
+impl auto cmp.Eq for Version
+impl auto cmp.Ord for Version
+
+fn test_auto_struct() {
+    a := Version{major: 1, minor: 9}
+    b := Version{major: 2, minor: 0}
+    c := Version{major: 1, minor: 10}
+    testing.check(a.cmp(&b) < 0, "major decide primeiro")
+    testing.check(a.cmp(&c) < 0, "depois minor")
+    testing.check(a.eq(&a) && !a.eq(&c), "eq campo a campo")
+}
+
+struct Doc {
+    title []byte
+    pages int
+}
+
+impl auto cmp.Ord for Doc
+
+fn test_auto_struct_with_owner() {
+    a := alloc(Doc{title: alloc([]byte, 1), pages: 3})
+    b := alloc(Doc{title: alloc([]byte, 1), pages: 1})
+    a.title[0] = 'a'
+    b.title[0] = 'b'
+    testing.check(a.cmp(&b) < 0, "o título decide antes das páginas")
+    free(a.title)
+    free(a)
+    free(b.title)
+    free(b)
+}
+
+enum Shape {
+    Circle(r float64)
+    Rect(w int, h int)
+    Empty
+}
+
+impl auto cmp.Eq for Shape
+impl auto cmp.Ord for Shape
+
+fn test_auto_enum() {
+    a := Shape.Rect(2, 3)
+    b := Shape.Rect(2, 4)
+    c := Shape.Circle(9.0)
+    e := Shape.Empty
+    testing.check(a.cmp(&b) < 0, "mesma variante: os campos decidem")
+    testing.check(c.cmp(&a) < 0, "variantes diferentes: a ordem da declaração")
+    testing.check(e.cmp(&c) > 0, "Empty vem por último")
+    testing.check(a.eq(&a) && !a.eq(&b) && !a.eq(&c), "eq")
+}
+
+struct Pair[A any, B any] {
+    a A
+    b B
+}
+
+impl auto cmp.Ord for Pair
+
+fn test_auto_generic() {
+    p := Pair[int, string]{a: 1, b: "x"}
+    q := Pair[int, string]{a: 1, b: "y"}
+    testing.check(p.cmp(&q) < 0, "genérico: compara os campos com o cmp de cada tipo")
+}
+
+struct Person {
+    name string
+    age int
+}
+
+// ordem escrita à mão: pela idade
+fn (p &Person) cmp(o &Person) int {
+    return p.age.cmp(&o.age)
+}
+
+impl cmp.Ord for Person
+
+fn test_hand_written() {
+    a := Person{name: "Zé", age: 30}
+    b := Person{name: "Ana", age: 40}
+    testing.check(a.cmp(&b) < 0, "pela idade, não pelo nome")
+}

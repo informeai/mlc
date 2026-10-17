@@ -1,4 +1,4 @@
-// erro: P não atende ordered, exigida por T em sort.sort
+// erro: P não implementa cmp.Ord, exigida por T em sort.sort (declare impl auto cmp.Ord for P
 import "std/sort"
 
 struct P {

@@ -1,5 +1,7 @@
+import "std/cmp"
 import "std/rand"
 import "std/sort"
+import "std/str"
 import "std/testing"
 
 fn test_sort_small() {
@@ -86,4 +88,60 @@ fn bench_sort_1000(b &testing.B) {
         sort.sort(&s)
     }
     free(s)
+}
+
+struct Item {
+    price int
+    name string
+}
+
+impl auto cmp.Ord for Item
+
+fn test_sort_structs() {
+    items := [4]Item{Item{price: 30, name: "c"}, Item{price: 10, name: "b"}, Item{price: 10, name: "a"}, Item{price: 20, name: "d"}}
+    sort.sort(&items)
+    testing.check(sort.is_sorted(&items), "ordenado")
+    testing.eq_int(items[0].price, 10)
+    testing.check(items[0].name == "a" && items[1].name == "b", "empate no preço: o nome decide")
+    testing.eq_int(items[3].price, 30)
+}
+
+fn test_sort_strings() {
+    w := [4]string{"pera", "abacaxi", "maçã", "banana"}
+    sort.sort(&w)
+    testing.check(w == [4]string{"abacaxi", "banana", "maçã", "pera"}, "strings")
+}
+
+fn line(s string) []byte {
+    b := alloc([]byte, len(s))
+    str.copy(&b, s)
+    return b
+}
+
+fn test_sort_owned_lines() {
+    lines := alloc([][]byte, 40)
+    for i := 0; i < len(lines); i++ {
+        k := (i * 17) % 40
+        b := alloc([]byte, 2)
+        b[0] = byte(int('a') + k / 10)
+        b[1] = byte(int('0') + k % 10)
+        old := replace(&lines[i], b)
+        free(old)
+    }
+    sort.sort(&lines) // donos trocados de lugar por posse (mais de 16: usa o quicksort)
+    testing.check(sort.is_sorted(&lines), "linhas ordenadas")
+    testing.eq_str(&lines[0], "a0")
+    testing.eq_str(&lines[39], "d9")
+    sort.reverse(&lines)
+    testing.eq_str(&lines[0], "d9")
+    for l in drain(lines) {
+        free(l)
+    }
+    free(lines)
+}
+
+fn test_sort_floats_with_negative() {
+    f := [5]float64{0.5, -3.0, 2.25, -0.5, 1.0}
+    sort.sort(&f)
+    testing.check(f == [5]float64{-3.0, -0.5, 0.5, 1.0, 2.25}, "floats")
 }

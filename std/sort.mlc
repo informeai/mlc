@@ -1,7 +1,13 @@
 // Ordenação de slices (e arrays, via &a), no lugar, sem alocar.
+//
+// sort usa a ordem de cmp.Ord: números, bool, string, slices (como
+// [][]byte, linhas de texto) e structs com impl cmp.Ord (ou impl auto
+// cmp.Ord). Os elementos são trocados de lugar por posse, sem cópias, então
+// donos ([]byte, ?*No) também são ordenados.
+import "std/cmp"
 
 // sort ordena s em ordem crescente (quicksort, com inserção nas partes pequenas).
-pub fn sort[T ordered](s &[]T) {
+pub fn sort[T owned + cmp.Ord](s &[]T) {
     n := len(s)
     if n <= 16 {
         insertion(s)
@@ -12,25 +18,32 @@ pub fn sort[T ordered](s &[]T) {
     sort(&s[p + 1:])
 }
 
-fn insertion[T ordered](s &[]T) {
+// insertion tira o elemento i e desloca os maiores uma posição para a
+// direita (por posse, com take e replace), até achar o lugar dele.
+fn insertion[T owned + cmp.Ord](s &[]T) {
     for i := 1; i < len(s); i++ {
-        x := s[i]
+        if s[i].cmp(&s[i - 1]) >= 0 {
+            continue // já está no lugar
+        }
+        x := take(&s[i])
         j := i - 1
-        for j >= 0 && s[j] > x {
-            s[j + 1] = s[j]
+        for j >= 0 && x.cmp(&s[j]) < 0 {
+            moved := take(&s[j])
+            gap := replace(&s[j + 1], moved)
+            drop(gap) // o zero deixado pelo take anterior
             j--
         }
-        s[j + 1] = x
+        gap := replace(&s[j + 1], x)
+        drop(gap)
     }
 }
 
-fn partition[T ordered](s &[]T) int {
+fn partition[T owned + cmp.Ord](s &[]T) int {
     last := len(s) - 1
     swap(s, last / 2, last) // pivô do meio, contra entradas já ordenadas
-    pivot := s[last]
     i := 0
     for j := 0; j < last; j++ {
-        if s[j] < pivot {
+        if s[j].cmp(&s[last]) < 0 {
             swap(s, i, j)
             i++
         }
@@ -39,22 +52,29 @@ fn partition[T ordered](s &[]T) int {
     return i
 }
 
-pub fn swap[T any](s &[]T, i int, j int) {
-    t := s[i]
-    s[i] = s[j]
-    s[j] = t
+// swap troca os elementos i e j (por posse: serve para donos também).
+pub fn swap[T owned](s &[]T, i int, j int) {
+    if i == j {
+        return
+    }
+    a := take(&s[i])
+    b := replace(&s[j], a)
+    old := replace(&s[i], b)
+    drop(old) // o zero deixado pelo take
 }
 
-pub fn is_sorted[T ordered](s &[]T) bool {
+// is_sorted diz se s está em ordem crescente.
+pub fn is_sorted[T owned + cmp.Ord](s &[]T) bool {
     for i := 1; i < len(s); i++ {
-        if s[i] < s[i - 1] {
+        if s[i].cmp(&s[i - 1]) < 0 {
             return false
         }
     }
     return true
 }
 
-pub fn reverse[T any](s &[]T) {
+// reverse inverte a ordem de s.
+pub fn reverse[T owned](s &[]T) {
     i := 0
     j := len(s) - 1
     for i < j {
@@ -64,8 +84,8 @@ pub fn reverse[T any](s &[]T) {
     }
 }
 
-// sort_by ordena s pela ordem de less (less(a, b): a vem antes de b). Serve
-// para structs e para qualquer outra ordem:
+// sort_by ordena s pela ordem de less (less(a, b): a vem antes de b), para
+// uma ordem diferente da de cmp.Ord (decrescente, por outro campo):
 //
 //     fn por_idade(a &Pessoa, b &Pessoa) bool {
 //         return a.idade < b.idade

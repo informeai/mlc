@@ -237,7 +237,11 @@ func (c *checker) checkTypeArgs(what string, params []*ast.TypeParam, args []Typ
 				if IsOwner(args[i]) && builtin != "owned" {
 					c.errorf(pos, "%s é dono e não atende %s, exigida por %s em %s (para aceitar donos: %s owned + %s)", args[i], p.Constraint, p.Name, what, p.Name, iface)
 				} else {
-					c.errorf(pos, "%s não implementa %s, exigida por %s em %s (declare impl %s for %s)", args[i], iface, p.Name, what, iface, args[i])
+					hint := fmt.Sprintf("declare impl %s for %s", iface, args[i])
+					if base := baseOf(args[i]); (iface == "cmp.Eq" || iface == "cmp.Ord" || iface == "io.Display") && (isStructType(base) || isEnumType(base)) {
+						hint = fmt.Sprintf("declare impl auto %s for %s, ou escreva o método", iface, base)
+					}
+					c.errorf(pos, "%s não implementa %s, exigida por %s em %s (%s)", args[i], iface, p.Name, what, hint)
 				}
 				ok = false
 				continue
@@ -778,4 +782,22 @@ func (c *checker) namesType(e ast.Expr) bool {
 		}
 	}
 	return false
+}
+
+// baseOf tira o ponteiro de ?*T e *T: o tipo que um impl implementa.
+func baseOf(t Type) Type {
+	if p, ok := t.(*Pointer); ok {
+		return p.Elem
+	}
+	return t
+}
+
+func isStructType(t Type) bool {
+	_, ok := t.(*Struct)
+	return ok
+}
+
+func isEnumType(t Type) bool {
+	_, ok := t.(*Enum)
+	return ok
 }

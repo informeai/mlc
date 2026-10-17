@@ -1,0 +1,16 @@
+// erro: Box não implementa cmp.Eq, exigida por T em f (declare impl auto cmp.Eq for Box, ou escreva o método)
+import "std/cmp"
+
+struct Box {
+    x int
+}
+
+fn f[T cmp.Eq](a &T, b &T) bool {
+    return a.eq(b)
+}
+
+fn main() {
+    a := Box{x: 1}
+    if f(&a, &a) {
+    }
+}

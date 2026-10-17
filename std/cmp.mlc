@@ -1,0 +1,256 @@
+// Igualdade e ordem como interfaces, para código genérico (sort.sort,
+// slices) aceitar structs pela igualdade e pela ordem que elas definem.
+//
+//     struct Version {
+//         major int
+//         minor int
+//     }
+//
+//     impl auto cmp.Eq for Version     // campo a campo
+//     impl auto cmp.Ord for Version    // pela ordem dos campos: major, depois minor
+//
+//     sort.sort(&versions)
+//
+// Ou com os métodos escritos à mão:
+//
+//     fn (p &Person) cmp(o &Person) int { return p.age.cmp(&o.age) }
+//     impl cmp.Ord for Person
+//
+// Os números, bool, string e os slices (em ordem lexicográfica) já
+// implementam as duas.
+
+// Eq é a igualdade: eq diz se os dois valores são iguais.
+pub interface Eq {
+    fn eq(self &Self, other &Self) bool
+}
+
+// Ord é a ordem: cmp devolve um número negativo se self vem antes de other,
+// zero se são equivalentes e positivo se vem depois.
+pub interface Ord {
+    fn cmp(self &Self, other &Self) int
+}
+
+// ---------- Ord dos tipos embutidos ----------
+
+impl Ord for int {
+    fn (x &int) cmp(o &int) int {
+        if *x < *o {
+            return -1
+        }
+        if *x > *o {
+            return 1
+        }
+        return 0
+    }
+}
+
+impl Ord for int8 {
+    fn (x &int8) cmp(o &int8) int {
+        return int(*x) - int(*o)
+    }
+}
+
+impl Ord for int16 {
+    fn (x &int16) cmp(o &int16) int {
+        return int(*x) - int(*o)
+    }
+}
+
+impl Ord for int32 {
+    fn (x &int32) cmp(o &int32) int {
+        return int(*x) - int(*o)
+    }
+}
+
+impl Ord for byte {
+    fn (x &byte) cmp(o &byte) int {
+        return int(*x) - int(*o)
+    }
+}
+
+impl Ord for uint16 {
+    fn (x &uint16) cmp(o &uint16) int {
+        return int(*x) - int(*o)
+    }
+}
+
+impl Ord for uint32 {
+    fn (x &uint32) cmp(o &uint32) int {
+        return int(*x) - int(*o)
+    }
+}
+
+impl Ord for uint64 {
+    fn (x &uint64) cmp(o &uint64) int {
+        if *x < *o {
+            return -1
+        }
+        if *x > *o {
+            return 1
+        }
+        return 0
+    }
+}
+
+// NaN não é menor nem maior que nada: cmp com NaN dá 0.
+impl Ord for float64 {
+    fn (x &float64) cmp(o &float64) int {
+        if *x < *o {
+            return -1
+        }
+        if *x > *o {
+            return 1
+        }
+        return 0
+    }
+}
+
+impl Ord for float32 {
+    fn (x &float32) cmp(o &float32) int {
+        if *x < *o {
+            return -1
+        }
+        if *x > *o {
+            return 1
+        }
+        return 0
+    }
+}
+
+// false vem antes de true.
+impl Ord for bool {
+    fn (x &bool) cmp(o &bool) int {
+        if *x == *o {
+            return 0
+        }
+        if *o {
+            return -1
+        }
+        return 1
+    }
+}
+
+// Textos em ordem de bytes (para ASCII, a ordem alfabética, com as
+// maiúsculas antes).
+impl Ord for string {
+    fn (x &string) cmp(o &string) int {
+        a := *x
+        b := *o
+        n := len(a)
+        if len(b) < n {
+            n = len(b)
+        }
+        for i := 0; i < n; i++ {
+            if a[i] != b[i] {
+                return int(a[i]) - int(b[i])
+            }
+        }
+        return len(a) - len(b)
+    }
+}
+
+// Slices (e []byte) em ordem lexicográfica: o primeiro elemento diferente
+// decide; se um acaba antes, ele vem primeiro.
+impl[T Ord] Ord for []T {
+    fn (s &[]T) cmp(o &[]T) int {
+        n := len(s)
+        if len(o) < n {
+            n = len(o)
+        }
+        for i := 0; i < n; i++ {
+            c := s[i].cmp(&o[i])
+            if c != 0 {
+                return c
+            }
+        }
+        return len(s) - len(o)
+    }
+}
+
+// ---------- Eq dos tipos embutidos ----------
+
+impl Eq for int {
+    fn (x &int) eq(o &int) bool {
+        return *x == *o
+    }
+}
+
+impl Eq for int8 {
+    fn (x &int8) eq(o &int8) bool {
+        return *x == *o
+    }
+}
+
+impl Eq for int16 {
+    fn (x &int16) eq(o &int16) bool {
+        return *x == *o
+    }
+}
+
+impl Eq for int32 {
+    fn (x &int32) eq(o &int32) bool {
+        return *x == *o
+    }
+}
+
+impl Eq for byte {
+    fn (x &byte) eq(o &byte) bool {
+        return *x == *o
+    }
+}
+
+impl Eq for uint16 {
+    fn (x &uint16) eq(o &uint16) bool {
+        return *x == *o
+    }
+}
+
+impl Eq for uint32 {
+    fn (x &uint32) eq(o &uint32) bool {
+        return *x == *o
+    }
+}
+
+impl Eq for uint64 {
+    fn (x &uint64) eq(o &uint64) bool {
+        return *x == *o
+    }
+}
+
+impl Eq for float64 {
+    fn (x &float64) eq(o &float64) bool {
+        return *x == *o
+    }
+}
+
+impl Eq for float32 {
+    fn (x &float32) eq(o &float32) bool {
+        return *x == *o
+    }
+}
+
+impl Eq for bool {
+    fn (x &bool) eq(o &bool) bool {
+        return *x == *o
+    }
+}
+
+impl Eq for string {
+    fn (x &string) eq(o &string) bool {
+        return *x == *o
+    }
+}
+
+impl[T Eq] Eq for []T {
+    fn (s &[]T) eq(o &[]T) bool {
+        if len(s) != len(o) {
+            return false
+        }
+        for i := 0; i < len(s); i++ {
+            if !s[i].eq(&o[i]) {
+                return false
+            }
+        }
+        return true
+    }
+}

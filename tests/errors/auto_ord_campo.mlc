@@ -1,0 +1,11 @@
+// erro: impl auto cmp.Ord for S: o campo f (fn(int) int) não implementa cmp.Ord
+import "std/cmp"
+
+struct S {
+    f fn(int) int
+}
+
+impl auto cmp.Ord for S
+
+fn main() {
+}

@@ -58,16 +58,35 @@ Entrada e saída (`io.print`, `io.printf`, `io.eprint`, `io.eprintf`, `io.write`
 
 ### `std/sort`
 
-Ordenam no lugar um `&[]T` (um slice emprestado, ou um array com `&a`).
+Ordenam no lugar um `&[]T` (um slice emprestado, ou um array com `&a`). A ordem é a de `cmp.Ord`: números, `bool`, `string`, slices (`[][]byte`, linhas de texto) e structs com `impl cmp.Ord` (ou `impl auto cmp.Ord`). Os elementos trocam de lugar por posse, sem cópias, então donos também são ordenados.
 
 | Função | O que faz |
 |---|---|
-| `sort[T ordered](s &[]T)` | ordena em ordem crescente (quicksort com inserção nos pedaços pequenos; não aloca) |
-| `is_sorted[T ordered](s &[]T) bool` | já está em ordem? |
-| `reverse[T any](s &[]T)` | inverte a ordem |
-| `swap[T any](s &[]T, i int, j int)` | troca dois elementos |
+| `sort[T owned + cmp.Ord](s &[]T)` | ordena em ordem crescente (quicksort com inserção nos pedaços pequenos; não aloca) |
+| `is_sorted[T owned + cmp.Ord](s &[]T) bool` | já está em ordem? |
+| `reverse[T owned](s &[]T)` | inverte a ordem |
+| `swap[T owned](s &[]T, i int, j int)` | troca dois elementos (por posse) |
 | `sort_by[T any](s &[]T, less fn(&T, &T) bool)` | ordena pela função `less` (para structs ou outra ordem) |
 | `is_sorted_by[T any](s &[]T, less fn(&T, &T) bool) bool` | já está na ordem de `less`? |
+
+### `std/cmp`
+
+As interfaces `Eq` (`eq(self &Self, other &Self) bool`) e `Ord` (`cmp(self &Self, other &Self) int`: negativo, zero ou positivo), já implementadas para os números, `bool`, `string` e os slices (ordem lexicográfica). Para structs e enums, `impl auto cmp.Eq` e `impl auto cmp.Ord`. Veja [interfaces.md](interfaces.md#igualdade-ordem-e-hash-cmpeq-cmpord-e-hashhash).
+
+### `std/slices`
+
+Operações sobre `&[]T` que comparam por empréstimo (servem para donos e para structs com `cmp.Eq`/`cmp.Ord`). Não alocam.
+
+| Função | O que faz |
+|---|---|
+| `index(s, &x) int` | posição do primeiro igual a `x`, ou `-1` |
+| `contains(s, &x) bool`, `count(s, &x) int` | |
+| `equal(a, b) bool` | mesmo tamanho e mesmos elementos |
+| `search(s, &x) int` | num slice ordenado: onde `x` está ou entraria |
+| `binary_search(s, &x) int` | num slice ordenado: a posição de `x`, ou `-1` |
+| `min_index(s) int`, `max_index(s) int` | o menor e o maior (o primeiro, no empate); `-1` se vazio |
+| `dedup(s) int` | num slice ordenado, junta os únicos em `s[:n]` (as repetições ficam depois, nada é liberado) |
+| `fill(s, x)` | põe `x` em todas as posições (só para tipos copiáveis) |
 
 ### `std/text`
 
@@ -197,7 +216,7 @@ Hashes em MLC: FNV para tabelas, CRC32 e SHA-256 para integridade e identificado
 | `mix64(x uint64) uint64` | espalha os bits de um inteiro (finalizador do splitmix64), para usar como chave |
 | `interface Hash { fn hash(self &Self) uint64; fn eq(self &Self, other &Self) bool }` | o que uma chave de `map.Map` precisa; dois valores iguais têm o mesmo hash |
 
-`Hash` já vem implementada para os inteiros, `bool`, `string` e slices (`[]byte`, `[]int`...). Para uma struct, escreva `hash` e `eq` e declare `impl hash.Hash for Ponto`.
+`Hash` já vem implementada para os inteiros, `bool`, `string` e slices (`[]byte`, `[]int`...). Para uma struct ou um enum, `impl auto hash.Hash for Ponto` gera `hash` e `eq` a partir dos campos; ou escreva os dois métodos e declare `impl hash.Hash for Ponto`.
 
 ```
 h := hash.sha256()

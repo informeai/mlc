@@ -1,0 +1,7 @@
+// erro: impl cmp.Ord for int precisa ficar no arquivo de int ou no de cmp.Ord
+import "std/cmp"
+
+impl auto cmp.Ord for int
+
+fn main() {
+}

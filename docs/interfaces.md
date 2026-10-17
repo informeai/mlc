@@ -106,7 +106,7 @@ pub interface Display {
 
 Os tipos embutidos (`int`, `float64`, `bool`, `string`, `byte`...), os slices e os arrays já implementam, em MLC, na própria biblioteca ([std/io.mlc](../std/io.mlc)).
 
-Para structs e enums, `impl auto` gera o método no formato de sempre:
+Para structs e enums, `impl auto` gera o método no formato de sempre (também existe para `cmp.Eq`, `cmp.Ord` e `hash.Hash`, veja [Igualdade, ordem e hash](#igualdade-ordem-e-hash-cmpeq-cmpord-e-hashhash)):
 
 ```
 impl auto io.Display for Ponto       // {1 2}
@@ -170,8 +170,45 @@ Toda a formatação é MLC, em `std/io.mlc`: o `Writer`, a escrita de inteiros, 
 
 Durante o `write` de um valor com especificação, os campos do Writer (`base`, `prec`, `zero`, `width`, `upper`, `alt`) fazem `put_int`, `put_uint` e `put_float` seguirem a especificação. Um `write` escrito à mão herda isso sem fazer nada. O alinhamento é feito em volta do `write` pelos métodos `measure`, `pad_before` e `pad_after`, também em MLC.
 
+## Igualdade, ordem e hash: cmp.Eq, cmp.Ord e hash.Hash
+
+```
+// std/cmp.mlc
+pub interface Eq {
+    fn eq(self &Self, other &Self) bool
+}
+
+pub interface Ord {
+    fn cmp(self &Self, other &Self) int     // negativo: self vem antes; 0: equivalentes; positivo: depois
+}
+```
+
+Os números, `bool`, `string` e os slices (em ordem lexicográfica) já implementam as duas. Para structs e enums, `impl auto` gera os métodos:
+
+```
+struct Version {
+    major int
+    minor int
+}
+
+impl auto cmp.Eq for Version         // campo a campo
+impl auto cmp.Ord for Version        // pela ordem dos campos: major, depois minor
+impl auto hash.Hash for Version      // hash e eq: Version vira chave de map
+
+sort.sort(&versions)
+i := slices.binary_search(&versions, &v)
+m := map.new[Version, []byte](16)
+```
+
+- Numa struct, os campos são comparados na ordem da declaração. Num enum, primeiro a variante (na ordem da declaração), depois os campos dela.
+- Cada campo precisa implementar a interface; senão o erro aponta o campo.
+- O `impl auto` de uma struct genérica (`impl auto cmp.Ord for Par`) exige a interface de cada parâmetro de tipo.
+- Para outra ordem, escreva o método e declare o `impl` de uma linha: `fn (p &Person) cmp(o &Person) int { return p.age.cmp(&o.age) }` e `impl cmp.Ord for Person`.
+- Structs com donos também implementam (os métodos recebem `&Self`).
+
+`sort.sort`, `sort.is_sorted` e o módulo `slices` usam essas interfaces. Veja [biblioteca.md](biblioteca.md).
+
 ## O que fica para depois
 
 - Interfaces dinâmicas (`&Medida`, `*Medida`), para guardar valores de tipos diferentes juntos.
-- Interfaces `Ord` e `Eq` para `sort.sort` aceitar structs.
 - Métodos de interface que recebem `Self` (cópia) ou `*Self` (posse).
