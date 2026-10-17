@@ -9,7 +9,7 @@ O modelo vem em fases:
 | A | `thread.spawn` e `thread.join`, com os dados atravessando por movimento | pronta |
 | B | canais com capacidade fixa (`std/chan`) | pronta |
 | C | `Mutex[T]` com guard, e atomics | pronta |
-| D | threads com escopo que recebem empréstimos | depois |
+| D | threads com escopo que recebem empréstimos | fora do roteiro (veja [O que ficou de fora](#o-que-ficou-de-fora)) |
 
 ## Threads (`import "std/thread"`)
 
@@ -248,6 +248,18 @@ Todas as operações são sequencialmente consistentes. Cada handle precisa de `
 
 - **Deadlock.** Duas threads esperando uma pela outra (dois canais cheios, um `recv` com o próprio `Sender` aberto na mesma thread, dois mutex travados em ordens diferentes) travam o programa, e o verificador não impede. A única exceção é travar o mesmo mutex duas vezes na mesma thread, que dá panic.
 - **O que passa pela FFI.** Uma biblioteca de C que cria threads ou compartilha memória por conta própria fica fora da garantia.
+
+## O que ficou de fora
+
+**Threads com escopo que recebem empréstimos**, como várias threads processando pedaços disjuntos de um mesmo buffer no lugar (`&s[0:n/2]` para uma, `&s[n/2:]` para outra). Hoje o mesmo trabalho é feito de três jeitos:
+
+- com os dados já divididos desde o início (um slice por trabalhador, movido para a thread e devolvido no `join`), que é o jeito idiomático e não custa nada a mais;
+- copiando os pedaços e juntando depois, com a cópia visível no código;
+- com tudo dentro de um `Mutex`, de forma segura mas sem paralelismo de verdade.
+
+Ganhar o caso "no lugar, sem cópia" exigiria provar na compilação que os pedaços não se sobrepõem e que nenhum empréstimo sobrevive às threads. Isso é muita complexidade no verificador para um caso de nicho (processamento numérico pesado sobre um buffer único). O modelo atual se explica numa frase: **os dados atravessam por movimento, por canal ou dentro de um mutex**.
+
+Se um programa real precisar de mais, o primeiro passo seria um **empréstimo só de leitura** (hoje todo `&T` permite alterar), que deixaria várias threads lerem os mesmos dados e serviria à linguagem inteira, não só às threads.
 
 ## Como funciona
 

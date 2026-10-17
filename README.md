@@ -192,4 +192,4 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
   - [x] fase A: `thread.spawn(f, ctx, stack)` e `thread.join(t)`; o contexto e o resultado atravessam por movimento; a pilha tem tamanho explícito; todo `spawn` precisa de `join`
   - [x] fase B: canais com capacidade fixa (`std/chan`): `chan.new[T](n)`, pontas `Sender`/`Receiver` que precisam de `close()`, `recv` devolvendo `Got(v)`/`Closed`, `send` sem receptor liberando o valor, vários produtores e consumidores
   - [x] fase C: `mutex.new(v)`, dono do valor, com `lock()` devolvendo um guard que precisa de `unlock()` e `get()` emprestando o valor só enquanto a trava existe; `wait`/`notify`; travar duas vezes na mesma thread dá panic; `atomic.Int` e `atomic.Bool`
-  - [ ] fase D: threads com escopo que recebem empréstimos
+  - Fora do roteiro: threads com escopo que recebem empréstimos (pedaços disjuntos de um mesmo buffer). Só entram se um programa real precisar; antes disso viria um empréstimo só de leitura, útil para a linguagem inteira. Veja [docs/concorrencia.md](docs/concorrencia.md#o-que-ficou-de-fora)
