@@ -33,6 +33,13 @@ static inline bool mlc_string_eq(mlc_str a, mlc_str b) {
 /* Encerra o programa com uma mensagem apontando para a linha do .mlc. */
 _Noreturn void mlc_panic(const char *file, int line, const char *msg);
 
+/* Empréstimo do objeto apontado por um ?*T: nil dá panic. */
+static inline void *mlc_nonnull(void *p, const char *file, int line) {
+    if (p == NULL) mlc_panic(file, line, "empréstimo de um ponteiro nil: a posição está vazia");
+    return p;
+}
+#define MLC_NONNULL(p) mlc_nonnull((p), __FILE__, __LINE__)
+
 /* Chamada através de um valor fn que ficou com o valor zero. */
 _Noreturn void mlc_null_fn(const char *file, int line);
 

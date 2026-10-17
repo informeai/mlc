@@ -46,7 +46,11 @@ func (g *gen) borrow(x ast.Expr) string {
 	if sl, ok := x.(*ast.SliceExpr); ok {
 		return g.subSlice(sl)
 	}
-	if isPointer(g.info.Types[x]) {
+	if p, ok := g.info.Types[x].(*checker.Pointer); ok {
+		if p.Nullable {
+			// &p com p ?*T (num genérico, &v.items[i] com T = ?*X): confere nil
+			return "MLC_NONNULL(" + g.expr(x) + ")"
+		}
 		return g.expr(x)
 	}
 	return "&" + g.expr(x)

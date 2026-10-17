@@ -220,6 +220,9 @@ func (c *checker) checkTypeArgs(what string, params []*ast.TypeParam, args []Typ
 			ok = false
 			continue
 		}
+		if b, _, _ := splitConstraint(p.Constraint); b == "owned" && !abstract(args[i]) && c.instName == "" {
+			c.requireFree(args[i], pos, what) // ?*X com X dono: precisa de free
+		}
 		if !c.satisfiesParam(args[i], p) {
 			reason := ""
 			builtin, iface, _ := splitConstraint(p.Constraint)

@@ -2,6 +2,7 @@ package checker
 
 import (
 	"mlc/internal/ast"
+	"mlc/internal/token"
 )
 
 // Donos em genéricos
@@ -29,31 +30,149 @@ func ownedVar(t Type) bool {
 }
 
 // ownedOK diz se t pode ser argumento de um parâmetro owned, e por que não.
+// Valem os tipos sem dono e os donos que têm valor zero e sabem se liberar:
+// ?*X (X sem donos, ou com um método fn (x *X) free()) e []E, com cada
+// elemento E também assim (donos aninhados: [][]byte, []?*No). A existência
+// do free é conferida depois (requireFree), quando os métodos já existem.
 func ownedOK(t Type) (bool, string) {
 	switch t := t.(type) {
 	case *Pointer:
 		if !t.Nullable {
 			return false, "*T não tem valor zero e as coleções precisam de posições vazias: use ?" + t.String()
 		}
-		if IsOwner(t.Elem) || isResource(t.Elem) || hasOwnerFields(t.Elem) {
-			return false, "donos dentro de donos ainda não podem ser argumentos de tipo"
-		}
-		return true, ""
+		return ownedPointee(t.Elem)
 	case *Slice:
-		if IsOwner(t.Elem) || isResource(t.Elem) {
-			return false, "donos dentro de donos ainda não podem ser argumentos de tipo"
-		}
-		return true, ""
+		return ownedElem(t.Elem)
 	case *Borrow:
 		return false, "empréstimos não podem ser argumentos de tipo"
 	}
 	if isResource(t) {
-		return false, "structs com donos ainda não podem ser argumentos de tipo"
+		return false, "uma struct com donos não pode ser copiada: use ?*" + t.String()
 	}
 	if t == Void || t == NilType || t == Invalid || isUntyped(t) {
 		return false, ""
 	}
 	return true, ""
+}
+
+// ownedPointee confere o tipo apontado por um ?*X usado como T owned.
+func ownedPointee(t Type) (bool, string) {
+	if IsOwner(t) {
+		return false, "ponteiro para dono não é suportado"
+	}
+	return true, ""
+}
+
+// ownedElem confere o elemento de um []E usado como T owned: precisa ter
+// valor zero (as posições novas vêm zeradas) e saber se liberar.
+func ownedElem(t Type) (bool, string) {
+	switch t := t.(type) {
+	case *Pointer:
+		if !t.Nullable {
+			return false, "elementos de slice começam zerados: use []?" + t.String()
+		}
+		return ownedPointee(t.Elem)
+	case *Slice:
+		return ownedElem(t.Elem)
+	}
+	if isResource(t) {
+		return false, "structs com donos só existem atrás de ponteiro: use []?*" + t.String()
+	}
+	return true, ""
+}
+
+// freeNeed é uma struct com donos que apareceu dentro de um T owned: ela
+// precisa de um método fn (x *X) free() (conferido depois da coleta).
+type freeNeed struct {
+	s   *Struct
+	pos token.Pos
+	mod *module
+	in  string // onde apareceu, para a mensagem
+}
+
+// requireFree anota as structs com donos alcançadas por t (como ?*X ou
+// dentro de []?*X), que precisam saber se liberar.
+func (c *checker) requireFree(t Type, pos token.Pos, in string) {
+	switch t := t.(type) {
+	case *Pointer:
+		if s, ok := t.Elem.(*Struct); ok && s.Resource {
+			c.freeNeeds = append(c.freeNeeds, freeNeed{s, pos, c.mod, in})
+		}
+	case *Slice:
+		c.requireFree(t.Elem, pos, in)
+	}
+}
+
+// checkFreeNeeds confere, com todos os métodos coletados, que cada struct
+// com donos usada dentro de um T owned tem o método free.
+func (c *checker) checkFreeNeeds() {
+	saved := c.mod
+	for _, n := range c.freeNeeds {
+		if c.freeMethod(n.s) == nil {
+			if c.freeMissing[n.s] {
+				continue // um erro por struct basta
+			}
+			c.freeMissing[n.s] = true
+			c.mod = n.mod
+			c.errorf(n.pos, "%s tem campos donos e não sabe se liberar dentro de %s: declare fn (x *%s) free() liberando os campos e o próprio x", n.s, n.in, n.s.Name)
+		}
+	}
+	c.mod = saved
+	c.freeNeeds = nil
+}
+
+// freeMethod devolve o método fn (x *X) free() de s (instanciando-o, numa
+// struct genérica), ou nil.
+func (c *checker) freeMethod(s *Struct) *Func {
+	m := s.Methods["free"]
+	if m == nil && s.Origin != nil {
+		if d := s.Origin.methodDecls["free"]; d != nil {
+			m = c.instMethod(s, "free")
+		}
+	}
+	if m == nil || m.recv != recvOwner || len(m.Params) != 1 || m.Result != Void {
+		return nil
+	}
+	return m
+}
+
+// dropPlan registra o que drop(x) faz com um valor concreto do tipo t: nada
+// (sem dono), free (dono simples), x.free() (struct que sabe se liberar) ou
+// liberar cada elemento e depois o slice. Os tipos com drop não trivial vão
+// para o gerador, que escreve uma função mlc_drop_ para cada um.
+func (c *checker) dropPlan(t Type, pos token.Pos) {
+	if abstract(t) || !IsOwner(t) || c.info.DropTypes[typeKey(t)] != nil {
+		return
+	}
+	switch tt := t.(type) {
+	case *Pointer:
+		if s, ok := tt.Elem.(*Struct); ok && s.Resource {
+			m := c.freeMethod(s)
+			if m == nil {
+				if !c.freeMissing[s] { // senão, o erro já saiu onde o tipo foi usado
+					c.errorf(pos, "drop de %s: %s tem campos donos e precisa de fn (x *%s) free()", t, s, s.Name)
+				}
+				return
+			}
+			c.info.DropFree[s] = m
+		}
+	case *Slice:
+		c.dropPlan(tt.Elem, pos)
+	}
+	c.info.DropTypes[typeKey(t)] = t
+	c.info.DropOrder = append(c.info.DropOrder, t)
+}
+
+// deepDrop diz se drop de um valor do tipo t libera outros donos além do
+// próprio valor (então é um move para a função de drop, e não um free).
+func deepDrop(t Type) bool {
+	switch tt := t.(type) {
+	case *Pointer:
+		return isResource(tt.Elem)
+	case *Slice:
+		return IsOwner(tt.Elem)
+	}
+	return false
 }
 
 // hasOwnerFields diz se t é uma struct com campos donos.
@@ -176,6 +295,8 @@ func (c *checker) dropCall(e *ast.CallExpr) Type {
 		c.errorf(e.Lparen, "drop só existe em código genérico, para um T owned; fora dele, use free")
 	case isBorrow(t):
 		c.errorf(e.Args[0].Pos(), "drop recebe o dono, não um empréstimo (%s)", t)
+	default:
+		c.dropPlan(t, e.Args[0].Pos())
 	}
 	c.info.Calls[e] = Callee{Builtin: Drop}
 	return Void

@@ -1,4 +1,4 @@
-// erro: donos dentro de donos ainda não podem ser argumentos de tipo
+// erro: L tem campos donos e não sabe se liberar dentro de vec.new: declare fn (x *L) free() liberando os campos e o próprio x
 import "std/vec"
 
 struct L {

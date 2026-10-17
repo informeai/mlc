@@ -1,0 +1,1 @@
+panic: std/vec.mlc:87: empréstimo de um ponteiro nil: a posição está vazia

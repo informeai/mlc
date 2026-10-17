@@ -961,9 +961,12 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 		o.free(e.Args[0])
 		return
 	case Drop:
-		if IsOwner(o.c.info.Types[e.Args[0]]) {
-			o.free(e.Args[0]) // drop de um dono é free
-		} else {
+		switch t := o.c.info.Types[e.Args[0]]; {
+		case deepDrop(t):
+			o.consume(e.Args[0], nil, "drop") // a função de drop libera o interior
+		case IsOwner(t):
+			o.free(e.Args[0]) // drop de um dono simples é free
+		default:
 			o.read(e.Args[0])
 		}
 		return

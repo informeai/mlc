@@ -1,0 +1,9 @@
+import "std/io"
+import "std/vec"
+
+fn main() {
+    g := vec.new[?*vec.Vec[int]](2)
+    g.push(nil)
+    io.print(g.at(0).len())
+    g.free()
+}

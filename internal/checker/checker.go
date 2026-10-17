@@ -133,6 +133,9 @@ type Info struct {
 	BorrowSrc    map[*Local]*Local            // variável emprestada → a origem (raiz)
 	BorrowView   map[*Local]bool              // a variável emprestada é uma visão (sub-slice)
 	BorrowParent map[*Local]*Local            // variável emprestada derivada de outra
+	DropTypes    map[string]Type              // tipos com drop não trivial (por typeKey)
+	DropOrder    []Type                       // os mesmos, na ordem em que apareceram
+	DropFree     map[*Struct]*Func            // o método free de cada struct liberada por drop
 	FuncTypes    []*FuncType                  // tipos fn concretos, para o gerador declarar
 	Funcs        []*Func                      // na ordem de declaração
 }
@@ -174,7 +177,9 @@ type checker struct {
 	muted       bool           // erros silenciados (tipos de uma instância de verificação)
 	mutedErrs   int
 	probeBroken map[*Func]bool
-	inReceiver  bool // resolvendo o tipo do receptor de um método // métodos de interface chamados em parâmetros de tipo
+	inReceiver  bool       // resolvendo o tipo do receptor de um método
+	freeNeeds   []freeNeed // structs com donos dentro de um T owned: precisam de free
+	freeMissing map[*Struct]bool
 	expected    Type // tipo esperado de expectedFor (para Resultado.Ok sem argumentos de tipo)
 	expectedFor ast.Expr
 	litOK       bool // o próximo literal composto pode conter ponteiros donos (dentro de alloc)
@@ -226,6 +231,8 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 			BorrowSrc:    map[*Local]*Local{},
 			BorrowView:   map[*Local]bool{},
 			BorrowParent: map[*Local]*Local{},
+			DropTypes:    map[string]Type{},
+			DropFree:     map[*Struct]*Func{},
 		},
 		pointers: map[ptrKey]*Pointer{},
 		borrows:  map[Type]*Borrow{},
@@ -238,6 +245,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 		funcTypes:   map[string]*FuncType{},
 		probes:      map[*Func]bool{},
 		probeBroken: map[*Func]bool{},
+		freeMissing: map[*Struct]bool{},
 		tvMethods:   map[string]*Func{},
 	}
 	for i, src := range srcs {
@@ -259,6 +267,8 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 		}
 		c.checkAbstracts()
 	}
+	// Structs com donos usadas dentro de um T owned precisam de free.
+	c.checkFreeNeeds()
 	// Corpo das instâncias de genéricos criadas pelos usos.
 	c.checkInstances()
 	// A posse só é verificada num programa sem erros de tipo: ela depende

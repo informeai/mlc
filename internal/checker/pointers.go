@@ -55,6 +55,11 @@ type ptrKey struct {
 }
 
 func (c *checker) borrowOf(elem Type) *Borrow {
+	if p, ok := elem.(*Pointer); ok {
+		// &p, com p ponteiro, empresta o objeto apontado: num genérico com
+		// T = ?*X, &T é &X (não existe empréstimo de ponteiro)
+		elem = p.Elem
+	}
 	if b, ok := c.borrows[elem]; ok {
 		return b
 	}

@@ -62,6 +62,7 @@ func Generate(file string, f *ast.File, info *checker.Info) string {
 	for _, fn := range info.Funcs {
 		g.raw("static MLC_MAYBE_UNUSED %s;\n", signature(fn)) // instâncias podem ficar sem uso
 	}
+	g.dropHelpers()
 	g.raw("\n")
 	for _, fn := range info.Funcs {
 		g.function(fn)
@@ -543,12 +544,10 @@ func (g *gen) expr(e ast.Expr) string {
 			}
 			return "mlc_free(" + g.expr(e.Args[0]) + ")"
 		case checker.Drop:
-			// drop(x): free se x for dono; nada se não for (T = int numa instância)
-			switch g.info.Types[e.Args[0]].(type) {
-			case *checker.Slice:
-				return "mlc_free(" + g.expr(e.Args[0]) + ".ptr)"
-			case *checker.Pointer:
-				return "mlc_free(" + g.expr(e.Args[0]) + ")"
+			// drop(x): libera x conforme o tipo (mlc_drop_*); nada se não for
+			// dono (T = int numa instância)
+			if t := g.info.Types[e.Args[0]]; checker.IsOwner(t) {
+				return dropName(t) + "(" + g.expr(e.Args[0]) + ")"
 			}
 			return "((void)(" + g.expr(e.Args[0]) + "))"
 		case checker.Realloc:
@@ -608,4 +607,33 @@ func cString(s string) string {
 	}
 	sb.WriteByte('"')
 	return sb.String()
+}
+
+// dropName é a função que libera um valor do tipo t (drop em código genérico).
+func dropName(t checker.Type) string { return "mlc_drop_" + mangle(t) }
+
+// dropHelpers escreve uma função de drop para cada tipo dono liberado por
+// drop: free de um dono simples, o método free de uma struct com donos, ou
+// cada elemento e depois o slice.
+func (g *gen) dropHelpers() {
+	for _, t := range g.info.DropOrder {
+		g.raw("static MLC_MAYBE_UNUSED void %s(%s v);\n", dropName(t), cType(t))
+	}
+	for _, t := range g.info.DropOrder {
+		g.raw("static void %s(%s v) {\n", dropName(t), cType(t))
+		switch tt := t.(type) {
+		case *checker.Pointer:
+			if s, ok := tt.Elem.(*checker.Struct); ok && s.Resource {
+				g.raw("    if (v != NULL) %s(v);\n", g.info.DropFree[s].CName)
+			} else {
+				g.raw("    mlc_free(v);\n")
+			}
+		case *checker.Slice:
+			if checker.IsOwner(tt.Elem) {
+				g.raw("    for (int64_t i = 0; i < v.len; i++) %s(v.ptr[i]);\n", dropName(tt.Elem))
+			}
+			g.raw("    mlc_free(v.ptr);\n")
+		}
+		g.raw("}\n")
+	}
 }

@@ -197,7 +197,27 @@ fn (v &Vec[T]) push(x T) {           // x é movido para dentro
 - Dentro do corpo, um valor do tipo `T` é tratado como um dono: atribuir, passar ou devolver **move**, usar depois de mover é erro, e todo valor precisa de destino (mover, guardar, devolver ou `drop(x)`). Copiar e comparar com `==` não valem.
 - **`drop(x)`** só existe em código genérico: libera `x` se for dono (`free`) e não faz nada se não for (com `T = int`). Fora de um genérico, use `free`.
 - `take(&s[i])`, `replace(&s[i], v)` e `for x in drain(s)` valem para `[]T`, como nos slices de donos.
-- `*X` não é aceito (não tem valor zero, e uma coleção precisa de posições vazias): use `?*X`. Structs com donos e donos dentro de donos (`?*Lista`, `[]?*No`) ainda não são aceitos.
+- `*X` não é aceito (não tem valor zero, e uma coleção precisa de posições vazias): use `?*X`.
+- **Donos aninhados:** valem `?*X` com `X` contendo donos e slices de donos (`[][]byte`, `[]?*No`), desde que cada struct com donos saiba se liberar com um método **`fn (x *X) free()`**, escrito por quem programa (o `Vec` e o `Map` da biblioteca já têm). `drop(x)` usa esse método: em `Vec[?*vec.Vec[int]]`, liberar o vetor de fora libera cada vetor de dentro. Sem o `free`, o erro aponta onde o tipo foi usado. Assim cabem árvores e dados aninhados:
+
+  ```
+  struct Valor {
+      tipo int
+      texto []byte
+      itens ?*vec.Vec[?*Valor]   // filhos
+  }
+
+  fn (v *Valor) free() {
+      free(v.texto)
+      if v.itens != nil {
+          v.itens.free()         // libera cada filho (Valor.free) e o vetor
+      }
+      v.itens = nil
+      free(v)
+  }
+  ```
+
+- Com `T = ?*X`, `&T` é `&X`: `v.at(i)` empresta o objeto apontado (`grade.at(1).get(2)`), e uma posição `nil` dá panic.
 - **Restrições combinadas:** uma restrição embutida e uma interface, com `+`: `[K owned + hash.Hash]` aceita donos simples que implementam `Hash` (as chaves de `map.Map`). Na restrição do receptor, a parte que falta vem da struct: em `Map[K owned + hash.Hash, V owned]`, `fn (m &Map[K any, V]) key_at` pede `K any + hash.Hash`.
 - **Os erros de posse aparecem na definição:** cada genérico com `owned` também é verificado com `T = []byte`. Um erro desses diz "verificado com T dono".
 

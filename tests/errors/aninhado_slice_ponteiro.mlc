@@ -1,0 +1,11 @@
+// erro: elementos de slice começam zerados (nil), então não podem ser *T: use []?*T
+import "std/vec"
+
+struct No {
+    v int
+}
+
+fn main() {
+    v := vec.new[[]*No](1)
+    v.free()
+}

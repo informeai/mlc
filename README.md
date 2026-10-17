@@ -158,7 +158,7 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 
 ### Próximos passos (em ordem de prioridade)
 
-- [ ] **Donos aninhados:** donos dentro de donos em genéricos, structs e enums com dados donos (`Vec[Vec[int]]`, `Map[[]byte, Vec[T]]`, `Vec[?*No]` com `No` contendo donos). Destrava JSON, árvores de sintaxe, grafos e índices
+- [x] **Donos aninhados:** `Vec[?*vec.Vec[int]]`, `Map[[]byte, ?*vec.Vec[[]byte]]`, `Vec[[][]byte]` e árvores (`Vec[?*Valor]` dentro de `Valor`); structs com donos se liberam com `fn (x *X) free()`, que o `drop` genérico chama. Enums com dados donos ficaram para o item de erros com conteúdo. Veja [docs/tipos.md](docs/tipos.md)
 - [ ] **FFI para bibliotecas do usuário:** `extern fn` fora da `std`, marcado de forma explícita e verificado na fronteira, para usar bibliotecas C (rede, bancos de dados, processos, diretórios, leitura de arquivo aos pedaços)
 - [ ] **Caminho de busca de bibliotecas:** reaproveitar bibliotecas entre projetos (por exemplo `MLC_PATH` ou uma pasta `lib/`), além dos imports relativos ao `main.mlc` e do `std/` embutido
 - [ ] **Formatação para buffer:** `str.format(dst, "...", x)`, um `io.Writer` que escreve num `[]byte` e especificadores de formato (`{:x}`, `{:.2}`, largura)

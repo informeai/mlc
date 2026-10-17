@@ -195,7 +195,7 @@ A linguagem não tem `append` nem coleção que cresce sozinha. Para isso existe
 
 ## Donos em genéricos
 
-Um genérico com `[T owned]` pode guardar donos (`Vec[[]byte]`, `Vec[?*No]`). Dentro dele, um valor `T` é tratado como um `?*X`: atribuir move, usar depois de mover é erro, e todo valor precisa de destino. `drop(x)` é a forma genérica de liberar: vira `free` quando `T` é dono e não faz nada quando não é. Como em todo genérico, cada instância concreta passa pelo verificador; além disso, cada genérico com `owned` é verificado com `T = []byte`, para os erros aparecerem na definição. Coleções como `Vec` liberam os elementos no `free()`, escrito em MLC e à vista na biblioteca.
+Um genérico com `[T owned]` pode guardar donos (`Vec[[]byte]`, `Vec[?*No]`), inclusive aninhados (`Vec[?*vec.Vec[int]]`, `Vec[[][]byte]`, árvores), quando cada struct com donos tem um método `fn (x *X) free()` que libera os campos e o próprio objeto: o `drop` genérico o chama, e o verificador confere o `free` como qualquer outra função. Dentro dele, um valor `T` é tratado como um `?*X`: atribuir move, usar depois de mover é erro, e todo valor precisa de destino. `drop(x)` é a forma genérica de liberar: vira `free` quando `T` é dono e não faz nada quando não é. Como em todo genérico, cada instância concreta passa pelo verificador; além disso, cada genérico com `owned` é verificado com `T = []byte`, para os erros aparecerem na definição. Coleções como `Vec` liberam os elementos no `free()`, escrito em MLC e à vista na biblioteca.
 
 ## Funções como valor
 
