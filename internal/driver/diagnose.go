@@ -16,7 +16,8 @@ import (
 // Um arquivo com fn main é checado como programa. Um módulo (sem main) é
 // checado pelo main.mlc mais próximo, subindo as pastas, quando esse programa
 // o importa: assim os imports dele resolvem como num build de verdade. Sem
-// esse main.mlc, o módulo é checado sozinho, sem exigir main.
+// esse main.mlc, o módulo é checado sozinho, sem exigir main. Um arquivo
+// _test.mlc é checado como programa de teste.
 func Diagnose(target string, read Loader) []token.Error {
 	target = filepath.Clean(target)
 	src, err := read(target)
@@ -41,6 +42,9 @@ func Diagnose(target string, read Loader) []token.Error {
 // checado: o próprio target se tiver fn main, senão o main.mlc mais próximo
 // que o importa. loose diz que target é um módulo solto, checado sozinho.
 func entryFor(target string, src []byte, read Loader) (file string, fileSrc []byte, loose bool) {
+	if IsTestFile(target) {
+		return target, src, false // arquivo de teste: é o principal do programa de teste
+	}
 	if f, errs := parser.ParseFile(target, src); len(errs) == 0 {
 		for _, fn := range f.Funcs {
 			if fn.Name == "main" && fn.Recv == nil {
@@ -80,6 +84,7 @@ func Analyze(target string, read Loader) *Program {
 	if len(errs) > 0 {
 		return nil
 	}
+	srcs[len(srcs)-1].Test = IsTestFile(file)
 	info, _ := checker.CheckProgram(srcs)
 	p := &Program{Srcs: srcs, Info: info}
 	for i := range srcs {
@@ -99,6 +104,7 @@ func Analyze(target string, read Loader) *Program {
 func programErrors(file string, src []byte, read Loader, target string) []token.Error {
 	srcs, errs := load(file, src, read)
 	if len(errs) == 0 {
+		srcs[len(srcs)-1].Test = IsTestFile(file)
 		_, errs = checker.CheckProgram(srcs)
 	}
 	var out []token.Error

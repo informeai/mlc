@@ -119,6 +119,7 @@ eos          = ";" | (* inserido pelo lexer no fim da linha *) ;
 - **`const`:** o valor é avaliado na compilação e só pode usar literais, outras constantes e operadores. No topo do arquivo, uma constante só usa as declaradas antes dela. Constantes podem ser usadas como padrão de `match`.
 - **`for x in s`:** `s` precisa ser uma variável ou campo slice; `x` recebe uma cópia de cada elemento. O nome `_` descarta o elemento.
 - **`match` sobre enum com donos:** sobre uma variável dona ou um temporário, consome (cada campo dono recebe um nome dono, sem `_`, e um braço `_` não pode cobrir variante com donos); sobre `*e`, um campo ou um empréstimo, só lê (os campos donos vêm como `&T`). Veja [tipos.md](tipos.md#enums-com-donos).
+- **Arquivos de teste:** um `nome_test.mlc` não declara `fn main`; as funções `fn test_nome()` (sem parâmetros nem retorno, não genéricas) são os testes, rodados por `mlc test`. Veja [testes.md](testes.md).
 - **Índice:** `s[i]` em slice dá o elemento; em string, o byte como `int`. Fora dos limites, panic.
 - **`for x in drain(s)`:** só para slices de donos; cada elemento sai do slice para `x`, que precisa ser liberado ou movido na volta. `drain` só existe nessa forma.
 - **Métodos:** `fn (p &Ponto) area() int` declara o método `area` de `Ponto`, chamado como `p.area()`. O receptor diz o que a chamada faz com `p`: `Ponto` recebe uma cópia, `&Ponto` empresta e `*Ponto` recebe a posse; o empréstimo ou o move acontece sem `&` na chamada. Métodos só existem em structs, declarados no arquivo da struct, e `pub` os exporta.

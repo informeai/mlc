@@ -23,6 +23,7 @@ type module struct {
 	file   string
 	prefix string // prefixo dos nomes no C, para não colidir entre arquivos
 	std    bool   // arquivo da biblioteca padrão
+	test   bool   // arquivo de teste (só o principal)
 
 	uses     map[string]*module // arquivos importados, pelo nome
 	funcs    map[string]*Func
@@ -38,7 +39,7 @@ type module struct {
 func (c *checker) newModule(src Source, i int) *module {
 	m := &module{
 		path: src.Path, file: src.File,
-		std:   src.Std,
+		std: src.Std, test: src.Test,
 		uses:  map[string]*module{},
 		funcs: map[string]*Func{}, structs: map[string]*Struct{},
 		generics:      map[string]*Func{},

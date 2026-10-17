@@ -1,0 +1,72 @@
+import "std/str"
+import "std/testing"
+import "std/text"
+
+fn test_classes() {
+    testing.check(text.is_space(' ') && text.is_space('\t') && text.is_space('\n'), "espaços")
+    testing.check(!text.is_space('a'), "a não é espaço")
+    testing.check(text.is_digit('0') && text.is_digit('9') && !text.is_digit('a'), "dígitos")
+    testing.check(text.is_letter('a') && text.is_letter('Z') && !text.is_letter('1'), "letras")
+}
+
+fn test_search() {
+    b := alloc([]byte, 16)
+    n := str.copy(&b, "banana split")
+    s := &b[:n]
+    testing.eq_int(text.index_byte(s, 'n'), 2)
+    testing.eq_int(text.index_byte(s, 'z'), -1)
+    testing.eq_int(text.index_of(s, "ana"), 1)
+    testing.eq_int(text.index_of(s, "split"), 7)
+    testing.eq_int(text.index_of(s, "splits"), -1)
+    testing.eq_int(text.index_of(s, ""), 0)
+    testing.check(text.contains(s, "a s"), "contém 'a s'")
+    testing.check(text.starts_with(s, "ban"), "começa com ban")
+    testing.check(!text.starts_with(s, "split"), "não começa com split")
+    testing.check(text.ends_with(s, "lit"), "termina com lit")
+    testing.check(!text.ends_with(s, "banana split!"), "sufixo maior que o texto")
+    testing.eq_int(text.count_byte(s, 'a'), 3)
+    free(b)
+}
+
+fn test_trim() {
+    b := alloc([]byte, 16)
+    n := str.copy(&b, "  oi mundo \n")
+    s := &b[:n]
+    start := text.trim_start(s)
+    end := text.trim_end(s)
+    testing.eq_str(&b[start:end], "oi mundo")
+    m := str.copy(&b, " \t ")
+    t := &b[:m]
+    testing.eq_int(text.trim_start(t), 3)
+    testing.eq_int(text.trim_end(t), 0)
+    free(b)
+}
+
+fn test_fields() {
+    b := alloc([]byte, 16)
+    n := str.copy(&b, "a,bc,,d")
+    line := &b[:n]
+    testing.eq_int(text.field_end(line, ',', 0), 1)
+    testing.eq_int(text.field_end(line, ',', 2), 4)
+    testing.eq_int(text.field_end(line, ',', 5), 5)
+    testing.eq_int(text.field_end(line, ',', 6), 7)
+    count := 0
+    i := 0
+    for i <= len(line) {
+        end := text.field_end(line, ',', i)
+        count++
+        i = end + 1
+    }
+    testing.eq_int(count, 4)
+    free(b)
+}
+
+fn test_case() {
+    b := alloc([]byte, 16)
+    n := str.copy(&b, "Olá, MLC 1")
+    text.to_upper(&b[:n])
+    testing.eq_str(&b[:n], "OLá, MLC 1") // só ASCII muda
+    text.to_lower(&b[:n])
+    testing.eq_str(&b[:n], "olá, mlc 1")
+    free(b)
+}

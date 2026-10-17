@@ -1,0 +1,9 @@
+// erro: um arquivo de teste não declara fn main
+import "std/testing"
+
+fn test_a() {
+    testing.check(true, "a")
+}
+
+fn main() {
+}

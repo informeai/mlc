@@ -261,3 +261,80 @@ fn main() {
 		t.Errorf("o diagnóstico não achou os módulos: %v", errs)
 	}
 }
+
+// TestTestRunner confere o resultado e a saída de cada teste de
+// tests/testing/runner_test.mlc (o mlc test).
+func TestTestRunner(t *testing.T) {
+	requireCC(t)
+	path := filepath.Join(testsDir, "testing", "runner_test.mlc")
+	src := []byte(readExpected(t, path))
+	exe := filepath.Join(t.TempDir(), "prog")
+	names, err := BuildTest(filepath.Base(path), src, exe, dirLoader(path), Options{})
+	if err != nil {
+		t.Fatalf("build falhou:\n%v", err)
+	}
+	want := []struct {
+		name   string
+		status TestStatus
+		output []string // trechos esperados na saída
+	}{
+		{"test_passes", Passed, nil},
+		{"test_fails", Failed, []string{
+			"saída do teste\n",
+			"runner_test.mlc:17: texto diferente\n    veio:     \"oi\\n\"\n    esperado: \"ola\"\n",
+			"runner_test.mlc:18: veio 3, esperado 4\n",
+			"runner_test.mlc:19: veio 255 (0xff), esperado 256 (0x100)\n",
+			"runner_test.mlc:20: veio 0.30000000000000004, esperado 0.3\n",
+			"runner_test.mlc:22: explícito\n",
+		}},
+		{"test_panics", Panicked, []string{"panic: runner_test.mlc:29: índice 5 fora dos limites (tamanho 2)"}},
+		{"test_expected_panic", Passed, []string{"panic esperado: runner_test.mlc:37:"}},
+		{"test_missing_panic", Failed, []string{"terminou sem o panic esperado"}},
+		{"test_fails_then_panics", Failed, []string{"runner_test.mlc:47: veio 1, esperado 2", "panic esperado:"}},
+	}
+	if len(names) != len(want) {
+		t.Fatalf("testes: %v", names)
+	}
+	for i, w := range want {
+		if names[i] != w.name {
+			t.Errorf("teste %d: %s, esperado %s", i, names[i], w.name)
+			continue
+		}
+		r := RunTest(exe, i, names[i])
+		if r.Status != w.status {
+			t.Errorf("%s: %v, esperado %v; saída:\n%s", w.name, r.Status, w.status, r.Output)
+		}
+		for _, frag := range w.output {
+			if !strings.Contains(string(r.Output), frag) {
+				t.Errorf("%s: a saída não contém %q:\n%s", w.name, frag, r.Output)
+			}
+		}
+		if w.name == "test_fails" && strings.Contains(string(r.Output), "nunca aparece") {
+			t.Errorf("check verdadeiro não deveria aparecer")
+		}
+	}
+}
+
+// TestStdLibrary roda os testes da biblioteca padrão (std/*_test.mlc).
+func TestStdLibrary(t *testing.T) {
+	requireCC(t)
+	files, _ := filepath.Glob("../../std/*_test.mlc")
+	if len(files) == 0 {
+		t.Fatal("nenhum std/*_test.mlc")
+	}
+	for _, path := range files {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			src := []byte(readExpected(t, path))
+			exe := filepath.Join(t.TempDir(), "prog")
+			names, err := BuildTest("std/"+filepath.Base(path), src, exe, os.ReadFile, Options{})
+			if err != nil {
+				t.Fatalf("build falhou:\n%v", err)
+			}
+			for i, name := range names {
+				if r := RunTest(exe, i, name); r.Status != Passed {
+					t.Errorf("%s: %v\n%s", name, r.Status, r.Output)
+				}
+			}
+		})
+	}
+}

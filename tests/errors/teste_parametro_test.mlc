@@ -1,0 +1,3 @@
+// erro: o teste test_a não recebe parâmetros nem retorna valor
+fn test_a(x int) {
+}

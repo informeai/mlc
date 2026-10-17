@@ -1,0 +1,98 @@
+import "std/str"
+import "std/testing"
+
+fn test_copy() {
+    b := alloc([]byte, 8)
+    n := str.copy(&b, "olá")
+    testing.eq_int(n, 4) // "á" ocupa dois bytes
+    testing.eq_str(&b[:n], "olá")
+    free(b)
+}
+
+fn test_copy_bytes_overlap() {
+    b := alloc([]byte, 6)
+    str.copy(&b, "abcdef")
+    n := str.copy_bytes(&b, &b[2:])
+    testing.eq_int(n, 4)
+    testing.eq_str(&b, "cdefef")
+    free(b)
+}
+
+fn test_copy_too_small() {
+    testing.expect_panic()
+    b := alloc([]byte, 2)
+    str.copy(&b, "abc")
+    free(b)
+}
+
+fn test_put_int() {
+    b := alloc([]byte, 24)
+    n := str.put_int(&b, -1234)
+    testing.eq_str(&b[:n], "-1234")
+    n = str.put_int(&b, -9223372036854775807 - 1)
+    testing.eq_str(&b[:n], "-9223372036854775808")
+    free(b)
+}
+
+fn test_int_len() {
+    testing.eq_int(str.int_len(0), 1)
+    testing.eq_int(str.int_len(9), 1)
+    testing.eq_int(str.int_len(10), 2)
+    testing.eq_int(str.int_len(-10), 3)
+    testing.eq_int(str.int_len(-9223372036854775807 - 1), 20)
+}
+
+fn test_put_float() {
+    b := alloc([]byte, 32)
+    n := str.put_float(&b, 0.1)
+    testing.eq_str(&b[:n], "0.1")
+    n = str.put_float(&b, 3.0)
+    testing.eq_str(&b[:n], "3")
+    n = str.put_float(&b, 1e6)
+    testing.eq_str(&b[:n], "1e+06")
+    free(b)
+}
+
+fn test_parse_int() {
+    b := alloc([]byte, 24)
+    v := 0
+    n := str.copy(&b, "-42")
+    testing.check(str.parse_int(&b[:n], &v), "-42 é válido")
+    testing.eq_int(v, -42)
+    n = str.copy(&b, "+7")
+    testing.check(str.parse_int(&b[:n], &v), "+7 é válido")
+    testing.eq_int(v, 7)
+    n = str.copy(&b, "-9223372036854775808")
+    testing.check(str.parse_int(&b[:n], &v), "o menor int é válido")
+    testing.eq_int(v, -9223372036854775807 - 1)
+    n = str.copy(&b, "9223372036854775808")
+    testing.check(!str.parse_int(&b[:n], &v), "estoura int")
+    n = str.copy(&b, "12a")
+    testing.check(!str.parse_int(&b[:n], &v), "12a é inválido")
+    testing.check(!str.parse_int(&b[:0], &v), "vazio é inválido")
+    n = str.copy(&b, "-")
+    testing.check(!str.parse_int(&b[:n], &v), "só o sinal é inválido")
+    free(b)
+}
+
+fn test_parse_float() {
+    b := alloc([]byte, 16)
+    x := 0.0
+    n := str.copy(&b, "-2.5e3")
+    testing.check(str.parse_float(&b[:n], &x), "-2.5e3 é válido")
+    testing.eq_float(x, -2500.0)
+    n = str.copy(&b, "1.5x")
+    testing.check(!str.parse_float(&b[:n], &x), "1.5x é inválido")
+    free(b)
+}
+
+fn test_eq() {
+    b := alloc([]byte, 4)
+    n := str.copy(&b, "abc")
+    testing.check(str.eq(&b[:n], "abc"), "abc == abc")
+    testing.check(!str.eq(&b[:n], "abd"), "abc != abd")
+    testing.check(!str.eq(&b[:n], "ab"), "tamanhos diferentes")
+    testing.check(str.eq_bytes(&b[:2], &b[:2]), "mesmo buffer")
+    testing.check(!str.eq_bytes(&b[:2], &b[1:3]), "ab != bc")
+    free(b)
+}

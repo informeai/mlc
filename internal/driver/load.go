@@ -167,6 +167,8 @@ func badPath(p string) string {
 		return "o caminho é relativo à pasta do arquivo principal, sem / no começo"
 	case strings.Contains(p, "\\"):
 		return "use / para separar pastas"
+	case strings.HasSuffix(p, "_test"):
+		return "um arquivo _test.mlc é um programa de teste (mlc test) e não pode ser importado"
 	}
 	for _, part := range strings.Split(p, "/") {
 		if part == ".." || part == "." {

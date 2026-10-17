@@ -1,0 +1,6 @@
+// erro: o teste test_a não pode ser genérico
+fn test_a[T any]() {
+}
+
+fn test_b() {
+}

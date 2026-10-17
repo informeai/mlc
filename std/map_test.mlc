@@ -1,0 +1,130 @@
+import "std/map"
+import "std/str"
+import "std/testing"
+
+fn text(s string) []byte {
+    b := alloc([]byte, len(s))
+    str.copy(&b, s)
+    return b
+}
+
+fn test_put_get() {
+    m := map.new[int, int](4)
+    for i := 0; i < 1000; i++ {
+        m.put(i, i * 2) // cresce várias vezes
+    }
+    testing.eq_int(m.len(), 1000)
+    k := 777
+    testing.check(m.has(&k), "tem 777")
+    testing.eq_int(*m.get(&k), 1554)
+    testing.eq_int(m.get_or(&k, -1), 1554)
+    k = 1000
+    testing.check(!m.has(&k), "não tem 1000")
+    testing.eq_int(m.get_or(&k, -1), -1)
+    testing.eq_int(m.index(&k), -1)
+    m.free()
+}
+
+fn test_put_replaces() {
+    m := map.new[int, int](4)
+    m.put(1, 10)
+    m.put(1, 20)
+    testing.eq_int(m.len(), 1)
+    k := 1
+    testing.eq_int(m.get_or(&k, 0), 20)
+    testing.check(m.set(&k, 30), "set numa chave que existe")
+    k = 2
+    testing.check(!m.set(&k, 40), "set numa chave nova não insere")
+    testing.eq_int(m.len(), 1)
+    m.free()
+}
+
+fn test_get_missing() {
+    testing.expect_panic()
+    m := map.new[int, int](4)
+    k := 5
+    x := m.get(&k)
+    testing.eq_int(*x, 0)
+    m.free()
+}
+
+fn test_remove_and_reinsert() {
+    m := map.new[int, int](4)
+    for i := 0; i < 100; i++ {
+        m.put(i, i)
+    }
+    for i := 0; i < 100; i += 2 {
+        k := i
+        testing.check(m.remove(&k), "remove existente")
+    }
+    k := 0
+    testing.check(!m.remove(&k), "remove de novo")
+    testing.eq_int(m.len(), 50)
+    for i := 0; i < 100; i++ {
+        k = i
+        testing.eq_bool(m.has(&k), i % 2 == 1)
+    }
+    m.put(0, 7) // reaproveita uma posição apagada
+    testing.eq_int(m.len(), 51)
+    k = 0
+    testing.eq_int(m.get_or(&k, 0), 7)
+    m.free()
+}
+
+fn test_iterate() {
+    m := map.new[int, int](4)
+    for i := 1; i <= 10; i++ {
+        m.put(i, i * i)
+    }
+    keys := 0
+    vals := 0
+    count := 0
+    for i := m.next(0); i >= 0; i = m.next(i + 1) {
+        keys += m.key_at(i)
+        vals += m.value_at(i)
+        count++
+    }
+    testing.eq_int(count, 10)
+    testing.eq_int(keys, 55)
+    testing.eq_int(vals, 385)
+    m.clear()
+    testing.eq_int(m.len(), 0)
+    testing.eq_int(m.next(0), -1)
+    m.free()
+}
+
+fn test_owned_keys_and_values() {
+    m := map.new[[]byte, []byte](2)
+    m.put(text("um"), text("one"))
+    m.put(text("dois"), text("two"))
+    m.put(text("um"), text("uno")) // substitui: a chave e o valor antigos são liberados
+    testing.eq_int(m.len(), 2)
+    k := text("um")
+    testing.eq_str(m.get(&k), "uno")
+    i := m.index(&k)
+    testing.eq_str(m.key_ref(i), "um")
+    v := m.take_or(&k, text("nada"))
+    testing.eq_str(&v, "uno")
+    free(v)
+    w := m.take_or(&k, text("nada"))
+    testing.eq_str(&w, "nada")
+    free(w)
+    free(k)
+    testing.eq_int(m.len(), 1)
+    m.free()
+}
+
+fn sum(k &int, v &int) {
+    if *k < 0 || *v < 0 {
+        // nunca acontece: só confere que each passa a chave e o valor
+        testing.fail("negativo")
+    }
+}
+
+fn test_each() {
+    m := map.new[int, int](4)
+    m.put(1, 2)
+    m.put(3, 4)
+    m.each(sum)
+    m.free()
+}

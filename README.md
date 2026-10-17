@@ -43,6 +43,7 @@ bin/mlc build -L /opt/lib prog.mlc       # -L: onde procurar as bibliotecas de C
 bin/mlc build -I ~/mlc-libs prog.mlc     # -I: onde procurar os imports, além do projeto
 bin/mlc fmt .                            # formata os .mlc da pasta (no lugar)
 bin/mlc fmt -l .                         # só lista os que mudariam
+bin/mlc test std                         # roda os testes dos *_test.mlc (aqui, os da std)
 make test                                # roda os testes
 make check                               # gofmt, mlc fmt -l, go vet e testes
 ```
@@ -50,6 +51,10 @@ make check                               # gofmt, mlc fmt -l, go vet e testes
 ## Formatação (`mlc fmt`)
 
 `mlc fmt` reescreve os arquivos na forma canônica, como o `gofmt`: indentação de 4 espaços, um espaço em volta dos operadores binários e depois das vírgulas, nenhum depois de operador unário (`-x`, `*p`, `&s`), comentários de fim de linha alinhados. As quebras de linha, os parênteses e os comentários de quem escreveu são mantidos; linhas em branco seguidas viram uma só. Um arquivo com erro de sintaxe não é formatado. `mlc fmt -` lê da entrada padrão e escreve na saída padrão (para editores).
+
+## Testes (`mlc test`)
+
+Um arquivo `nome_test.mlc` declara funções `fn test_nome()` e usa as verificações de `std/testing` (`testing.eq_int(v.len(), 1)`, `testing.eq_str(&buf[:n], "oi")`, `testing.expect_panic()`). O `mlc test` roda cada teste num processo separado, então um panic ou uma falha fica no teste que o causou. Uma verificação que falha aponta a linha dela. A biblioteca padrão tem os testes dela em `std/*_test.mlc`. Veja [docs/testes.md](docs/testes.md).
 
 ## Bibliotecas
 
@@ -94,7 +99,7 @@ O compilador C usado é o da variável `CC` (padrão: `cc`).
 
 | Pasta | Papel |
 |---|---|
-| `cmd/mlc` | linha de comando (`build`, `run`, `fmt`, `lsp`) |
+| `cmd/mlc` | linha de comando (`build`, `run`, `test`, `fmt`, `lsp`) |
 | `internal/token` | tokens, posições e erros de compilação |
 | `internal/lexer` | tokens, com `;` automático no fim da linha |
 | `internal/parser` | parser recursive descent → AST |
@@ -106,10 +111,11 @@ O compilador C usado é o da variável `CC` (padrão: `cc`).
 | `internal/lsp` | `mlc lsp`: diagnósticos, cores semânticas e formatação para editores |
 | `editors/` | extensão do VS Code e plugin do Neovim |
 | `rt/c` | runtime em C, embutido no binário do `mlc` |
-| `std` | biblioteca padrão escrita em MLC (`import "std/io"`, `import "std/math"`), embutida no binário. Veja [docs/biblioteca.md](docs/biblioteca.md) |
+| `std` | biblioteca padrão escrita em MLC (`import "std/io"`, `import "std/math"`), embutida no binário, com os testes em `std/*_test.mlc`. Veja [docs/biblioteca.md](docs/biblioteca.md) |
 | `tests/run` | programas e saída esperada (`.out`); entrada opcional (`.in`) |
 | `tests/panic` | programas que devem abortar (`.out` + `.err`) |
 | `tests/errors` | programas que devem ser rejeitados (`// erro: ...` na 1ª linha) |
+| `tests/testing` | arquivo de teste com resultados conhecidos, para conferir o próprio `mlc test` |
 
 Um programa de vários arquivos fica numa pasta própria, com o principal em `main.mlc` (por exemplo `tests/run/projeto/main.mlc`) e os arquivos importados ao lado.
 
@@ -160,13 +166,14 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 - [x] **Enums com dados:** `enum Forma { Circulo(raio float64); Vazio }`, `match` com desestruturação e cobertura obrigatória, enums genéricos (`Resultado[T]`) com inferência pelo valor ou pelo contexto
 - [x] **Números:** `int8`, `int16`, `int32`, `uint16`, `uint32`, `uint64`, `float32`, `float64`; constantes sem tipo; conversões checadas. Veja [docs/tipos.md](docs/tipos.md)
 - [x] **Arrays `[N]T`:** tamanho fixo, por valor, na pilha ou em structs, sem `alloc`; `&a` empresta como `&[]T`
-- [x] **Biblioteca padrão** em MLC, importada com `std/`: `io`, `str`, `result`, `math`, `sort`, `text`, `vec`, `rand`, `os`, `fs`, `time`. Nada aloca escondido; erros como `Result[T, E]`. Veja [docs/biblioteca.md](docs/biblioteca.md)
+- [x] **Biblioteca padrão** em MLC, importada com `std/`: `io`, `str`, `result`, `math`, `sort`, `text`, `vec`, `rand`, `os`, `fs`, `time`, `testing`. Nada aloca escondido; erros como `Result[T, E]`. Veja [docs/biblioteca.md](docs/biblioteca.md)
 - [x] **`mlc fmt`:** formatador canônico (4 espaços), preservando comentários e quebras de linha; `-l` lista, `-` usa a entrada padrão
 - [x] **Interfaces estáticas:** `interface`, `impl` (de uma linha, com bloco ou genérico) e `impl auto`; interfaces como restrição de genérico, com chamadas diretas (sem tabela de métodos). `io.print`/`io.printf`/`io.eprintf` sobre `io.Display`, com a formatação em MLC. Veja [docs/interfaces.md](docs/interfaces.md)
 - [x] **Bits e funções como valor:** `& | ^ << >>`, `^x`, aritmética que dá a volta (`+% -% *%`), literais `0xFF`, `0b1010`, `0o17`, `1_000_000`; tipos `fn(int) bool`, funções como valor e chamadas indiretas (sem closures, sem alocação). `std/rand` passou a ser MLC; novos `std/hash` e `sort.sort_by`. Veja [docs/tipos.md](docs/tipos.md)
 - [x] **Donos em genéricos:** restrição `owned` (`Vec[[]byte]`, `Vec[?*No]`), `drop(x)` em código genérico, restrição no receptor (`fn (v &Vec[T any]) get`); `std/vec` com `push`/`pop`/`take`/`put`/`set` movendo a posse e `free` liberando os elementos; erros de posse apontados na definição do genérico. Veja [docs/tipos.md](docs/tipos.md)
 - [x] **Hash map em MLC:** `std/map` (`Map[K owned + hash.Hash, V owned]`, endereçamento aberto) e a interface `hash.Hash` para inteiros, `bool`, `string` e slices; restrições combinadas com `+`. Veja [docs/biblioteca.md](docs/biblioteca.md)
 - [x] **Empréstimos devolvidos e guardados:** `fn (v &Vec[T]) at(i int) &T`, `x := m.get(&k)`, `x := &a[i]`; a origem fica congelada enquanto o empréstimo é usado, conferido na compilação. `vec.at`/`last` e `map.get`/`key_ref`/`value_ref`. Veja [docs/memoria.md](docs/memoria.md)
+- [x] **Testes:** `mlc test` roda as funções `test_*` dos arquivos `*_test.mlc`, cada uma num processo, e aceita `-run` e `-v`. As verificações ficam em `std/testing` (`eq_int`, `eq_str`, `near`, `expect_panic`, ...) e apontam a linha que falhou. Cada módulo da `std` tem os testes dele. Veja [docs/testes.md](docs/testes.md)
 - [x] **LSP:** `mlc lsp` com diagnósticos ao digitar, cores, formatação, hover e ir para a definição; extensão para VS Code e configuração para Neovim. Veja [Editores](#editores)
 
 ### Próximos passos (em ordem de prioridade)

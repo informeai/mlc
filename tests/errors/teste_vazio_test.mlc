@@ -1,0 +1,4 @@
+// erro: arquivo de teste sem testes
+fn ajuda() int {
+    return 1
+}

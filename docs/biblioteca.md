@@ -29,6 +29,7 @@ Tudo que vem com a linguagem está aqui, inclusive entrada e saída (`std/io`) e
   ```
 
 - **Nomes em inglês**, como todo o runtime.
+- **Testada em MLC.** Cada módulo tem testes em `std/<módulo>_test.mlc`, que rodam com `mlc test std` (ou `make test-std`) e no `go test`. Veja [testes.md](testes.md).
 - **O que precisa do sistema** (arquivos, relógio, `libm`) é declarado como `extern fn` e implementado no runtime C (`mlc_std_<módulo>_<nome>`). `extern fn` só é aceita dentro da biblioteca padrão; o resto é MLC comum, com as mesmas checagens de posse e de tipos de qualquer programa.
 
 ## Módulos
@@ -219,6 +220,10 @@ match fs.file_size(caminho) {
 | `remove_file(path) Result[int, int]` | apaga o arquivo |
 | `exists(path) bool` | o caminho existe? |
 | `NOT_FOUND` (2), `DENIED` (13), `TOO_BIG` (1000) | códigos de erro; os demais são o `errno` do sistema |
+
+### `std/testing`
+
+Verificações para os testes rodados com `mlc test` (`check`, `fail`, `eq_int`, `eq_uint`, `eq_bool`, `eq_float`, `near`, `eq_str`, `eq_bytes`, `expect_panic`). São `extern fn`, para que a falha aponte a linha do teste. Veja [testes.md](testes.md).
 
 ### `std/time`
 

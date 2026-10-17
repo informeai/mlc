@@ -185,4 +185,8 @@ float mlc_f64_to_f32(double v);
 /* Argumentos da linha de comando, guardados pelo main gerado para std/os. */
 void mlc_args_init(int argc, char **argv);
 
+/* Programa de teste (mlc test): qual teste rodar e o resultado no fim. */
+int64_t mlc_test_selected(int argc, char **argv);
+void mlc_test_finish(void);
+
 #endif

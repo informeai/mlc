@@ -1,0 +1,33 @@
+import "std/math"
+import "std/testing"
+
+fn test_generic() {
+    testing.eq_int(math.abs(-3), 3)
+    testing.eq_float(math.abs(-2.5), 2.5)
+    testing.eq_int(math.min(2, 5), 2)
+    testing.eq_int(math.max(2, 5), 5)
+    testing.eq_int(math.clamp(9, 0, 5), 5)
+    testing.eq_int(math.clamp(-1, 0, 5), 0)
+    testing.eq_int(math.clamp(3, 0, 5), 3)
+}
+
+fn test_functions() {
+    testing.eq_float(math.sqrt(16.0), 4.0)
+    testing.eq_float(math.pow(2.0, 10.0), 1024.0)
+    testing.eq_float(math.floor(-1.5), -2.0)
+    testing.eq_float(math.ceil(-1.5), -1.0)
+    testing.eq_float(math.round(2.5), 3.0)
+    testing.near(math.sin(math.PI / 2.0), 1.0, 1e-12)
+    testing.near(math.cos(math.PI), -1.0, 1e-12)
+    testing.near(math.tan(0.0), 0.0, 1e-12)
+    testing.near(math.atan2(1.0, 1.0), math.PI / 4.0, 1e-12)
+    testing.near(math.log(math.E), 1.0, 1e-12)
+    testing.near(math.exp(1.0), math.E, 1e-12)
+}
+
+fn test_nan_inf() {
+    testing.check(math.is_nan(math.sqrt(-1.0)), "sqrt(-1) é NaN")
+    testing.check(!math.is_nan(1.0), "1 não é NaN")
+    testing.check(math.is_inf(math.exp(1000.0)), "exp(1000) é infinito")
+    testing.check(!math.is_inf(1.0), "1 não é infinito")
+}

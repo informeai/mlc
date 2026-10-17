@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"mlc/internal/driver"
 	"mlc/internal/format"
@@ -26,6 +27,11 @@ Uso:
   mlc run [-I dir] [-L dir] arquivo.mlc [argumentos]             compila e executa
       -I: pasta onde procurar os imports (além da do arquivo, de lib/ e de MLC_PATH)
       -L: pasta onde procurar as bibliotecas de C de link "nome"
+  mlc test [-v] [-run texto] [-I dir] [-L dir] [arquivos ou pastas]
+                                               roda os testes dos arquivos *_test.mlc
+                                               (padrão: a pasta atual e as de dentro)
+      -v: mostra cada teste e a saída dele, mesmo quando passa
+      -run: só os testes cujo nome contém o texto
   mlc fmt [-l] [arquivos ou pastas]            formata no lugar (padrão: a pasta atual)
   mlc fmt -                                    formata a entrada padrão na saída padrão
   mlc lsp                                      servidor de linguagem (LSP) para editores
@@ -41,6 +47,8 @@ func main() {
 		os.Exit(build(os.Args[2:]))
 	case "run":
 		os.Exit(run(os.Args[2:]))
+	case "test":
+		os.Exit(testCmd(os.Args[2:]))
 	case "fmt":
 		os.Exit(fmtCmd(os.Args[2:]))
 	case "lsp":
@@ -60,6 +68,14 @@ func readSource(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
+// readProgram é readSource para build e run: um _test.mlc é rodado com mlc test.
+func readProgram(path string) ([]byte, error) {
+	if driver.IsTestFile(path) {
+		return nil, fmt.Errorf("%s: arquivo de teste; rode com mlc test %s", path, path)
+	}
+	return readSource(path)
+}
+
 func build(args []string) int {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
 	out := fs.String("o", "", "caminho do executável (padrão: nome do arquivo sem .mlc)")
@@ -74,7 +90,7 @@ func build(args []string) int {
 		return 2
 	}
 	path := fs.Arg(0)
-	src, err := readSource(path)
+	src, err := readProgram(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -112,7 +128,7 @@ func run(args []string) int {
 		return 2
 	}
 	path := args[0]
-	src, err := readSource(path)
+	src, err := readProgram(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -140,6 +156,119 @@ func run(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// testCmd compila cada arquivo _test.mlc num programa de teste e roda cada
+// teste num processo separado. Devolve 1 se algum falhar.
+func testCmd(args []string) int {
+	fs := flag.NewFlagSet("test", flag.ExitOnError)
+	verbose := fs.Bool("v", false, "mostra cada teste e a saída dele")
+	only := fs.String("run", "", "só os testes cujo nome contém o texto")
+	var libDirs, importDirs dirList
+	fs.Var(&libDirs, "L", "pasta onde procurar as bibliotecas de C (pode repetir)")
+	fs.Var(&importDirs, "I", "pasta onde procurar os imports (pode repetir)")
+	fs.Parse(args)
+	opts := driver.Options{LibDirs: libDirs, ImportDirs: importDirs}
+	paths := fs.Args()
+	if len(paths) == 0 {
+		paths = []string{"."}
+	}
+	var files []string
+	for _, p := range paths {
+		info, err := os.Stat(p)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		if !info.IsDir() {
+			files = append(files, p)
+			continue
+		}
+		filepath.WalkDir(p, func(path string, d iofs.DirEntry, err error) error {
+			if err == nil && !d.IsDir() && driver.IsTestFile(path) {
+				files = append(files, path)
+			}
+			return nil
+		})
+	}
+	if len(files) == 0 {
+		fmt.Fprintln(os.Stderr, "mlc test: nenhum arquivo *_test.mlc encontrado")
+		return 1
+	}
+	dir, err := os.MkdirTemp("", "mlc-test-")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer os.RemoveAll(dir)
+
+	status := 0
+	for n, file := range files {
+		if !testFile(file, filepath.Join(dir, fmt.Sprintf("t%d", n)), *only, *verbose, opts) {
+			status = 1
+		}
+	}
+	return status
+}
+
+// testFile roda os testes de um arquivo e diz se todos passaram.
+func testFile(file, exe, only string, verbose bool, opts driver.Options) bool {
+	src, err := readSource(file)
+	if err == nil {
+		var names []string
+		names, err = driver.BuildTest(file, src, exe, os.ReadFile, opts)
+		if err == nil {
+			return runTests(file, exe, names, only, verbose)
+		}
+	}
+	fmt.Fprintln(os.Stderr, err)
+	fmt.Printf("FALHOU\t%s\t(não compilou)\n", file)
+	return false
+}
+
+func runTests(file, exe string, names []string, only string, verbose bool) bool {
+	start := time.Now()
+	ran, failed := 0, 0
+	for i, name := range names {
+		if only != "" && !strings.Contains(name, only) {
+			continue
+		}
+		ran++
+		if verbose {
+			fmt.Printf("=== %s\n", name)
+		}
+		r := driver.RunTest(exe, i, name)
+		if r.Status != driver.Passed {
+			failed++
+		}
+		if r.Status == driver.Passed && !verbose {
+			continue
+		}
+		label := "ok"
+		if r.Status != driver.Passed {
+			label = strings.ToUpper(r.Status.String())
+		}
+		fmt.Printf("--- %s: %s (%.2fs)\n", label, name, r.Elapsed.Seconds())
+		for _, line := range strings.SplitAfter(string(r.Output), "\n") {
+			if line != "" {
+				fmt.Print("    ", line)
+			}
+		}
+		if len(r.Output) > 0 && r.Output[len(r.Output)-1] != '\n' {
+			fmt.Println()
+		}
+	}
+	elapsed := time.Since(start).Seconds()
+	switch {
+	case failed > 0:
+		fmt.Printf("FALHOU\t%s\t%d de %s falharam\t%.2fs\n", file, failed, plural(ran, "teste", "testes"), elapsed)
+		return false
+	case ran == 0:
+		fmt.Printf("ok\t%s\tnenhum teste com %q\n", file, only)
+	default:
+		fmt.Printf("ok\t%s\t%s\t%.2fs\n", file, plural(ran, "teste", "testes"), elapsed)
+	}
+	return true
 }
 
 // fmtCmd formata arquivos .mlc no lugar. Com -l, só lista os que mudariam.
@@ -226,4 +355,11 @@ func (d *dirList) String() string { return strings.Join(*d, ",") }
 func (d *dirList) Set(v string) error {
 	*d = append(*d, v)
 	return nil
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return fmt.Sprintf("%d %s", n, many)
 }

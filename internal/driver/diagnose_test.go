@@ -19,3 +19,22 @@ func TestDiagnoseLooseModule(t *testing.T) {
 		t.Fatalf("esperado erro na linha 2: %v", errs)
 	}
 }
+
+// Um _test.mlc é checado como programa de teste: sem exigir main, e com os
+// erros próprios de um teste.
+func TestDiagnoseTestFile(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "conta_test.mlc")
+	ok := "import \"std/testing\"\n\nfn test_soma() {\n    testing.eq_int(1 + 1, 2)\n}\n"
+	if errs := Diagnose(file, Overlay(map[string][]byte{file: []byte(ok)})); len(errs) != 0 {
+		t.Fatalf("arquivo de teste sem erros não deveria ter diagnósticos: %v", errs)
+	}
+	bad := "fn test_soma(x int) {\n}\n"
+	errs := Diagnose(file, Overlay(map[string][]byte{file: []byte(bad)}))
+	if len(errs) != 1 || !strings.Contains(errs[0].Msg, "não recebe parâmetros") {
+		t.Fatalf("esperado erro do teste com parâmetro: %v", errs)
+	}
+	if p := Analyze(file, Overlay(map[string][]byte{file: []byte(ok)})); p == nil || len(p.Info.Tests) != 1 {
+		t.Fatalf("Analyze deveria achar o teste")
+	}
+}

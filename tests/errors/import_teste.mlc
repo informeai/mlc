@@ -1,0 +1,5 @@
+// erro: um arquivo _test.mlc é um programa de teste
+import "std/vec_test"
+
+fn main() {
+}

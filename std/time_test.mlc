@@ -1,0 +1,10 @@
+import "std/testing"
+import "std/time"
+
+fn test_clocks() {
+    testing.check(time.now_ms() > 1_600_000_000_000, "now_ms é depois de 2020")
+    a := time.mono_ns()
+    time.sleep_ms(5)
+    b := time.mono_ns()
+    testing.check(b - a >= 5_000_000, "sleep_ms(5) espera pelo menos 5 ms")
+}

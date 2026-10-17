@@ -1,0 +1,52 @@
+// Exercita o mlc test: cada teste aqui tem um resultado conhecido, conferido
+// por TestTestRunner (internal/driver/driver_test.go).
+import "std/io"
+import "std/str"
+import "std/testing"
+
+fn test_passes() {
+    testing.eq_int(1 + 1, 2)
+    testing.eq_bool(true, true)
+    testing.check(true, "nunca aparece")
+}
+
+fn test_fails() {
+    io.print("saída do teste")
+    b := alloc([]byte, 8)
+    n := str.copy(&b, "oi\n")
+    testing.eq_str(&b[:n], "ola")
+    testing.eq_int(3, 4) // as falhas não interrompem o teste
+    testing.eq_uint(255, 256)
+    testing.eq_float(0.1 + 0.2, 0.3)
+    testing.near(0.1 + 0.2, 0.3, 1e-9)
+    testing.fail("explícito")
+    free(b)
+}
+
+fn test_panics() {
+    b := alloc([]byte, 2)
+    i := 5
+    b[i] = 1
+    free(b)
+}
+
+fn test_expected_panic() {
+    testing.expect_panic()
+    b := alloc([]byte, 2)
+    i := 5
+    b[i] = 1
+    free(b)
+}
+
+fn test_missing_panic() {
+    testing.expect_panic()
+}
+
+fn test_fails_then_panics() {
+    testing.expect_panic()
+    testing.eq_int(1, 2)
+    b := alloc([]byte, 2)
+    i := 5
+    b[i] = 1
+    free(b)
+}

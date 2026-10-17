@@ -4,6 +4,7 @@
 #include "mlc_runtime.h"
 
 #include <errno.h>
+#include <stdarg.h>
 #include <float.h>
 #include <inttypes.h>
 #include <math.h>
@@ -12,8 +13,16 @@
 #include <sys/stat.h>
 #include <time.h>
 
+static int64_t mlc_test_failures = 0;        /* verificações que falharam no teste */
+static bool mlc_test_panic_expected = false; /* testing.expect_panic() */
+
 void mlc_panic(const char *file, int line, const char *msg) {
     fflush(stdout);
+    if (mlc_test_panic_expected) {
+        /* o teste pediu este panic: termina como sucesso (se nada mais falhou) */
+        fprintf(stderr, "panic esperado: %s:%d: %s\n", file, line, msg);
+        exit(mlc_test_failures > 0 ? 1 : 0);
+    }
     fprintf(stderr, "panic: %s:%d: %s\n", file, line, msg);
     exit(2);
 }
@@ -436,4 +445,118 @@ void mlc_null_fn(const char *file, int line) {
 /* std/map */
 void mlc_std_map_fail(mlc_str msg, const char *file, int line) {
     mlc_std_vec_fail(msg, file, line);
+}
+
+/* std/testing. Cada teste roda num processo: o mlc test passa o índice do
+ * teste como argumento, e o código de saída diz o resultado (0 ok, 1
+ * verificação falhou, 2 panic, 3 vazamento). As falhas não interrompem o
+ * teste; cada uma aponta a linha da verificação. */
+
+int64_t mlc_test_selected(int argc, char **argv) {
+    if (argc != 2) {
+        fprintf(stderr, "este programa de teste é rodado pelo mlc test\n");
+        exit(2);
+    }
+    return atoll(argv[1]);
+}
+
+void mlc_test_finish(void) {
+    if (mlc_test_panic_expected) {
+        fflush(stdout);
+        fprintf(stderr, "o teste terminou sem o panic esperado (testing.expect_panic)\n");
+        mlc_test_failures++;
+    }
+    if (mlc_test_failures > 0) {
+        fflush(stdout);
+        exit(1);
+    }
+}
+
+static void mlc_test_fail(const char *file, int line, const char *fmt, ...) {
+    fflush(stdout);
+    fprintf(stderr, "%s:%d: ", file, line);
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
+    mlc_test_failures++;
+}
+
+/* Escreve um texto entre aspas, com os bytes de controle escapados. */
+static void mlc_test_quote(const uint8_t *p, int64_t n) {
+    fputc('"', stderr);
+    for (int64_t i = 0; i < n; i++) {
+        uint8_t c = p[i];
+        if (c == '"' || c == '\\') fprintf(stderr, "\\%c", c);
+        else if (c == '\n') fputs("\\n", stderr);
+        else if (c == '\t') fputs("\\t", stderr);
+        else if (c < 0x20 || c == 0x7f) fprintf(stderr, "\\x%02x", c);
+        else fputc(c, stderr);
+    }
+    fputc('"', stderr);
+}
+
+void mlc_std_testing_check(bool ok, mlc_str msg, const char *file, int line) {
+    if (!ok) mlc_test_fail(file, line, "%.*s", (int)msg.len, msg.ptr);
+}
+
+void mlc_std_testing_fail(mlc_str msg, const char *file, int line) {
+    mlc_test_fail(file, line, "%.*s", (int)msg.len, msg.ptr);
+}
+
+void mlc_std_testing_eq_int(int64_t got, int64_t want, const char *file, int line) {
+    if (got != want) mlc_test_fail(file, line, "veio %" PRId64 ", esperado %" PRId64, got, want);
+}
+
+void mlc_std_testing_eq_uint(uint64_t got, uint64_t want, const char *file, int line) {
+    if (got != want) mlc_test_fail(file, line, "veio %" PRIu64 " (0x%" PRIx64 "), esperado %" PRIu64 " (0x%" PRIx64 ")", got, got, want, want);
+}
+
+void mlc_std_testing_eq_bool(bool got, bool want, const char *file, int line) {
+    if (got != want) mlc_test_fail(file, line, "veio %s, esperado %s", got ? "true" : "false", want ? "true" : "false");
+}
+
+void mlc_std_testing_eq_float(double got, double want, const char *file, int line) {
+    if (got != want) {
+        char a[32], b[32];
+        mlc_format_float(a, sizeof a, got, 17, 0);
+        mlc_format_float(b, sizeof b, want, 17, 0);
+        mlc_test_fail(file, line, "veio %s, esperado %s", a, b);
+    }
+}
+
+void mlc_std_testing_near(double got, double want, double tol, const char *file, int line) {
+    if (!(fabs(got - want) <= tol)) { /* NaN também falha */
+        char a[32], b[32], t[32];
+        mlc_format_float(a, sizeof a, got, 17, 0);
+        mlc_format_float(b, sizeof b, want, 17, 0);
+        mlc_format_float(t, sizeof t, tol, 17, 0);
+        mlc_test_fail(file, line, "veio %s, esperado %s (tolerância %s)", a, b, t);
+    }
+}
+
+static void mlc_test_eq_text(const uint8_t *got, int64_t gn, const uint8_t *want, int64_t wn,
+                             const char *file, int line) {
+    if (gn == wn && (gn == 0 || memcmp(got, want, (size_t)gn) == 0)) return;
+    mlc_test_fail(file, line, "texto diferente");
+    fputs("    veio:     ", stderr);
+    mlc_test_quote(got, gn);
+    fputs("\n    esperado: ", stderr);
+    mlc_test_quote(want, wn);
+    fputc('\n', stderr);
+}
+
+void mlc_std_testing_eq_str(mlc_sl_byte *got, mlc_str want, const char *file, int line) {
+    mlc_test_eq_text(got->ptr, got->len, (const uint8_t *)want.ptr, want.len, file, line);
+}
+
+void mlc_std_testing_eq_bytes(mlc_sl_byte *got, mlc_sl_byte *want, const char *file, int line) {
+    mlc_test_eq_text(got->ptr, got->len, want->ptr, want->len, file, line);
+}
+
+void mlc_std_testing_expect_panic(const char *file, int line) {
+    (void)file;
+    (void)line;
+    mlc_test_panic_expected = true;
 }

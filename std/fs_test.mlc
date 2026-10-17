@@ -1,0 +1,61 @@
+import "std/fs"
+import "std/str"
+import "std/testing"
+
+// cada teste roda num processo separado, um depois do outro: o mesmo
+// arquivo temporário serve para todos
+fn path(dst &[]byte) int {
+    return str.copy(dst, "/tmp/mlc-std-fs-test.txt")
+}
+
+fn test_write_read_remove() {
+    p := alloc([]byte, 64)
+    n := path(&p)
+    data := alloc([]byte, 16)
+    k := str.copy(&data, "linha\n")
+    match fs.write_file(&p[:n], &data[:k]) {
+        Ok(w) => testing.eq_int(w, 6)
+        Err(code) => testing.eq_int(code, 0)
+    }
+    match fs.append_file(&p[:n], &data[:k]) {
+        Ok(w) => testing.eq_int(w, 6)
+        Err(code) => testing.eq_int(code, 0)
+    }
+    testing.check(fs.exists(&p[:n]), "existe depois de escrever")
+    match fs.file_size(&p[:n]) {
+        Ok(size) => testing.eq_int(size, 12)
+        Err(code) => testing.eq_int(code, 0)
+    }
+    buf := alloc([]byte, 32)
+    match fs.read_file(&p[:n], &buf) {
+        Ok(r) => testing.eq_str(&buf[:r], "linha\nlinha\n")
+        Err(code) => testing.eq_int(code, 0)
+    }
+    match fs.read_file(&p[:n], &buf[:4]) {
+        Ok(_) => testing.fail("buffer pequeno deveria dar TOO_BIG")
+        Err(code) => testing.eq_int(code, fs.TOO_BIG)
+    }
+    match fs.remove_file(&p[:n]) {
+        Ok(r) => testing.eq_int(r, 0)
+        Err(code) => testing.eq_int(code, 0)
+    }
+    testing.check(!fs.exists(&p[:n]), "não existe depois de apagar")
+    free(buf)
+    free(data)
+    free(p)
+}
+
+fn test_missing_file() {
+    p := alloc([]byte, 64)
+    n := str.copy(&p, "/tmp/mlc-std-fs-test-nao-existe.txt")
+    testing.check(!fs.exists(&p[:n]), "não existe")
+    match fs.file_size(&p[:n]) {
+        Ok(_) => testing.fail("file_size de arquivo que não existe")
+        Err(code) => testing.eq_int(code, fs.NOT_FOUND)
+    }
+    match fs.remove_file(&p[:n]) {
+        Ok(_) => testing.fail("remove_file de arquivo que não existe")
+        Err(code) => testing.eq_int(code, fs.NOT_FOUND)
+    }
+    free(p)
+}

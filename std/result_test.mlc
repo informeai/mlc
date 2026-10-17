@@ -1,0 +1,55 @@
+import "std/result"
+import "std/str"
+import "std/testing"
+
+enum ParseError {
+    Empty
+    Bad(msg []byte)
+}
+
+fn parse(s string) result.Result[int, ParseError] {
+    if len(s) == 0 {
+        return result.Result.Err(ParseError.Empty)
+    }
+    b := alloc([]byte, len(s))
+    n := str.copy(&b, s)
+    v := 0
+    if !str.parse_int(&b[:n], &v) {
+        return result.Result.Err(ParseError.Bad(b)) // a mensagem vai com o erro
+    }
+    free(b)
+    return result.Result.Ok(v)
+}
+
+fn test_ok() {
+    match parse("42") {
+        Ok(v) => testing.eq_int(v, 42)
+        Err(e) => {
+            free(e)
+            testing.fail("42 é válido")
+        }
+    }
+}
+
+fn test_err_with_content() {
+    match parse("4x") {
+        Ok(_) => testing.fail("4x é inválido")
+        Err(e) => {
+            match e {
+                Empty => testing.fail("não é vazio")
+                Bad(msg) => {
+                    testing.eq_str(&msg, "4x")
+                    free(msg)
+                }
+            }
+        }
+    }
+}
+
+fn test_err_code() {
+    var r result.Result[int, int] = result.Result.Err(7)
+    match r {
+        Ok(_) => testing.fail("é erro")
+        Err(code) => testing.eq_int(code, 7)
+    }
+}

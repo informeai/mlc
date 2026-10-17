@@ -1,0 +1,108 @@
+import "std/str"
+import "std/testing"
+import "std/vec"
+
+fn text(s string) []byte {
+    b := alloc([]byte, len(s))
+    str.copy(&b, s)
+    return b
+}
+
+fn test_push_get() {
+    v := vec.new[int](0) // cresce a partir de zero
+    for i := 0; i < 100; i++ {
+        v.push(i * i)
+    }
+    testing.eq_int(v.len(), 100)
+    testing.check(v.cap() >= 100, "capacidade cresceu")
+    testing.eq_int(v.get(0), 0)
+    testing.eq_int(v.get(99), 9801)
+    testing.eq_int(*v.last(), 9801)
+    v.free()
+}
+
+fn test_pop() {
+    v := vec.new[int](2)
+    v.push(1)
+    v.push(2)
+    testing.eq_int(v.pop(), 2)
+    testing.eq_int(v.pop(), 1)
+    testing.eq_int(v.len(), 0)
+    v.free()
+}
+
+fn test_pop_empty() {
+    testing.expect_panic()
+    v := vec.new[int](2)
+    x := v.pop()
+    testing.eq_int(x, 0)
+    v.free()
+}
+
+fn test_at_out_of_range() {
+    testing.expect_panic()
+    v := vec.new[int](2)
+    v.push(1)
+    x := v.at(1)
+    testing.eq_int(*x, 0)
+    v.free()
+}
+
+fn test_at_changes_in_place() {
+    v := vec.new[int](2)
+    v.push(10)
+    x := v.at(0)
+    *x += 5
+    testing.eq_int(v.get(0), 15)
+    v.free()
+}
+
+fn test_set_swap_clear() {
+    v := vec.new[int](4)
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    v.set(0, 9)
+    v.swap(0, 2)
+    testing.eq_int(v.get(0), 3)
+    testing.eq_int(v.get(2), 9)
+    cap := v.cap()
+    v.clear()
+    testing.eq_int(v.len(), 0)
+    testing.eq_int(v.cap(), cap)
+    v.free()
+}
+
+fn test_owned_elements() {
+    v := vec.new[[]byte](1)
+    v.push(text("um"))
+    v.push(text("dois"))
+    v.push(text("três"))
+    testing.eq_str(v.at(1), "dois")
+    t := v.take(1) // a posse volta; fica o valor zero no lugar
+    testing.eq_str(&t, "dois")
+    testing.eq_int(len(*v.at(1)), 0)
+    v.set(1, t) // volta ao vetor
+    old := v.put(0, text("zero"))
+    testing.eq_str(&old, "um")
+    free(old)
+    last := v.pop()
+    testing.eq_str(&last, "três")
+    free(last)
+    testing.eq_str(v.at(0), "zero")
+    v.free() // libera os elementos que sobraram
+}
+
+fn test_nested() {
+    outer := vec.new[?*vec.Vec[int]](2)
+    for i := 0; i < 3; i++ {
+        inner := vec.new[int](1)
+        for j := 0; j <= i; j++ {
+            inner.push(j)
+        }
+        outer.push(inner)
+    }
+    testing.eq_int(outer.at(2).len(), 3)
+    testing.eq_int(outer.at(2).get(2), 2)
+    outer.free() // libera os vetores de dentro (drop)
+}

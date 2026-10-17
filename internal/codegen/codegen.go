@@ -79,8 +79,22 @@ func Generate(file string, f *ast.File, info *checker.Info) string {
 	for _, fn := range info.Funcs {
 		g.function(fn)
 	}
+	if info.Tests != nil {
+		g.testMain(info.Tests)
+		return g.buf.String()
+	}
 	g.raw("int main(int argc, char **argv) {\n    mlc_args_init(argc, argv);\n    %s();\n    mlc_check_allocs();\n    return 0;\n}\n", info.Main.CName)
 	return g.buf.String()
+}
+
+// testMain gera o main de um programa de teste: roda o teste cujo índice
+// veio como argumento (o mlc test roda um processo por teste).
+func (g *gen) testMain(tests []*checker.Func) {
+	g.raw("int main(int argc, char **argv) {\n    int64_t test = mlc_test_selected(argc, argv);\n    mlc_args_init(1, argv);\n    switch (test) {\n")
+	for i, fn := range tests {
+		g.raw("    case %d: %s(); break;\n", i, fn.CName)
+	}
+	g.raw("    default: return 2;\n    }\n    mlc_test_finish();\n    mlc_check_allocs();\n    return 0;\n}\n")
 }
 
 func (g *gen) raw(format string, args ...any) {

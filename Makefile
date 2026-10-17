@@ -1,18 +1,23 @@
 BIN := bin/mlc
 
-.PHONY: build test check fmt clean
+.PHONY: build test test-std check fmt clean
 
 # make (ou make build): gera o compilador em bin/mlc
 build:
 	go build -o $(BIN) ./cmd/mlc
 
-# make test: roda a suíte (programas, panics e erros de compilação)
+# make test: roda a suíte (programas, panics, erros de compilação e os
+# testes da biblioteca padrão)
 test:
 	go test ./...
 
+# make test-std: roda os testes da biblioteca padrão com o mlc test
+test-std: build
+	$(BIN) test std
+
 # make check: o que precisa estar limpo antes de considerar uma mudança pronta
 # (os .mlc de tests/errors ficam de fora: vários têm erro de sintaxe de propósito)
-MLC_SRC := std tests/run tests/panic
+MLC_SRC := std tests/run tests/panic tests/testing
 
 check: build
 	@test -z "$$(gofmt -l .)" || { echo "arquivos sem gofmt:"; gofmt -l .; exit 1; }

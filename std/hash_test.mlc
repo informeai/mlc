@@ -1,0 +1,41 @@
+import "std/hash"
+import "std/str"
+import "std/testing"
+
+fn test_fnv_known_values() {
+    b := alloc([]byte, 8)
+    testing.eq_uint(uint64(hash.fnv32(&b[:0])), 0x811C_9DC5)
+    testing.eq_uint(hash.fnv64(&b[:0]), 0xCBF2_9CE4_8422_2325)
+    n := str.copy(&b, "a")
+    testing.eq_uint(uint64(hash.fnv32(&b[:n])), 0xE40C_292C)
+    testing.eq_uint(hash.fnv64(&b[:n]), 0xAF63_DC4C_8601_EC8C)
+    n = str.copy(&b, "foobar")
+    testing.eq_uint(hash.fnv64(&b[:n]), 0x8594_4171_F739_67E8)
+    testing.eq_uint(hash.fnv64_str("foobar"), 0x8594_4171_F739_67E8)
+    free(b)
+}
+
+fn test_mix64() {
+    testing.check(hash.mix64(1) != hash.mix64(2), "valores diferentes espalham")
+    testing.eq_uint(hash.mix64(12345), hash.mix64(12345))
+}
+
+fn test_hash_interface() {
+    a := 42
+    b := 42
+    testing.eq_uint(a.hash(), b.hash())
+    testing.check(a.eq(&b), "int eq")
+    s := "texto"
+    t := "texto"
+    testing.eq_uint(s.hash(), t.hash())
+    buf := alloc([]byte, 5)
+    str.copy(&buf, "texto")
+    other := alloc([]byte, 5)
+    str.copy(&other, "texto")
+    testing.eq_uint(buf.hash(), other.hash())
+    testing.check(buf.eq(&other), "[]byte eq")
+    other[0] = 'T'
+    testing.check(!buf.eq(&other), "[]byte diferente")
+    free(buf)
+    free(other)
+}

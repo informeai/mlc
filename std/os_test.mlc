@@ -1,0 +1,33 @@
+import "std/os"
+import "std/testing"
+
+fn test_args() {
+    testing.eq_int(os.arg_count(), 1) // só o nome do programa
+    buf := alloc([]byte, 4096)
+    match os.arg(0, &buf) {
+        Ok(n) => testing.check(n > 0, "arg(0) é o caminho do programa")
+        Err(code) => testing.eq_int(code, 0)
+    }
+    match os.arg(1, &buf) {
+        Ok(_) => testing.fail("arg(1) não existe")
+        Err(code) => testing.eq_int(code, os.NOT_FOUND)
+    }
+    free(buf)
+}
+
+fn test_getenv() {
+    buf := alloc([]byte, 4096)
+    match os.getenv("MLC_VARIAVEL_QUE_NAO_EXISTE", &buf) {
+        Ok(_) => testing.fail("a variável não existe")
+        Err(code) => testing.eq_int(code, os.NOT_FOUND)
+    }
+    match os.getenv("PATH", &buf[:1]) {
+        Ok(_) => testing.fail("PATH não cabe em 1 byte")
+        Err(code) => testing.eq_int(code, os.TOO_LONG)
+    }
+    match os.getenv("PATH", &buf) {
+        Ok(n) => testing.check(n > 1, "PATH tem conteúdo")
+        Err(code) => testing.eq_int(code, 0)
+    }
+    free(buf)
+}

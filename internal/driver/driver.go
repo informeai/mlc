@@ -46,15 +46,32 @@ func CompileOpts(file string, src []byte, read Loader, opts Options) (string, er
 // compile traduz o programa para C e devolve também as bibliotecas de C
 // pedidas com link "nome".
 func compile(file string, src []byte, read Loader, opts Options) (string, []string, error) {
+	csrc, info, err := compileInfo(file, src, read, opts)
+	if err != nil {
+		return "", nil, err
+	}
+	return csrc, info.Links, nil
+}
+
+// compileInfo é compile devolvendo o resultado da checagem. Um arquivo
+// _test.mlc vira um programa de teste (veja BuildTest).
+func compileInfo(file string, src []byte, read Loader, opts Options) (string, *checker.Info, error) {
 	srcs, errs := load(file, src, read, opts.ImportDirs...)
 	if len(errs) > 0 {
 		return "", nil, Errors(errs)
 	}
+	srcs[len(srcs)-1].Test = IsTestFile(file)
 	info, errs := checker.CheckProgram(srcs)
 	if len(errs) > 0 {
 		return "", nil, Errors(errs)
 	}
-	return codegen.Generate(file, srcs[len(srcs)-1].AST, info), info.Links, nil
+	return codegen.Generate(file, srcs[len(srcs)-1].AST, info), info, nil
+}
+
+// IsTestFile diz se file é um arquivo de teste (nome_test.mlc): em vez de
+// main, ele declara funções fn test_*(), que o mlc test roda.
+func IsTestFile(file string) bool {
+	return strings.HasSuffix(filepath.Base(file), "_test.mlc")
 }
 
 // extraCFlags é acrescentado à linha do compilador C. Os testes usam
@@ -91,10 +108,36 @@ func (e *LinkError) Error() string {
 // compilação (uma falha aí é bug do mlc, porque o checker aceitou o
 // programa) e a ligação com as bibliotecas (uma falha aí é do programa).
 func BuildOpts(file string, src []byte, out string, read Loader, opts Options) error {
-	csrc, links, err := compile(file, src, read, opts)
+	csrc, info, err := compileInfo(file, src, read, opts)
 	if err != nil {
 		return err
 	}
+	return buildC(csrc, info.Links, out, opts)
+}
+
+// BuildTest compila o arquivo de teste file até um executável em out e
+// devolve os nomes dos testes, na ordem do código. O executável roda o
+// teste de índice i com o argumento i (veja RunTests).
+func BuildTest(file string, src []byte, out string, read Loader, opts Options) ([]string, error) {
+	if !IsTestFile(file) {
+		return nil, fmt.Errorf("%s: um arquivo de teste termina em _test.mlc", file)
+	}
+	csrc, info, err := compileInfo(file, src, read, opts)
+	if err != nil {
+		return nil, err
+	}
+	if err := buildC(csrc, info.Links, out, opts); err != nil {
+		return nil, err
+	}
+	names := make([]string, len(info.Tests))
+	for i, fn := range info.Tests {
+		names[i] = fn.Name
+	}
+	return names, nil
+}
+
+// buildC compila e liga o C gerado com o runtime.
+func buildC(csrc string, links []string, out string, opts Options) error {
 
 	dir, err := os.MkdirTemp("", "mlc-build-")
 	if err != nil {

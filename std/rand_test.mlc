@@ -1,0 +1,34 @@
+import "std/rand"
+import "std/testing"
+
+fn test_deterministic() {
+    a := rand.new(42)
+    b := rand.new(42)
+    for i := 0; i < 10; i++ {
+        testing.eq_uint(a.next(), b.next())
+    }
+    c := rand.new(43)
+    d := rand.new(42)
+    testing.check(c.next() != d.next(), "sementes diferentes, sequências diferentes")
+}
+
+fn test_splitmix_reference() {
+    // primeiro valor do splitmix64 com semente 0
+    r := rand.new(0)
+    testing.eq_uint(r.next(), 0xE220_A839_7B1D_CDAF)
+}
+
+fn test_ranges() {
+    r := rand.new(1)
+    seen := [6]bool{}
+    for i := 0; i < 1000; i++ {
+        n := r.range(1, 7)
+        testing.check(n >= 1 && n < 7, "range fora de [1, 7)")
+        seen[n - 1] = true
+        f := r.float()
+        testing.check(f >= 0.0 && f < 1.0, "float fora de [0, 1)")
+    }
+    for s in seen {
+        testing.check(s, "todo valor de 1 a 6 aparece em 1000 sorteios")
+    }
+}

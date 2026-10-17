@@ -1,0 +1,47 @@
+// Testes, rodados com mlc test. Um arquivo nome_test.mlc declara funções
+// fn test_nome(), sem parâmetros; o mlc test roda cada uma num processo
+// separado, então um panic ou um vazamento fica no teste que o causou.
+//
+//     import "std/testing"
+//     import "std/vec"
+//
+//     fn test_push() {
+//         v := vec.new[int](2)
+//         v.push(7)
+//         testing.eq_int(v.len(), 1)
+//         vec.free(v)
+//     }
+//
+// Uma verificação que falha mostra a linha dela e o teste continua. Nada
+// aqui aloca: os textos são comparados onde estão.
+
+// check falha com msg se ok for false.
+pub extern fn check(ok bool, msg string)
+
+// fail falha com msg.
+pub extern fn fail(msg string)
+
+// eq_int compara inteiros (got: o que veio; want: o esperado).
+pub extern fn eq_int(got int, want int)
+
+// eq_uint compara inteiros sem sinal (hashes, máscaras de bits).
+pub extern fn eq_uint(got uint64, want uint64)
+
+// eq_bool compara bools.
+pub extern fn eq_bool(got bool, want bool)
+
+// eq_float compara floats exatamente; para contas com arredondamento, near.
+pub extern fn eq_float(got float64, want float64)
+
+// near aceita uma diferença de até tol.
+pub extern fn near(got float64, want float64, tol float64)
+
+// eq_str compara um texto num buffer com o esperado.
+pub extern fn eq_str(got &[]byte, want string)
+
+// eq_bytes compara dois buffers.
+pub extern fn eq_bytes(got &[]byte, want &[]byte)
+
+// expect_panic diz que o teste precisa terminar em panic (por exemplo, um
+// índice fora dos limites); terminar sem panic é falha.
+pub extern fn expect_panic()

@@ -118,6 +118,7 @@ type Info struct {
 	// contas só com constantes): *big.Int, float64, string ou bool.
 	Values       map[ast.Expr]any
 	Main         *Func                      // fn main do arquivo principal
+	Tests        []*Func                    // fn test_*() de um arquivo de teste, na ordem do código
 	Structs      []*Struct                  // cada struct depois das que ela contém
 	Slices       []*Slice                   // tipos slice usados, para o gerador declarar
 	Arrays       []*Array                   // tipos array usados, para o gerador declarar
@@ -204,6 +205,7 @@ type checker struct {
 type Source struct {
 	Path string // caminho usado no import ("" para o arquivo principal)
 	Std  bool   // arquivo da biblioteca padrão: pode declarar extern fn
+	Test bool   // arquivo de teste (_test.mlc): sem main, com fn test_*()
 	File string // nome do arquivo, para mensagens e #line
 	AST  *ast.File
 }
@@ -430,6 +432,10 @@ func (c *checker) collectFuncs(f *ast.File) {
 	}
 
 	main := c.mod.funcs["main"]
+	if c.entry() && c.mod.test {
+		c.collectTests(f, main)
+		return
+	}
 	switch {
 	case !c.entry() && main != nil:
 		c.errorf(main.Decl.P, "fn main só pode existir no arquivo principal; %s é importado", c.mod.file)
@@ -440,6 +446,35 @@ func (c *checker) collectFuncs(f *ast.File) {
 		c.errorf(main.Decl.P, "main não recebe parâmetros nem retorna valor")
 	default:
 		c.info.Main = main
+	}
+}
+
+// collectTests junta as funções test_* de um arquivo de teste: o mlc test
+// gera o main que roda cada uma num processo separado.
+func (c *checker) collectTests(f *ast.File, main *Func) {
+	if main != nil {
+		c.errorf(main.Decl.P, "um arquivo de teste não declara fn main: o mlc test gera o main que roda os testes")
+	}
+	for _, d := range f.Funcs {
+		if d.Recv != nil || !strings.HasPrefix(d.Name, "test_") {
+			continue
+		}
+		if len(d.TypeParams) > 0 {
+			c.errorf(d.P, "o teste %s não pode ser genérico", d.Name)
+			continue
+		}
+		fn := c.mod.funcs[d.Name]
+		if fn == nil || fn.Decl != d {
+			continue // nome repetido ou reservado: já deu erro
+		}
+		if len(fn.Params) > 0 || fn.Result != Void {
+			c.errorf(d.P, "o teste %s não recebe parâmetros nem retorna valor", d.Name)
+			continue
+		}
+		c.info.Tests = append(c.info.Tests, fn)
+	}
+	if len(c.info.Tests) == 0 && len(c.errs) == 0 {
+		c.errorf(token.Pos{Line: 1, Col: 1}, "arquivo de teste sem testes: declare funções fn test_nome()")
 	}
 }
 
