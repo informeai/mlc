@@ -60,12 +60,49 @@ io.write_line(&buf[:k])
 
 As funções que escrevem dão panic se o texto não couber em `dst`, com uma mensagem como `str.copy: o texto (3 bytes) não cabe no destino (2 bytes)`.
 
+## Formatar num buffer: `str.format`
+
+```
+n := str.format_len("{} itens, R$ {:.2}", qtd, total)   // quantos bytes o texto ocupa
+linha := alloc([]byte, n)                                // a alocação, com o tamanho exato
+str.format(&linha, "{} itens, R$ {:.2}", qtd, total)
+```
+
+| Função | O que faz |
+|---|---|
+| `str.format(dst &[]byte, "...", a, ...) int` | escreve o formato em `dst`, como o `io.printf`, e devolve quantos bytes usou; dá panic se não couber, apontando a linha do `str.format` |
+| `str.format_len("...", a, ...) int` | quantos bytes o texto ocupa, sem escrever nada |
+
+- O formato e os valores seguem as regras do `io.printf`, inclusive as especificações (abaixo) e os tipos com `io.Display`: um `write` escrito para o `io.printf` também serve para o `str.format`.
+- Para continuar escrevendo depois do que já está no buffer: `k += str.format(&buf[k:], "...", x)`.
+- `dst` não pode ser também um dos valores (`str.format(&b, "{}", b)` é erro), porque o texto seria lido enquanto é sobrescrito.
+- Nada aloca. O texto passa por um `io.Writer` com buffer na pilha, que o entrega a `dst`. O `Writer` não guarda `dst`: ele guarda um índice de destino que o runtime confere, e esse destino só existe durante o `str.format`. Por isso não há um `Writer` sobre `[]byte` que se possa guardar numa variável: isso precisaria de empréstimos guardados em structs, item 8 do roteiro.
+
+## Especificações de formato
+
+Valem no `io.printf`, `io.eprintf`, `str.format` e `str.format_len`: `{:[[preenchimento]alinhamento][#][0][largura][.casas][tipo]}`.
+
+| Exemplo | Resultado | Vale para |
+|---|---|---|
+| `{:x}`, `{:X}`, `{:b}`, `{:o}` | `ff`, `FF`, `101`, `10` | inteiros (negativos com `-`: `-ff`) |
+| `{:#x}`, `{:#b}`, `{:#o}` | `0xff`, `0b101`, `0o10` | inteiros |
+| `{:.2}` | `3.14` | `float64`, `float32` |
+| `{:8}`, `{:<8}`, `{:>8}`, `{:^8}` | largura mínima de 8 caracteres, alinhado à esquerda, à direita ou no centro | qualquer valor; sem alinhamento, números vão à direita e o resto à esquerda |
+| `{:*^8}` | preenche com `*` em vez de espaço | qualquer valor |
+| `{:08}`, `{:08.2}`, `{:#010x}` | zeros depois do sinal e do prefixo: `-0000042` | números |
+| `{:s}`, `{:>10s}` | os bytes de um `[]byte` (ou `[N]byte`) como texto, em vez de `[104 105]` | `[]byte`, `&[]byte`, `[N]byte` |
+
+- **A largura conta caracteres, não bytes.** `"café"` ocupa 4. Um valor maior que a largura não é cortado.
+- Uma especificação que não serve para o tipo é erro de compilação (`{:x}` num `float64`, `{:.2}` num `int`).
+- Um valor pode ser um empréstimo, escrito sem cópia: `&b[:n]` ou uma variável `&T`.
+- Num tipo com `write` próprio, a largura e o alinhamento valem para o texto inteiro que o `write` escreve. Base, casas e zeros valem para os números escritos por `w.put_int`, `w.put_uint` e `w.put_float`.
+
 ## Entrada e saída (`import "std/io"`)
 
 | Função | O que faz |
 |---|---|
 | `io.print(a, b, ...)` | escreve valores separados por espaço, com quebra de linha no fim |
-| `io.printf("x = {}\n", x)` | escreve o formato trocando cada `{}` por um valor (formato conferido na compilação) |
+| `io.printf("x = {}\n", x)` | escreve o formato trocando cada `{}` por um valor (formato conferido na compilação; especificações como `{:>8.2}`, veja acima) |
 | `io.eprint(...)`, `io.eprintf(...)` | o mesmo, no erro padrão |
 | `io.write(s &[]byte)` | escreve os bytes de `s`, sem separador nem quebra de linha |
 | `io.write_line(s &[]byte)` | escreve `s` e uma quebra de linha |
@@ -92,4 +129,4 @@ for {
 
 ## Por que não há concatenação
 
-Uma `concat(a, b)` precisaria decidir sozinha quanto alocar, e um texto que cresce sozinho é um `append` embutido. As duas coisas escondem alocação, o que vai contra a regra central do MLC. Montar texto num buffer deixa visível **onde** está a memória (o `alloc`) e **quanto** ela ocupa (o tamanho passado ao `alloc`, que `str.int_len` e `len` ajudam a calcular).
+Uma `concat(a, b)` precisaria decidir sozinha quanto alocar, e um texto que cresce sozinho é um `append` embutido. As duas coisas escondem alocação, o que vai contra a regra central do MLC. Montar texto num buffer deixa visível **onde** está a memória (o `alloc`) e **quanto** ela ocupa (o tamanho passado ao `alloc`, que `str.format_len`, `str.int_len` e `len` ajudam a calcular).

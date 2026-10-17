@@ -426,6 +426,55 @@ int64_t mlc_std_io_format_f64(mlc_sl_byte *dst, double x, const char *file, int 
     return mlc_put_bytes(dst, buf, n, "io.put_float", file, line);
 }
 
+/* Real com prec casas decimais ({:.2}). */
+int64_t mlc_std_io_format_fixed(mlc_sl_byte *dst, double x, int64_t prec, const char *file, int line) {
+    char buf[352];
+    int n;
+    if (isnan(x)) n = snprintf(buf, sizeof buf, "NaN");
+    else if (isinf(x)) n = snprintf(buf, sizeof buf, x > 0 ? "+Inf" : "-Inf");
+    else n = snprintf(buf, sizeof buf, "%.*f", (int)prec, x);
+    return mlc_put_bytes(dst, buf, n, "io.put_float", file, line);
+}
+
+/* Destinos do str.format: uma pilha, porque um write pode chamar outro
+ * str.format. O Writer guarda só o índice, conferido aqui; o texto que não
+ * cabe é contado e, no fim, dá panic na linha do str.format. */
+typedef struct {
+    uint8_t *ptr;
+    int64_t cap, len, needed;
+} mlc_sink;
+
+static mlc_sink mlc_sinks[64];
+static int64_t mlc_sink_depth = 0;
+
+int64_t mlc_sink_push(mlc_sl_byte *dst, const char *file, int line) {
+    if (mlc_sink_depth == (int64_t)(sizeof mlc_sinks / sizeof mlc_sinks[0]))
+        mlc_panic(file, line, "str.format aninhado em mais de 64 níveis");
+    mlc_sinks[mlc_sink_depth] = (mlc_sink){dst->ptr, dst->len, 0, 0};
+    return mlc_sink_depth++;
+}
+
+void mlc_std_io_sink_put(int64_t sink, mlc_sl_byte *b, const char *file, int line) {
+    if (sink < 0 || sink >= mlc_sink_depth) mlc_panic(file, line, "Writer com um destino de str.format que não existe");
+    mlc_sink *s = &mlc_sinks[sink];
+    int64_t room = s->cap - s->len;
+    int64_t n = b->len < room ? b->len : room;
+    if (n > 0) memcpy(s->ptr + s->len, b->ptr, (size_t)n);
+    s->len += n;
+    s->needed += b->len;
+}
+
+int64_t mlc_sink_pop(int64_t sink, const char *file, int line) {
+    if (sink != mlc_sink_depth - 1) mlc_panic(file, line, "erro interno: destinos de str.format fora de ordem");
+    mlc_sink s = mlc_sinks[--mlc_sink_depth];
+    if (s.needed > s.cap) {
+        char msg[160];
+        snprintf(msg, sizeof msg, "str.format: o texto tem %" PRId64 " bytes e o destino, %" PRId64, s.needed, s.cap);
+        mlc_panic(file, line, msg);
+    }
+    return s.len;
+}
+
 int64_t mlc_std_io_format_f32(mlc_sl_byte *dst, float x, const char *file, int line) {
     char buf[32];
     int n = mlc_format_float(buf, sizeof buf, x, 9, 1);

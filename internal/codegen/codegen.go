@@ -463,22 +463,29 @@ func (g *gen) cond(e ast.Expr) string {
 	return g.expr(e)
 }
 
-// ioPrint traduz io.print para uma expressão com vírgulas: argumentos
-// separados por espaço e quebra de linha no fim.
-//
-// Como em qualquer chamada, todos os argumentos são calculados antes de
-// imprimir: se algum tem efeito, os que não são literais vão para
-// temporárias, e só depois começam as impressões.
-// ioPrint traduz io.print e io.printf conforme o plano do checker: os
-// valores vão para temporárias (da esquerda para a direita, antes de escrever
-// qualquer coisa) e cada um é escrito pelo seu método write, sobre um
-// io.Writer na pilha.
+// ioPrint traduz io.print, io.printf, str.format e str.format_len conforme
+// o plano do checker: os valores vão para temporárias (da esquerda para a
+// direita, antes de escrever qualquer coisa) e cada um é escrito pelo seu
+// método write, sobre um io.Writer na pilha. No str.format, o Writer
+// escreve num destino registrado no runtime (mlc_sink_push), e o resultado
+// é quantos bytes foram escritos.
 func (g *gen) ioPrint(call *ast.CallExpr) string {
 	plan := g.info.Prints[call]
 	w := g.temp(plan.Writer)
+	fd := plan.Fd
+	switch plan.Mode {
+	case checker.PrintSink:
+		fd = -1 // io.SINK
+	case checker.PrintCount:
+		fd = -2 // io.COUNT
+	}
 	parts := []string{
 		fmt.Sprintf("%s = %s", w, zeroValue(plan.Writer)),
-		fmt.Sprintf("%s.f_fd = INT64_C(%d)", w, plan.Fd),
+		fmt.Sprintf("%s.f_fd = INT64_C(%d)", w, fd),
+	}
+	if plan.Mode == checker.PrintSink {
+		// o destino é calculado primeiro, como o primeiro argumento
+		parts = append(parts, fmt.Sprintf("%s.f_sink = mlc_sink_push(%s, __FILE__, __LINE__)", w, g.expr(plan.Dst)))
 	}
 	vals := make([]string, len(plan.Args))
 	for i, a := range plan.Args {
@@ -499,10 +506,62 @@ func (g *gen) ioPrint(call *ast.CallExpr) string {
 			at := t.(*checker.Array)
 			recv = fmt.Sprintf("&(%s){%s.a, INT64_C(%d)}", sliceCType(&checker.Slice{Elem: at.Elem}), v, at.Len)
 		}
-		parts = append(parts, fmt.Sprintf("%s(%s, &%s)", p.Write.CName, recv, w))
+		write := func(writer string) string { return fmt.Sprintf("%s(%s, &%s)", p.Write.CName, recv, writer) }
+		if p.Spec != nil && p.Spec.Text {
+			write = func(writer string) string { return fmt.Sprintf("%s(&%s, %s)", plan.PutBytes.CName, writer, recv) }
+		}
+		if p.Spec == nil {
+			parts = append(parts, write(w))
+			continue
+		}
+		parts = append(parts, g.specWrite(plan, p.Spec, w, write)...)
 	}
 	parts = append(parts, fmt.Sprintf("%s(&%s)", plan.Flush.CName, w))
+	switch plan.Mode {
+	case checker.PrintSink:
+		parts = append(parts, fmt.Sprintf("mlc_sink_pop(%s.f_sink, __FILE__, __LINE__)", w))
+	case checker.PrintCount:
+		parts = append(parts, w+".f_total")
+	}
 	return "(" + strings.Join(parts, ", ") + ")"
+}
+
+// specWrite escreve um valor com especificação ({:>8.2}): os campos do
+// Writer valem durante o write, e o alinhamento é feito em volta dele (para
+// alinhar à direita ou no centro, o valor é escrito antes num Writer que só
+// conta, para saber o tamanho).
+func (g *gen) specWrite(plan *checker.PrintPlan, spec *checker.FormatSpec, w string, write func(string) string) []string {
+	var parts []string
+	prec := 0
+	if spec.Prec >= 0 {
+		prec = spec.Prec + 1
+	}
+	numeric := spec.Zero || spec.Prec >= 0 || spec.Base != 0
+	if numeric {
+		parts = append(parts, fmt.Sprintf("%s(&%s, INT64_C(%d), %t, INT64_C(%d), INT64_C(%d), %t, %t)",
+			plan.SpecBegin.CName, w, spec.Width, spec.Zero, prec, spec.Base, spec.Upper, spec.Alt))
+	}
+	if spec.Width > 0 && !spec.Zero {
+		fill, align := fmt.Sprintf("(uint8_t)%d", spec.Fill), fmt.Sprintf("(uint8_t)%d", spec.Align)
+		if spec.Align != '<' {
+			m := g.temp(plan.Writer)
+			parts = append(parts,
+				fmt.Sprintf("%s = %s(&%s)", m, plan.Measure.CName, w),
+				write(m),
+				fmt.Sprintf("%s(&%s, %s, %s, INT64_C(%d), %s.f_chars)", plan.PadBefore.CName, w, fill, align, spec.Width, m))
+		}
+		start := g.temp(checker.Int)
+		parts = append(parts,
+			fmt.Sprintf("%s = %s.f_chars", start, w),
+			write(w),
+			fmt.Sprintf("%s(&%s, %s, %s, INT64_C(%d), %s.f_chars - %s)", plan.PadAfter.CName, w, fill, align, spec.Width, w, start))
+	} else {
+		parts = append(parts, write(w))
+	}
+	if numeric {
+		parts = append(parts, fmt.Sprintf("%s(&%s)", plan.SpecEnd.CName, w))
+	}
+	return parts
 }
 
 func (g *gen) expr(e ast.Expr) string {
@@ -516,6 +575,9 @@ func (g *gen) expr(e ast.Expr) string {
 	}
 	if fn, ok := g.info.FuncRefs[e]; ok {
 		return fn.CName // a função usada como valor: o endereço dela
+	}
+	if _, ok := g.info.Types[e].(*checker.OutHandle); ok {
+		return "&" + g.expr(e.(*ast.UnaryExpr).X) // &h para um parâmetro &?*X: o lugar do handle
 	}
 	switch e := e.(type) {
 	case *ast.Ident:
@@ -696,6 +758,9 @@ func cFFIType(t checker.Type) string {
 		if s, ok := b.Elem.(*checker.Slice); ok {
 			return cType(s.Elem) + " *"
 		}
+	}
+	if oh, ok := t.(*checker.OutHandle); ok {
+		return cType(oh.Ptr) + "*" // &?*X: o endereço da variável que recebe o handle
 	}
 	return cType(t)
 }

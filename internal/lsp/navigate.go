@@ -329,7 +329,11 @@ func (n *navigator) calleeSymbol(call *ast.CallExpr) *symbol {
 				d = dd
 			}
 		}
-		s := n.moduleSymbol("std/io")
+		mod := "std/io"
+		if n.prog.Info.Prints[call] != nil && n.prog.Info.Prints[call].Mode != checker.PrintFile {
+			mod = "std/str"
+		}
+		s := n.moduleSymbol(mod)
 		if s == nil {
 			return &symbol{code: d[0], doc: d[1], noDef: true}
 		}
@@ -821,7 +825,9 @@ var builtinDocs = map[string][2]string{
 	"drain":      {"for x in drain(s)", "Percorre um slice de donos tirando cada elemento; cada `x` precisa ser liberado ou movido."},
 	"print":      {"io.print(a, b, ...)", "Escreve os valores separados por espaço e termina a linha. Cada valor precisa implementar `io.Display` e é escrito pelo seu método `write`, sobre um `io.Writer` com buffer na pilha (sem alocação). O compilador só reescreve a chamada."},
 	"eprint":     {"io.eprint(a, b, ...)", "Como `io.print`, mas no erro padrão."},
-	"printf":     {"io.printf(\"x = {}\\n\", x)", "Escreve o formato trocando cada `{}` por um valor (que precisa implementar `io.Display`); `{{` e `}}` escrevem chaves. O formato é uma string literal, conferida na compilação: a quantidade de `{}` precisa bater com a de valores."},
+	"printf":     {"io.printf(\"x = {}\\n\", x)", "Escreve o formato trocando cada `{}` por um valor (que precisa implementar `io.Display`); `{{` e `}}` escrevem chaves. O formato é uma string literal, conferida na compilação: a quantidade de `{}` precisa bater com a de valores. Especificações: `{:x}` `{:X}` `{:b}` `{:o}` `{:#x}` (inteiros), `{:.2}` (reais), `{:8}` `{:<8}` `{:>8}` `{:^8}` `{:*^8}` (largura em caracteres), `{:08}` (zeros), `{:s}` (os bytes de um `[]byte` como texto)."},
+	"format":     {"str.format(&dst, \"x = {}\", x) int", "Escreve o formato em `dst`, como `io.printf`, e devolve quantos bytes usou; dá panic se não couber. Não aloca: para saber o tamanho antes, use `str.format_len`."},
+	"format_len": {"str.format_len(\"x = {}\", x) int", "Quantos bytes o formato ocupa, sem escrever nada: `n := str.format_len(...)`, `b := alloc([]byte, n)`, `str.format(&b, ...)`."},
 	"eprintf":    {"io.eprintf(\"erro: {}\\n\", e)", "Como `io.printf`, mas no erro padrão."},
 	"int":        {"int", "Inteiro com sinal de 64 bits. Estouro dá panic."},
 	"int8":       {"int8", "Inteiro com sinal de 8 bits (-128 a 127)."},

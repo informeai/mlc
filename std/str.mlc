@@ -4,6 +4,13 @@
 //
 // As que podem dar panic são extern (no runtime C), para o panic apontar a
 // linha de quem chamou; as outras são MLC comum.
+//
+// str.format(&dst, "x = {}", x) escreve um formato em dst e devolve quantos
+// bytes usou (panic se não couber); str.format_len("x = {}", x) diz quantos
+// bytes o texto tem, para alocar o tamanho certo. Como o io.printf, são
+// reescritas pelo compilador em chamadas aos write (io.Display) de cada
+// valor, sobre um io.Writer que escreve em dst ou só conta.
+import "std/io"
 
 // copy copia s para o começo de dst e devolve quantos bytes copiou.
 pub extern fn copy(dst &[]byte, s string) int

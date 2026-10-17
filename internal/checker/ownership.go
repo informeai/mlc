@@ -1026,6 +1026,9 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 		for _, a := range e.Args {
 			o.read(a)
 		}
+		if plan := o.c.info.Prints[e]; plan != nil && plan.Dst != nil {
+			o.formatAlias(plan)
+		}
 		return
 	}
 
@@ -1035,7 +1038,12 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 	// Numa mesma chamada, um objeto não pode ser emprestado e movido.
 	borrowedRoots := map[*Local]bool{}
 	var touched []pathKey // objetos emprestados: a função pode mudar os campos
-	o.deferMoves(func() { o.userArgs(e, callee, borrowedRoots, &touched) })
+	var outs []pathKey    // &h de parâmetros &?*X: recebem um handle depois da chamada
+	o.deferMoves(func() { o.userArgs(e, callee, borrowedRoots, &touched, &outs) })
+	for _, k := range outs {
+		o.install(k, ownValue{st: sLive | sNull})
+		o.origin[k] = e.Lparen
+	}
 	// Depois da chamada, os campos dos objetos emprestados podem ter mudado
 	// (a função manteve o objeto inteiro, mas não se sabe como).
 	for _, obj := range touched {
@@ -1048,11 +1056,13 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 
 // userArgs avalia os argumentos de uma chamada de função do usuário, da
 // esquerda para a direita. Os moves só valem depois de todos (deferMoves).
-func (o *ownChecker) userArgs(e *ast.CallExpr, callee Callee, borrowedRoots map[*Local]bool, touched *[]pathKey) {
+func (o *ownChecker) userArgs(e *ast.CallExpr, callee Callee, borrowedRoots map[*Local]bool, touched *[]pathKey, outs *[]pathKey) {
 	for i, a := range o.c.info.CallArgs(e) { // num método, o receptor vem primeiro
 		context := "o argumento " + itoa(i+1) + " de " + callee.Func.Name
 		pt := callee.Func.Params[i].Type
 		switch {
+		case isOutHandle(pt):
+			o.outArg(a, callee.Func.Name, borrowedRoots, outs)
 		case IsOwner(pt): // *T, ?*T e []T: a função recebe a posse
 			if k, ok := o.pathOf(a); ok && borrowedRoots[k.root] {
 				o.errorf(a.Pos(), "%s é emprestada e movida na mesma chamada", k.root.Name)
@@ -1310,4 +1320,71 @@ func (o *ownChecker) movingRoot(root *Local) bool {
 		}
 	}
 	return false
+}
+
+// formatAlias recusa str.format(&b, "{}", b): o texto de b seria lido
+// enquanto b é sobrescrito. Valores copiados inteiros (números, structs sem
+// slices) já foram calculados antes da escrita e não contam.
+func (o *ownChecker) formatAlias(plan *PrintPlan) {
+	dst := rootLocal(o.c, plan.Dst)
+	if dst == nil {
+		return
+	}
+	for i, a := range plan.Args {
+		switch plan.ArgTypes[i].(type) {
+		case *Slice, *Borrow:
+			if rootLocal(o.c, a) == dst {
+				o.errorf(a.Pos(), "%s é o destino de str.format e também um valor do formato: o texto seria lido enquanto é sobrescrito", dst.Name)
+			}
+		}
+	}
+}
+
+// rootLocal devolve a variável de onde e sai (b em &b[2:], p.nome, *x), ou nil.
+func rootLocal(c *checker, e ast.Expr) *Local {
+	for {
+		switch x := e.(type) {
+		case *ast.Ident:
+			return c.info.Locals[x]
+		case *ast.UnaryExpr:
+			e = x.X
+		case *ast.SliceExpr:
+			e = x.X
+		case *ast.IndexExpr:
+			e = x.X
+		case *ast.SelectorExpr:
+			e = x.X
+		default:
+			return nil
+		}
+	}
+}
+
+// outArg checa &h passado a um parâmetro &?*X: h não pode ter um handle
+// (a função de C escreveria outro por cima), e recebe o novo depois da
+// chamada (outs).
+func (o *ownChecker) outArg(a ast.Expr, fn string, borrowedRoots map[*Local]bool, outs *[]pathKey) {
+	u, ok := a.(*ast.UnaryExpr)
+	if !ok {
+		return
+	}
+	k, ok := o.pathOf(u.X)
+	if !ok {
+		return
+	}
+	if !k.isRoot() {
+		o.reach(k, u.X.Pos())
+	}
+	if o.st.get(k)&sLive != 0 {
+		o.errorf(a.Pos(), "vazamento: %s pode ter um handle, e %s escreveria outro por cima; feche o antigo antes", k, fn)
+	}
+	for _, prev := range *outs {
+		if prev == k {
+			o.errorf(a.Pos(), "%s recebe dois handles na mesma chamada", k)
+		}
+	}
+	if borrowedRoots[k.root] || o.movingRoot(k.root) {
+		o.errorf(a.Pos(), "%s é usada de duas formas na mesma chamada", k.root.Name)
+	}
+	*outs = append(*outs, k)
 }

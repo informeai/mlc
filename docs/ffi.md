@@ -41,6 +41,7 @@ fn main() {
   | `_Bool` | `bool` |
   | `const char *` (texto que o C só lê) | `string` |
   | `T *` para dados que o C lê ou escreve | `&[]T` (o ponteiro para os dados) ou `&T` |
+  | `X **` onde o C escreve um handle novo | `&?*X` (parâmetro de saída) |
 
 - **Funções variádicas** (`printf`, `open` com modo) **não são aceitas**: a forma de passar os argumentos muda conforme a plataforma.
 - `link "nome"` pede a biblioteca `libnome` na ligação (`-lnome`). `mlc build -L pasta` e `mlc run -L pasta` dizem onde procurá-la.
@@ -55,6 +56,7 @@ fn main() {
 | `&T` (`T` número, `bool`, struct só de campos escalares, ou handle) | ponteiro | o C não pode guardar o ponteiro |
 | `*X` (`X` um `extern "C" type`) | o handle | a função de C **recebe a posse** (fecha ou libera o handle) |
 | retorno `?*X` | o handle (ou `NULL`) | um dono novo, que o verificador obriga a fechar |
+| `&?*X` | o endereço de uma variável `?*X` (`X **`) | a função de C escreve um handle novo nela; a variável não pode ter handle antes e, depois, precisa ser fechada |
 
 **Nada que seja dono de memória do MLC atravessa:** um slice dono (`[]byte`), um ponteiro dono (`*P`) ou uma struct com donos são recusados. O C não saberia liberar essa memória e poderia guardá-la. Para entregar dados, empreste com `&`.
 
@@ -66,6 +68,33 @@ fn main() {
 - é emprestado com `&b` às funções que só o usam;
 - precisa ser **passado a uma função de C que o recebe por posse** (`fn fecha(b *Banco)`); esquecer é vazamento, detectado na compilação;
 - não dá para usar `free` nele, ver o conteúdo, criá-lo com `alloc` ou guardá-lo num `Vec` genérico (o `drop` não saberia que função de C o fecha).
+
+## Handles devolvidos por ponteiro (`&?*X`)
+
+Muitas bibliotecas devolvem o handle num parâmetro e usam o retorno para o código de erro:
+
+```
+link "sqlite3"
+
+extern "C" type sqlite3
+extern "C" fn sqlite3_open(name string, db &?*sqlite3) int32     // int sqlite3_open(const char *, sqlite3 **)
+extern "C" fn sqlite3_close(db *sqlite3) int32
+
+fn main() {
+    var db ?*sqlite3 = nil
+    rc := sqlite3_open("dados.db", &db)
+    if db != nil {
+        // ... usa &db ...
+        sqlite3_close(db)                   // o verificador cobra este fechamento
+    }
+    io.print("rc", rc)
+}
+```
+
+- `&?*X` só existe em parâmetros de `extern "C" fn`, e só para handles (`X` um `extern "C" type`).
+- O argumento é `&h`, com `h` uma variável ou campo `?*X`. **`h` não pode ter um handle aberto** antes da chamada (precisa ser `nil` ou já ter sido fechado), porque a função de C escreveria outro por cima e o antigo vazaria.
+- Depois da chamada, `h` pode ter um handle ou ser `nil` (a função pode falhar). Como qualquer `?*X`, ele precisa de `if h != nil` antes de ser fechado, e esquecer de fechar é vazamento detectado na compilação.
+- A mesma variável não pode receber dois handles na mesma chamada (`f(&h, &h)`).
 
 ## Erros de ligação
 

@@ -1,0 +1,9 @@
+// erro: {:q} no formato de io.printf: especificação desconhecida
+import "std/io"
+import "std/str"
+
+fn main() {
+    b := alloc([]byte, 8)
+    io.printf("{:q}", 1)
+    free(b)
+}

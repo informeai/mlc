@@ -1,0 +1,9 @@
+// erro: {x} no formato de io.printf: use {} para um valor
+import "std/io"
+import "std/str"
+
+fn main() {
+    b := alloc([]byte, 8)
+    io.printf("{x}", 1)
+    free(b)
+}

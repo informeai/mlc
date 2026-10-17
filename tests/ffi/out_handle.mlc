@@ -1,0 +1,65 @@
+// Parâmetros de saída (&?*X): a função de C escreve um handle na variável.
+// Ligado com tests/ffi/counter.c por TestFFIOutHandle.
+import "std/io"
+
+link "counter"
+
+extern "C" type Counter
+
+extern "C" fn counter_open(start int32, out &?*Counter) int32
+extern "C" fn counter_pair(a &?*Counter, b &?*Counter) int32
+extern "C" fn counter_next(c &Counter) int32
+extern "C" fn counter_close(c *Counter)
+extern "C" fn counter_live() int32
+
+struct Conn {
+    c ?*Counter
+    uses int
+}
+
+fn main() {
+    var c ?*Counter = nil
+    rc := counter_open(5, &c)
+    if c != nil {
+        io.print("aberto:", rc, counter_next(&c), counter_next(&c), counter_live())
+        counter_close(c)
+    }
+
+    // depois de fechado, a mesma variável recebe outro handle
+    rc = counter_open(-1, &c)
+    io.print("falhou:", rc, c == nil)
+    if c != nil {
+        counter_close(c)
+    }
+
+    var a ?*Counter = nil
+    var b ?*Counter = nil
+    counter_pair(&a, &b)
+    if a != nil {
+        io.print("a:", counter_next(&a))
+        counter_close(a)
+    }
+    if b != nil {
+        io.print("b:", counter_next(&b))
+        counter_close(b)
+    }
+
+    // num campo
+    conn := alloc(Conn{c: nil, uses: 0})
+    counter_open(100, &conn.c)
+    if conn.c != nil {
+        conn.uses++
+        io.print("campo:", counter_next(&conn.c), conn.uses)
+        counter_close(conn.c)
+    }
+    free(conn)
+
+    for i := 0; i < 3; i++ {
+        var h ?*Counter = nil
+        counter_open(int32(i), &h)
+        if h != nil {
+            counter_close(h)
+        }
+    }
+    io.print("abertos no fim:", counter_live())
+}

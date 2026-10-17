@@ -137,6 +137,8 @@ io.eprint(a, b, c)
 ```
 
 - O formato é uma **string literal**, conferida na compilação: a quantidade de `{}` precisa bater com a de valores, e `{` ou `}` sozinhos são erro (`{{` e `}}` escrevem chaves).
+- Especificações como `{:x}`, `{:.2}`, `{:>8}`, `{:08}` e `{:s}` dizem como escrever o valor. Veja [texto.md](texto.md#especificações-de-formato).
+- `str.format(&buf, "...", x)` faz a mesma escrita num `[]byte`, e `str.format_len` diz quantos bytes ela ocupa. Veja [texto.md](texto.md#formatar-num-buffer-strformat).
 - Um valor sem `io.Display` é erro de compilação, com a sugestão do `impl auto`.
 - Os valores são calculados antes de escrever, da esquerda para a direita.
 - Um empréstimo (`x` com `x &T`) é escrito sem cópia; dentro de um genérico `[T io.Display]`, `io.print(x)` também funciona.
@@ -166,9 +168,10 @@ Toda a formatação é MLC, em `std/io.mlc`: o `Writer`, a escrita de inteiros, 
 | `w.put_bool(b bool)` | `true` / `false` |
 | `w.flush()` | escreve o que está no buffer (também acontece quando ele enche) |
 
+Durante o `write` de um valor com especificação, os campos do Writer (`base`, `prec`, `zero`, `width`, `upper`, `alt`) fazem `put_int`, `put_uint` e `put_float` seguirem a especificação. Um `write` escrito à mão herda isso sem fazer nada. O alinhamento é feito em volta do `write` pelos métodos `measure`, `pad_before` e `pad_after`, também em MLC.
+
 ## O que fica para depois
 
 - Interfaces dinâmicas (`&Medida`, `*Medida`), para guardar valores de tipos diferentes juntos.
-- Especificadores de formato (`{:x}`, `{:.2}`, largura) e formatar para um buffer (`str.format`).
 - Interfaces `Ord` e `Eq` para `sort.sort` aceitar structs.
 - Métodos de interface que recebem `Self` (cópia) ou `*Self` (posse).

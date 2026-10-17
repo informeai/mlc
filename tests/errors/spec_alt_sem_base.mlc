@@ -1,0 +1,9 @@
+// erro: # só vale com x, X, b ou o
+import "std/io"
+import "std/str"
+
+fn main() {
+    b := alloc([]byte, 8)
+    io.printf("{:#}", 1)
+    free(b)
+}

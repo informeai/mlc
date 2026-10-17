@@ -1,0 +1,9 @@
+// erro: o destino de str.format: esperado &[]byte; para emprestar, escreva &b
+import "std/io"
+import "std/str"
+
+fn main() {
+    b := alloc([]byte, 8)
+    str.format(b, "x")
+    free(b)
+}

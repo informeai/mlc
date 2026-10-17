@@ -1,0 +1,1 @@
+panic: format_cheio.mlc:8: str.format: o texto tem 7 bytes e o destino, 4

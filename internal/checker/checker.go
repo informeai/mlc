@@ -178,6 +178,8 @@ type checker struct {
 	tvMethods   map[string]*Func
 	autos       []autoImpl // impl auto do arquivo atual, para conferir os campos
 	funcTypes   map[string]*FuncType
+	outHandles  map[*Pointer]*OutHandle
+	inExternC   bool           // resolvendo a assinatura de uma extern "C" fn (aceita &?*X)
 	probes      map[*Func]bool // instâncias de verificação de posse (T owned = []byte)
 	probing     bool           // checando uma delas
 	muted       bool           // erros silenciados (tipos de uma instância de verificação)
@@ -252,6 +254,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 
 		paramIfaces: map[*ast.TypeParam]*Interface{},
 		funcTypes:   map[string]*FuncType{},
+		outHandles:  map[*Pointer]*OutHandle{},
 		probes:      map[*Func]bool{},
 		probeBroken: map[*Func]bool{},
 		freeMissing: map[*Struct]bool{},
@@ -412,7 +415,9 @@ func (c *checker) collectFuncs(f *ast.File) {
 			Name: c.qualify(d.Name), Result: Void, Decl: d,
 			CName: "mlc_fn_" + c.mod.prefix + d.Name, File: c.mod.file, Pub: d.Pub, mod: c.mod,
 		}
+		c.inExternC = d.ExternC
 		c.signature(fn, d, nil)
+		c.inExternC = false
 		if d.ExternC {
 			c.collectExternC(fn, d) // extern "C" fn: uma função de C de verdade
 			continue

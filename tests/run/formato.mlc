@@ -1,0 +1,27 @@
+import "std/io"
+import "std/str"
+
+struct Item {
+    name string
+    qty int
+    price float64
+}
+
+fn main() {
+    items := [3]Item{Item{name: "café", qty: 2, price: 7.5}, Item{name: "pão", qty: 12, price: 0.8}, Item{name: "leite", qty: 1, price: 4.99}}
+    io.printf("{:<8} {:>4} {:>8}\n", "item", "qtd", "preço")
+    for it in items {
+        io.printf("{:<8} {:>4} {:>8.2}\n", it.name, it.qty, it.price)
+    }
+    io.printf("{:-^22}\n", " fim ")
+    io.printf("hex {:#06x} bin {:08b} oct {:o} {:X}\n", 3054, 37, 64, 48879)
+    io.eprintf("{:>5}|\n", "erro")
+
+    // montar texto num buffer: o tamanho vem de format_len
+    n := str.format_len("{} itens, {:.1} no total", 3, 7.5 * 2.0 + 0.8 * 12.0 + 4.99)
+    line := alloc([]byte, n)
+    str.format(&line, "{} itens, {:.1} no total", 3, 7.5 * 2.0 + 0.8 * 12.0 + 4.99)
+    io.write_line(&line)
+    io.printf("[{:s}] [{:>30s}]\n", &line[:7], &line)
+    free(line)
+}

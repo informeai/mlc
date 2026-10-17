@@ -1,0 +1,9 @@
+// erro: {:.N} (casas decimais) só vale para float64 e float32, e o valor é int
+import "std/io"
+import "std/str"
+
+fn main() {
+    b := alloc([]byte, 8)
+    io.printf("{:.2}", 1)
+    free(b)
+}

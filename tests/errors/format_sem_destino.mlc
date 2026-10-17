@@ -1,0 +1,9 @@
+// erro: str.format precisa do destino e do formato
+import "std/io"
+import "std/str"
+
+fn main() {
+    b := alloc([]byte, 8)
+    str.format()
+    free(b)
+}

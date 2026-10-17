@@ -1,0 +1,9 @@
+// erro: {:0N} não se combina com alinhamento
+import "std/io"
+import "std/str"
+
+fn main() {
+    b := alloc([]byte, 8)
+    io.printf("{:<08}", 1)
+    free(b)
+}

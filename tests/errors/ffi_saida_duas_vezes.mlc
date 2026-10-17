@@ -1,0 +1,14 @@
+// erro: h recebe dois handles na mesma chamada
+extern "C" type H
+extern "C" type G
+extern "C" fn h_open(n int32, out &?*H) int32
+extern "C" fn h_pair(a &?*H, b &?*H) int32
+extern "C" fn h_close(h *H) int32
+
+fn main() {
+    var h ?*H = nil
+    h_pair(&h, &h)
+    if h != nil {
+        h_close(h)
+    }
+}

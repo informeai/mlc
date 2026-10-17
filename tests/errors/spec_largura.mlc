@@ -1,0 +1,9 @@
+// erro: {:999} no formato de io.printf: a largura vai até 255
+import "std/io"
+import "std/str"
+
+fn main() {
+    b := alloc([]byte, 8)
+    io.printf("{:999}", 1)
+    free(b)
+}

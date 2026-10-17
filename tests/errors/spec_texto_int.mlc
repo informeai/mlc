@@ -1,0 +1,9 @@
+// erro: {:s} escreve os bytes de um []byte como texto, e o valor é int
+import "std/io"
+import "std/str"
+
+fn main() {
+    b := alloc([]byte, 8)
+    io.printf("{:s}", 1)
+    free(b)
+}

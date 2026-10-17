@@ -1,0 +1,12 @@
+// erro: &?*T só existe em parâmetros de extern "C" fn
+extern "C" type H
+extern "C" type G
+extern "C" fn h_open(n int32, out &?*H) int32
+extern "C" fn h_pair(a &?*H, b &?*H) int32
+extern "C" fn h_close(h *H) int32
+
+fn f(p &?*H) {
+}
+
+fn main() {
+}

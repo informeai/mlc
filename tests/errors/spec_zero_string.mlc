@@ -1,0 +1,9 @@
+// erro: {:0N} (zeros à esquerda) só vale para números, e o valor é string
+import "std/io"
+import "std/str"
+
+fn main() {
+    b := alloc([]byte, 8)
+    io.printf("{:08}", "a")
+    free(b)
+}

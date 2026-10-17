@@ -276,3 +276,34 @@ func TestNavigationInterfaces(t *testing.T) {
 		}
 	}
 }
+
+// str.format e str.format_len: hover com a documentação e definição no std/str.
+func TestNavigationFormat(t *testing.T) {
+	src := "import \"std/io\"\nimport \"std/str\"\n\nfn main() {\n    b := alloc([]byte, 8)\n    n := str.format(&b, \"{:>3}\", 7)\n    io.print(n, str.format_len(\"{}\", 1))\n    io.printf(\"{:x}\\n\", 255)\n    free(b)\n}\n"
+	path := filepath.Join(t.TempDir(), "main.mlc")
+	os.WriteFile(path, []byte(src), 0o644)
+	read := driver.Overlay(nil)
+	for _, tc := range []struct{ at, file, hover string }{
+		{"str.«format(&b", "std/str.mlc", "devolve quantos bytes usou"},
+		{"str.«format_len(", "std/str.mlc", "sem escrever nada"},
+		{"io.«printf(", "std/io.mlc", "`{:x}`"},
+	} {
+		mark := strings.Index(tc.at, "«")
+		off := strings.Index(src, strings.Replace(tc.at, "«", "", 1)) + mark
+		prog := driver.Analyze(path, read)
+		if prog == nil {
+			t.Fatal("não analisou")
+		}
+		sym, _ := newNavigator(prog, read, []byte(src)).resolve(off)
+		if sym == nil {
+			t.Errorf("%q: nada encontrado", tc.at)
+			continue
+		}
+		if !strings.Contains(sym.code+"\n"+sym.doc, tc.hover) {
+			t.Errorf("%q: o hover não tem %q:\n%s\n%s", tc.at, tc.hover, sym.code, sym.doc)
+		}
+		if !strings.HasSuffix(filepath.ToSlash(sym.file), tc.file) {
+			t.Errorf("%q: definição em %s, esperado %s", tc.at, sym.file, tc.file)
+		}
+	}
+}

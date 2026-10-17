@@ -108,6 +108,13 @@ func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 	case ast.TypeArray:
 		return c.resolveArray(t, ctx)
 	case ast.TypePointer, ast.TypeNullPtr, ast.TypeBorrow:
+		if t.Mod == ast.TypeBorrow && t.Elem != nil && t.Elem.Mod == ast.TypeNullPtr && ctx == ctxParam {
+			if c.inExternC {
+				return c.outHandleType(t) // &?*X: parâmetro de saída de uma função de C
+			}
+			c.errorf(t.P, "&?*T só existe em parâmetros de extern \"C\" fn (um handle devolvido pela função de C); numa função MLC, devolva o ?*T")
+			return Invalid
+		}
 		switch {
 		case ctx == ctxArrayElem:
 			c.errorf(t.P, "arrays de ponteiros ainda não são suportados: os elementos não podem ser donos nem empréstimos")

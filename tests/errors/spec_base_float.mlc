@@ -1,0 +1,9 @@
+// erro: {:x}, {:b} e {:o} só valem para inteiros, e o valor é float64
+import "std/io"
+import "std/str"
+
+fn main() {
+    b := alloc([]byte, 8)
+    io.printf("{:x}", 1.5)
+    free(b)
+}

@@ -65,6 +65,9 @@ func (g *gen) isLiteral(e ast.Expr) bool {
 	case *ast.Ident:
 		_, isConst := g.info.Values[e]
 		return isConst || g.info.Locals[e] == nil // constante, true ou false
+	case *ast.UnaryExpr:
+		_, isOut := g.info.Types[e].(*checker.OutHandle)
+		return isOut // &h de um parâmetro &?*X: um endereço, sem efeitos
 	}
 	return false
 }

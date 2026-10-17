@@ -224,6 +224,10 @@ func (c *checker) callArgs(e *ast.CallExpr, fn *Func, params []*Local) {
 			c.borrowArg(a, b, context)
 			continue
 		}
+		if oh, ok := params[i].Type.(*OutHandle); ok {
+			c.outArg(a, oh, context)
+			continue
+		}
 		c.valueAs(a, params[i].Type, context)
 	}
 }

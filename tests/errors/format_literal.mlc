@@ -1,0 +1,10 @@
+// erro: o formato de str.format_len precisa ser uma string literal
+import "std/io"
+import "std/str"
+
+fn main() {
+    b := alloc([]byte, 8)
+    f := "{}"
+    io.print(str.format_len(f, 1))
+    free(b)
+}

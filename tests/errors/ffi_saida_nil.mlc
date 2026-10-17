@@ -1,0 +1,12 @@
+// erro: h pode ser nil aqui, mas o argumento 1 de h_close espera *H
+extern "C" type H
+extern "C" type G
+extern "C" fn h_open(n int32, out &?*H) int32
+extern "C" fn h_pair(a &?*H, b &?*H) int32
+extern "C" fn h_close(h *H) int32
+
+fn main() {
+    var h ?*H = nil
+    h_open(1, &h)
+    h_close(h)
+}

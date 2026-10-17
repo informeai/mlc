@@ -1,0 +1,9 @@
+// erro: {:.2s} no formato de str.format: {:s} só aceita largura e alinhamento
+import "std/io"
+import "std/str"
+
+fn main() {
+    b := alloc([]byte, 8)
+    str.format(&b, "{:.2s}", &b[:1])
+    free(b)
+}

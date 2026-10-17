@@ -338,3 +338,33 @@ func TestStdLibrary(t *testing.T) {
 		})
 	}
 }
+
+// TestFFIOutHandle liga tests/ffi/out_handle.mlc a uma biblioteca de C feita
+// na hora (tests/ffi/counter.c), que devolve handles por ponteiro (&?*X).
+func TestFFIOutHandle(t *testing.T) {
+	requireCC(t)
+	cc := os.Getenv("CC")
+	if cc == "" {
+		cc = "cc"
+	}
+	dir := t.TempDir()
+	obj := filepath.Join(dir, "counter.o")
+	if out, err := exec.Command(cc, "-c", "-o", obj, filepath.Join(testsDir, "ffi", "counter.c")).CombinedOutput(); err != nil {
+		t.Fatalf("compilando counter.c: %v\n%s", err, out)
+	}
+	if out, err := exec.Command("ar", "rcs", filepath.Join(dir, "libcounter.a"), obj).CombinedOutput(); err != nil {
+		t.Fatalf("ar: %v\n%s", err, out)
+	}
+	path := filepath.Join(testsDir, "ffi", "out_handle.mlc")
+	exe := filepath.Join(dir, "prog")
+	if err := BuildOpts(filepath.Base(path), []byte(readExpected(t, path)), exe, dirLoader(path), Options{LibDirs: []string{dir}}); err != nil {
+		t.Fatalf("build falhou:\n%v", err)
+	}
+	out, err := exec.Command(exe).CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if want := readExpected(t, filepath.Join(testsDir, "ffi", "out_handle.out")); string(out) != want {
+		t.Errorf("saída:\n%s\nesperado:\n%s", out, want)
+	}
+}

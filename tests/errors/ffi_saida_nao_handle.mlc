@@ -1,0 +1,15 @@
+// erro: &?*T só serve para handles de C
+extern "C" type H
+extern "C" type G
+extern "C" fn h_open(n int32, out &?*H) int32
+extern "C" fn h_pair(a &?*H, b &?*H) int32
+extern "C" fn h_close(h *H) int32
+
+struct P {
+    x int
+}
+
+extern "C" fn bad(p &?*P) int32
+
+fn main() {
+}
