@@ -1,0 +1,9 @@
+// erro: argumento 1 de f (?&int: nil ou um empréstimo): esperado &int; para emprestar, escreva &x
+extern "C" type Msg
+extern "C" fn f(p ?&int, s ?&[]int, m ?&?*Msg) int32
+extern "C" fn done(m *Msg)
+
+fn main() {
+    x := 1
+    f(x, nil, nil)
+}

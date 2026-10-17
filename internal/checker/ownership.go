@@ -1103,6 +1103,17 @@ func (o *ownChecker) userArgs(e *ast.CallExpr, callee Callee, borrowedRoots map[
 		switch {
 		case isOutHandle(pt):
 			o.outArg(a, callee.Func.Name, borrowedRoots, outs)
+		case isOptArg(pt):
+			switch {
+			case isNil(a):
+			case isOutHandle(pt.(*OptArg).Inner):
+				o.outArg(a, callee.Func.Name, borrowedRoots, outs)
+			default:
+				if obj, ok := o.borrowArg(a); ok {
+					borrowedRoots[obj.root] = true
+					*touched = append(*touched, obj)
+				}
+			}
 		case IsOwner(pt): // *T, ?*T e []T: a função recebe a posse
 			if k, ok := o.pathOf(a); ok && borrowedRoots[k.root] {
 				o.errorf(a.Pos(), "%s é emprestada e movida na mesma chamada", k.root.Name)

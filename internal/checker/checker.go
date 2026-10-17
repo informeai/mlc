@@ -188,6 +188,7 @@ type checker struct {
 	autos       []autoImpl // impl auto do arquivo atual, para conferir os campos
 	funcTypes   map[string]*FuncType
 	outHandles  map[*Pointer]*OutHandle
+	optArgs     map[Type]*OptArg
 	threads     map[Type]*Struct // thread.Thread[R], por R
 	chans       map[chanKey]*Struct
 	mutexes     map[mutexKey]*Struct
@@ -270,6 +271,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 		paramIfaces: map[*ast.TypeParam]*Interface{},
 		funcTypes:   map[string]*FuncType{},
 		outHandles:  map[*Pointer]*OutHandle{},
+		optArgs:     map[Type]*OptArg{},
 		threads:     map[Type]*Struct{},
 		chans:       map[chanKey]*Struct{},
 		mutexes:     map[mutexKey]*Struct{},

@@ -32,3 +32,26 @@ void counter_close(counter *c) {
 }
 
 int counter_live(void) { return live; }
+
+/* Parâmetros que aceitam NULL (?&T no MLC). */
+
+/* Escreve o valor em out, se out não for NULL; diz se escreveu. */
+int counter_peek(counter *c, int *out) {
+    if (out == NULL) return 0;
+    *out = c->n;
+    return 1;
+}
+
+/* Soma n inteiros; com data NULL, a soma é 0. */
+long counter_sum(const long *data, long n) {
+    if (data == NULL) return 0;
+    long s = 0;
+    for (long i = 0; i < n; i++) s += data[i];
+    return s;
+}
+
+/* Abre um contador em *out, se out não for NULL (senão só devolve -2). */
+int counter_maybe_open(int start, counter **out) {
+    if (out == NULL) return -2;
+    return counter_open(start, out);
+}

@@ -3,4 +3,8 @@ falhou: -1 true
 a: 11
 b: 21
 campo: 101 1
+peek com nil: 0 peek com &v: 1 42
+soma: 10 7 0
+sem destino: -2
+aberto pelo ponteiro opcional: 8
 abertos no fim: 0

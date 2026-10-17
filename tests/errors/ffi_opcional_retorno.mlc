@@ -1,0 +1,9 @@
+// erro: ?&T só existe em parâmetros de extern "C" fn
+extern "C" type Msg
+extern "C" fn f(p ?&int, s ?&[]int, m ?&?*Msg) int32
+extern "C" fn done(m *Msg)
+
+extern "C" fn r() ?&int
+
+fn main() {
+}

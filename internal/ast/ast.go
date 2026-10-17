@@ -129,13 +129,14 @@ type TypeExpr struct {
 type TypeMod int
 
 const (
-	TypeNamed   TypeMod = iota
-	TypeSlice           // []T
-	TypePointer         // *T
-	TypeNullPtr         // ?*T
-	TypeBorrow          // &T
-	TypeArray           // [N]T
-	TypeFunc            // fn(T, U) R
+	TypeNamed     TypeMod = iota
+	TypeSlice             // []T
+	TypePointer           // *T
+	TypeNullPtr           // ?*T
+	TypeBorrow            // &T
+	TypeArray             // [N]T
+	TypeFunc              // fn(T, U) R
+	TypeOptBorrow         // ?&T (só em parâmetros de extern "C" fn)
 )
 
 func (n *Import) Pos() token.Pos   { return n.P }

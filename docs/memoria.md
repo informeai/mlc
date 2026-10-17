@@ -199,7 +199,7 @@ Um genérico com `[T owned]` pode guardar donos (`Vec[[]byte]`, `Vec[?*No]`), in
 
 ## Funções de C e handles
 
-Uma função de C (`extern "C" fn`) só recebe o que não é dono de memória do MLC: números, `string`, empréstimos (`&[]T`, `&T`) e handles de C. Um handle (`?*X`, com `X` um `extern "C" type`) é um dono como os outros: vem de uma função de C e precisa ser passado a uma função de C que o recebe por posse (`*X`); `free` não vale para ele. Assim o verificador também garante que arquivos, conexões e outros recursos de C são fechados. Um handle devolvido por ponteiro (`sqlite3_open(nome, &db)`, com parâmetro `&?*X`) só pode ir para uma variável sem handle aberto, e sai da chamada como um `?*X` comum, que precisa ser fechado. Veja [ffi.md](ffi.md).
+Uma função de C (`extern "C" fn`) só recebe o que não é dono de memória do MLC: números, `string`, empréstimos (`&[]T`, `&T`) e handles de C. Um handle (`?*X`, com `X` um `extern "C" type`) é um dono como os outros: vem de uma função de C e precisa ser passado a uma função de C que o recebe por posse (`*X`); `free` não vale para ele. Assim o verificador também garante que arquivos, conexões e outros recursos de C são fechados. Um handle devolvido por ponteiro (`sqlite3_open(nome, &db)`, com parâmetro `&?*X`) só pode ir para uma variável sem handle aberto, e sai da chamada como um `?*X` comum, que precisa ser fechado. Um parâmetro que o C aceita como `NULL` (`?&T`, `?&?*X`) recebe `nil` ou um empréstimo, com as mesmas regras. Veja [ffi.md](ffi.md).
 
 ## Funções como valor
 

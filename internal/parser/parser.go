@@ -354,6 +354,10 @@ func (p *Parser) parseType() *ast.TypeExpr {
 		return &ast.TypeExpr{Mod: ast.TypePointer, Elem: p.parseType(), P: pos}
 	case token.QUESTION:
 		p.next()
+		if p.tok.Kind == token.AMP {
+			p.next()
+			return &ast.TypeExpr{Mod: ast.TypeOptBorrow, Elem: p.parseType(), P: pos}
+		}
 		p.expect(token.MUL)
 		return &ast.TypeExpr{Mod: ast.TypeNullPtr, Elem: p.parseType(), P: pos}
 	case token.AMP:

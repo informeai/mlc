@@ -42,6 +42,7 @@ fn main() {
   | `const char *` (texto que o C só lê) | `string` |
   | `T *` para dados que o C lê ou escreve | `&[]T` (o ponteiro para os dados) ou `&T` |
   | `X **` onde o C escreve um handle novo | `&?*X` (parâmetro de saída) |
+  | qualquer um dos de cima, quando o C aceita `NULL` | `?&T`, `?&[]T`, `?&?*X` |
 
 - **Funções variádicas** (`printf`, `open` com modo) **não são aceitas**: a forma de passar os argumentos muda conforme a plataforma.
 - `link "nome"` pede a biblioteca `libnome` na ligação (`-lnome`). `mlc build -L pasta` e `mlc run -L pasta` dizem onde procurá-la.
@@ -57,6 +58,7 @@ fn main() {
 | `*X` (`X` um `extern "C" type`) | o handle | a função de C **recebe a posse** (fecha ou libera o handle) |
 | retorno `?*X` | o handle (ou `NULL`) | um dono novo, que o verificador obriga a fechar |
 | `&?*X` | o endereço de uma variável `?*X` (`X **`) | a função de C escreve um handle novo nela; a variável não pode ter handle antes e, depois, precisa ser fechada |
+| `?&T`, `?&[]T`, `?&?*X` | `NULL` (com `nil`) ou o mesmo que `&T`, `&[]T`, `&?*X` | as mesmas regras do empréstimo ou do handle, quando não é `nil` |
 
 **Nada que seja dono de memória do MLC atravessa:** um slice dono (`[]byte`), um ponteiro dono (`*P`) ou uma struct com donos são recusados. O C não saberia liberar essa memória e poderia guardá-la. Para entregar dados, empreste com `&`.
 
@@ -96,6 +98,34 @@ fn main() {
 - Depois da chamada, `h` pode ter um handle ou ser `nil` (a função pode falhar). Como qualquer `?*X`, ele precisa de `if h != nil` antes de ser fechado, e esquecer de fechar é vazamento detectado na compilação.
 - A mesma variável não pode receber dois handles na mesma chamada (`f(&h, &h)`).
 
+## Ponteiros que podem ser `NULL` (`?&T`)
+
+Em C, `NULL` num parâmetro costuma querer dizer "não me importo" ou "use o padrão". Passar outra coisa no lugar (uma struct zerada, um ponteiro para uma variável que ninguém lê) às vezes dá o mesmo resultado e às vezes não, conforme o sistema. Com `?&T`, a declaração diz que o parâmetro aceita `NULL`, e a chamada passa `nil` ou um empréstimo:
+
+```
+extern "C" type AddrInfo
+extern "C" type Msg
+
+extern "C" fn getaddrinfo(node string, service string, hints ?&Hints, res &?*AddrInfo) int32
+extern "C" fn time(t ?&int) int
+extern "C" fn sqlite3_exec(db &sqlite3, sql string, callback ?&byte, arg ?&byte, errmsg ?&?*Msg) int32
+extern "C" fn sqlite3_free(m *Msg)
+
+getaddrinfo("localhost", "80", nil, &res)      // hints NULL: o padrão do sistema
+now := time(nil)
+
+var msg ?*Msg = nil
+rc := sqlite3_exec(&db, sql, nil, nil, &msg)   // com &msg, o SQLite aloca a mensagem de erro
+if msg != nil {
+    sqlite3_free(msg)                           // e o verificador cobra este free
+}
+```
+
+- `?&T` só existe em parâmetros de `extern "C" fn`. Numa função MLC, use `?*T` ou duas funções.
+- `?&T` e `?&[]T` aceitam `nil` ou o mesmo empréstimo que `&T` e `&[]T`, com as mesmas regras: o C só usa o ponteiro durante a chamada.
+- `?&?*X` é o handle devolvido por ponteiro opcional. Com `nil`, o C não devolve nada. Com `&h`, valem as regras do `&?*X`: `h` não pode ter handle antes e precisa ser fechado depois.
+- Para um parâmetro de um tipo que o MLC não representa (um ponteiro de função, por exemplo) e que você sempre passa como `NULL`, qualquer `?&T` serve (`?&byte`), já que só o `NULL` atravessa.
+
 ## Erros de ligação
 
 Se uma biblioteca de `link "..."` ou uma função de C não existir, `mlc build` diz que não foi possível ligar o programa e mostra a mensagem do ligador. Esse é um erro do programa, não do compilador.
@@ -103,5 +133,5 @@ Se uma biblioteca de `link "..."` ou uma função de C não existir, `mlc build`
 ## O que fica de fora nesta versão
 
 - Ponteiros devolvidos pelo C para memória que o MLC liberaria (`char *` de `strdup`): use um handle opaco e a função de C que libera.
-- Callbacks do C para o MLC (ponteiros de função na fronteira).
+- Callbacks do C para o MLC (ponteiros de função na fronteira). Um parâmetro de callback que sempre recebe `NULL` pode ser declarado como `?&byte`.
 - Structs por valor na fronteira e funções variádicas.

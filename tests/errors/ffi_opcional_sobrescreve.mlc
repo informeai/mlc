@@ -1,0 +1,13 @@
+// erro: vazamento: m pode ter um handle, e f escreveria outro por cima
+extern "C" type Msg
+extern "C" fn f(p ?&int, s ?&[]int, m ?&?*Msg) int32
+extern "C" fn done(m *Msg)
+
+fn main() {
+    var m ?*Msg = nil
+    f(nil, nil, &m)
+    f(nil, nil, &m)
+    if m != nil {
+        done(m)
+    }
+}

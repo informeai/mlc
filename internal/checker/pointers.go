@@ -107,6 +107,16 @@ func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 		return c.resolveSlice(t, ctx)
 	case ast.TypeArray:
 		return c.resolveArray(t, ctx)
+	case ast.TypeOptBorrow:
+		if ctx != ctxParam || !c.inExternC {
+			c.errorf(t.P, "?&T só existe em parâmetros de extern \"C\" fn (um ponteiro que o C aceita como NULL); numa função MLC, use ?*T ou duas funções")
+			return Invalid
+		}
+		inner := c.resolveType(&ast.TypeExpr{Mod: ast.TypeBorrow, Elem: t.Elem, P: t.P}, ctxParam)
+		if inner == Invalid {
+			return Invalid
+		}
+		return c.optArgType(inner)
 	case ast.TypePointer, ast.TypeNullPtr, ast.TypeBorrow:
 		if t.Mod == ast.TypeBorrow && t.Elem != nil && t.Elem.Mod == ast.TypeNullPtr && ctx == ctxParam {
 			if c.inExternC {

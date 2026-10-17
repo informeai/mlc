@@ -34,6 +34,26 @@ import (
 // uma variável ?*X que não tem handle (nil ou já fechada), e depois da
 // chamada db pode ter um handle novo, que o verificador obriga a fechar.
 
+// OptArg é ?&T (ou ?&?*X), um parâmetro de função de C que pode ser NULL:
+// quem chama passa nil ou o mesmo que passaria para &T (ou &?*X).
+type OptArg struct{ Inner Type } // *Borrow ou *OutHandle
+
+func (o *OptArg) String() string { return "?" + o.Inner.String() }
+
+func isOptArg(t Type) bool {
+	_, ok := t.(*OptArg)
+	return ok
+}
+
+func (c *checker) optArgType(inner Type) *OptArg {
+	if o, ok := c.optArgs[inner]; ok {
+		return o
+	}
+	o := &OptArg{Inner: inner}
+	c.optArgs[inner] = o
+	return o
+}
+
 // OutHandle é o tipo &?*X de um parâmetro de saída de uma função de C: ela
 // escreve um handle novo (ou NULL) na variável emprestada.
 type OutHandle struct{ Ptr *Pointer }
@@ -117,6 +137,8 @@ func cParamOK(t Type) string {
 	switch tt := t.(type) {
 	case *OutHandle:
 		return ""
+	case *OptArg:
+		return cParamOK(tt.Inner)
 	case *Borrow:
 		switch e := tt.Elem.(type) {
 		case *Slice:
@@ -177,7 +199,7 @@ func (c *checker) collectExternC(fn *Func, d *ast.FuncDecl) {
 			c.errorf(d.Params[i].P, "parâmetro %s de %s (%s): %s", p.Name, d.Name, p.Type, why)
 		}
 	}
-	if why := cResultOK(fn.Result); why != "" {
+	if why := cResultOK(fn.Result); why != "" && fn.Result != Invalid {
 		c.errorf(d.P, "retorno de %s (%s): %s", d.Name, fn.Result, why)
 	}
 	fn.CSym = d.Name

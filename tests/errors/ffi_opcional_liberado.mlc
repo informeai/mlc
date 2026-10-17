@@ -1,0 +1,10 @@
+// erro: s já foi liberada ou movida
+extern "C" type Msg
+extern "C" fn f(p ?&int, s ?&[]int, m ?&?*Msg) int32
+extern "C" fn done(m *Msg)
+
+fn main() {
+    s := alloc([]int, 3)
+    free(s)
+    f(nil, &s, nil)
+}

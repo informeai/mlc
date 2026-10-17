@@ -234,6 +234,21 @@ func (c *checker) callArgs(e *ast.CallExpr, fn *Func, params []*Local) {
 			c.outArg(a, oh, context)
 			continue
 		}
+		if opt, ok := params[i].Type.(*OptArg); ok {
+			// ?&T: nil (NULL no C) ou o que &T aceitaria
+			if isNil(a) {
+				c.value(a)
+				continue
+			}
+			context += " (" + opt.String() + ": nil ou um empréstimo)"
+			switch in := opt.Inner.(type) {
+			case *Borrow:
+				c.borrowArg(a, in, context)
+			case *OutHandle:
+				c.outArg(a, in, context)
+			}
+			continue
+		}
 		c.valueAs(a, params[i].Type, context)
 	}
 }

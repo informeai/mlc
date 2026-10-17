@@ -806,6 +806,9 @@ func cFFIType(t checker.Type) string {
 	if oh, ok := t.(*checker.OutHandle); ok {
 		return cType(oh.Ptr) + "*" // &?*X: o endereço da variável que recebe o handle
 	}
+	if opt, ok := t.(*checker.OptArg); ok {
+		return cFFIType(opt.Inner) // ?&T: o mesmo ponteiro, que pode ser NULL
+	}
 	return cType(t)
 }
 
@@ -821,9 +824,21 @@ func (g *gen) cCall(e *ast.CallExpr, fn *checker.Func) string {
 			args[i] = "(" + args[i] + ").ptr"
 		case isSliceBorrow(p.Type):
 			args[i] = "(" + args[i] + ")->ptr"
+		case isOptArgType(p.Type):
+			switch {
+			case g.info.Types[e.Args[i]] == checker.NilType:
+				args[i] = "NULL"
+			case isSliceBorrow(p.Type.(*checker.OptArg).Inner):
+				args[i] = "(" + args[i] + ")->ptr"
+			}
 		}
 	}
 	return sequence(pre, fmt.Sprintf("%s(%s)", fn.CName, strings.Join(args, ", ")))
+}
+
+func isOptArgType(t checker.Type) bool {
+	_, ok := t.(*checker.OptArg)
+	return ok
 }
 
 func isSliceBorrow(t checker.Type) bool {

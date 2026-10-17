@@ -666,6 +666,8 @@ func typeString(t *ast.TypeExpr) string {
 		return "*" + typeString(t.Elem)
 	case ast.TypeNullPtr:
 		return "?*" + typeString(t.Elem)
+	case ast.TypeOptBorrow:
+		return "?&" + typeString(t.Elem)
 	case ast.TypeBorrow:
 		return "&" + typeString(t.Elem)
 	}
