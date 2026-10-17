@@ -176,9 +176,8 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 - [x] **Caminho de busca de bibliotecas:** imports procurados na pasta do projeto, em `lib/`, nas pastas de `-I` e nas de `MLC_PATH`. Veja [Bibliotecas](#bibliotecas)
 - [ ] **Formatação para buffer:** `str.format(dst, "...", x)`, um `io.Writer` que escreve num `[]byte` e especificadores de formato (`{:x}`, `{:.2}`, largura)
 - [ ] **Callbacks com contexto:** métodos com parâmetros de tipo próprios (como `each[C](ctx &C, f fn(&C, &K, &V))`) ou funções sem captura no heap
-- [ ] **Erros com conteúdo:** enums com dados donos (mensagens alocadas) e um atalho de propagação (como `try`)
+- [ ] **Erros com conteúdo:** enums com dados donos (mensagens alocadas explicitamente por quem cria o erro, liberadas por quem o trata). Sem atalho de propagação (`try`): toda saída da função continua escrita como `return`. O `Result` é o jeito único de devolver erro
 - [ ] **Interfaces `Ord` e `Eq`:** `sort.sort` e `map` aceitando structs pela ordem e igualdade que elas definem
 - [ ] **Iteradores como objetos:** empréstimos guardados em structs, com tempo de vida conferido
 - [ ] **Interfaces dinâmicas:** `&I` e `*I`, para guardar valores de tipos diferentes juntos (sem boxing: só a partir de `&T` ou `*T`)
 - [ ] **Concorrência:** threads, atomics e mutex, com a posse garantindo a ausência de data races
-- [ ] **Múltiplos retornos**
