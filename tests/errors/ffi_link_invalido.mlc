@@ -1,0 +1,5 @@
+// erro: escreva só o nome da biblioteca, como link "sqlite3"
+link "-o /tmp/x"
+
+fn main() {
+}

@@ -138,6 +138,10 @@ func (p *Parser) parseFile() *ast.File {
 		case token.FN:
 			f.Funcs = append(f.Funcs, p.parseFunc())
 		case token.EXTERN:
+			if p.isExternType() {
+				f.Structs = append(f.Structs, p.parseExternType())
+				continue
+			}
 			f.Funcs = append(f.Funcs, p.parseExtern())
 		case token.STRUCT:
 			f.Structs = append(f.Structs, p.parseStruct())
@@ -149,6 +153,15 @@ func (p *Parser) parseFile() *ast.File {
 			f.Interfaces = append(f.Interfaces, p.parseInterface())
 		case token.IMPL:
 			f.Impls = append(f.Impls, p.parseImpl())
+		case token.IDENT:
+			if p.tok.Lit != "link" || p.peek.Kind != token.STRING {
+				p.unexpected("esperado declaração (import, fn, struct, enum, const, interface, impl ou link)")
+			}
+			pos := p.tok.Pos
+			p.next()
+			f.Links = append(f.Links, &ast.LinkDecl{Lib: p.tok.Lit, P: pos})
+			p.next()
+			p.expectEOS()
 		default:
 			p.unexpected("esperado declaração (import, fn, struct, enum, const, interface ou impl)")
 		}
@@ -208,12 +221,47 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 // implementada no runtime C.
 func (p *Parser) parseExtern() *ast.FuncDecl {
 	p.expect(token.EXTERN)
+	externC := false
+	if p.tok.Kind == token.STRING {
+		// extern "C" fn: uma função de uma biblioteca de C
+		if p.tok.Lit != "C" {
+			p.errorf(p.tok.Pos, "a única convenção de chamada é \"C\": extern \"C\" fn")
+		}
+		externC = true
+		p.next()
+	}
 	if p.tok.Kind != token.FN {
 		p.unexpected("esperado fn depois de extern")
 	}
 	p.extern = true
 	defer func() { p.extern = false }()
-	return p.parseFunc()
+	fn := p.parseFunc()
+	fn.ExternC = externC
+	return fn
+}
+
+// parseExternType lê "extern \"C\" type Banco": um tipo opaco de C.
+func (p *Parser) parseExternType() *ast.StructDecl {
+	pos := p.expect(token.EXTERN).Pos
+	p.expect(token.STRING)
+	p.next() // type
+	name := p.expect(token.IDENT)
+	p.expectEOS()
+	return &ast.StructDecl{Extern: true, Name: name.Lit, P: pos}
+}
+
+// isExternType diz se o que vem é extern "C" type Nome.
+func (p *Parser) isExternType() bool {
+	if p.tok.Kind != token.EXTERN || p.peek.Kind != token.STRING {
+		return false
+	}
+	save := *p.lx
+	tok, peek := p.tok, p.peek
+	p.next()
+	p.next()
+	is := p.tok.Kind == token.IDENT && p.tok.Lit == "type"
+	*p.lx, p.tok, p.peek = save, tok, peek
+	return is
 }
 
 func (p *Parser) parseStruct() *ast.StructDecl {
@@ -765,6 +813,12 @@ func (p *Parser) parsePub(f *ast.File) {
 	pos := p.expect(token.PUB).Pos
 	switch p.tok.Kind {
 	case token.EXTERN:
+		if p.isExternType() {
+			s := p.parseExternType()
+			s.Pub = true
+			f.Structs = append(f.Structs, s)
+			break
+		}
 		fn := p.parseExtern()
 		fn.Pub = true
 		f.Funcs = append(f.Funcs, fn)

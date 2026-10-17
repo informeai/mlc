@@ -196,6 +196,10 @@ func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 		}
 		s = inst
 	}
+	if s.Extern && ctx != ctxElem && ctx != ctxBorrowElem {
+		c.errorf(t.P, "%s é um tipo de C opaco: só existe atrás de ponteiro (?*%s, *%s ou &%s)", s.Name, s.Name, s.Name, s.Name)
+		return Invalid
+	}
 	if s.Resource && (ctx == ctxVar || ctx == ctxParam || ctx == ctxResult) {
 		c.errorf(t.P, "%s contém ponteiros donos e só pode ser usada através de um ponteiro: use *%s, ?*%s ou &%s", s.Name, s.Name, s.Name, s.Name)
 		return Invalid
@@ -305,6 +309,10 @@ func (c *checker) builtinCall(e *ast.CallExpr, name string) (Type, bool) {
 		if elem == Invalid {
 			return Invalid, true
 		}
+		if isExternStruct(elem) {
+			c.errorf(e.Args[0].Pos(), "%s é um tipo de C opaco: os valores vêm de funções de C, não de alloc", elem)
+			return Invalid, true
+		}
 		c.info.Calls[e] = Callee{Builtin: Alloc, Elem: elem, Zero: zero}
 		return c.pointerTo(elem, false), true
 	case "free":
@@ -313,8 +321,12 @@ func (c *checker) builtinCall(e *ast.CallExpr, name string) (Type, bool) {
 			c.checkArgs(e)
 			return Invalid, true
 		}
-		switch t := c.value(e.Args[0]); t.(type) {
-		case *Pointer, *Slice:
+		switch t := c.value(e.Args[0]); tt := t.(type) {
+		case *Pointer:
+			if isExternStruct(tt.Elem) {
+				c.errorf(e.Args[0].Pos(), "%s é um handle de C: libere com a função de C que o fecha, não com free", t)
+			}
+		case *Slice:
 		case *Borrow:
 			c.errorf(e.Args[0].Pos(), "não é possível liberar um empréstimo (%s): só o dono libera", t)
 		default:

@@ -1,0 +1,5 @@
+// erro: a única convenção de chamada é "C"
+extern "Pascal" fn f()
+
+fn main() {
+}

@@ -22,8 +22,9 @@ import (
 const usage = `mlc — compilador da linguagem MLC (My Lang C)
 
 Uso:
-  mlc build [-o saida] [-emit-c] arquivo.mlc   compila para um executável
-  mlc run arquivo.mlc [argumentos]             compila e executa
+  mlc build [-o saida] [-emit-c] [-L dir] arquivo.mlc   compila para um executável
+  mlc run [-L dir] arquivo.mlc [argumentos]             compila e executa
+                                       (-L: pasta das bibliotecas de C de link "nome")
   mlc fmt [-l] [arquivos ou pastas]            formata no lugar (padrão: a pasta atual)
   mlc fmt -                                    formata a entrada padrão na saída padrão
   mlc lsp                                      servidor de linguagem (LSP) para editores
@@ -62,6 +63,8 @@ func build(args []string) int {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
 	out := fs.String("o", "", "caminho do executável (padrão: nome do arquivo sem .mlc)")
 	emitC := fs.Bool("emit-c", false, "imprime o C gerado em vez de compilar")
+	var libDirs dirList
+	fs.Var(&libDirs, "L", "pasta onde procurar as bibliotecas de C (pode repetir)")
 	fs.Parse(args)
 	if fs.NArg() != 1 {
 		fmt.Fprint(os.Stderr, usage)
@@ -87,7 +90,7 @@ func build(args []string) int {
 	if *out == "" {
 		*out = strings.TrimSuffix(filepath.Base(path), ".mlc")
 	}
-	if err := driver.Build(path, src, *out); err != nil {
+	if err := driver.BuildOpts(path, src, *out, os.ReadFile, driver.Options{LibDirs: libDirs}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
@@ -95,6 +98,11 @@ func build(args []string) int {
 }
 
 func run(args []string) int {
+	fs := flag.NewFlagSet("run", flag.ExitOnError)
+	var libDirs dirList
+	fs.Var(&libDirs, "L", "pasta onde procurar as bibliotecas de C (pode repetir)")
+	fs.Parse(args) // para no primeiro argumento que não é opção: o arquivo
+	args = fs.Args()
 	if len(args) < 1 {
 		fmt.Fprint(os.Stderr, usage)
 		return 2
@@ -113,7 +121,7 @@ func run(args []string) int {
 	defer os.RemoveAll(dir)
 
 	exe := filepath.Join(dir, strings.TrimSuffix(filepath.Base(path), ".mlc"))
-	if err := driver.Build(path, src, exe); err != nil {
+	if err := driver.BuildOpts(path, src, exe, os.ReadFile, driver.Options{LibDirs: libDirs}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
@@ -204,4 +212,14 @@ func printErrors(errs []token.Error) {
 	for _, e := range errs {
 		fmt.Fprintln(os.Stderr, e)
 	}
+}
+
+// dirList junta os -L repetidos.
+type dirList []string
+
+func (d *dirList) String() string { return strings.Join(*d, ",") }
+
+func (d *dirList) Set(v string) error {
+	*d = append(*d, v)
+	return nil
 }

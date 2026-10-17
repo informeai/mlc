@@ -347,6 +347,14 @@ func (o *ownChecker) leaks(ls []*Local, pos token.Pos, where string) {
 		if s&sLive == 0 {
 			continue
 		}
+		if p, ok := l.Type.(*Pointer); ok && isExternStruct(p.Elem) {
+			o.errorf(pos, "vazamento: o handle de C %s (linha %d) pode ainda estar aberto %s; passe-o à função de C que o fecha",
+				l.Name, o.origin[k].Line, where)
+			if o.muted == 0 {
+				o.st[k] = sDead
+			}
+			continue
+		}
 		if s == sLive {
 			o.errorf(pos, "vazamento: %s ainda é dona da memória (linha %d) %s; libere com free(%s) ou passe a posse adiante",
 				l.Name, o.origin[k].Line, where, l.Name)

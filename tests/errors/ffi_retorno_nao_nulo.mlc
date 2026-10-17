@@ -1,0 +1,7 @@
+// erro: uma função de C pode devolver NULL: o retorno precisa ser ?*H
+extern "C" type H
+
+extern "C" fn abre() *H
+
+fn main() {
+}

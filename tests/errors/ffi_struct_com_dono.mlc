@@ -1,0 +1,9 @@
+// erro: uma struct emprestada ao C só pode ter campos numéricos ou bool
+struct P {
+    nome []byte
+}
+
+extern "C" fn usa(p &P)
+
+fn main() {
+}

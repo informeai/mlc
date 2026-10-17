@@ -1,0 +1,10 @@
+// erro: ?*FILE é um handle de C: libere com a função de C que o fecha, não com free
+extern "C" type FILE
+
+extern "C" fn fopen(caminho string, modo string) ?*FILE
+extern "C" fn fclose(f *FILE) int32
+
+fn main() {
+    f := fopen("x", "r")
+    free(f)
+}

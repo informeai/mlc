@@ -15,7 +15,17 @@ type File struct {
 	Funcs      []*FuncDecl
 	Interfaces []*InterfaceDecl
 	Impls      []*ImplDecl
+	Links      []*LinkDecl // link "sqlite3": bibliotecas de C a ligar
 }
+
+// LinkDecl é "link \"sqlite3\"": a biblioteca de C que o arquivo usa (vira
+// -lsqlite3 na ligação).
+type LinkDecl struct {
+	Lib string
+	P   token.Pos
+}
+
+func (n *LinkDecl) Pos() token.Pos { return n.P }
 
 // InterfaceDecl é "interface Display { fn write(self &Self, w &Writer) }":
 // assinaturas de métodos que um tipo implementa com impl. Nesta versão, uma
@@ -47,6 +57,7 @@ func (n *InterfaceDecl) Pos() token.Pos { return n.P }
 func (n *ImplDecl) Pos() token.Pos      { return n.P }
 
 type StructDecl struct {
+	Extern     bool // extern "C" type Banco: tipo opaco de C, só atrás de ponteiro
 	Name       string
 	TypeParams []*TypeParam // struct Par[A any, B any] { ... }
 	Pub        bool
@@ -82,6 +93,7 @@ type Import struct {
 
 type FuncDecl struct {
 	Extern     bool // extern fn: implementada no runtime C (só na biblioteca padrão), sem corpo
+	ExternC    bool // extern "C" fn: uma função de C de verdade, chamada pelo nome
 	Name       string
 	TypeParams []*TypeParam // fn maior[T ordered](...)
 	Pub        bool         // visível para quem importa o arquivo

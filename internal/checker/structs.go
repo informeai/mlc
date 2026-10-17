@@ -22,6 +22,10 @@ type Struct struct {
 	// copiar duplicaria os donos.
 	Resource bool
 
+	// Extern: extern "C" type, um tipo opaco de C (sem campos), que só
+	// existe atrás de ponteiro, como handle
+	Extern bool
+
 	// Genéricos: Params na struct genérica (a declaração); Origin e Args numa
 	// instância (Par[int, string]).
 	Params      []*ast.TypeParam
@@ -67,7 +71,7 @@ func (c *checker) collectStructs(f *ast.File) {
 		}
 		s := &Struct{
 			Name: c.qualify(d.Name), Methods: map[string]*Func{}, CName: c.mod.prefix + d.Name, File: c.mod.file, Pub: d.Pub, Decl: d,
-			mod: c.mod,
+			mod: c.mod, Extern: d.Extern,
 		}
 		if len(d.TypeParams) > 0 {
 			// genérica: os campos são resolvidos em cada instância
@@ -211,6 +215,10 @@ func (c *checker) composite(e *ast.CompositeLit) Type {
 
 // compositeOf checa os campos do literal de s.
 func (c *checker) compositeOf(e *ast.CompositeLit, s *Struct, allowed bool) Type {
+	if s.Extern {
+		c.errorf(e.Type.P, "%s é um tipo de C opaco: os valores vêm de funções de C", s.Name)
+		return Invalid
+	}
 	if s.Resource && !allowed {
 		c.errorf(e.Type.P, "literal de %s, que contém ponteiros donos, só pode aparecer dentro de alloc(...)", s.Name)
 	}

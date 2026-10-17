@@ -1,0 +1,5 @@
+// erro: uma função de C só devolve números, bool ou um handle
+extern "C" fn nome() string
+
+fn main() {
+}

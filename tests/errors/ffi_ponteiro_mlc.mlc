@@ -1,0 +1,9 @@
+// erro: memória do MLC não pode ser entregue ao C
+struct P {
+    x int
+}
+
+extern "C" fn guarda(p *P)
+
+fn main() {
+}

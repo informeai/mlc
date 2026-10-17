@@ -1,0 +1,5 @@
+// erro: um slice dono não pode ser entregue ao C; empreste com &[]T
+extern "C" fn guarda(s []byte)
+
+fn main() {
+}

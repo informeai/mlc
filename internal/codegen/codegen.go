@@ -59,6 +59,18 @@ func Generate(file string, f *ast.File, info *checker.Info) string {
 		params = append(params, "const char *", "int")
 		g.raw("%s %s(%s);\n", cType(fn.Result), fn.Native, strings.Join(params, ", "))
 	}
+	// funções de C (extern "C" fn): um nome local ligado ao símbolo de C por
+	// rótulo de assembly, para não brigar com o que os cabeçalhos já declaram
+	for _, fn := range info.CExterns {
+		params := []string{}
+		for _, p := range fn.Params {
+			params = append(params, cFFIType(p.Type))
+		}
+		if len(params) == 0 {
+			params = append(params, "void")
+		}
+		g.raw("extern %s %s(%s) __asm__(MLC_SYM(%q));\n", cFFIType(fn.Result), fn.CName, strings.Join(params, ", "), fn.CSym)
+	}
 	for _, fn := range info.Funcs {
 		g.raw("static MLC_MAYBE_UNUSED %s;\n", signature(fn)) // instâncias podem ficar sem uso
 	}
@@ -565,6 +577,9 @@ func (g *gen) expr(e ast.Expr) string {
 		if callee.Indirect {
 			return g.indirectCall(e)
 		}
+		if callee.Func != nil && callee.Func.CSym != "" {
+			return g.cCall(e, callee.Func)
+		}
 		pre, args := g.operands(g.info.CallArgs(e)) // num método, o receptor vem primeiro
 		if callee.Func.Native != "" {
 			// função do runtime: recebe arquivo e linha para os panics
@@ -636,4 +651,45 @@ func (g *gen) dropHelpers() {
 		}
 		g.raw("}\n")
 	}
+}
+
+// cFFIType é o tipo C de um parâmetro ou retorno de uma função de C: string
+// vira const char * (os literais do MLC terminam em zero) e &[]T vira o
+// ponteiro para os dados.
+func cFFIType(t checker.Type) string {
+	if t == checker.String {
+		return "const char *"
+	}
+	if b, ok := t.(*checker.Borrow); ok {
+		if s, ok := b.Elem.(*checker.Slice); ok {
+			return cType(s.Elem) + " *"
+		}
+	}
+	return cType(t)
+}
+
+// cCall traduz a chamada de uma função de C, convertendo os argumentos.
+func (g *gen) cCall(e *ast.CallExpr, fn *checker.Func) string {
+	pre, args := g.operands(e.Args)
+	for i, p := range fn.Params {
+		if i >= len(args) {
+			break
+		}
+		switch {
+		case p.Type == checker.String:
+			args[i] = "(" + args[i] + ").ptr"
+		case isSliceBorrow(p.Type):
+			args[i] = "(" + args[i] + ")->ptr"
+		}
+	}
+	return sequence(pre, fmt.Sprintf("%s(%s)", fn.CName, strings.Join(args, ", ")))
+}
+
+func isSliceBorrow(t checker.Type) bool {
+	b, ok := t.(*checker.Borrow)
+	if !ok {
+		return false
+	}
+	_, ok = b.Elem.(*checker.Slice)
+	return ok
 }

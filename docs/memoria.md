@@ -197,6 +197,10 @@ A linguagem não tem `append` nem coleção que cresce sozinha. Para isso existe
 
 Um genérico com `[T owned]` pode guardar donos (`Vec[[]byte]`, `Vec[?*No]`), inclusive aninhados (`Vec[?*vec.Vec[int]]`, `Vec[[][]byte]`, árvores), quando cada struct com donos tem um método `fn (x *X) free()` que libera os campos e o próprio objeto: o `drop` genérico o chama, e o verificador confere o `free` como qualquer outra função. Dentro dele, um valor `T` é tratado como um `?*X`: atribuir move, usar depois de mover é erro, e todo valor precisa de destino. `drop(x)` é a forma genérica de liberar: vira `free` quando `T` é dono e não faz nada quando não é. Como em todo genérico, cada instância concreta passa pelo verificador; além disso, cada genérico com `owned` é verificado com `T = []byte`, para os erros aparecerem na definição. Coleções como `Vec` liberam os elementos no `free()`, escrito em MLC e à vista na biblioteca.
 
+## Funções de C e handles
+
+Uma função de C (`extern "C" fn`) só recebe o que não é dono de memória do MLC: números, `string`, empréstimos (`&[]T`, `&T`) e handles de C. Um handle (`?*X`, com `X` um `extern "C" type`) é um dono como os outros: vem de uma função de C e precisa ser passado a uma função de C que o recebe por posse (`*X`); `free` não vale para ele. Assim o verificador também garante que arquivos, conexões e outros recursos de C são fechados. Veja [ffi.md](ffi.md).
+
 ## Funções como valor
 
 Um valor `fn(T) R` é só o endereço de uma função: como não captura variáveis, não aloca nem tem dono, e pode ser copiado livremente. Uma chamada através dele segue os tipos dos parâmetros (`&T` empresta, `*T` move), e o verificador confere como numa chamada direta. O valor zero é nulo; chamá-lo dá panic, nunca comportamento indefinido.

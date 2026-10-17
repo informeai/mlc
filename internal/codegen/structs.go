@@ -59,7 +59,9 @@ func (g *gen) valueType(t checker.Type, done map[checker.Type]bool) {
 				g.valueType(f.Type, done)
 			}
 		}
-		g.structDef(t)
+		if !t.Extern { // tipo de C opaco: só o typedef, sem corpo
+			g.structDef(t)
+		}
 	case *checker.Array:
 		if isValueType(t.Elem) {
 			g.valueType(t.Elem, done)

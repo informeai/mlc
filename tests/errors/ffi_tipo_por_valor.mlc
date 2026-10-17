@@ -1,0 +1,9 @@
+// erro: FILE é um tipo de C opaco: só existe atrás de ponteiro
+extern "C" type FILE
+
+extern "C" fn fopen(caminho string, modo string) ?*FILE
+extern "C" fn fclose(f *FILE) int32
+
+fn main() {
+    var x FILE
+}

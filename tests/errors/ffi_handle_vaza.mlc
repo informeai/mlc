@@ -1,0 +1,14 @@
+// erro: vazamento: o handle de C f (linha 10) pode ainda estar aberto no fim da função; passe-o à função de C que o fecha
+import "std/io"
+
+extern "C" type FILE
+
+extern "C" fn fopen(caminho string, modo string) ?*FILE
+extern "C" fn fclose(f *FILE) int32
+
+fn main() {
+    f := fopen("x", "r")
+    if f != nil {
+        io.print("abriu")
+    }
+}

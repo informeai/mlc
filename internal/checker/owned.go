@@ -57,6 +57,9 @@ func ownedOK(t Type) (bool, string) {
 
 // ownedPointee confere o tipo apontado por um ?*X usado como T owned.
 func ownedPointee(t Type) (bool, string) {
+	if isExternStruct(t) {
+		return false, "um handle de C precisa da função de C que o fecha, e drop não sabe qual é"
+	}
 	if IsOwner(t) {
 		return false, "ponteiro para dono não é suportado"
 	}

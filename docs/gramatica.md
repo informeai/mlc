@@ -17,7 +17,9 @@ fn_decl      = "fn" [ "(" param ")" ] ident [ type_params ] "(" [ param_list ] "
 type_params  = "[" ident constraint { "," ident constraint } "]" ;   (* [T ordered, U io.Display] *)
 constraint   = ident [ "." ident ] { "+" ident [ "." ident ] } ;   (* any, comparable, ordered, number, integer, owned, uma interface, ou uma de cada: owned + hash.Hash *)
 (* no receptor de um método, um argumento de tipo pode ter restrição: fn (v &Vec[T any]) get(i int) T *)
-extern_decl  = "extern" "fn" ident "(" [ param_list ] ")" [ type ] eos ;   (* só na biblioteca padrão; sem corpo *)
+extern_decl  = "extern" [ "\"C\"" ] "fn" ident "(" [ param_list ] ")" [ type ] eos   (* extern fn: só na std; extern "C" fn: função de C *)
+             | "extern" "\"C\"" "type" ident eos ;   (* handle opaco de C *)
+link_decl    = "link" string_lit eos ;   (* biblioteca de C: link "m" vira -lm *)
 param_list   = param { "," param } ;
 param        = ident type ;
 
@@ -122,6 +124,7 @@ eos          = ";" | (* inserido pelo lexer no fim da linha *) ;
 - **Arquivos:** `import "geometria"` carrega `geometria.mlc`; o caminho é relativo à pasta do arquivo principal (`import "util/texto"` carrega `util/texto.mlc`, e o módulo se chama `texto`). O que o arquivo declara com `pub` é usado com o nome do módulo na frente: `geometria.area(r)`, `geometria.Ponto{...}`, `geometria.PI`, inclusive em tipos e em padrões de `match`. Importação circular é erro, e `fn main` só existe no arquivo principal.
 - **Interfaces:** `interface Medida { fn tamanho(self &Self) int }` só serve de restrição de genérico (`fn f[T Medida](x &T)`), nunca de tipo de variável. Um tipo implementa com `impl Medida for Quadrado` (struct com os métodos de receptor `&S`), com bloco (`impl Medida for int { fn (x &int) tamanho() int {...} }`) ou genérico (`impl[T Medida] Medida for []T {...}`). O impl fica no arquivo do tipo ou no da interface. `impl auto io.Display for T` gera o método `write` de uma struct ou enum. Veja [interfaces.md](interfaces.md).
 - **Bits e contas que dão a volta:** `& | ^ << >>`, `^x` e `+% -% *%` só valem para inteiros. `+ - *` continuam dando panic no estouro; `+%`, `-%` e `*%` calculam módulo 2^bits. O deslocamento por `n` fora de `0..bits-1` dá panic (erro de compilação se `n` for constante); a quantidade de bits pode ser de qualquer tipo inteiro, e `1 << n` com `n` variável é `int`. Um `<<` descarta os bits que saem; `>>` com sinal repete o bit de sinal. Constantes que estouram continuam sendo erro de compilação.
+- **Funções de C:** `extern "C" fn` declara uma função de C em qualquer arquivo; só passam números, `bool`, `string`, `&[]T`, `&T` e handles (`extern "C" type`). `link "nome"` pede a biblioteca. Veja [ffi.md](ffi.md).
 - **Empréstimos devolvidos e guardados:** uma função pode devolver `&T` quando o resultado vem do receptor `&` (método) ou do único parâmetro `&`; `x := v.at(0)` e `x := &a.campo` guardam um empréstimo numa variável, que congela a origem enquanto é usada. Veja [memoria.md](memoria.md).
 - **Donos em genéricos:** a restrição `owned` aceita donos simples (`?*X`, `[]X`); dentro do corpo, um `T owned` só se move, e `drop(x)` (só em código genérico) o libera. O receptor de um método pode apertar a restrição: `fn (v &Vec[T any]) get(i int) T` só existe quando `T` é copiável. Num argumento de tipo, `?*X` e `fn(...)` podem ser escritos direto: `vec.new[?*No](8)`.
 - **Funções como valor:** `fn(int, &T) bool` é o tipo de um valor função. O nome de uma função (`dobro`, `geo.dobro`, `maior[int]`) vira valor; não há closures, métodos como valor nem `extern fn` como valor. Chamar um valor fn nulo (o valor zero) dá panic. Valores fn não podem ser comparados.

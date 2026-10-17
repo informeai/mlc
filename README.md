@@ -39,6 +39,7 @@ make                                     # gera o compilador em bin/mlc
 bin/mlc run exemplo.mlc                  # compila e executa
 bin/mlc build -o exemplo exemplo.mlc     # gera o executável
 bin/mlc build -emit-c exemplo.mlc        # mostra o C gerado
+bin/mlc build -L /opt/lib prog.mlc       # -L: onde procurar as bibliotecas de C de link "nome"
 bin/mlc fmt .                            # formata os .mlc da pasta (no lugar)
 bin/mlc fmt -l .                         # só lista os que mudariam
 make test                                # roda os testes
@@ -159,7 +160,7 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 ### Próximos passos (em ordem de prioridade)
 
 - [x] **Donos aninhados:** `Vec[?*vec.Vec[int]]`, `Map[[]byte, ?*vec.Vec[[]byte]]`, `Vec[[][]byte]` e árvores (`Vec[?*Valor]` dentro de `Valor`); structs com donos se liberam com `fn (x *X) free()`, que o `drop` genérico chama. Enums com dados donos ficaram para o item de erros com conteúdo. Veja [docs/tipos.md](docs/tipos.md)
-- [ ] **FFI para bibliotecas do usuário:** `extern fn` fora da `std`, marcado de forma explícita e verificado na fronteira, para usar bibliotecas C (rede, bancos de dados, processos, diretórios, leitura de arquivo aos pedaços)
+- [x] **FFI para bibliotecas do usuário:** `extern "C" fn` em qualquer arquivo, com a fronteira conferida (números, `string`, `&[]T`, `&T` e handles `extern "C" type`, que o verificador obriga a fechar); `link "nome"` e `-L`; erros de ligação apontados como erro do programa. Veja [docs/ffi.md](docs/ffi.md)
 - [ ] **Caminho de busca de bibliotecas:** reaproveitar bibliotecas entre projetos (por exemplo `MLC_PATH` ou uma pasta `lib/`), além dos imports relativos ao `main.mlc` e do `std/` embutido
 - [ ] **Formatação para buffer:** `str.format(dst, "...", x)`, um `io.Writer` que escreve num `[]byte` e especificadores de formato (`{:x}`, `{:.2}`, largura)
 - [ ] **Callbacks com contexto:** métodos com parâmetros de tipo próprios (como `each[C](ctx &C, f fn(&C, &K, &V))`) ou funções sem captura no heap

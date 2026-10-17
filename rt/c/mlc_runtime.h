@@ -19,6 +19,12 @@ typedef struct {
  * genéricos, métodos de biblioteca sem uso). */
 #define MLC_MAYBE_UNUSED __attribute__((unused))
 
+/* Nome de um símbolo de C para rótulos de assembly (extern "C" fn): no macOS
+ * os símbolos têm um _ na frente, que __USER_LABEL_PREFIX__ informa. */
+#define MLC_XSTR(x) #x
+#define MLC_STR(x) MLC_XSTR(x)
+#define MLC_SYM(name) MLC_STR(__USER_LABEL_PREFIX__) name
+
 /* []byte: buffer de texto. Definido aqui porque as funções de texto do runtime
  * o recebem; o código gerado não declara de novo. */
 typedef struct {

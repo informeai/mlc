@@ -74,7 +74,8 @@ type Func struct {
 	typeVars  []Type           // função genérica: os parâmetros de tipo (checagem abstrata)
 	instances map[string]*Func // função genérica: instâncias já criadas
 	recv      recvMode
-	queued    bool // instância de genérico: checada por checkInstances
+	queued    bool   // instância de genérico: checada por checkInstances
+	CSym      string // extern "C" fn: o nome do símbolo em C
 	// BorrowFrom: numa função que devolve &T, o parâmetro (1 + índice) de onde
 	// o empréstimo vem; 0 se não devolve empréstimo
 	BorrowFrom int
@@ -136,6 +137,8 @@ type Info struct {
 	DropTypes    map[string]Type              // tipos com drop não trivial (por typeKey)
 	DropOrder    []Type                       // os mesmos, na ordem em que apareceram
 	DropFree     map[*Struct]*Func            // o método free de cada struct liberada por drop
+	CExterns     []*Func                      // funções de C (extern "C" fn), para o gerador declarar
+	Links        []string                     // bibliotecas de C pedidas com link "nome"
 	FuncTypes    []*FuncType                  // tipos fn concretos, para o gerador declarar
 	Funcs        []*Func                      // na ordem de declaração
 }
@@ -252,6 +255,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 		c.order[src.File] = i
 		c.mod = c.newModule(src, i)
 		c.collectImports(src.AST)
+		c.collectLinks(src.AST)
 		c.collectConsts(src.AST) // antes das structs: [N]T usa constantes
 		c.collectEnumNames(src.AST)
 		c.collectStructs(src.AST)
@@ -403,10 +407,14 @@ func (c *checker) collectFuncs(f *ast.File) {
 			CName: "mlc_fn_" + c.mod.prefix + d.Name, File: c.mod.file, Pub: d.Pub, mod: c.mod,
 		}
 		c.signature(fn, d, nil)
+		if d.ExternC {
+			c.collectExternC(fn, d) // extern "C" fn: uma função de C de verdade
+			continue
+		}
 		if d.Extern {
 			// implementada no runtime C: mlc_std_<módulo>_<nome>, sem corpo
 			if !c.mod.std {
-				c.errorf(d.P, "extern fn só é permitida na biblioteca padrão")
+				c.errorf(d.P, "extern fn só é permitida na biblioteca padrão; para chamar uma função de C, declare extern \"C\" fn")
 			}
 			fn.Native = "mlc_std_" + c.mod.name + "_" + d.Name
 			c.info.Externs = append(c.info.Externs, fn)

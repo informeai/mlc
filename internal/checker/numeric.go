@@ -216,6 +216,10 @@ func (c *checker) unary(e *ast.UnaryExpr) Type {
 			return Invalid
 		}
 		elem, _ := c.deref(t, e.X.Pos(), exprName(e.X))
+		if isExternStruct(elem) {
+			c.errorf(e.P, "%s é um tipo de C opaco: não dá para ler o conteúdo", elem)
+			return Invalid
+		}
 		return elem
 	}
 	t := c.value(e.X)

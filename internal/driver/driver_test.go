@@ -187,3 +187,19 @@ func testName(path string) string {
 	}
 	return filepath.Base(path)
 }
+
+// TestLinkErrors: uma biblioteca de C ou um símbolo que não existe é erro do
+// programa (LinkError), não do mlc.
+func TestLinkErrors(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "prog")
+	for _, src := range []string{
+		"import \"std/io\"\nlink \"naoexiste_mlc_123\"\nextern \"C\" fn abs(x int32) int32\nfn main() {\n    io.print(abs(1))\n}\n",
+		"import \"std/io\"\nextern \"C\" fn funcao_que_nao_existe_mlc(x int32) int32\nfn main() {\n    io.print(funcao_que_nao_existe_mlc(1))\n}\n",
+	} {
+		err := Build("link.mlc", []byte(src), out)
+		var le *LinkError
+		if !errors.As(err, &le) || !strings.Contains(err.Error(), "não foi possível ligar o programa") {
+			t.Errorf("esperado LinkError, veio %v", err)
+		}
+	}
+}
