@@ -231,7 +231,7 @@ func (c *checker) collectImpls(f *ast.File) {
 	for _, a := range c.autos {
 		bad := false
 		for _, f := range a.fields {
-			if !c.implements(f.t, a.im.Iface) {
+			if !c.implementsAs(f.t, a.im.Iface, true) { // o write gerado lê o campo emprestado
 				c.errorf(a.im.Decl.P, "impl auto %s for %s: o campo %s (%s) não implementa %s", c.ifaceName(a.im.Iface), a.im.Type, f.name, f.t, c.ifaceName(a.im.Iface))
 				bad = true
 			}

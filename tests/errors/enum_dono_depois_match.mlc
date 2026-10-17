@@ -1,0 +1,18 @@
+// erro: e liberada duas vezes: já foi liberada ou movida (linha 13)
+enum E {
+    Msg(m []byte)
+    Nada
+}
+
+fn texto() []byte {
+    return alloc([]byte, 2)
+}
+
+fn main() {
+    e := E.Msg(texto())
+    match e {
+        Msg(m) => free(m)
+        Nada => {}
+    }
+    free(e)
+}

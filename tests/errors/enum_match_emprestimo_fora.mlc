@@ -1,0 +1,18 @@
+// erro: & só pode aparecer como argumento de chamada
+enum E {
+    Msg(m []byte)
+    Nada
+}
+
+fn texto() []byte {
+    return alloc([]byte, 2)
+}
+
+fn main() {
+    e := E.Msg(texto())
+    match *(&e) {
+        Msg(m) => {}
+        Nada => {}
+    }
+    free(e)
+}

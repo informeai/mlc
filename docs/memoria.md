@@ -205,6 +205,16 @@ Uma função de C (`extern "C" fn`) só recebe o que não é dono de memória do
 
 Um valor `fn(T) R` é só o endereço de uma função: como não captura variáveis, não aloca nem tem dono, e pode ser copiado livremente. Uma chamada através dele segue os tipos dos parâmetros (`&T` empresta, `*T` move), e o verificador confere como numa chamada direta. O valor zero é nulo; chamá-lo dá panic, nunca comportamento indefinido.
 
+## Enums com donos (erros com conteúdo)
+
+Uma variante de enum pode guardar donos (`BadDigit(at int, msg []byte)`). O enum inteiro vira um dono por valor: construir move os argumentos donos para dentro, e atribuir, passar ou devolver move o enum. Ele sai de cena de três jeitos, todos explícitos:
+
+- **`match` que consome** (sobre uma variável dona ou um temporário, como `match parse(s)`): cada campo dono ganha um nome dono no braço, que precisa ser liberado ou movido ali; `_` num campo dono e um braço `_` que cobriria uma variante com donos são erros, porque a memória vazaria sem aparecer no código.
+- **`free(e)`**, que libera os dados da variante atual.
+- **mover** o enum adiante (`return e`, um parâmetro por valor).
+
+Um `match` sobre `*e`, um campo ou um empréstimo **só lê**: os campos donos vêm como empréstimos (`&[]byte`), com as mesmas regras de [Devolver e guardar empréstimos](#devolver-e-guardar-empréstimos). Não há `try`: propagar um erro é um `return` escrito, e a posse viaja com o valor. Veja [tipos.md](tipos.md#enums-com-donos).
+
 ## O que é proibido
 
 - Aritmética de ponteiros e conversão entre tipos de ponteiro.

@@ -160,7 +160,7 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 - [x] **Enums com dados:** `enum Forma { Circulo(raio float64); Vazio }`, `match` com desestruturação e cobertura obrigatória, enums genéricos (`Resultado[T]`) com inferência pelo valor ou pelo contexto
 - [x] **Números:** `int8`, `int16`, `int32`, `uint16`, `uint32`, `uint64`, `float32`, `float64`; constantes sem tipo; conversões checadas. Veja [docs/tipos.md](docs/tipos.md)
 - [x] **Arrays `[N]T`:** tamanho fixo, por valor, na pilha ou em structs, sem `alloc`; `&a` empresta como `&[]T`
-- [x] **Biblioteca padrão** em MLC, importada com `std/`: `io`, `str`, `result`, `math`, `sort`, `text`, `vec`, `rand`, `os`, `fs`, `time`. Nada aloca escondido; erros como `Result[T]`. Veja [docs/biblioteca.md](docs/biblioteca.md)
+- [x] **Biblioteca padrão** em MLC, importada com `std/`: `io`, `str`, `result`, `math`, `sort`, `text`, `vec`, `rand`, `os`, `fs`, `time`. Nada aloca escondido; erros como `Result[T, E]`. Veja [docs/biblioteca.md](docs/biblioteca.md)
 - [x] **`mlc fmt`:** formatador canônico (4 espaços), preservando comentários e quebras de linha; `-l` lista, `-` usa a entrada padrão
 - [x] **Interfaces estáticas:** `interface`, `impl` (de uma linha, com bloco ou genérico) e `impl auto`; interfaces como restrição de genérico, com chamadas diretas (sem tabela de métodos). `io.print`/`io.printf`/`io.eprintf` sobre `io.Display`, com a formatação em MLC. Veja [docs/interfaces.md](docs/interfaces.md)
 - [x] **Bits e funções como valor:** `& | ^ << >>`, `^x`, aritmética que dá a volta (`+% -% *%`), literais `0xFF`, `0b1010`, `0o17`, `1_000_000`; tipos `fn(int) bool`, funções como valor e chamadas indiretas (sem closures, sem alocação). `std/rand` passou a ser MLC; novos `std/hash` e `sort.sort_by`. Veja [docs/tipos.md](docs/tipos.md)
@@ -171,12 +171,12 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 
 ### Próximos passos (em ordem de prioridade)
 
-- [x] **Donos aninhados:** `Vec[?*vec.Vec[int]]`, `Map[[]byte, ?*vec.Vec[[]byte]]`, `Vec[[][]byte]` e árvores (`Vec[?*Valor]` dentro de `Valor`); structs com donos se liberam com `fn (x *X) free()`, que o `drop` genérico chama. Enums com dados donos ficaram para o item de erros com conteúdo. Veja [docs/tipos.md](docs/tipos.md)
+- [x] **Donos aninhados:** `Vec[?*vec.Vec[int]]`, `Map[[]byte, ?*vec.Vec[[]byte]]`, `Vec[[][]byte]` e árvores (`Vec[?*Valor]` dentro de `Valor`); structs com donos se liberam com `fn (x *X) free()`, que o `drop` genérico chama. Enums com dados donos vieram no item de erros com conteúdo. Veja [docs/tipos.md](docs/tipos.md)
 - [x] **FFI para bibliotecas do usuário:** `extern "C" fn` em qualquer arquivo, com a fronteira conferida (números, `string`, `&[]T`, `&T` e handles `extern "C" type`, que o verificador obriga a fechar); `link "nome"` e `-L`; erros de ligação apontados como erro do programa. Veja [docs/ffi.md](docs/ffi.md)
 - [x] **Caminho de busca de bibliotecas:** imports procurados na pasta do projeto, em `lib/`, nas pastas de `-I` e nas de `MLC_PATH`. Veja [Bibliotecas](#bibliotecas)
 - [ ] **Formatação para buffer:** `str.format(dst, "...", x)`, um `io.Writer` que escreve num `[]byte` e especificadores de formato (`{:x}`, `{:.2}`, largura)
 - [ ] **Callbacks com contexto:** métodos com parâmetros de tipo próprios (como `each[C](ctx &C, f fn(&C, &K, &V))`) ou funções sem captura no heap
-- [ ] **Erros com conteúdo:** enums com dados donos (mensagens alocadas explicitamente por quem cria o erro, liberadas por quem o trata). Sem atalho de propagação (`try`): toda saída da função continua escrita como `return`. O `Result` é o jeito único de devolver erro
+- [x] **Erros com conteúdo:** enums com dados donos (mensagens alocadas explicitamente por quem cria o erro, liberadas por quem o trata); `match` que consome ou só lê, `free` de enum; `Result[T, E]` com donos nos dois lados. Sem atalho de propagação (`try`): toda saída da função continua escrita como `return`. Veja [docs/tipos.md](docs/tipos.md#enums-com-donos)
 - [ ] **Interfaces `Ord` e `Eq`:** `sort.sort` e `map` aceitando structs pela ordem e igualdade que elas definem
 - [ ] **Iteradores como objetos:** empréstimos guardados em structs, com tempo de vida conferido
 - [ ] **Interfaces dinâmicas:** `&I` e `*I`, para guardar valores de tipos diferentes juntos (sem boxing: só a partir de `&T` ou `*T`)

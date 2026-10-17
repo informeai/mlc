@@ -161,6 +161,12 @@ func (c *checker) dropPlan(t Type, pos token.Pos) {
 		}
 	case *Slice:
 		c.dropPlan(tt.Elem, pos)
+	case *Enum:
+		for _, v := range tt.Variants {
+			for _, f := range v.Fields {
+				c.dropPlan(f.Type, pos)
+			}
+		}
 	}
 	c.info.DropTypes[typeKey(t)] = t
 	c.info.DropOrder = append(c.info.DropOrder, t)
@@ -174,6 +180,8 @@ func deepDrop(t Type) bool {
 		return isResource(tt.Elem)
 	case *Slice:
 		return IsOwner(tt.Elem)
+	case *Enum:
+		return tt.Resource
 	}
 	return false
 }

@@ -40,6 +40,11 @@ type Enum struct {
 	Args      []Type
 	instances map[string]*Enum
 	mod       *module
+
+	// Resource: alguma variante guarda donos (Err(msg []byte)). O enum vira
+	// um dono por valor: atribuir, passar ou devolver move, e o verificador
+	// cobra que ele seja consumido (match, free ou move).
+	Resource bool
 }
 
 type Variant struct {
@@ -121,9 +126,36 @@ func (c *checker) variants(en *Enum) {
 			}
 			fseen[fd.Name] = true
 			t := c.resolveType(fd.Type, ctxField)
-			if IsOwner(t) || isResource(t) || isBorrow(t) {
-				c.errorf(fd.P, "variantes não podem guardar donos nesta versão (%s é %s)", fd.Name, t)
+			switch tt := t.(type) {
+			case *Borrow:
+				c.errorf(fd.P, "uma variante não pode guardar empréstimo (%s é %s)", fd.Name, t)
 				t = Invalid
+			case *Pointer:
+				// o valor zero do enum é a primeira variante zerada: *T não tem zero
+				if !tt.Nullable {
+					c.errorf(fd.P, "uma variante guarda ?*T, não *T (o valor zero do enum é nil): use ?%s", t)
+					t = Invalid
+				} else if ok, why := ownedPointee(tt.Elem); !ok {
+					c.errorf(fd.P, "%s: %s", fd.Name, why)
+					t = Invalid
+				} else {
+					c.requireFree(t, fd.P, en.Name)
+				}
+			case *Slice:
+				if ok, why := ownedElem(tt.Elem); !ok {
+					c.errorf(fd.P, "%s: %s", fd.Name, why)
+					t = Invalid
+				} else {
+					c.requireFree(t, fd.P, en.Name)
+				}
+			default:
+				if isResource(t) {
+					c.errorf(fd.P, "uma struct com donos só existe atrás de ponteiro: use ?*%s", t)
+					t = Invalid
+				}
+			}
+			if IsOwner(t) {
+				en.Resource = true // a variante guarda um dono
 			}
 			v.Fields = append(v.Fields, &Field{Name: fd.Name, Type: t})
 		}
@@ -304,6 +336,18 @@ func (c *checker) checkEnumMatch(s *ast.MatchStmt, en *Enum) {
 	seen := map[string]token.Pos{}
 	var wildcard *ast.Pattern
 	unreachable := false
+	// Um enum dono é consumido pelo match quando o sujeito é uma variável dona
+	// ou um valor temporário: os campos donos saem para os nomes do padrão.
+	// Senão (*e, um campo, um empréstimo), o match só lê, e os campos donos
+	// vêm emprestados.
+	mode := matchCopy
+	if IsOwner(en) {
+		mode = matchBorrow
+		if c.consumableSubject(s.Subject) {
+			mode = matchTake
+			c.info.MatchTakes[s] = true
+		}
+	}
 	for _, arm := range s.Arms {
 		if wildcard != nil && !unreachable {
 			c.errorf(arm.P, "braço depois de _ nunca é executado")
@@ -318,10 +362,18 @@ func (c *checker) checkEnumMatch(s *ast.MatchStmt, en *Enum) {
 				wildcard = p
 				continue
 			}
-			c.variantPattern(p, en, len(arm.Patterns), seen)
+			c.variantPattern(p, en, len(arm.Patterns), seen, mode, s.Subject)
 		}
 		c.checkStmt(arm.Body)
 		c.popScope()
+	}
+	if wildcard != nil && mode == matchTake {
+		// o _ consumiria variantes sem dar nome aos donos delas
+		for _, v := range en.Variants {
+			if _, ok := seen[v.Name]; !ok && variantOwns(v) {
+				c.errorf(wildcard.P, "o braço _ tiraria a variante %s, que guarda donos, sem liberá-los: trate %s num braço próprio", v.Name, v.Name)
+			}
+		}
 	}
 	switch {
 	case wildcard != nil && len(seen) == len(en.Variants):
@@ -339,7 +391,39 @@ func (c *checker) checkEnumMatch(s *ast.MatchStmt, en *Enum) {
 	}
 }
 
-func (c *checker) variantPattern(p *ast.Pattern, en *Enum, armSize int, seen map[string]token.Pos) {
+// modos de um match sobre enum
+const (
+	matchCopy   = iota // enum sem donos: os campos são copiados
+	matchTake          // enum dono consumido: os campos donos saem para os nomes
+	matchBorrow        // enum dono só lido: os campos donos vêm emprestados
+)
+
+// consumableSubject diz se o sujeito de um match pode ser consumido: uma
+// variável dona inteira ou um valor temporário (chamada, construtor).
+func (c *checker) consumableSubject(e ast.Expr) bool {
+	switch e := e.(type) {
+	case *ast.Ident:
+		l := c.info.Locals[e]
+		return l != nil && !isBorrow(l.Type)
+	case *ast.CallExpr:
+		return true
+	case *ast.SelectorExpr:
+		_, ctor := c.info.EnumCtors[e] // Forma.Vazio
+		return ctor
+	}
+	return false
+}
+
+func variantOwns(v *Variant) bool {
+	for _, f := range v.Fields {
+		if IsOwner(f.Type) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *checker) variantPattern(p *ast.Pattern, en *Enum, armSize int, seen map[string]token.Pos, mode int, subject ast.Expr) {
 	name, pos := "", p.P
 	switch {
 	case p.Variant != nil:
@@ -373,11 +457,27 @@ func (c *checker) variantPattern(p *ast.Pattern, en *Enum, armSize int, seen map
 	c.info.Patterns[p] = v
 	var locals []*Local
 	for i, b := range p.Binds {
+		if i < len(v.Fields) && b.Name == "_" && mode == matchTake && IsOwner(v.Fields[i].Type) {
+			c.errorf(b.P, "o campo %s de %s é dono: dê um nome a ele (para liberar ou mover), em vez de _", v.Fields[i].Name, v.Name)
+		}
 		if b.Name == "_" || i >= len(v.Fields) {
 			locals = append(locals, nil)
 			continue
 		}
-		locals = append(locals, c.declare(b.Name, b.P, v.Fields[i].Type, false))
+		ft := v.Fields[i].Type
+		if mode == matchBorrow && IsOwner(ft) {
+			// o match só lê: o campo dono vem emprestado
+			l := c.declare(b.Name, b.P, c.borrowOf(ft), false)
+			if root, _ := c.placeRoot(subject); root != nil {
+				c.info.BorrowSrc[l] = root
+			} else if root, _ := c.borrowRoot(subject); root != nil {
+				c.info.BorrowSrc[l] = root
+			}
+			c.info.BindBorrows[l] = true
+			locals = append(locals, l)
+			continue
+		}
+		locals = append(locals, c.declare(b.Name, b.P, ft, false))
 	}
 	c.info.PatternBinds[p] = locals
 }

@@ -554,6 +554,9 @@ func (g *gen) expr(e ast.Expr) string {
 			if _, ok := g.info.Types[e.Args[0]].(*checker.Slice); ok {
 				return "mlc_free(" + g.expr(e.Args[0]) + ".ptr)"
 			}
+			if t, ok := g.info.Types[e.Args[0]].(*checker.Enum); ok {
+				return dropName(t) + "(" + g.expr(e.Args[0]) + ")" // os donos da variante
+			}
 			return "mlc_free(" + g.expr(e.Args[0]) + ")"
 		case checker.Drop:
 			// drop(x): libera x conforme o tipo (mlc_drop_*); nada se não for
@@ -648,6 +651,21 @@ func (g *gen) dropHelpers() {
 				g.raw("    for (int64_t i = 0; i < v.len; i++) %s(v.ptr[i]);\n", dropName(tt.Elem))
 			}
 			g.raw("    mlc_free(v.ptr);\n")
+		case *checker.Enum:
+			// libera os donos da variante que estiver lá
+			g.raw("    switch (v.tag) {\n")
+			for _, vr := range tt.Variants {
+				var frees []string
+				for _, f := range vr.Fields {
+					if checker.IsOwner(f.Type) {
+						frees = append(frees, fmt.Sprintf("%s(v.u.v_%s.f_%s);", dropName(f.Type), vr.Name, f.Name))
+					}
+				}
+				if len(frees) > 0 {
+					g.raw("    case %d: %s break;\n", vr.Tag, strings.Join(frees, " "))
+				}
+			}
+			g.raw("    default: break;\n    }\n")
 		}
 		g.raw("}\n")
 	}

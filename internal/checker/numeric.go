@@ -347,6 +347,9 @@ func (c *checker) binary(e *ast.BinaryExpr) Type {
 		case isResource(x):
 			c.errorf(e.OpPos, "structs que contêm ponteiros donos não podem ser comparadas com ==")
 			return Invalid
+		case isEnum(x) && IsOwner(x):
+			c.errorf(e.OpPos, "enums que guardam donos não podem ser comparados com ==: use match")
+			return Invalid
 		}
 		result = Bool
 	case token.LAND, token.LOR:

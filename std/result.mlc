@@ -1,10 +1,14 @@
-// Resultado de uma operação que pode falhar: o valor, ou um código de erro.
+// Resultado de uma operação que pode falhar: o valor, ou o erro.
 //
 //     match fs.read_file(&caminho, &buf) {
 //         Ok(n) => ...
 //         Err(code) => ...
 //     }
-pub enum Result[T any] {
+//
+// O erro pode ser um código (Result[int, int], como em fs e os) ou um enum
+// com conteúdo, inclusive donos (uma mensagem alocada por quem cria o erro):
+// quem consome o Result com match recebe a posse e precisa liberá-la.
+pub enum Result[T owned, E owned] {
     Ok(value T)
-    Err(code int)
+    Err(err E)
 }

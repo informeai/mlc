@@ -1,0 +1,8 @@
+// erro: padrão de variante em match sobre int
+fn main() {
+    a := 1
+    match a {
+        Foo(x) => {}
+        _ => {}
+    }
+}

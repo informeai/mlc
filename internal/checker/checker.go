@@ -138,6 +138,8 @@ type Info struct {
 	DropOrder    []Type                       // os mesmos, na ordem em que apareceram
 	DropFree     map[*Struct]*Func            // o método free de cada struct liberada por drop
 	CExterns     []*Func                      // funções de C (extern "C" fn), para o gerador declarar
+	MatchTakes   map[*ast.MatchStmt]bool      // match que consome um enum dono (tira os dados)
+	BindBorrows  map[*Local]bool              // nome de padrão que empresta um campo dono
 	Links        []string                     // bibliotecas de C pedidas com link "nome"
 	FuncTypes    []*FuncType                  // tipos fn concretos, para o gerador declarar
 	Funcs        []*Func                      // na ordem de declaração
@@ -236,6 +238,8 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 			BorrowParent: map[*Local]*Local{},
 			DropTypes:    map[string]Type{},
 			DropFree:     map[*Struct]*Func{},
+			MatchTakes:   map[*ast.MatchStmt]bool{},
+			BindBorrows:  map[*Local]bool{},
 		},
 		pointers: map[ptrKey]*Pointer{},
 		borrows:  map[Type]*Borrow{},
@@ -666,6 +670,12 @@ func (c *checker) checkStmt(s ast.Stmt) {
 // braços inalcançáveis e cobertura de todos os valores.
 func (c *checker) checkMatch(s *ast.MatchStmt) {
 	t := c.valueDefault(s.Subject)
+	if b, ok := t.(*Borrow); ok {
+		if en, ok := b.Elem.(*Enum); ok {
+			c.checkEnumMatch(s, en) // match e, com e &Enum: só lê
+			return
+		}
+	}
 	if en, ok := t.(*Enum); ok {
 		c.checkEnumMatch(s, en)
 		return
@@ -727,6 +737,15 @@ func (c *checker) checkMatch(s *ast.MatchStmt) {
 // patternValue devolve o valor constante de um padrão e o seu tipo. Um
 // literal sem tipo assume o tipo do valor do match (subject).
 func (c *checker) patternValue(p *ast.Pattern, subject Type) (any, Type) {
+	if p.Lit == nil { // padrão de variante (V(x)) fora de match sobre enum
+		if subject != Invalid {
+			c.errorf(p.P, "padrão de variante em match sobre %s", subject)
+		}
+		return nil, Invalid
+	}
+	if _, ok := p.Lit.(*ast.Ident); ok && subject == Invalid {
+		return nil, Invalid // o sujeito já deu erro; o nome pode ser uma variante
+	}
 	switch lit := p.Lit.(type) {
 	case *ast.Ident:
 		if l := c.scope.lookup(lit.Name); l != nil && !l.IsConst {

@@ -1,0 +1,16 @@
+// erro: vazamento: m ainda é dona da memória
+enum E {
+    Msg(m []byte)
+    Nada
+}
+
+fn main() {
+    e := E.Msg(alloc([]byte, 2))
+    match e {
+        Msg(m) => {
+            if len(m) > 0 {
+            }
+        }
+        Nada => {}
+    }
+}

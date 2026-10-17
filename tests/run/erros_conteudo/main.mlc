@@ -1,0 +1,93 @@
+import "std/io"
+import "std/result"
+import "std/str"
+
+// um erro com conteúdo: a mensagem é alocada por quem cria o erro e
+// liberada por quem o trata
+enum ParseError {
+    Empty
+    BadDigit(at int, msg []byte)
+    TooLong(text []byte)
+}
+
+impl auto io.Display for ParseError
+
+fn text(s string) []byte {
+    b := alloc([]byte, len(s))
+    str.copy(&b, s)
+    return b
+}
+
+fn parse(s string) result.Result[int, ParseError] {
+    if len(s) == 0 {
+        return result.Result.Err(ParseError.Empty)
+    }
+    if len(s) > 4 {
+        return result.Result.Err(ParseError.TooLong(text(s)))
+    }
+    n := 0
+    for i := 0; i < len(s); i += 1 {
+        d := int(s[i]) - 48
+        if d < 0 || d > 9 {
+            return result.Result.Err(ParseError.BadDigit(i, text("não é dígito")))
+        }
+        n = n * 10 + d
+    }
+    return result.Result.Ok(n)
+}
+
+// só lê: os campos donos vêm emprestados e continuam com o dono
+fn describe(e &ParseError) int {
+    match *e {
+        Empty => return 0
+        BadDigit(at, msg) => return at + len(msg)
+        TooLong(t) => return len(t)
+    }
+}
+
+// consome: o match recebe a posse dos campos e precisa liberá-los
+fn report(s string) {
+    match parse(s) {
+        Ok(n) => io.print("ok", n)
+        Err(e) => {
+            io.print("erro", describe(&e), e)
+            match e {
+                Empty => io.print("  vazio")
+                BadDigit(at, msg) => {
+                    io.print("  posição", at)
+                    free(msg)
+                }
+                TooLong(t) => free(t)
+            }
+        }
+    }
+}
+
+// o Ok também pode ser dono
+fn copy_of(s string) result.Result[[]byte, int] {
+    if len(s) == 0 {
+        return result.Result.Err(1)
+    }
+    return result.Result.Ok(text(s))
+}
+
+fn main() {
+    report("123")
+    report("")
+    report("1x3")
+    report("123456")
+
+    r := copy_of("olá")
+    match r {
+        Ok(b) => {
+            io.print(len(b))
+            free(b)
+        }
+        Err(code) => io.print("código", code)
+    }
+
+    // free libera os dados da variante atual, sem match
+    e := ParseError.TooLong(text("abc"))
+    io.print(describe(&e))
+    free(e)
+}

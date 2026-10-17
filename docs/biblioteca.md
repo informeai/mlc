@@ -19,7 +19,7 @@ Tudo que vem com a linguagem está aqui, inclusive entrada e saída (`std/io`) e
 ## Regras da biblioteca
 
 - **Nada aloca escondido.** As funções escrevem em buffers emprestados por quem chama (`dst &[]byte`) e devolvem quantos bytes usaram. A única exceção é `std/vec`, cujas alocações (`new`, `push` via `grow`) estão escritas em MLC, à vista em [`std/vec.mlc`](../std/vec.mlc).
-- **Erros são valores.** Quem pode falhar devolve `result.Result[int]`, um enum de `std/result`. O `match` obriga a tratar os dois casos:
+- **Erros são valores.** Quem pode falhar devolve um `result.Result[T, E]`, o enum de `std/result`; `fs` e `os` devolvem `Result[int, int]` (bytes usados ou código de erro). O `match` obriga a tratar os dois casos:
 
   ```
   match fs.read_file(&caminho[:n], &buf) {
@@ -41,7 +41,7 @@ Entrada e saída (`io.print`, `io.printf`, `io.eprint`, `io.eprintf`, `io.write`
 
 | Declaração | O que é |
 |---|---|
-| `enum Result[T any] { Ok(value T); Err(code int) }` | resultado de uma operação que pode falhar; `code` é um código de erro do módulo que o devolveu |
+| `enum Result[T owned, E owned] { Ok(value T); Err(err E) }` | resultado de uma operação que pode falhar. `E` pode ser um código (`int`) ou um enum com conteúdo, inclusive donos (uma mensagem alocada por quem cria o erro): o `match` que consome o `Result` entrega a posse, e quem trata libera. Não há atalho de propagação (`try`): cada saída é um `return` escrito. Veja [tipos.md](tipos.md#enums-com-donos) |
 
 ### `std/math`
 
@@ -187,8 +187,8 @@ conta.free()                              // libera cada chave e o mapa
 | Declaração | O que faz |
 |---|---|
 | `arg_count() int` | quantos argumentos o programa recebeu (o 0 é o nome dele) |
-| `arg(i int, dst &[]byte) Result[int]` | copia o argumento `i` para `dst` |
-| `getenv(name string, dst &[]byte) Result[int]` | copia o valor da variável de ambiente |
+| `arg(i int, dst &[]byte) Result[int, int]` | copia o argumento `i` para `dst` |
+| `getenv(name string, dst &[]byte) Result[int, int]` | copia o valor da variável de ambiente |
 | `exit(code int)` | encerra o programa |
 | `NOT_FOUND`, `TOO_LONG` | códigos de erro: não existe; não cabe em `dst` |
 
@@ -212,11 +212,11 @@ match fs.file_size(caminho) {
 
 | Declaração | O que faz |
 |---|---|
-| `file_size(path) Result[int]` | tamanho em bytes |
-| `read_file(path, dst) Result[int]` | lê o arquivo inteiro no começo de `dst`; se não couber, nada é lido e o erro é `TOO_BIG` |
-| `write_file(path, data) Result[int]` | cria ou substitui o arquivo |
-| `append_file(path, data) Result[int]` | acrescenta no fim (cria se preciso) |
-| `remove_file(path) Result[int]` | apaga o arquivo |
+| `file_size(path) Result[int, int]` | tamanho em bytes |
+| `read_file(path, dst) Result[int, int]` | lê o arquivo inteiro no começo de `dst`; se não couber, nada é lido e o erro é `TOO_BIG` |
+| `write_file(path, data) Result[int, int]` | cria ou substitui o arquivo |
+| `append_file(path, data) Result[int, int]` | acrescenta no fim (cria se preciso) |
+| `remove_file(path) Result[int, int]` | apaga o arquivo |
 | `exists(path) bool` | o caminho existe? |
 | `NOT_FOUND` (2), `DENIED` (13), `TOO_BIG` (1000) | códigos de erro; os demais são o `errno` do sistema |
 

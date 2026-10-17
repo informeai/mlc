@@ -71,9 +71,11 @@ func (c *checker) borrowOf(elem Type) *Borrow {
 // IsOwner diz se valores do tipo t carregam posse de memória: ponteiros
 // donos e slices.
 func IsOwner(t Type) bool {
-	switch t.(type) {
+	switch tt := t.(type) {
 	case *Pointer, *Slice:
 		return true
+	case *Enum:
+		return tt.Resource // um enum que guarda donos é dono por valor
 	}
 	return false
 }
@@ -327,6 +329,12 @@ func (c *checker) builtinCall(e *ast.CallExpr, name string) (Type, bool) {
 				c.errorf(e.Args[0].Pos(), "%s é um handle de C: libere com a função de C que o fecha, não com free", t)
 			}
 		case *Slice:
+		case *Enum:
+			if !tt.Resource {
+				c.errorf(e.Args[0].Pos(), "free espera um dono; %s não guarda donos", t)
+			} else {
+				c.dropPlan(t, e.Args[0].Pos()) // libera os dados da variante que estiver lá
+			}
 		case *Borrow:
 			c.errorf(e.Args[0].Pos(), "não é possível liberar um empréstimo (%s): só o dono libera", t)
 		default:

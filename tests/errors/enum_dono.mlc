@@ -1,4 +1,4 @@
-// erro: variantes não podem guardar donos nesta versão (p é *int)
+// erro: uma variante guarda ?*T, não *T (o valor zero do enum é nil): use ?*int
 enum Caixa {
     Cheia(p *int)
     Vazia

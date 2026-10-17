@@ -17,7 +17,7 @@ struct Ponto {
     y int
 }
 
-fn show(r result.Result[int]) {
+fn show(r result.Result[int, int]) {
     match r {
         Ok(n) => io.print("ok", n)
         Err(code) => io.print("erro", code)

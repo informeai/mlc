@@ -36,6 +36,9 @@ func (g *gen) enumDef(e *checker.Enum) {
 	}
 	g.raw("    } u;\n};\n\n")
 
+	if e.Resource {
+		return // enum que guarda donos não é comparado com ==
+	}
 	// igualdade: mesma variante e mesmos campos
 	g.raw("static bool mlc_eq_%s(%s x, %s y) {\n    if (x.tag != y.tag) return false;\n    switch (x.tag) {\n", mangle(e), t, t)
 	for _, v := range e.Variants {
@@ -70,11 +73,16 @@ func (g *gen) enumCtor(e ast.Expr, v *checker.Variant) string {
 // matchEnum traduz um match sobre enum: switch na tag; num braço com dados,
 // cada nome recebe uma cópia do campo.
 func (g *gen) matchEnum(s *ast.MatchStmt) {
-	en := g.typeOf(s.Subject).(*checker.Enum)
+	subject := g.expr(s.Subject)
+	st := g.typeOf(s.Subject)
+	if b, ok := st.(*checker.Borrow); ok {
+		st, subject = b.Elem, "(*"+subject+")" // match e, com e &Enum
+	}
+	en := st.(*checker.Enum)
 	tmp := g.newName("mlc_subject")
 	g.line("{")
 	g.indent++
-	g.line("%s %s = %s;", enumCType(en), tmp, g.expr(s.Subject))
+	g.line("%s %s = %s;", enumCType(en), tmp, subject)
 	hasWildcard := false
 	for _, arm := range s.Arms {
 		for _, p := range arm.Patterns {
@@ -107,8 +115,18 @@ func (g *gen) matchEnum(s *ast.MatchStmt) {
 		if binds != nil {
 			v := g.info.Patterns[binds].(*checker.Variant)
 			for i, l := range g.info.PatternBinds[binds] {
-				if l != nil {
-					g.line("%s %s = %s.u.v_%s.f_%s;", cType(l.Type), l.CName, tmp, v.Name, v.Fields[i].Name)
+				if l == nil {
+					continue
+				}
+				field := fmt.Sprintf("%s.u.v_%s.f_%s", tmp, v.Name, v.Fields[i].Name)
+				switch {
+				case g.info.BindBorrows[l] && isPointer(v.Fields[i].Type):
+					// campo ?*X emprestado como &X: o objeto apontado (nil dá panic)
+					g.line("%s %s = MLC_NONNULL(%s);", cType(l.Type), l.CName, field)
+				case g.info.BindBorrows[l]:
+					g.line("%s %s = &%s;", cType(l.Type), l.CName, field)
+				default:
+					g.line("%s %s = %s;", cType(l.Type), l.CName, field)
 				}
 			}
 		}

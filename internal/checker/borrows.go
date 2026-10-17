@@ -224,6 +224,14 @@ func (c *checker) borrowParent(e ast.Expr) *Local {
 
 // ---------- tempo de vida ----------
 
+// borrowDecl é uma variável emprestada: x := ..., ou o nome de um padrão
+// que empresta um campo dono. start é onde o empréstimo passa a valer.
+type borrowDecl struct {
+	l     *Local
+	start token.Pos
+	pos   token.Pos
+}
+
 type borrowUse struct {
 	l   *Local
 	pos token.Pos
@@ -238,7 +246,7 @@ func (c *checker) checkBorrowLifetimes(fn *Func) {
 	}
 	var uses []borrowUse
 	var loops []*ast.ForStmt
-	var decls []*ast.VarDecl
+	var decls []borrowDecl
 	inspect(fn.Decl.Body, func(n any) {
 		switch n := n.(type) {
 		case *ast.Ident:
@@ -249,7 +257,14 @@ func (c *checker) checkBorrowLifetimes(fn *Func) {
 			loops = append(loops, n)
 		case *ast.VarDecl:
 			if l := c.info.Decls[n]; l != nil && c.info.BorrowSrc[l] != nil {
-				decls = append(decls, n)
+				decls = append(decls, borrowDecl{l, maxPos(n.Value), n.P})
+			}
+		case *ast.Pattern:
+			// Circulo(r) num match que só lê: r empresta um campo dono
+			for _, l := range c.info.PatternBinds[n] {
+				if l != nil && c.info.BorrowSrc[l] != nil {
+					decls = append(decls, borrowDecl{l, l.Pos, l.Pos})
+				}
 			}
 		}
 	})
@@ -268,9 +283,8 @@ func (c *checker) checkBorrowLifetimes(fn *Func) {
 			}
 		}
 		for _, d := range decls {
-			l := c.info.Decls[d]
-			if g[c.info.BorrowSrc[l]] {
-				g[l] = true
+			if g[c.info.BorrowSrc[d.l]] {
+				g[d.l] = true
 			}
 		}
 		return g
@@ -284,8 +298,8 @@ func (c *checker) checkBorrowLifetimes(fn *Func) {
 		return false
 	}
 	for _, d := range decls {
-		x := c.info.Decls[d]
-		start := maxPos(d.Value)
+		x := d.l
+		start := d.start
 		end := start
 		for _, u := range uses {
 			if u.l != x || !start.Before(u.pos) {
@@ -294,7 +308,7 @@ func (c *checker) checkBorrowLifetimes(fn *Func) {
 			e := u.pos
 			for _, lp := range loops {
 				// usada num laço que começou antes da declaração: vale o laço todo
-				if within(u.pos, lp.P, lp.Body.End) && !within(d.P, lp.P, lp.Body.End) && e.Before(lp.Body.End) {
+				if within(u.pos, lp.P, lp.Body.End) && !within(d.pos, lp.P, lp.Body.End) && e.Before(lp.Body.End) {
 					e = lp.Body.End
 				}
 			}
@@ -308,7 +322,7 @@ func (c *checker) checkBorrowLifetimes(fn *Func) {
 				continue
 			}
 			c.errorf(u.pos, "%s está emprestada a %s (linha %d) até a linha %d: use %s, ou termine de usar %s antes",
-				u.l.Name, x.Name, d.P.Line, end.Line, x.Name, x.Name)
+				u.l.Name, x.Name, d.pos.Line, end.Line, x.Name, x.Name)
 		}
 	}
 	c.sameStatementBorrows(fn, group)

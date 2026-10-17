@@ -13,19 +13,19 @@ extern fn arg_copy(i int, dst &[]byte) int
 extern fn getenv_copy(name string, dst &[]byte) int
 
 // arg copia o argumento i para dst e devolve quantos bytes usou.
-pub fn arg(i int, dst &[]byte) result.Result[int] {
+pub fn arg(i int, dst &[]byte) result.Result[int, int] {
     return wrap(arg_copy(i, dst))
 }
 
 // getenv copia o valor da variável de ambiente name para dst.
-pub fn getenv(name string, dst &[]byte) result.Result[int] {
+pub fn getenv(name string, dst &[]byte) result.Result[int, int] {
     return wrap(getenv_copy(name, dst))
 }
 
 // exit encerra o programa com o código dado, sem voltar.
 pub extern fn exit(code int)
 
-fn wrap(n int) result.Result[int] {
+fn wrap(n int) result.Result[int, int] {
     if n < 0 {
         return result.Result.Err(-n)
     }

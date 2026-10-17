@@ -504,12 +504,34 @@ func (o *ownChecker) stmt(s ast.Stmt) {
 	case *ast.ForStmt:
 		o.forStmt(s)
 	case *ast.MatchStmt:
-		o.read(s.Subject)
+		if info.MatchTakes[s] {
+			o.consume(s.Subject, nil, "o match") // os campos donos saem para os nomes
+		} else {
+			o.read(s.Subject)
+		}
 		base := o.st
 		var out ownFlow
 		for _, arm := range s.Arms {
 			o.st = base.clone()
 			o.push()
+			for _, p := range arm.Patterns {
+				for _, l := range info.PatternBinds[p] {
+					switch {
+					case l == nil:
+					case isBorrow(l.Type):
+						// campo emprestado (match que só lê): como x := v.at(0)
+						o.st[pathKey{l, ""}] = sLive | sOpaque
+						o.scopes[len(o.scopes)-1] = append(o.scopes[len(o.scopes)-1], l)
+					case IsOwner(l.Type):
+						// campo tirado (match que consome): precisa ser liberado ou movido
+						st := sLive | sOpaque
+						if pt, ok := l.Type.(*Pointer); ok && pt.Nullable {
+							st |= sNull
+						}
+						o.declare(l, ownValue{st: st}, l.Pos)
+					}
+				}
+			}
 			o.stmt(arm.Body)
 			o.pop(arm.Body.Pos(), "no fim do braço do match")
 			out = merge(out, o.st)
@@ -958,10 +980,16 @@ func (o *ownChecker) literalFields(lit *ast.CompositeLit, prefix string, sub map
 
 func (o *ownChecker) call(e *ast.CallExpr) {
 	callee := o.c.info.Calls[e]
-	if _, isCtor := o.c.info.EnumCtors[e]; isCtor {
-		for _, a := range e.Args {
-			o.read(a) // dados de variante não são donos
-		}
+	if v, isCtor := o.c.info.EnumCtors[e]; isCtor {
+		o.deferMoves(func() {
+			for i, a := range e.Args {
+				if i < len(v.Fields) && IsOwner(v.Fields[i].Type) {
+					o.consume(a, v.Fields[i].Type, "a variante "+v.Name) // o dono vai para o enum
+				} else {
+					o.read(a)
+				}
+			}
+		})
 		return
 	}
 	switch callee.Builtin {

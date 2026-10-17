@@ -1,0 +1,18 @@
+// erro: enums que guardam donos não podem ser comparados com ==: use
+enum E {
+    Msg(m []byte)
+    Nada
+}
+
+fn texto() []byte {
+    return alloc([]byte, 2)
+}
+
+fn main() {
+    a := E.Msg(texto())
+    b := E.Nada
+    if a == b {
+    }
+    free(a)
+    free(b)
+}

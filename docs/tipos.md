@@ -250,4 +250,37 @@ match f {
 - **Enums genéricos:** os tipos podem ser escritos (`Resultado[int].Erro(2)`) ou deduzidos do valor (`Resultado.Ok(5)`) ou do contexto (`return Resultado.Erro(1)` numa função que devolve `Resultado[int]`).
 - `==` compara variante e dados; `io.print` mostra `Circulo(2)`.
 - O valor zero (`var f Forma`) é a primeira variante, com os campos zerados.
-- Nesta versão os dados das variantes não podem ser donos (`*T`, `[]T`): um enum é um valor comum, copiável.
+- Um enum sem donos é um valor comum, copiável.
+
+### Enums com donos
+
+Uma variante pode guardar donos (`[]T`, `?*X`, ou structs e genéricos que os guardam): é assim que um erro carrega uma mensagem alocada por quem o criou.
+
+```
+enum ParseError {
+    Empty
+    BadDigit(at int, msg []byte)
+}
+
+fn describe(e &ParseError) int {
+    match *e {                              // só lê: msg vem emprestada (&[]byte)
+        Empty => return 0
+        BadDigit(at, msg) => return at + len(msg)
+    }
+}
+
+fn handle(e ParseError) {
+    match e {                               // consome: msg passa a ser dona
+        Empty => {}
+        BadDigit(_, msg) => free(msg)       // o verificador cobra este free
+    }
+}
+```
+
+- Um enum assim é **dono por valor**: atribuir, passar ou devolver move, como um `[]byte`. Ao construir (`ParseError.BadDigit(i, msg)`), os argumentos donos são movidos para dentro.
+- Um campo ponteiro é sempre `?*X` (o valor zero do enum é a primeira variante com os campos zerados, ou seja, `nil`); `*X` é erro.
+- **`match` sobre uma variável dona ou um temporário consome:** cada campo dono recebe um nome (`_` é erro, porque o dado vazaria) e precisa ser liberado ou movido no braço. Um braço `_` que cobriria uma variante com donos também é erro. Depois do `match` a variável não existe mais.
+- **`match` sobre `*e`, um campo ou um empréstimo só lê:** os campos donos vêm emprestados (`&[]byte`, `&X`) e a origem fica congelada enquanto o braço os usa.
+- **`free(e)`** libera os dados da variante atual, sem `match`.
+- `==` não se aplica (use `match`); `io.print` funciona com `impl auto io.Display`.
+- O `Result` da biblioteca padrão aceita donos nos dois lados: `result.Result[int, ParseError]`, `result.Result[[]byte, int]`. Veja [biblioteca.md](biblioteca.md).
