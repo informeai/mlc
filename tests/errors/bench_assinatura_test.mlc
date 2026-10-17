@@ -1,0 +1,5 @@
+// erro: o benchmark bench_x recebe b &testing.B e não retorna valor
+import "std/testing"
+
+fn bench_x(n int) {
+}

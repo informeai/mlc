@@ -75,3 +75,15 @@ fn test_sort_by() {
     testing.eq_int(p[19].age, 19)
     free(p)
 }
+
+fn bench_sort_1000(b &testing.B) {
+    r := rand.new(1)
+    s := alloc([]int, 1000)
+    for i := 0; i < b.n; i++ {
+        for j := 0; j < len(s); j++ {
+            s[j] = r.range(0, 1_000_000)
+        }
+        sort.sort(&s)
+    }
+    free(s)
+}

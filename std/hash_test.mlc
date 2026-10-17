@@ -1,3 +1,4 @@
+import "std/encoding"
 import "std/hash"
 import "std/str"
 import "std/testing"
@@ -38,4 +39,83 @@ fn test_hash_interface() {
     testing.check(!buf.eq(&other), "[]byte diferente")
     free(buf)
     free(other)
+}
+
+fn sha_hex(s &[]byte, out &[]byte) int {
+    var d [32]byte
+    hash.sha256_sum(s, &d)
+    return encoding.hex(out, &d)
+}
+
+fn test_sha256_vectors() {
+    var out [64]byte
+    var b [64]byte
+    n := sha_hex(&b[:0], &out)
+    testing.eq_str(&out[:n], "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+    k := str.copy(&b, "abc")
+    n = sha_hex(&b[:k], &out)
+    testing.eq_str(&out[:n], "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+    k = str.copy(&b, "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq") // 56 bytes: o enchimento vira outro bloco
+    n = sha_hex(&b[:k], &out)
+    testing.eq_str(&out[:n], "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1")
+}
+
+fn test_sha256_million_a_in_pieces() {
+    h := hash.sha256()
+    var chunk [1000]byte
+    for i := 0; i < len(chunk); i++ {
+        chunk[i] = 'a'
+    }
+    for i := 0; i < 1000; i++ {
+        h.write(&chunk)
+    }
+    var d [32]byte
+    h.sum(&d)
+    var out [64]byte
+    n := encoding.hex(&out, &d)
+    testing.eq_str(&out[:n], "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0")
+}
+
+fn test_sha256_pieces_equal_whole() {
+    var b [200]byte
+    for i := 0; i < len(b); i++ {
+        b[i] = byte(i)
+    }
+    var whole [32]byte
+    hash.sha256_sum(&b, &whole)
+    h := hash.sha256()
+    h.write(&b[:1])
+    h.write(&b[1:63])
+    h.write(&b[63:64])
+    h.write(&b[64:])
+    var parts [32]byte
+    h.sum(&parts)
+    testing.eq_bytes(&parts, &whole)
+    h.sum(&parts) // sum não muda o estado
+    testing.eq_bytes(&parts, &whole)
+}
+
+fn test_sha256_small_destination() {
+    testing.expect_panic()
+    var d [16]byte
+    hash.sha256_sum(&d[:0], &d)
+}
+
+fn test_crc32() {
+    var b [64]byte
+    testing.eq_uint(uint64(hash.crc32(&b[:0])), 0)
+    k := str.copy(&b, "123456789")
+    testing.eq_uint(uint64(hash.crc32(&b[:k])), 0xCBF4_3926)
+    k = str.copy(&b, "The quick brown fox jumps over the lazy dog")
+    testing.eq_uint(uint64(hash.crc32(&b[:k])), 0x414F_A339)
+    part := hash.crc32(&b[:10])
+    testing.eq_uint(uint64(hash.crc32_update(part, &b[10:k])), 0x414F_A339)
+}
+
+fn bench_sha256_4kb(b &testing.B) {
+    var data [4096]byte
+    var d [32]byte
+    for i := 0; i < b.n; i++ {
+        hash.sha256_sum(&data, &d)
+    }
 }

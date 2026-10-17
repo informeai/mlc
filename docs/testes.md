@@ -65,6 +65,8 @@ Uma verificação que falha mostra a linha dela no teste e conta como falha, mas
 | `eq_bytes(got &[]byte, want &[]byte)` | os buffers são diferentes |
 | `expect_panic()` | o teste termina **sem** panic; com o panic, o teste passa (se nada antes dele falhou) |
 
+`testing.B` é o estado de um benchmark: o campo `n` diz quantas vezes repetir (veja [Benchmarks](#benchmarks)).
+
 Para structs, enums e o resto, use `check(a == b, "...")` ou um `match`.
 
 ## Resultado de cada teste
@@ -77,6 +79,37 @@ Para structs, enums e o resto, use `check(a == b, "...")` ou um `match`.
 | `VAZAMENTO` | sobrou memória no fim do processo. Isso não deveria acontecer, porque o verificador de posse impede; se acontecer, é bug do `mlc` |
 
 O `mlc test` sai com código 1 se algum teste falhar ou algum arquivo não compilar.
+
+## Benchmarks
+
+Uma função `fn bench_nome(b &testing.B)` repete o trecho medido `b.n` vezes:
+
+```
+fn bench_sort_1000(b &testing.B) {
+    s := alloc([]int, 1000)
+    for i := 0; i < b.n; i++ {
+        preenche(&s)
+        sort.sort(&s)
+    }
+    free(s)
+}
+```
+
+```sh
+mlc test -bench . std                   # todos os benchmarks (depois dos testes)
+mlc test -bench sort std/sort_test.mlc  # só os que têm "sort" no nome
+mlc test -benchtime 2000 -bench . std   # medir cada um por 2 s (o padrão é 500 ms)
+```
+
+```
+ok	std/sort_test.mlc	7 testes	0.30s
+bench_sort_1000	        6730 vezes	       33049.3 ns/op
+```
+
+- O `mlc test -bench` roda o benchmark com `b.n` = 1, depois um `n` maior, até a medida passar do tempo pedido. É o mesmo método do `go test -bench`.
+- Cada rodada é um processo, e o tempo é medido dentro do programa, sem contar a inicialização. Um panic ou uma falha param o benchmark e aparecem como num teste.
+- Os benchmarks só rodam com `-bench`, e só se os testes do arquivo passaram. Um arquivo pode ter só benchmarks.
+- O compilador C pode eliminar um laço que não faz nada (o resultado é `0.0 ns/op`). Use o resultado do trabalho (conferir uma soma, por exemplo) para o laço não sumir.
 
 ## Biblioteca padrão
 

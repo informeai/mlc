@@ -229,6 +229,9 @@ int64_t mlc_sink_pop(int64_t sink, const char *file, int line);
 
 /* Programa de teste (mlc test): qual teste rodar e o resultado no fim. */
 int64_t mlc_test_selected(int argc, char **argv);
+bool mlc_bench_selected(int argc, char **argv, int64_t *bench, int64_t *n);
+int64_t mlc_bench_now(void);
+void mlc_bench_report(int64_t ns);
 void mlc_test_finish(void);
 
 #endif

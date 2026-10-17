@@ -115,25 +115,35 @@ func BuildOpts(file string, src []byte, out string, read Loader, opts Options) e
 	return buildC(csrc, info.Links, out, opts)
 }
 
-// BuildTest compila o arquivo de teste file até um executável em out e
-// devolve os nomes dos testes, na ordem do código. O executável roda o
-// teste de índice i com o argumento i (veja RunTests).
-func BuildTest(file string, src []byte, out string, read Loader, opts Options) ([]string, error) {
+// TestProgram são os nomes dos testes e dos benchmarks de um programa de
+// teste, na ordem do código.
+type TestProgram struct {
+	Tests   []string
+	Benches []string
+}
+
+// BuildTest compila o arquivo de teste file até um executável em out. O
+// executável roda o teste de índice i com o argumento i (veja RunTest) e o
+// benchmark i com "bench i n" (veja RunBench).
+func BuildTest(file string, src []byte, out string, read Loader, opts Options) (TestProgram, error) {
+	var p TestProgram
 	if !IsTestFile(file) {
-		return nil, fmt.Errorf("%s: um arquivo de teste termina em _test.mlc", file)
+		return p, fmt.Errorf("%s: um arquivo de teste termina em _test.mlc", file)
 	}
 	csrc, info, err := compileInfo(file, src, read, opts)
 	if err != nil {
-		return nil, err
+		return p, err
 	}
 	if err := buildC(csrc, info.Links, out, opts); err != nil {
-		return nil, err
+		return p, err
 	}
-	names := make([]string, len(info.Tests))
-	for i, fn := range info.Tests {
-		names[i] = fn.Name
+	for _, fn := range info.Tests {
+		p.Tests = append(p.Tests, fn.Name)
 	}
-	return names, nil
+	for _, fn := range info.Benches {
+		p.Benches = append(p.Benches, fn.Name)
+	}
+	return p, nil
 }
 
 // buildC compila e liga o C gerado com o runtime.

@@ -785,6 +785,26 @@ int64_t mlc_test_selected(int argc, char **argv) {
     return atoll(argv[1]);
 }
 
+/* Benchmark: "bench i n" roda o benchmark i com b.n = n. */
+bool mlc_bench_selected(int argc, char **argv, int64_t *bench, int64_t *n) {
+    if (argc != 4 || strcmp(argv[1], "bench") != 0) return false;
+    *bench = atoll(argv[2]);
+    *n = atoll(argv[3]);
+    return true;
+}
+
+int64_t mlc_bench_now(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (int64_t)ts.tv_sec * 1000000000 + ts.tv_nsec;
+}
+
+/* O tempo vai numa linha própria no fim, que o mlc test procura. */
+void mlc_bench_report(int64_t ns) {
+    fflush(stdout);
+    fprintf(stderr, "\nmlc-bench-ns %" PRId64 "\n", ns);
+}
+
 void mlc_test_finish(void) {
     if (mlc_test_panic_expected) {
         fflush(stdout);
@@ -1398,3 +1418,7 @@ int64_t mlc_std_time_local_offset(int64_t ms, const char *file, int line) {
     return 0;
 #endif
 }
+
+void mlc_std_hash_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
+
+void mlc_std_encoding_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }

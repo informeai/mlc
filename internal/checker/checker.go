@@ -123,6 +123,8 @@ type Info struct {
 	Values       map[ast.Expr]any
 	Main         *Func                      // fn main do arquivo principal
 	Tests        []*Func                    // fn test_*() de um arquivo de teste, na ordem do código
+	Benches      []*Func                    // fn bench_*(b &testing.B) de um arquivo de teste
+	TestMode     bool                       // arquivo de teste: o main roda testes e benchmarks
 	Structs      []*Struct                  // cada struct depois das que ela contém
 	Slices       []*Slice                   // tipos slice usados, para o gerador declarar
 	Arrays       []*Array                   // tipos array usados, para o gerador declarar
@@ -476,8 +478,16 @@ func (c *checker) collectTests(f *ast.File, main *Func) {
 	if main != nil {
 		c.errorf(main.Decl.P, "um arquivo de teste não declara fn main: o mlc test gera o main que roda os testes")
 	}
+	c.info.TestMode = true
 	for _, d := range f.Funcs {
-		if d.Recv != nil || !strings.HasPrefix(d.Name, "test_") {
+		if d.Recv != nil {
+			continue
+		}
+		if strings.HasPrefix(d.Name, "bench_") {
+			c.collectBench(d)
+			continue
+		}
+		if !strings.HasPrefix(d.Name, "test_") {
 			continue
 		}
 		if len(d.TypeParams) > 0 {
@@ -494,9 +504,37 @@ func (c *checker) collectTests(f *ast.File, main *Func) {
 		}
 		c.info.Tests = append(c.info.Tests, fn)
 	}
-	if len(c.info.Tests) == 0 && len(c.errs) == 0 {
-		c.errorf(token.Pos{Line: 1, Col: 1}, "arquivo de teste sem testes: declare funções fn test_nome()")
+	if len(c.info.Tests) == 0 && len(c.info.Benches) == 0 && len(c.errs) == 0 {
+		c.errorf(token.Pos{Line: 1, Col: 1}, "arquivo de teste sem testes: declare funções fn test_nome() (ou fn bench_nome(b &testing.B))")
 	}
+}
+
+// collectBench registra um benchmark: fn bench_nome(b &testing.B), que
+// repete o trecho medido b.n vezes.
+func (c *checker) collectBench(d *ast.FuncDecl) {
+	if len(d.TypeParams) > 0 {
+		c.errorf(d.P, "o benchmark %s não pode ser genérico", d.Name)
+		return
+	}
+	fn := c.mod.funcs[d.Name]
+	if fn == nil || fn.Decl != d {
+		return
+	}
+	ok := len(fn.Params) == 1 && fn.Result == Void
+	if ok {
+		b, isBorrow := fn.Params[0].Type.(*Borrow)
+		s, isStruct := Type(nil), false
+		if isBorrow {
+			s = b.Elem
+			_, isStruct = s.(*Struct)
+		}
+		ok = isStruct && s.(*Struct).Name == "testing.B"
+	}
+	if !ok {
+		c.errorf(d.P, "o benchmark %s recebe b &testing.B e não retorna valor: fn %s(b &testing.B)", d.Name, d.Name)
+		return
+	}
+	c.info.Benches = append(c.info.Benches, fn)
 }
 
 // ---------- Comandos ----------

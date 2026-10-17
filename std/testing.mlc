@@ -42,6 +42,22 @@ pub extern fn eq_str(got &[]byte, want string)
 // eq_bytes compara dois buffers.
 pub extern fn eq_bytes(got &[]byte, want &[]byte)
 
+// B é o estado de um benchmark: fn bench_nome(b &testing.B) repete o
+// trecho medido b.n vezes, e o mlc test -bench escolhe b.n até a medida
+// durar o bastante.
+//
+//     fn bench_sort(b &testing.B) {
+//         s := alloc([]int, 1000)
+//         for i := 0; i < b.n; i++ {
+//             preenche(&s)
+//             sort.sort(&s)
+//         }
+//         free(s)
+//     }
+pub struct B {
+    n int
+}
+
 // expect_panic diz que o teste precisa terminar em panic (por exemplo, um
 // índice fora dos limites); terminar sem panic é falha.
 pub extern fn expect_panic()

@@ -1,0 +1,99 @@
+import "std/encoding"
+import "std/str"
+import "std/testing"
+
+fn b64(s string, out &[]byte) int {
+    var b [32]byte
+    n := str.copy(&b, s)
+    return encoding.base64(out, &b[:n])
+}
+
+fn test_base64_rfc4648() {
+    var out [32]byte
+    n := b64("", &out)
+    testing.eq_str(&out[:n], "")
+    n = b64("f", &out)
+    testing.eq_str(&out[:n], "Zg==")
+    n = b64("fo", &out)
+    testing.eq_str(&out[:n], "Zm8=")
+    n = b64("foo", &out)
+    testing.eq_str(&out[:n], "Zm9v")
+    n = b64("foob", &out)
+    testing.eq_str(&out[:n], "Zm9vYg==")
+    n = b64("fooba", &out)
+    testing.eq_str(&out[:n], "Zm9vYmE=")
+    n = b64("foobar", &out)
+    testing.eq_str(&out[:n], "Zm9vYmFy")
+    testing.eq_int(encoding.base64_len(6), 8)
+    testing.eq_int(encoding.base64_len(4), 8)
+}
+
+fn test_base64_round_trip_all_bytes() {
+    var b [256]byte
+    for i := 0; i < len(b); i++ {
+        b[i] = byte(i)
+    }
+    var t [344]byte
+    n := encoding.base64(&t, &b)
+    testing.eq_int(n, encoding.base64_len(256))
+    var back [256]byte
+    m := encoding.unbase64(&back, &t[:n])
+    testing.eq_int(m, 256)
+    testing.eq_bytes(&back, &b)
+}
+
+fn test_base64_url() {
+    var b [3]byte
+    b[0] = 0xFB
+    b[1] = 0xFF
+    b[2] = 0xBF
+    var t [8]byte
+    n := encoding.base64(&t, &b)
+    testing.eq_str(&t[:n], "+/+/")
+    n = encoding.base64_url(&t, &b)
+    testing.eq_str(&t[:n], "-_-_")
+    var back [3]byte
+    testing.eq_int(encoding.unbase64(&back, &t[:n]), 3)
+    testing.eq_bytes(&back, &b)
+    n = encoding.base64_url(&t, &b[:1]) // sem enchimento
+    testing.eq_str(&t[:n], "-w")
+    testing.eq_int(encoding.unbase64(&back, &t[:n]), 1)
+}
+
+fn test_unbase64_invalid() {
+    var t [16]byte
+    var out [16]byte
+    n := str.copy(&t, "Zm9v!")
+    testing.eq_int(encoding.unbase64(&out, &t[:n]), -1)
+    n = str.copy(&t, "Z")
+    testing.eq_int(encoding.unbase64(&out, &t[:n]), -1) // um caractere sozinho não forma byte
+    n = str.copy(&t, "Zg===")
+    testing.eq_int(encoding.unbase64(&out, &t[:n]), -1)
+}
+
+fn test_hex() {
+    var b [4]byte
+    b[0] = 0x00
+    b[1] = 0xAB
+    b[2] = 0x7F
+    b[3] = 0xFF
+    var t [8]byte
+    n := encoding.hex(&t, &b)
+    testing.eq_str(&t[:n], "00ab7fff")
+    var back [4]byte
+    var up [8]byte
+    k := str.copy(&up, "00AB7FFF")
+    testing.eq_int(encoding.unhex(&back, &up[:k]), 4)
+    testing.eq_bytes(&back, &b)
+    k = str.copy(&up, "abc")
+    testing.eq_int(encoding.unhex(&back, &up[:k]), -1) // tamanho ímpar
+    k = str.copy(&up, "zz")
+    testing.eq_int(encoding.unhex(&back, &up[:k]), -1)
+}
+
+fn test_small_destination() {
+    testing.expect_panic()
+    var b [4]byte
+    var t [7]byte
+    encoding.hex(&t, &b)
+}

@@ -84,8 +84,8 @@ func Generate(file string, f *ast.File, info *checker.Info) string {
 	for _, fn := range info.Funcs {
 		g.function(fn)
 	}
-	if info.Tests != nil {
-		g.testMain(info.Tests)
+	if info.TestMode {
+		g.testMain(info.Tests, info.Benches)
 		return g.buf.String()
 	}
 	g.raw("int main(int argc, char **argv) {\n    mlc_args_init(argc, argv);\n    %s();\n    mlc_check_allocs();\n    return 0;\n}\n", info.Main.CName)
@@ -94,8 +94,20 @@ func Generate(file string, f *ast.File, info *checker.Info) string {
 
 // testMain gera o main de um programa de teste: roda o teste cujo índice
 // veio como argumento (o mlc test roda um processo por teste).
-func (g *gen) testMain(tests []*checker.Func) {
-	g.raw("int main(int argc, char **argv) {\n    int64_t test = mlc_test_selected(argc, argv);\n    mlc_args_init(1, argv);\n    switch (test) {\n")
+//
+// Com "bench i n", roda o benchmark i com b.n = n e informa o tempo.
+func (g *gen) testMain(tests, benches []*checker.Func) {
+	g.raw("int main(int argc, char **argv) {\n")
+	if len(benches) > 0 {
+		bt := benches[0].Params[0].Type.(*checker.Borrow).Elem
+		g.raw("    int64_t bench, n;\n    if (mlc_bench_selected(argc, argv, &bench, &n)) {\n        mlc_args_init(1, argv);\n")
+		g.raw("        %s b = %s;\n        b.f_n = n;\n        int64_t start = mlc_bench_now();\n        switch (bench) {\n", cType(bt), zeroValue(bt))
+		for i, fn := range benches {
+			g.raw("        case %d: %s(&b); break;\n", i, fn.CName)
+		}
+		g.raw("        default: return 2;\n        }\n        mlc_bench_report(mlc_bench_now() - start);\n        mlc_test_finish();\n        mlc_check_allocs();\n        return 0;\n    }\n")
+	}
+	g.raw("    int64_t test = mlc_test_selected(argc, argv);\n    mlc_args_init(1, argv);\n    switch (test) {\n")
 	for i, fn := range tests {
 		g.raw("    case %d: %s(); break;\n", i, fn.CName)
 	}

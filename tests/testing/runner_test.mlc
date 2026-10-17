@@ -50,3 +50,18 @@ fn test_fails_then_panics() {
     b[i] = 1
     free(b)
 }
+
+fn bench_sum(b &testing.B) {
+    total := 0
+    for i := 0; i < b.n; i++ {
+        total += i
+    }
+    testing.check(total >= 0, "nunca falha")
+}
+
+fn bench_panics(b &testing.B) {
+    v := alloc([]int, 1)
+    i := b.n + 5
+    v[i] = 1
+    free(v)
+}

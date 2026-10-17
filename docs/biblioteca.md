@@ -185,16 +185,43 @@ Para uma semente diferente a cada execução, use `uint64(time.now_ms())`.
 
 ### `std/hash`
 
-Hashes não criptográficos, em MLC, para tabelas e checagens rápidas.
+Hashes em MLC: FNV para tabelas, CRC32 e SHA-256 para integridade e identificadores.
 
 | Função | O que faz |
 |---|---|
+| `sha256() Sha256` | começa um SHA-256; `h.write(&dados)` quantas vezes precisar, `h.sum(&dst)` escreve os 32 bytes (e não muda o estado) |
+| `sha256_sum(dados, dst)` | o SHA-256 de uma vez |
+| `crc32(s) uint32`, `crc32_update(crc, s) uint32` | CRC-32 (IEEE, o de zip, gzip e PNG), também em pedaços |
 | `fnv32(s &[]byte) uint32`, `fnv64(s &[]byte) uint64` | FNV-1a de 32 e 64 bits |
 | `fnv64_str(s string) uint64` | FNV-1a de 64 bits de uma string fixa |
 | `mix64(x uint64) uint64` | espalha os bits de um inteiro (finalizador do splitmix64), para usar como chave |
 | `interface Hash { fn hash(self &Self) uint64; fn eq(self &Self, other &Self) bool }` | o que uma chave de `map.Map` precisa; dois valores iguais têm o mesmo hash |
 
 `Hash` já vem implementada para os inteiros, `bool`, `string` e slices (`[]byte`, `[]int`...). Para uma struct, escreva `hash` e `eq` e declare `impl hash.Hash for Ponto`.
+
+```
+h := hash.sha256()
+for { ... h.write(&buf[:n]) ... }       // um arquivo lido em pedaços
+var digest [32]byte
+h.sum(&digest)
+var txt [64]byte
+n := encoding.hex(&txt, &digest)        // "ba7816bf..."
+```
+
+O SHA-256 serve para integridade e identificadores, mas não é criptografia completa: assinaturas, senhas e cifras pedem uma biblioteca de C pela FFI.
+
+### `std/encoding`
+
+| Função | O que faz |
+|---|---|
+| `hex(dst, src) int` | hexadecimal minúsculo (2 bytes por byte) |
+| `unhex(dst, src) int` | lê hex (maiúsculo ou minúsculo); `-1` se for inválido |
+| `base64(dst, src) int` | base64 padrão, com `+`, `/` e `=` |
+| `base64_url(dst, src) int` | base64 para URLs e nomes de arquivo (`-` e `_`, sem `=`) |
+| `base64_len(n) int` | o tamanho do base64 de `n` bytes, para alocar |
+| `unbase64(dst, src) int` | lê as duas formas, com ou sem `=`; `-1` se for inválido. Um `dst` de `len(src) * 3 / 4` bytes sempre basta |
+
+As funções que escrevem dão panic se `dst` for pequeno demais.
 
 ### `std/map`
 

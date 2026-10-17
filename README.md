@@ -44,6 +44,7 @@ bin/mlc build -I ~/mlc-libs prog.mlc     # -I: onde procurar os imports, além d
 bin/mlc fmt .                            # formata os .mlc da pasta (no lugar)
 bin/mlc fmt -l .                         # só lista os que mudariam
 bin/mlc test std                         # roda os testes dos *_test.mlc (aqui, os da std)
+bin/mlc test -bench . std                # e mede os benchmarks (fn bench_*)
 make test                                # roda os testes
 make check                               # gofmt, mlc fmt -l, go vet e testes
 ```
@@ -166,7 +167,7 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 - [x] **Enums com dados:** `enum Forma { Circulo(raio float64); Vazio }`, `match` com desestruturação e cobertura obrigatória, enums genéricos (`Resultado[T]`) com inferência pelo valor ou pelo contexto
 - [x] **Números:** `int8`, `int16`, `int32`, `uint16`, `uint32`, `uint64`, `float32`, `float64`; constantes sem tipo; conversões checadas. Veja [docs/tipos.md](docs/tipos.md)
 - [x] **Arrays `[N]T`:** tamanho fixo, por valor, na pilha ou em structs, sem `alloc`; `&a` empresta como `&[]T`
-- [x] **Biblioteca padrão** em MLC, importada com `std/`: `io`, `str`, `result`, `math`, `sort`, `text`, `vec`, `rand`, `os`, `fs`, `time`, `testing`, `thread`, `chan`, `mutex`, `atomic`, `args`, `process`, `bytes`, `utf8`, `net`, `json`. Nada aloca escondido; erros como `Result[T, E]`. Veja [docs/biblioteca.md](docs/biblioteca.md)
+- [x] **Biblioteca padrão** em MLC, importada com `std/`: `io`, `str`, `result`, `math`, `sort`, `text`, `vec`, `rand`, `os`, `fs`, `time`, `testing`, `thread`, `chan`, `mutex`, `atomic`, `args`, `process`, `bytes`, `utf8`, `net`, `json`, `encoding`. Nada aloca escondido; erros como `Result[T, E]`. Veja [docs/biblioteca.md](docs/biblioteca.md)
 - [x] **`mlc fmt`:** formatador canônico (4 espaços), preservando comentários e quebras de linha; `-l` lista, `-` usa a entrada padrão
 - [x] **Interfaces estáticas:** `interface`, `impl` (de uma linha, com bloco ou genérico) e `impl auto`; interfaces como restrição de genérico, com chamadas diretas (sem tabela de métodos). `io.print`/`io.printf`/`io.eprintf` sobre `io.Display`, com a formatação em MLC. Veja [docs/interfaces.md](docs/interfaces.md)
 - [x] **Bits e funções como valor:** `& | ^ << >>`, `^x`, aritmética que dá a volta (`+% -% *%`), literais `0xFF`, `0b1010`, `0o17`, `1_000_000`; tipos `fn(int) bool`, funções como valor e chamadas indiretas (sem closures, sem alocação). `std/rand` passou a ser MLC; novos `std/hash` e `sort.sort_by`. Veja [docs/tipos.md](docs/tipos.md)
@@ -185,6 +186,7 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 - [x] **Parâmetros de saída na FFI:** `extern "C" fn sqlite3_open(nome string, db &?*sqlite3) int32` e `sqlite3_open("x.db", &db)`. O verificador exige que `db` não tenha handle antes da chamada e cobra o fechamento depois. Veja [docs/ffi.md](docs/ffi.md#handles-devolvidos-por-ponteiro-x)
 - [x] **Biblioteca para ferramentas de linha de comando:** `fs` com arquivos abertos (`open`, `read`, `write`, `seek`), diretórios, `stat`, `mkdir` e `rename`; `args` (opções e posicionais); `process` (rodar programas, sem shell); `bytes.Buf` (texto que cresce, à vista); `utf8`; `text.split_next` e `word_next`; `os.setenv`, `cwd` e `chdir`. Veja [docs/biblioteca.md](docs/biblioteca.md)
 - [x] **Rede, JSON e datas:** `std/net` (TCP: `listen`, `accept`, `connect`, `read`, `write`, timeouts, erros portáveis, sem `SIGPIPE`); `std/json` (leitor sem alocação que devolve tokens como enum, `skip`, `escape`/`unescape`); `std/time` com datas (`utc`, `local`, `iso`, `parse_iso`). Veja [docs/biblioteca.md](docs/biblioteca.md)
+- [x] **Hash, encoding e benchmarks:** SHA-256 (incremental) e CRC32 em `std/hash`; `std/encoding` com hex e base64; benchmarks no `mlc test -bench` (`fn bench_*(b &testing.B)`). Veja [docs/testes.md](docs/testes.md#benchmarks)
 - [ ] **Callbacks com contexto:** métodos com parâmetros de tipo próprios (como `each[C](ctx &C, f fn(&C, &K, &V))`) ou funções sem captura no heap
 - [x] **Erros com conteúdo:** enums com dados donos (mensagens alocadas explicitamente por quem cria o erro, liberadas por quem o trata); `match` que consome ou só lê, `free` de enum; `Result[T, E]` com donos nos dois lados. Sem atalho de propagação (`try`): toda saída da função continua escrita como `return`. Veja [docs/tipos.md](docs/tipos.md#enums-com-donos)
 - [ ] **Interfaces `Ord` e `Eq`:** `sort.sort` e `map` aceitando structs pela ordem e igualdade que elas definem

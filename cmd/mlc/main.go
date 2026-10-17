@@ -27,11 +27,13 @@ Uso:
   mlc run [-I dir] [-L dir] arquivo.mlc [argumentos]             compila e executa
       -I: pasta onde procurar os imports (além da do arquivo, de lib/ e de MLC_PATH)
       -L: pasta onde procurar as bibliotecas de C de link "nome"
-  mlc test [-v] [-run texto] [-I dir] [-L dir] [arquivos ou pastas]
+  mlc test [-v] [-run texto] [-bench texto] [-I dir] [-L dir] [arquivos ou pastas]
                                                roda os testes dos arquivos *_test.mlc
                                                (padrão: a pasta atual e as de dentro)
       -v: mostra cada teste e a saída dele, mesmo quando passa
       -run: só os testes cujo nome contém o texto
+      -bench texto: mede também os benchmarks (fn bench_*(b &testing.B)); . para todos
+      -benchtime ms: quanto tempo medir cada benchmark (padrão 500)
   mlc fmt [-l] [arquivos ou pastas]            formata no lugar (padrão: a pasta atual)
   mlc fmt -                                    formata a entrada padrão na saída padrão
   mlc lsp                                      servidor de linguagem (LSP) para editores
@@ -164,11 +166,14 @@ func testCmd(args []string) int {
 	fs := flag.NewFlagSet("test", flag.ExitOnError)
 	verbose := fs.Bool("v", false, "mostra cada teste e a saída dele")
 	only := fs.String("run", "", "só os testes cujo nome contém o texto")
+	bench := fs.String("bench", "", "roda também os benchmarks cujo nome contém o texto (. para todos)")
+	benchTime := fs.Int("benchtime", 500, "quanto tempo (ms) cada benchmark é medido, no mínimo")
 	var libDirs, importDirs dirList
 	fs.Var(&libDirs, "L", "pasta onde procurar as bibliotecas de C (pode repetir)")
 	fs.Var(&importDirs, "I", "pasta onde procurar os imports (pode repetir)")
 	fs.Parse(args)
 	opts := driver.Options{LibDirs: libDirs, ImportDirs: importDirs}
+	bc := benchConfig{filter: *bench, target: time.Duration(*benchTime) * time.Millisecond}
 	paths := fs.Args()
 	if len(paths) == 0 {
 		paths = []string{"."}
@@ -204,21 +209,33 @@ func testCmd(args []string) int {
 
 	status := 0
 	for n, file := range files {
-		if !testFile(file, filepath.Join(dir, fmt.Sprintf("t%d", n)), *only, *verbose, opts) {
+		if !testFile(file, filepath.Join(dir, fmt.Sprintf("t%d", n)), *only, *verbose, bc, opts) {
 			status = 1
 		}
 	}
 	return status
 }
 
-// testFile roda os testes de um arquivo e diz se todos passaram.
-func testFile(file, exe, only string, verbose bool, opts driver.Options) bool {
+// benchConfig diz quais benchmarks rodar (filter vazio: nenhum; ".": todos)
+// e por quanto tempo medir cada um.
+type benchConfig struct {
+	filter string
+	target time.Duration
+}
+
+// testFile roda os testes de um arquivo (e os benchmarks, com -bench) e diz
+// se todos passaram.
+func testFile(file, exe, only string, verbose bool, bc benchConfig, opts driver.Options) bool {
 	src, err := readSource(file)
 	if err == nil {
-		var names []string
-		names, err = driver.BuildTest(file, src, exe, os.ReadFile, opts)
+		var prog driver.TestProgram
+		prog, err = driver.BuildTest(file, src, exe, os.ReadFile, opts)
 		if err == nil {
-			return runTests(file, exe, names, only, verbose)
+			ok := len(prog.Tests) == 0 || runTests(file, exe, prog.Tests, only, verbose)
+			if ok && bc.filter != "" {
+				ok = runBenches(file, exe, prog.Benches, bc)
+			}
+			return ok
 		}
 	}
 	fmt.Fprintln(os.Stderr, err)
@@ -267,6 +284,48 @@ func runTests(file, exe string, names []string, only string, verbose bool) bool 
 		fmt.Printf("ok\t%s\tnenhum teste com %q\n", file, only)
 	default:
 		fmt.Printf("ok\t%s\t%s\t%.2fs\n", file, plural(ran, "teste", "testes"), elapsed)
+	}
+	return true
+}
+
+// runBenches mede os benchmarks: cada um roda com b.n = 1, 2, ... (num
+// processo por rodada, com o tempo medido dentro do programa) até a medida
+// passar de bc.target, como o go test -bench.
+func runBenches(file, exe string, names []string, bc benchConfig) bool {
+	ran := 0
+	for i, name := range names {
+		if bc.filter != "." && !strings.Contains(name, bc.filter) {
+			continue
+		}
+		ran++
+		n := 1
+		for {
+			r := driver.RunBench(exe, i, n)
+			if r.Status != driver.Passed {
+				fmt.Printf("--- %s: %s (b.n = %d)\n", strings.ToUpper(r.Status.String()), name, n)
+				for _, line := range strings.SplitAfter(string(r.Output), "\n") {
+					if strings.TrimSpace(line) != "" {
+						fmt.Print("    ", line)
+					}
+				}
+				fmt.Printf("FALHOU\t%s\n", file)
+				return false
+			}
+			if time.Duration(r.Ns) >= bc.target || n >= 1_000_000_000 {
+				fmt.Printf("%s\t%12d vezes\t%14.1f ns/op\n", name, n, float64(r.Ns)/float64(n))
+				break
+			}
+			next := n * 100
+			if r.Ns > 0 {
+				// prevê o n que chega ao tempo, com folga, sem saltar mais que 100x
+				next = int(float64(n) * float64(bc.target) / float64(r.Ns) * 1.2)
+				next = min(max(next, n+1), n*100)
+			}
+			n = min(next, 1_000_000_000)
+		}
+	}
+	if ran == 0 {
+		fmt.Printf("ok\t%s\tnenhum benchmark com %q\n", file, bc.filter)
 	}
 	return true
 }

@@ -273,10 +273,11 @@ func TestTestRunner(t *testing.T) {
 	path := filepath.Join(testsDir, "testing", "runner_test.mlc")
 	src := []byte(readExpected(t, path))
 	exe := filepath.Join(t.TempDir(), "prog")
-	names, err := BuildTest(filepath.Base(path), src, exe, dirLoader(path), Options{})
+	prog, err := BuildTest(filepath.Base(path), src, exe, dirLoader(path), Options{})
 	if err != nil {
 		t.Fatalf("build falhou:\n%v", err)
 	}
+	names := prog.Tests
 	want := []struct {
 		name   string
 		status TestStatus
@@ -330,11 +331,11 @@ func TestStdLibrary(t *testing.T) {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			src := []byte(readExpected(t, path))
 			exe := filepath.Join(t.TempDir(), "prog")
-			names, err := BuildTest("std/"+filepath.Base(path), src, exe, os.ReadFile, Options{})
+			prog, err := BuildTest("std/"+filepath.Base(path), src, exe, os.ReadFile, Options{})
 			if err != nil {
 				t.Fatalf("build falhou:\n%v", err)
 			}
-			for i, name := range names {
+			for i, name := range prog.Tests {
 				if r := RunTest(exe, i, name); r.Status != Passed {
 					t.Errorf("%s: %v\n%s", name, r.Status, r.Output)
 				}
@@ -370,5 +371,30 @@ func TestFFIOutHandle(t *testing.T) {
 	}
 	if want := readExpected(t, filepath.Join(testsDir, "ffi", "out_handle.out")); string(out) != want {
 		t.Errorf("saída:\n%s\nesperado:\n%s", out, want)
+	}
+}
+
+// TestBenchRunner confere os benchmarks de tests/testing/runner_test.mlc.
+func TestBenchRunner(t *testing.T) {
+	requireCC(t)
+	path := filepath.Join(testsDir, "testing", "runner_test.mlc")
+	exe := filepath.Join(t.TempDir(), "prog")
+	prog, err := BuildTest(filepath.Base(path), []byte(readExpected(t, path)), exe, dirLoader(path), Options{})
+	if err != nil {
+		t.Fatalf("build falhou:\n%v", err)
+	}
+	if fmt.Sprint(prog.Benches) != "[bench_sum bench_panics]" {
+		t.Fatalf("benchmarks: %v", prog.Benches)
+	}
+	r := RunBench(exe, 0, 100000)
+	if r.Status != Passed || r.Ns <= 0 {
+		t.Errorf("bench_sum: %v, %d ns\n%s", r.Status, r.Ns, r.Output)
+	}
+	if strings.Contains(string(r.Output), "mlc-bench-ns") {
+		t.Errorf("a linha do tempo deveria sair da saída: %q", r.Output)
+	}
+	r = RunBench(exe, 1, 1)
+	if r.Status != Panicked || !strings.Contains(string(r.Output), "fora dos limites") {
+		t.Errorf("bench_panics: %v\n%s", r.Status, r.Output)
 	}
 }

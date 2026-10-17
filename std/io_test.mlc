@@ -120,3 +120,10 @@ fn test_width_counts_characters() {
     testing.eq_str(&b[:n], "[café  ] [   pão] [  ção  ]")
     free(b)
 }
+
+fn bench_format(b &testing.B) {
+    var out [64]byte
+    for i := 0; i < b.n; i++ {
+        str.format(&out, "{} {:.2} {:>8} {:x}", i, 3.14159, "texto", 255)
+    }
+}
