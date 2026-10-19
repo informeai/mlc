@@ -793,6 +793,8 @@ O corpo pode vir com `Content-Length`, `Transfer-Encoding: chunked` ou, numa res
 
 `tests/run/http_servico.mlc` tem um serviço completo: rotas, JSON, uma thread por conexão (no máximo 64 ao mesmo tempo, pelo `sync.group`), log e encerramento limpo com `TERM`.
 
+`tests/run/http_rotas.mlc` monta o equivalente a um `http.ListenAndServe` à mão: handlers `fn(&net.Conn, &http.Message, &Ctx)` numa tabela fixa de rotas (`Router`, com prefixo para `/itens/{id}`, 404 e 405), o laço de keep-alive com timeout, 431 para cabeçalho grande, 413 para corpo grande e `skip_body` depois de cada handler.
+
 ### `std/json`
 
 JSON sem alocação: um leitor que devolve um token por vez, sem árvore. Quem lê decide o que guardar e onde alocar.

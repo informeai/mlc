@@ -1,0 +1,277 @@
+import "std/http"
+import "std/io"
+import "std/log"
+import "std/net"
+import "std/signal"
+import "std/str"
+import "std/sync"
+import "std/thread"
+
+// Um servidor com laço, roteador e handlers escritos à mão, como um
+// http.ListenAndServe do Go, mas com tudo à vista: a tabela de rotas é um
+// array fixo, cada conexão tem uma thread com pilha de 64 KB (até 64 ao
+// mesmo tempo), e os limites (rotas, parâmetro, corpo, timeout) estão no
+// código. O cliente, numa thread, faz os pedidos e depois manda TERM para o
+// próprio processo.
+
+// ---------- o "framework": rotas, contexto e laço, tudo à vista ----------
+
+// Ctx é o que cada handler recebe além do pedido: o estado da conexão.
+struct Ctx {
+    lg *log.Logger
+    param [128]byte // o resto do caminho depois do prefixo da rota (o {id})
+    param_n int
+}
+
+// Handler: escreve a resposta em c a partir do pedido m.
+struct Route {
+    method string
+    prefix string
+    exact bool // true: o caminho é igual ao prefixo; false: começa com ele
+    h fn(&net.Conn, &http.Message, &Ctx)
+}
+
+const MAX_ROUTES = 16
+
+struct Router {
+    routes [MAX_ROUTES]Route
+    n int
+}
+
+fn (r &Router) handle(method string, prefix string, exact bool, h fn(&net.Conn, &http.Message, &Ctx)) {
+    r.routes[r.n] = Route{method: method, prefix: prefix, exact: exact, h: h}
+    r.n++
+}
+
+// dispatch acha a rota: 404 se nenhum caminho bate, 405 se o caminho bate
+// mas o método não.
+fn (r &Router) dispatch(c &net.Conn, m &http.Message, ctx &Ctx) {
+    path_found := false
+    for i := 0; i < r.n; i++ {
+        rt := r.routes[i]
+        hit := false
+        if rt.exact {
+            hit = m.path_is(rt.prefix)
+        } else {
+            hit = m.path_has_prefix(rt.prefix)
+        }
+        if !hit {
+            continue
+        }
+        path_found = true
+        if !m.method_is(rt.method) {
+            continue
+        }
+        var path [256]byte
+        n := m.path(&path)
+        if n < 0 {
+            n = 0
+        }
+        ctx.param_n = str.copy_bytes(&ctx.param, &path[len(rt.prefix):n])
+        rt.h(c, m, ctx)
+        return
+    }
+    if path_found {
+        http.respond_str(c, 405, "text/plain", "método não permitido\n")
+        return
+    }
+    http.respond_str(c, 404, "text/plain", "não encontrado\n")
+}
+
+// Job é o que vai para a thread de cada conexão (movido).
+struct Job {
+    c *net.Conn
+    lg *log.Logger
+    router Router // cópia da tabela: são só textos e endereços de funções
+}
+
+// serve_conn é o laço de keep-alive de uma conexão.
+fn serve_conn(job *Job) {
+    c := job.c
+    ctx := alloc(Ctx{lg: job.lg, param: [128]byte{}, param_n: 0})
+    router := job.router
+    free(job)
+    c.set_timeout(5000) // cliente parado por 5 s: a conexão fecha
+    var m http.Message
+    for {
+        match m.read_request(&c) {
+            Ok(_) => {}
+            Err(code) => {
+                if code == http.HEAD_TOO_BIG {
+                    http.respond_str(&c, 431, "text/plain", "cabeçalho grande demais\n")
+                } else if code == http.BAD_MESSAGE {
+                    http.respond_str(&c, 400, "text/plain", "pedido inválido\n")
+                }
+                break // io.EOF, timeout ou erro: fecha
+            }
+        }
+        router.dispatch(&c, &m, &ctx)
+        match m.skip_body(&c) { // o handler pode não ter lido o corpo
+            Ok(_) => {}
+            Err(_) => break
+        }
+        if !m.keep_alive() {
+            break
+        }
+    }
+    c.close()
+    lg := ctx.lg
+    free(ctx)
+    lg.close()
+}
+
+// serve: o accept, uma thread por conexão (até max_conns ao mesmo tempo,
+// com pilha de 64 KB), e encerramento limpo com Ctrl+C ou TERM.
+fn serve(l &net.Listener, router &Router, max_conns int, lg &log.Logger) {
+    l.set_timeout(20) // acorda para olhar os sinais
+    workers := sync.group(max_conns)
+    err := 0
+    for !signal.received(signal.TERM) && !signal.received(signal.INT) {
+        c := l.accept(&err)
+        if c == nil {
+            continue
+        }
+        job := alloc(Job{c: c, lg: lg.clone(), router: *router})
+        workers.add(thread.spawn(serve_conn, job, thread.STACK_64KB))
+    }
+    workers.wait()
+}
+
+// ---------- a aplicação ----------
+
+fn health(c &net.Conn, m &http.Message, ctx &Ctx) {
+    http.respond_str(c, 200, "text/plain", "ok\n")
+}
+
+// GET /itens/{id}
+fn get_item(c &net.Conn, m &http.Message, ctx &Ctx) {
+    id := 0
+    if !str.parse_int(&ctx.param[:ctx.param_n], &id) {
+        http.respond_str(c, 400, "application/json", "{\"erro\":\"id precisa ser número\"}\n")
+        return
+    }
+    var body [64]byte
+    n := str.format(&body, "{{\"id\":{},\"nome\":\"item {}\"}}\n", id, id)
+    http.respond(c, 200, "application/json", &body[:n])
+}
+
+// POST /eco
+fn echo(c &net.Conn, m &http.Message, ctx &Ctx) {
+    var body [1024]byte
+    match m.read_all(c, &body) {
+        Ok(n) => {
+            ctx.lg.info("eco de {} bytes", n)
+            http.respond(c, 200, "text/plain", &body[:n])
+        }
+        Err(code) => {
+            if code == http.TOO_BIG {
+                http.respond_str(c, 413, "text/plain", "corpo grande demais\n")
+            }
+        }
+    }
+}
+
+// ---------- o cliente do teste ----------
+
+// show lê a resposta e escreve o código e o corpo.
+fn show(c &net.Conn) {
+    var m http.Message
+    match m.read_response(c) {
+        Ok(_) => {}
+        Err(code) => {
+            io.printf("erro {}\n", code)
+            return
+        }
+    }
+    var out [256]byte
+    match m.read_all(c, &out) {
+        Ok(n) => io.printf("{} {:s}", m.status(), &out[:n])
+        Err(code) => io.printf("erro {}\n", code)
+    }
+}
+
+fn call(c &net.Conn, method string, target string, body string) {
+    var b http.Builder
+    b.request(method, target)
+    b.header("Host", "localhost")
+    b.send_str(c, body)
+    io.printf("{} {}: ", method, target)
+    show(c)
+}
+
+fn connect(port int) ?*net.Conn {
+    var h [16]byte
+    hn := str.copy(&h, "127.0.0.1")
+    err := 0
+    return net.connect(&h[:hn], port, &err)
+}
+
+fn client(port int) {
+    c := connect(port)
+    if c != nil {
+        // todos na mesma conexão (keep-alive)
+        call(&c, "GET", "/health", "")
+        call(&c, "GET", "/itens/42", "")
+        call(&c, "GET", "/itens/abc", "")
+        call(&c, "POST", "/eco", "olá eco\n")
+        call(&c, "DELETE", "/health", "")
+        call(&c, "GET", "/nada", "")
+        c.close()
+    }
+    // corpo maior que o buffer do handler: 413, e a conexão continua
+    c2 := connect(port)
+    if c2 != nil {
+        var big [2000]byte
+        for i := 0; i < len(big); i++ {
+            big[i] = 'x'
+        }
+        var b http.Builder
+        b.request("POST", "/eco")
+        b.header("Host", "localhost")
+        b.send(&c2, &big)
+        io.printf("POST /eco com 2000 bytes: ")
+        show(&c2)
+        call(&c2, "GET", "/health", "")
+        c2.close()
+    }
+    // cabeçalho de 9 KB (um JWT grande): 431
+    c3 := connect(port)
+    if c3 != nil {
+        var req [9300]byte
+        n := str.copy(&req, "GET /health HTTP/1.1\r\nAuthorization: Bearer ")
+        for i := 0; i < 9000; i++ {
+            req[n] = 'a'
+            n++
+        }
+        n += str.copy(&req[n:], "\r\n\r\n")
+        c3.write(&req[:n])
+        io.printf("cabeçalho de 9 KB: ")
+        show(&c3)
+        c3.close()
+    }
+    signal.raise(signal.TERM)
+}
+
+fn main() {
+    lg := log.new(log.STDERR, log.WARN) // só avisos e erros (a saída do teste fica no stdout)
+    var r Router
+    r.handle("GET", "/health", true, health)
+    r.handle("GET", "/itens/", false, get_item)
+    r.handle("POST", "/eco", true, echo)
+    signal.listen_shutdown()
+    var h [16]byte
+    hn := str.copy(&h, "127.0.0.1")
+    err := 0
+    l := net.listen(&h[:hn], 0, &err)
+    if l == nil {
+        lg.error("listen falhou: {}", err)
+        lg.close()
+        return
+    }
+    cl := thread.spawn(client, l.port(), thread.STACK_64KB)
+    serve(&l, &r, 64, &lg)
+    thread.join(cl)
+    l.close()
+    lg.close()
+    io.print("encerrado")
+}
