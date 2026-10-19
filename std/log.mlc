@@ -1,0 +1,96 @@
+// Registro (log) com nível, horário e linhas inteiras mesmo com várias
+// threads. O logger é um objeto: quem o cria passa adiante (emprestado, ou
+// um clone para outra thread) e fecha. Não existe logger global.
+//
+//     lg := log.new(log.STDERR, log.INFO)
+//     lg.info("servidor ouvindo na porta {}", port)
+//     lg.warn("conexão lenta: {} ms", ms)
+//     lg.debug("não sai: abaixo do nível INFO")
+//     t := thread.spawn(worker, lg.clone(), thread.STACK_64KB)   // outro handle
+//     ...
+//     lg.close()
+//
+// Cada linha sai como
+//
+//     2026-10-19T14:03:22.123-03:00 INFO  servidor ouvindo na porta 8080
+//
+// debug, info, warn e error têm o formato do io.printf (conferido na
+// compilação) e são escritos pelo compilador como o w.printf: os valores
+// são calculados sempre, da esquerda para a direita, mas só são formatados
+// se o nível estiver ativo. A linha é montada num buffer da thread (2048
+// bytes; o que passar fica de fora) e escrita de uma vez, com a trava do
+// logger. Nada aloca por linha.
+import "std/io"
+
+// níveis
+pub const DEBUG = 0
+pub const INFO = 1
+pub const WARN = 2
+pub const ERROR = 3
+
+// destinos de new
+pub const STDOUT = 1
+pub const STDERR = 2
+
+// Logger é um handle contado: cada handle (os de clone também) precisa de
+// close, e o último fecha o arquivo.
+pub extern "C" type Logger
+
+extern fn new_raw(fd int, level int) *Logger
+extern fn open_raw(path &[]byte, level int, err &int) ?*Logger
+extern fn clone_raw(l &Logger) *Logger
+extern fn close_raw(l *Logger)
+extern fn level_raw(l &Logger) int
+extern fn set_level_raw(l &Logger, level int)
+extern fn set_time_raw(l &Logger, on bool)
+extern fn emit_raw(l &Logger, level int, msg &[]byte)
+
+// new cria um logger na saída padrão (STDOUT) ou no erro padrão (STDERR),
+// que registra do nível level para cima.
+pub fn new(dest int, level int) *Logger {
+    return new_raw(dest, level)
+}
+
+// open cria um logger num arquivo, acrescentando no fim (cria o arquivo se
+// preciso). Em caso de erro devolve nil, com o código em err.
+pub fn open(path &[]byte, level int, err &int) ?*Logger {
+    return open_raw(path, level, err)
+}
+
+// clone devolve outro handle para o mesmo logger (para outra thread).
+pub fn (l &Logger) clone() *Logger {
+    return clone_raw(l)
+}
+
+// close fecha este handle; o último fecha o arquivo.
+pub fn (l *Logger) close() {
+    close_raw(l)
+}
+
+// level devolve o nível mínimo registrado.
+pub fn (l &Logger) level() int {
+    return level_raw(l)
+}
+
+// set_level muda o nível mínimo (vale para todos os handles).
+pub fn (l &Logger) set_level(level int) {
+    set_level_raw(l, level)
+}
+
+// enabled diz se uma linha do nível level seria registrada.
+pub fn (l &Logger) enabled(level int) bool {
+    return level >= level_raw(l)
+}
+
+// set_time liga ou desliga o horário no começo das linhas (desligado, a
+// saída fica igual em toda execução, bom para testes).
+pub fn (l &Logger) set_time(on bool) {
+    set_time_raw(l, on)
+}
+
+// write registra uma linha já pronta (sem o \n), se o nível estiver ativo.
+pub fn (l &Logger) write(level int, msg &[]byte) {
+    if level >= level_raw(l) {
+        emit_raw(l, level, msg)
+    }
+}

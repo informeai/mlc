@@ -424,6 +424,8 @@ func specialMembers(s *checker.Struct) []completionItem {
 		names, prefix = []string{"lock", "clone", "close", "notify", "notify_all"}, "mutex."
 	case s.MutexKind == checker.MutexGuard:
 		names, prefix = []string{"get", "unlock", "wait", "notify", "notify_all"}, "mutex."
+	case s.Decl != nil && s.Decl.Name == "Logger" && strings.HasSuffix(s.File, "log.mlc"):
+		names, prefix = []string{"debug", "info", "warn", "error"}, "Logger."
 	case s.Decl != nil && s.Decl.Name == "Writer" && strings.HasSuffix(s.File, "io.mlc"):
 		d := builtinDocs["Writer.printf"]
 		return []completionItem{{Label: "printf", Kind: kindMethod, Detail: d[0], Documentation: doc(d[1]), SortText: "1"}}

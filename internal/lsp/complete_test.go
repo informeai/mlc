@@ -180,3 +180,17 @@ func TestCompleteImports(t *testing.T) {
 		t.Errorf("import \"s: %v", got)
 	}
 }
+
+func TestCompleteLogger(t *testing.T) {
+	src := `import "std/log"
+
+fn main() {
+    lg := log.new(log.STDERR, log.INFO)
+    lg.close()
+}
+`
+	got := completeAt(t, strings.Replace(src, "    lg.close()", "    lg.\n    lg.close()", 1), "    lg.")
+	if !has(got, "info", "warn", "error", "debug", "close", "set_level") {
+		t.Errorf("lg.: %v", got)
+	}
+}

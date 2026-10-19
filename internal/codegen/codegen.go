@@ -505,6 +505,9 @@ func (g *gen) ioPrint(call *ast.CallExpr) string {
 	if plan.Mode == checker.PrintWriter {
 		return g.writerPrintf(plan)
 	}
+	if plan.Mode == checker.PrintLog {
+		return g.logPrintf(plan)
+	}
 	w := g.temp(plan.Writer)
 	fd := plan.Fd
 	switch plan.Mode {
@@ -532,6 +535,28 @@ func (g *gen) ioPrint(call *ast.CallExpr) string {
 	case checker.PrintCount:
 		parts = append(parts, w+".f_total")
 	}
+	return "(" + strings.Join(parts, ", ") + ")"
+}
+
+// logPrintf traduz lg.info("...", a, ...) e os outros níveis: os valores
+// são calculados sempre (da esquerda para a direita), mas só são escritos
+// se o nível estiver ativo, num Writer cujo destino é a linha da thread no
+// runtime (mlc_log_begin), entregue inteira ao logger (mlc_log_end).
+func (g *gen) logPrintf(plan *checker.PrintPlan) string {
+	lg := g.temp(g.typeOf(plan.Recv))
+	parts := []string{lg + " = " + g.expr(plan.Recv)}
+	vals := make([]string, len(plan.Args))
+	for i, a := range plan.Args {
+		vals[i] = g.temp(plan.ArgTypes[i])
+		parts = append(parts, vals[i]+" = "+g.expr(a))
+	}
+	w := g.temp(plan.Writer)
+	write := writerInit(plan.Writer, w)
+	write = append(write, w+".f_fd = INT64_C(-1)", w+".f_sink = mlc_log_begin(__FILE__, __LINE__)")
+	write = append(write, g.printParts(plan, w, vals)...)
+	write = append(write, fmt.Sprintf("%s(&%s)", plan.Flush.CName, w))
+	write = append(write, fmt.Sprintf("mlc_log_end(%s, INT64_C(%d), %s.f_sink, __FILE__, __LINE__)", lg, plan.Level, w))
+	parts = append(parts, fmt.Sprintf("(mlc_log_enabled(%s, INT64_C(%d)) ? (%s) : (void)0)", lg, plan.Level, strings.Join(write, ", ")))
 	return "(" + strings.Join(parts, ", ") + ")"
 }
 

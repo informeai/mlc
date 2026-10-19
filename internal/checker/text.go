@@ -38,7 +38,8 @@ type PrintPlan struct {
 	Fd       int      // 1: saída padrão; 2: erro padrão
 	Mode     int      // PrintFile, PrintSink (str.format) ou PrintCount (str.format_len)
 	Dst      ast.Expr // str.format: o destino (&[]byte)
-	Recv     ast.Expr // w.printf: o Writer (variável, &io.Writer ou *io.Writer)
+	Recv     ast.Expr // w.printf: o Writer (variável, &io.Writer ou *io.Writer); lg.info: o Logger
+	Level    int      // lg.debug, info, warn, error: o nível (log.DEBUG...)
 
 	// métodos do Writer usados com especificação ({:...})
 	SpecBegin, SpecEnd, Measure, PadBefore, PadAfter, PutBytes *Func
@@ -49,6 +50,7 @@ const (
 	PrintSink          // str.format: no destino
 	PrintCount         // str.format_len: só conta
 	PrintWriter        // w.printf: num Writer que já existe, sem flush no fim
+	PrintLog           // lg.info: numa linha do logger, se o nível estiver ativo
 )
 
 // FormatSpec é a especificação de um {} do formato: {:[[fill]align][#][0][width][.prec][x|X|b|o|s]}.
@@ -107,6 +109,22 @@ func (c *checker) writerPrintf(e *ast.CallExpr, sel *ast.SelectorExpr, t Type) T
 	return c.ioPrint(e, "wprintf")
 }
 
+// logLevels são os métodos de log.Logger com formato, e o nível de cada um.
+var logLevels = map[string]int{"debug": 0, "info": 1, "warn": 2, "error": 3}
+
+// isLogger diz se s é o log.Logger da biblioteca padrão.
+func isLogger(s *Struct) bool {
+	return s.mod != nil && s.mod.std && s.mod.path == "std/log" && s.Decl != nil && s.Decl.Name == "Logger"
+}
+
+// loggerPrintf checa lg.info("...", a, ...) e os outros níveis: o formato
+// do io.printf, escrito numa linha do logger.
+func (c *checker) loggerPrintf(e *ast.CallExpr, sel *ast.SelectorExpr) Type {
+	c.printRecv, c.printLevel = sel.X, logLevels[sel.Sel]
+	defer func() { c.printRecv = nil }()
+	return c.ioPrint(e, "log."+sel.Sel)
+}
+
 // ioPrint checa io.print(a, b, ...), io.printf("...", a, b, ...),
 // str.format(&dst, "...", a, ...) e str.format_len("...", a, ...).
 func (c *checker) ioPrint(e *ast.CallExpr, kind string) Type {
@@ -126,6 +144,8 @@ func (c *checker) ioPrint(e *ast.CallExpr, kind string) Type {
 		plan.Mode, name, result = PrintCount, "str.format_len", Int
 	case "wprintf":
 		plan.Mode, plan.Recv, name = PrintWriter, c.printRecv, "Writer.printf"
+	case "log.debug", "log.info", "log.warn", "log.error":
+		plan.Mode, plan.Recv, plan.Level, name = PrintLog, c.printRecv, c.printLevel, "Logger."+kind[len("log."):]
 	}
 	args := e.Args
 	if kind == "format" {

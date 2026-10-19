@@ -1,0 +1,87 @@
+import "std/log"
+import "std/net"
+import "std/signal"
+import "std/str"
+import "std/sync"
+import "std/thread"
+
+// Um serviço com encerramento limpo: o laço do accept acorda a cada 20 ms
+// (set_timeout) para conferir se chegou um pedido de parada (TERM ou
+// Ctrl+C); cada conexão é tratada numa thread do grupo, com o próprio
+// handle do logger. Aqui o cliente, depois de duas conexões, manda TERM
+// para o próprio processo, como faria um "docker stop". (O cliente espera
+// a resposta de cada conexão antes da próxima, então a saída sai em ordem.)
+
+struct Conn {
+    c *net.Conn
+    lg *log.Logger
+    id int
+}
+
+fn handle(ctx *Conn) {
+    c := ctx.c // move os campos para fora; depois o objeto pode ser liberado
+    lg := ctx.lg
+    id := ctx.id
+    free(ctx)
+    var buf [64]byte
+    match c.read(&buf) {
+        Ok(n) => {
+            lg.info("conexão {}: {:s}", id, &buf[:n])
+            c.write(&buf[:n])
+        }
+        Err(code) => lg.error("conexão {}: erro {}", id, code)
+    }
+    c.close()
+    lg.close()
+}
+
+fn client(port int) {
+    var h [16]byte
+    hn := str.copy(&h, "127.0.0.1")
+    for i := 0; i < 2; i++ {
+        err := 0
+        c := net.connect(&h[:hn], port, &err)
+        if c != nil {
+            var msg [16]byte
+            k := str.format(&msg, "olá {}", i)
+            c.write(&msg[:k])
+            var back [16]byte
+            c.read(&back)
+            c.close()
+        }
+    }
+    signal.raise(signal.TERM)
+}
+
+fn main() {
+    lg := log.new(log.STDOUT, log.INFO)
+    lg.set_time(false) // saída igual em toda execução
+    signal.listen_shutdown()
+    var h [16]byte
+    hn := str.copy(&h, "127.0.0.1")
+    err := 0
+    l := net.listen(&h[:hn], 0, &err)
+    if l == nil {
+        lg.error("listen falhou: {}", err)
+        lg.close()
+        return
+    }
+    l.set_timeout(20)
+    cl := thread.spawn(client, l.port(), thread.STACK_64KB)
+    workers := sync.group(16) // até 16 conexões neste exemplo
+    id := 0
+    for !signal.received(signal.TERM) && !signal.received(signal.INT) {
+        c := l.accept(&err)
+        if c == nil {
+            continue // TIMEOUT: volta a conferir os sinais
+        }
+        id++
+        workers.add(thread.spawn(handle, alloc(Conn{c: c, lg: lg.clone(), id: id}), thread.STACK_64KB))
+    }
+    lg.info("pedido de parada: esperando as conexões")
+    workers.wait()
+    thread.join(cl)
+    l.close()
+    lg.info("encerrado")
+    lg.close()
+}

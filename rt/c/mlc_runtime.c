@@ -18,7 +18,9 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <stddef.h>
+#include <poll.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -789,6 +791,13 @@ void mlc_std_io_sink_put(int64_t sink, mlc_sl_byte *b, const char *file, int lin
     s->needed += b->len;
 }
 
+/* mlc_sink_pop_trunc é o mlc_sink_pop do log: o que não coube fica de fora,
+ * sem panic. */
+int64_t mlc_sink_pop_trunc(int64_t sink, const char *file, int line) {
+    if (sink != mlc_sink_depth - 1) mlc_panic(file, line, "erro interno: destinos de str.format fora de ordem");
+    return mlc_sinks[--mlc_sink_depth].len;
+}
+
 int64_t mlc_sink_pop(int64_t sink, const char *file, int line) {
     if (sink != mlc_sink_depth - 1) mlc_panic(file, line, "erro interno: destinos de str.format fora de ordem");
     mlc_sink s = mlc_sinks[--mlc_sink_depth];
@@ -1263,6 +1272,7 @@ void mlc_std_bytes_fail(mlc_str msg, const char *file, int line) { mlc_std_proce
 
 typedef struct mlc_sock {
     int fd;
+    int64_t accept_ms; /* tempo máximo do accept (listener); -1: sem limite */
 } mlc_sock;
 
 static int64_t mlc_net_err(int e) {
@@ -1296,6 +1306,7 @@ static void mlc_net_nosigpipe(int fd) {
 static mlc_sock *mlc_net_wrap(int fd, const char *file, int line) {
     mlc_sock *s = mlc_alloc(sizeof *s, file, line);
     s->fd = fd;
+    s->accept_ms = -1;
     return s;
 }
 
@@ -1350,6 +1361,22 @@ mlc_sock *mlc_std_net_listen(mlc_sl_byte *host, int64_t port, int64_t *err, cons
 mlc_sock *mlc_std_net_accept_raw(mlc_sock *l, int64_t *err, const char *file, int line) {
     *err = 0;
     for (;;) {
+        if (l->accept_ms >= 0) {
+            struct pollfd p = {l->fd, POLLIN, 0};
+            int r = poll(&p, 1, (int)l->accept_ms);
+            if (r == 0) {
+                *err = 2004; /* net.TIMEOUT */
+                return NULL;
+            }
+            if (r < 0) {
+                if (errno == EINTR) {
+                    *err = 2004; /* um sinal: quem chamou confere e tenta de novo */
+                    return NULL;
+                }
+                *err = mlc_net_err(errno);
+                return NULL;
+            }
+        }
         int fd = accept(l->fd, NULL, NULL);
         if (fd >= 0) {
             mlc_net_nosigpipe(fd);
@@ -1446,6 +1473,12 @@ int64_t mlc_std_net_timeout_raw(mlc_sock *c, int64_t ms, const char *file, int l
     return 0;
 }
 
+void mlc_std_net_listener_timeout_raw(mlc_sock *l, int64_t ms, const char *file, int line) {
+    (void)file;
+    (void)line;
+    l->accept_ms = ms > INT32_MAX ? INT32_MAX : ms;
+}
+
 int64_t mlc_std_net_shutdown_raw(mlc_sock *c, const char *file, int line) {
     (void)file;
     (void)line;
@@ -1540,4 +1573,323 @@ int64_t mlc_std_os_error_text_raw(int64_t code, mlc_sl_byte *dst, const char *fi
         t = buf;
     }
     return mlc_put_bytes(dst, t, (int64_t)strlen(t), "os.error_text", file, line);
+}
+
+/* std/signal: o tratador só marca o sinal (got) e escreve um byte num pipe,
+ * para acordar quem espera em signal.wait; o que fazer fica com o programa.
+ * Os códigos são os do MLC (std/signal.mlc), traduzidos aqui para os do
+ * sistema (SIGUSR1 é 30 no macOS e 10 no Linux). */
+
+static volatile sig_atomic_t mlc_sig_got[32];
+static int mlc_sig_pipe[2] = {-1, -1};
+static pthread_mutex_t mlc_sig_mu = PTHREAD_MUTEX_INITIALIZER;
+
+static int mlc_sig_native(int64_t code) {
+    switch (code) {
+    case 1: return SIGHUP;
+    case 2: return SIGINT;
+    case 3: return SIGQUIT;
+    case 10: return SIGUSR1;
+    case 12: return SIGUSR2;
+    case 15: return SIGTERM;
+    }
+    return 0;
+}
+
+static int mlc_sig_code(int sig) {
+    for (int c = 1; c < 32; c++) {
+        if (mlc_sig_native(c) == sig) return c;
+    }
+    return 0;
+}
+
+static void mlc_sig_handler(int sig) {
+    int saved = errno;
+    int c = mlc_sig_code(sig);
+    if (c > 0) mlc_sig_got[c] = 1;
+    if (mlc_sig_pipe[1] >= 0) {
+        ssize_t r = write(mlc_sig_pipe[1], "s", 1);
+        (void)r;
+    }
+    errno = saved;
+}
+
+static int mlc_sig_check(int64_t code, const char *file, int line) {
+    int sig = mlc_sig_native(code);
+    if (sig == 0) {
+        char msg[96];
+        snprintf(msg, sizeof msg, "signal: código de sinal desconhecido (%" PRId64 ")", code);
+        mlc_panic(file, line, msg);
+    }
+    return sig;
+}
+
+static void mlc_sig_set(int sig, void (*handler)(int), const char *file, int line) {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_handler = handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    if (sigaction(sig, &sa, NULL) != 0) mlc_panic(file, line, "signal: o sistema recusou o tratador");
+}
+
+void mlc_std_signal_listen(int64_t code, const char *file, int line) {
+    int sig = mlc_sig_check(code, file, line);
+    pthread_mutex_lock(&mlc_sig_mu);
+    if (mlc_sig_pipe[0] < 0) {
+        if (pipe(mlc_sig_pipe) != 0) {
+            pthread_mutex_unlock(&mlc_sig_mu);
+            mlc_panic(file, line, "signal: não deu para criar o pipe dos sinais");
+        }
+        for (int i = 0; i < 2; i++) {
+            fcntl(mlc_sig_pipe[i], F_SETFL, fcntl(mlc_sig_pipe[i], F_GETFL) | O_NONBLOCK);
+            fcntl(mlc_sig_pipe[i], F_SETFD, FD_CLOEXEC);
+        }
+    }
+    pthread_mutex_unlock(&mlc_sig_mu);
+    mlc_sig_set(sig, mlc_sig_handler, file, line);
+}
+
+void mlc_std_signal_ignore(int64_t code, const char *file, int line) {
+    mlc_sig_set(mlc_sig_check(code, file, line), SIG_IGN, file, line);
+}
+
+void mlc_std_signal_restore(int64_t code, const char *file, int line) {
+    mlc_sig_set(mlc_sig_check(code, file, line), SIG_DFL, file, line);
+}
+
+bool mlc_std_signal_received(int64_t code, const char *file, int line) {
+    mlc_sig_check(code, file, line);
+    return mlc_sig_got[code] != 0;
+}
+
+void mlc_std_signal_clear(int64_t code, const char *file, int line) {
+    mlc_sig_check(code, file, line);
+    mlc_sig_got[code] = 0;
+}
+
+void mlc_std_signal_raise(int64_t code, const char *file, int line) {
+    kill(getpid(), mlc_sig_check(code, file, line));
+}
+
+static int64_t mlc_sig_first(void) {
+    for (int c = 1; c < 32; c++) {
+        if (mlc_sig_got[c]) return c;
+    }
+    return 0;
+}
+
+int64_t mlc_std_signal_wait(int64_t ms, const char *file, int line) {
+    (void)file;
+    (void)line;
+    struct timespec start;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    for (;;) {
+        int64_t c = mlc_sig_first();
+        if (c != 0) return c;
+        int timeout = -1;
+        if (ms >= 0) {
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            int64_t spent = (int64_t)(now.tv_sec - start.tv_sec) * 1000 + (now.tv_nsec - start.tv_nsec) / 1000000;
+            if (spent >= ms) return 0;
+            int64_t left = ms - spent;
+            timeout = left > INT32_MAX ? INT32_MAX : (int)left;
+        }
+        if (mlc_sig_pipe[0] < 0) { /* ninguém chamou listen: só espera o tempo */
+            if (ms < 0) mlc_panic(file, line, "signal.wait sem tempo limite e sem signal.listen: esperaria para sempre");
+            struct timespec ts = {(time_t)(timeout / 1000), (long)(timeout % 1000) * 1000000};
+            nanosleep(&ts, NULL);
+            continue;
+        }
+        struct pollfd p = {mlc_sig_pipe[0], POLLIN, 0};
+        poll(&p, 1, timeout);
+        char buf[64];
+        while (read(mlc_sig_pipe[0], buf, sizeof buf) > 0) {
+        }
+    }
+}
+
+/* std/log: o logger é um handle contado (clone para outras threads, o
+ * último close fecha o arquivo). Cada linha é montada inteira e escrita com
+ * a trava, então linhas de threads diferentes não se misturam. */
+
+typedef struct mlc_log {
+    pthread_mutex_t mu;
+    int fd;
+    bool owns_fd;
+    _Atomic int64_t level;
+    _Atomic bool time;
+    _Atomic int64_t refs;
+} mlc_log;
+
+static mlc_log *mlc_log_make(int fd, bool owns, int64_t level, const char *file, int line) {
+    mlc_log *l = mlc_alloc(sizeof *l, file, line);
+    pthread_mutex_init(&l->mu, NULL);
+    l->fd = fd;
+    l->owns_fd = owns;
+    l->level = level;
+    l->time = true;
+    l->refs = 1;
+    return l;
+}
+
+mlc_log *mlc_std_log_new_raw(int64_t fd, int64_t level, const char *file, int line) {
+    if (fd != 1 && fd != 2) mlc_panic(file, line, "log.new: o destino é log.STDOUT ou log.STDERR (para um arquivo, use log.open)");
+    return mlc_log_make((int)fd, false, level, file, line);
+}
+
+mlc_log *mlc_std_log_open_raw(mlc_sl_byte *path, int64_t level, int64_t *err, const char *file, int line) {
+    char p[4096];
+    *err = 0;
+    if (path->len >= (int64_t)sizeof p) {
+        *err = ENAMETOOLONG;
+        return NULL;
+    }
+    memcpy(p, path->ptr, (size_t)path->len);
+    p[path->len] = '\0';
+    int fd = open(p, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
+    if (fd < 0) {
+        *err = errno;
+        return NULL;
+    }
+    return mlc_log_make(fd, true, level, file, line);
+}
+
+mlc_log *mlc_std_log_clone_raw(mlc_log *l, const char *file, int line) {
+    (void)file;
+    (void)line;
+    l->refs++;
+    return l;
+}
+
+void mlc_std_log_close_raw(mlc_log *l, const char *file, int line) {
+    (void)file;
+    (void)line;
+    if (--l->refs > 0) return;
+    if (l->owns_fd) close(l->fd);
+    pthread_mutex_destroy(&l->mu);
+    mlc_free(l);
+}
+
+int64_t mlc_std_log_level_raw(mlc_log *l, const char *file, int line) {
+    (void)file;
+    (void)line;
+    return l->level;
+}
+
+void mlc_std_log_set_level_raw(mlc_log *l, int64_t level, const char *file, int line) {
+    (void)file;
+    (void)line;
+    l->level = level;
+}
+
+void mlc_std_log_set_time_raw(mlc_log *l, bool on, const char *file, int line) {
+    (void)file;
+    (void)line;
+    l->time = on;
+}
+
+void mlc_std_log_emit_raw(mlc_log *l, int64_t level, mlc_sl_byte *msg, const char *file, int line) {
+    (void)file;
+    (void)line;
+    static const char *names[] = {"DEBUG", "INFO ", "WARN ", "ERROR"};
+    char buf[4096 + 128];
+    size_t n = 0;
+    if (l->time) {
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        time_t t = ts.tv_sec;
+        struct tm lt;
+        localtime_r(&t, &lt);
+        n += strftime(buf, 32, "%Y-%m-%dT%H:%M:%S", &lt);
+        long off = lt.tm_gmtoff / 60;
+        char sign = off < 0 ? '-' : '+';
+        if (off < 0) off = -off;
+        n += (size_t)snprintf(buf + n, 32, ".%03ld%c%02ld:%02ld ", ts.tv_nsec / 1000000, sign, off / 60, off % 60);
+    }
+    const char *name = level >= 0 && level <= 3 ? names[level] : "?    ";
+    memcpy(buf + n, name, 5);
+    n += 5;
+    buf[n++] = ' ';
+    size_t m = msg->len < 4096 ? (size_t)msg->len : 4096;
+    memcpy(buf + n, msg->ptr, m);
+    n += m;
+    buf[n++] = '\n';
+    pthread_mutex_lock(&l->mu);
+    size_t done = 0;
+    while (done < n) {
+        ssize_t w = write(l->fd, buf + done, n - done);
+        if (w < 0) {
+            if (errno == EINTR) continue;
+            break; /* sem onde registrar o erro do log */
+        }
+        done += (size_t)w;
+    }
+    pthread_mutex_unlock(&l->mu);
+}
+
+/* lg.info("...", x) e os outros níveis: o compilador escreve o formato num
+ * Writer cujo destino é a linha da thread (mlc_log_begin) e entrega a linha
+ * ao logger (mlc_log_end). Dois níveis bastam para um write que registre
+ * algo enquanto é escrito; o que passar de LINE bytes fica de fora. */
+
+#define MLC_LOG_LINE 2048
+static _Thread_local uint8_t mlc_log_bufs[2][MLC_LOG_LINE];
+static _Thread_local int mlc_log_depth = 0;
+
+bool mlc_log_enabled(void *l, int64_t level) { return level >= ((mlc_log *)l)->level; }
+
+int64_t mlc_log_begin(const char *file, int line) {
+    if (mlc_log_depth == 2) mlc_panic(file, line, "log: registro dentro de registro dentro de registro");
+    mlc_sl_byte d = {mlc_log_bufs[mlc_log_depth++], MLC_LOG_LINE};
+    return mlc_sink_push(&d, file, line);
+}
+
+void mlc_log_end(void *l, int64_t level, int64_t sink, const char *file, int line) {
+    int64_t n = mlc_sink_pop_trunc(sink, file, line);
+    mlc_sl_byte m = {mlc_log_bufs[--mlc_log_depth], n};
+    mlc_std_log_emit_raw((mlc_log *)l, level, &m, file, line);
+}
+
+/* std/sync: um grupo de threads (sem resultado), esperadas juntas. A
+ * capacidade é escolhida por quem cria o grupo. */
+
+typedef struct mlc_group {
+    int64_t cap;
+    int64_t len;
+    mlc_thread *threads[];
+} mlc_group;
+
+mlc_group *mlc_std_sync_group(int64_t cap, const char *file, int line) {
+    if (cap < 0) mlc_panic(file, line, "sync.group: capacidade negativa");
+    mlc_group *g = mlc_alloc(sizeof *g + (size_t)cap * sizeof(mlc_thread *), file, line);
+    g->cap = cap;
+    g->len = 0;
+    return g;
+}
+
+void mlc_std_sync_add_raw(mlc_group *g, mlc_thread *t, const char *file, int line) {
+    if (g->len == g->cap) {
+        /* a thread já está rodando: espera por ela antes do panic, para não
+         * deixá-la solta */
+        mlc_thread_join(t, file, line);
+        mlc_free(t);
+        mlc_panic(file, line, "sync.Group.add: o grupo está cheio (aumente a capacidade de sync.group)");
+    }
+    g->threads[g->len++] = t;
+}
+
+int64_t mlc_std_sync_len_raw(mlc_group *g, const char *file, int line) {
+    (void)file;
+    (void)line;
+    return g->len;
+}
+
+void mlc_std_sync_wait_raw(mlc_group *g, const char *file, int line) {
+    for (int64_t i = 0; i < g->len; i++) {
+        mlc_thread_join(g->threads[i], file, line);
+        mlc_free(g->threads[i]);
+    }
+    mlc_free(g);
 }

@@ -138,6 +138,9 @@ func (c *checker) methodCall(e *ast.CallExpr, sel *ast.SelectorExpr) (Type, bool
 	if s != nil && sel.Sel == "printf" && s.mod != nil && s.mod.std && s.mod.path == "std/io" && s.Decl != nil && s.Decl.Name == "Writer" {
 		return c.writerPrintf(e, sel, t), true
 	}
+	if _, ok := logLevels[sel.Sel]; ok && s != nil && isLogger(s) {
+		return c.loggerPrintf(e, sel), true
+	}
 	if s == nil {
 		// int, []T, parâmetros de tipo...: só métodos de impl
 		return c.implMethodCall(e, sel, t)

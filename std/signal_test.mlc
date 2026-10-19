@@ -1,0 +1,42 @@
+import "std/signal"
+import "std/testing"
+import "std/time"
+
+fn test_listen_and_received() {
+    signal.listen(signal.USR1)
+    testing.check(!signal.received(signal.USR1), "ainda não chegou")
+    signal.raise(signal.USR1)
+    testing.check(signal.received(signal.USR1), "chegou")
+    testing.check(signal.received(signal.USR1), "a marca fica até clear")
+    signal.clear(signal.USR1)
+    testing.check(!signal.received(signal.USR1), "clear esquece")
+}
+
+// Ctrl+C anotado não encerra o programa
+fn test_interrupt_does_not_kill() {
+    signal.listen_shutdown()
+    signal.raise(signal.INT)
+    testing.check(signal.received(signal.INT), "INT anotado")
+    testing.check(!signal.received(signal.TERM), "TERM não chegou")
+}
+
+fn test_wait() {
+    signal.listen(signal.USR2)
+    start := time.mono_ns()
+    testing.eq_int(signal.wait(50), 0) // nada chegou: volta pelo tempo
+    testing.check(time.mono_ns() - start >= 40000000, "esperou o tempo")
+    signal.raise(signal.USR2)
+    testing.eq_int(signal.wait(-1), signal.USR2) // já chegou: volta na hora
+}
+
+fn test_ignore() {
+    signal.ignore(signal.HUP)
+    signal.raise(signal.HUP) // ignorado: nem encerra, nem anota
+    testing.check(!signal.received(signal.HUP), "ignorado")
+    signal.restore(signal.HUP)
+}
+
+fn test_unknown_signal() {
+    testing.expect_panic()
+    signal.listen(9)
+}

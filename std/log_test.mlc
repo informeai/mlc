@@ -1,0 +1,153 @@
+import "std/fs"
+import "std/log"
+import "std/str"
+import "std/sync"
+import "std/testing"
+import "std/thread"
+
+fn path(dst &[]byte, name string) int {
+    n := str.copy(dst, "/tmp/mlc-std-log-test-")
+    return n + str.copy(&dst[n:], name)
+}
+
+// open_file abre um logger novo num arquivo vazio, sem horário.
+fn open_file(p &[]byte, level int) *log.Logger {
+    fs.remove_file(p)
+    err := 0
+    lg := log.open(p, level, &err)
+    if lg == nil {
+        testing.fail("log.open falhou")
+        return log.new(log.STDERR, level)
+    }
+    lg.set_time(false)
+    return lg
+}
+
+fn read_all(p &[]byte, dst &[]byte) int {
+    match fs.read_file(p, dst) {
+        Ok(n) => return n
+        Err(code) => testing.eq_int(code, 0)
+    }
+    return 0
+}
+
+fn test_levels_and_format() {
+    var p [64]byte
+    n := path(&p, "levels.log")
+    lg := open_file(&p[:n], log.INFO)
+    lg.debug("não sai {}", 1)
+    lg.info("porta {}", 8080)
+    lg.warn("lento: {:.1} ms", 12.25)
+    var name [8]byte
+    k := str.copy(&name, "x.txt")
+    lg.error("falha ao abrir {:s}: {}", &name[:k], 2)
+    testing.check(!lg.enabled(log.DEBUG), "DEBUG desligado")
+    lg.set_level(log.DEBUG)
+    lg.debug("agora sai")
+    lg.write(log.WARN, &name[:k])
+    testing.eq_int(lg.level(), log.DEBUG)
+    lg.close()
+    var buf [512]byte
+    m := read_all(&p[:n], &buf)
+    testing.eq_str(&buf[:m], "INFO  porta 8080\nWARN  lento: 12.2 ms\nERROR falha ao abrir x.txt: 2\nDEBUG agora sai\nWARN  x.txt\n")
+    fs.remove_file(&p[:n])
+}
+
+fn test_time_prefix() {
+    var p [64]byte
+    n := path(&p, "time.log")
+    fs.remove_file(&p[:n])
+    err := 0
+    lg := log.open(&p[:n], log.INFO, &err)
+    if lg == nil {
+        testing.fail("log.open falhou")
+        return
+    }
+    lg.info("x")
+    lg.close()
+    var buf [128]byte
+    m := read_all(&p[:n], &buf)
+    // 2026-10-19T14:03:22.123-03:00 INFO  x
+    testing.eq_int(m, 29 + 1 + 6 + 2)
+    testing.check(buf[4] == '-' && buf[10] == 'T' && buf[19] == '.' && buf[29] == ' ', "formato do horário")
+    fs.remove_file(&p[:n])
+}
+
+fn test_long_line_is_cut() {
+    var p [64]byte
+    n := path(&p, "long.log")
+    lg := open_file(&p[:n], log.INFO)
+    big := alloc([]byte, 3000)
+    for i := 0; i < len(big); i++ {
+        big[i] = 'a'
+    }
+    lg.info("{:s}", &big)
+    free(big)
+    lg.close()
+    var buf [4096]byte
+    m := read_all(&p[:n], &buf)
+    testing.eq_int(m, 6 + 2048 + 1) // "INFO  " + a linha cortada + \n
+    fs.remove_file(&p[:n])
+}
+
+fn writer(lg *log.Logger) {
+    for i := 0; i < 200; i++ {
+        lg.info("linha da thread com um texto comprido para misturar se pudesse {:04}", i)
+    }
+    lg.close()
+}
+
+// várias threads escrevendo: cada linha sai inteira
+fn test_threads() {
+    var p [64]byte
+    n := path(&p, "threads.log")
+    lg := open_file(&p[:n], log.INFO)
+    g := sync.group(4)
+    for i := 0; i < 4; i++ {
+        g.add(thread.spawn(writer, lg.clone(), thread.STACK_64KB))
+    }
+    g.wait()
+    lg.close()
+    size := 0
+    match fs.file_size(&p[:n]) {
+        Ok(s) => size = s
+        Err(code) => testing.eq_int(code, 0)
+    }
+    buf := alloc([]byte, size)
+    m := read_all(&p[:n], &buf)
+    line := "INFO  linha da thread com um texto comprido para misturar se pudesse 0000"
+    testing.eq_int(m, 800 * (len(line) + 1))
+    start := 0
+    lines := 0
+    for i := 0; i < m; i++ {
+        if buf[i] == '\n' {
+            testing.eq_int(i - start, len(line))
+            start = i + 1
+            lines++
+        }
+    }
+    testing.eq_int(lines, 800)
+    free(buf)
+    fs.remove_file(&p[:n])
+}
+
+fn test_bad_destination() {
+    testing.expect_panic()
+    lg := log.new(7, log.INFO)
+    lg.close()
+}
+
+fn bump(n &int) int {
+    *n += 1
+    return *n
+}
+
+// os valores são calculados sempre, da esquerda para a direita; só a
+// formatação depende do nível
+fn test_values_always_evaluated() {
+    lg := log.new(log.STDERR, log.ERROR)
+    count := 0
+    lg.debug("{} {}", bump(&count), bump(&count))
+    testing.eq_int(count, 2)
+    lg.close()
+}

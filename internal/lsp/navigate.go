@@ -376,6 +376,11 @@ func (n *navigator) calleeSymbol(call *ast.CallExpr) *symbol {
 				mod = "std/str"
 			case checker.PrintWriter:
 				d = builtinDocs["Writer.printf"]
+			case checker.PrintLog:
+				mod = "std/log"
+				if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+					d = builtinDocs["Logger."+sel.Sel]
+				}
 			}
 		}
 		s := n.moduleSymbol(mod)
@@ -895,6 +900,10 @@ var builtinDocs = map[string][2]string{
 	"mutex.notify_all": {"notify_all()", "Acorda todas as threads que esperam em `wait`."},
 	"spawn":            {"thread.spawn(f fn(C) R, ctx C, stack int) *thread.Thread[R]", "Cria uma thread que roda `f(ctx)`. O contexto é **movido** para a thread, e `stack` é o tamanho da pilha em bytes (pelo menos 16 KB, como `thread.STACK_64KB`). O handle devolvido precisa ir para `thread.join` (o compilador confere)."},
 	"join":             {"thread.join(t *thread.Thread[R]) R", "Espera a thread terminar e devolve o resultado de `f`, cuja posse volta para quem chamou. Libera o registro da thread."},
+	"Logger.debug":     {"lg.debug(\"...\", a, ...)", "Registra uma linha de nível DEBUG, com o formato do `io.printf`. Os valores são calculados sempre; a linha só é formatada e escrita se o nível do logger deixar."},
+	"Logger.info":      {"lg.info(\"...\", a, ...)", "Registra uma linha de nível INFO, com o formato do `io.printf`: `2026-10-19T14:03:22.123-03:00 INFO  ...`. A linha sai inteira, mesmo com várias threads."},
+	"Logger.warn":      {"lg.warn(\"...\", a, ...)", "Registra uma linha de nível WARN, com o formato do `io.printf`."},
+	"Logger.error":     {"lg.error(\"...\", a, ...)", "Registra uma linha de nível ERROR, com o formato do `io.printf`."},
 	"Writer.printf":    {"w.printf(\"x = {}\\n\", x)", "Escreve o formato do `io.printf` no Writer `w`, sem criar outro e sem `flush` (chame `w.flush()` no fim). Num laço, é tão rápido quanto `w.put_int`; dentro de um `write` próprio, recebe o `&io.Writer` do parâmetro."},
 	"format":           {"str.format(&dst, \"x = {}\", x) int", "Escreve o formato em `dst`, como `io.printf`, e devolve quantos bytes usou; dá panic se não couber. Não aloca: para saber o tamanho antes, use `str.format_len`."},
 	"format_len":       {"str.format_len(\"x = {}\", x) int", "Quantos bytes o formato ocupa, sem escrever nada: `n := str.format_len(...)`, `b := alloc([]byte, n)`, `str.format(&b, ...)`."},

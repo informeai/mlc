@@ -1,0 +1,7 @@
+// erro: feche com lg.close()
+import "std/log"
+
+fn main() {
+    lg := log.new(log.STDERR, log.INFO)
+    lg.warn("sem close")
+}

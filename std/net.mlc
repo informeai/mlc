@@ -52,6 +52,7 @@ pub extern fn connect(host &[]byte, port int, err &int) ?*Conn
 extern fn accept_raw(l &Listener, err &int) ?*Conn
 extern fn port_raw(l &Listener) int
 extern fn close_listener(l *Listener)
+extern fn listener_timeout_raw(l &Listener, ms int)
 extern fn read_raw(c &Conn, dst &[]byte) int
 extern fn write_raw(c &Conn, data &[]byte) int
 extern fn timeout_raw(c &Conn, ms int) int
@@ -65,6 +66,15 @@ pub fn (l &Listener) accept(err &int) ?*Conn {
 }
 
 // port diz em que porta o listener está (útil com porta 0).
+// set_timeout limita a espera de accept a ms milissegundos (-1: sem
+// limite). Passado o tempo, accept devolve nil com err TIMEOUT, e o laço
+// pode conferir outra coisa (um signal.received, por exemplo) antes de
+// voltar a esperar. Um sinal que chega durante a espera também devolve
+// TIMEOUT.
+pub fn (l &Listener) set_timeout(ms int) {
+    listener_timeout_raw(l, ms)
+}
+
 pub fn (l &Listener) port() int {
     return port_raw(l)
 }

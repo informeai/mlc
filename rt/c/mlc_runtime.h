@@ -226,6 +226,10 @@ void mlc_mutex_notify(mlc_mutex *m, bool all);
 /* Destinos do str.format (veja std/io.mlc, Writer). */
 int64_t mlc_sink_push(mlc_sl_byte *dst, const char *file, int line);
 int64_t mlc_sink_pop(int64_t sink, const char *file, int line);
+int64_t mlc_sink_pop_trunc(int64_t sink, const char *file, int line);
+bool mlc_log_enabled(void *l, int64_t level);
+int64_t mlc_log_begin(const char *file, int line);
+void mlc_log_end(void *l, int64_t level, int64_t sink, const char *file, int line);
 
 /* Programa de teste (mlc test): qual teste rodar e o resultado no fim. */
 int64_t mlc_test_selected(int argc, char **argv);

@@ -1,0 +1,8 @@
+// erro: o formato tem 2 {} e a chamada passa 1 valor(es)
+import "std/log"
+
+fn main() {
+    lg := log.new(log.STDERR, log.INFO)
+    lg.info("porta {} e {}", 8080)
+    lg.close()
+}

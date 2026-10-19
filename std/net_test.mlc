@@ -199,3 +199,22 @@ fn test_write_after_peer_closed() {
         c.close()
     }
 }
+
+fn test_accept_timeout() {
+    var h [16]byte
+    hn := localhost(&h)
+    err := 0
+    l := net.listen(&h[:hn], 0, &err)
+    if l == nil {
+        testing.fail("listen falhou")
+        return
+    }
+    l.set_timeout(30)
+    c := l.accept(&err)
+    if c != nil {
+        testing.fail("ninguém conectou")
+        c.close()
+    }
+    testing.eq_int(err, net.TIMEOUT)
+    l.close()
+}

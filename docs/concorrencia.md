@@ -71,6 +71,20 @@ for t in drain(ts) {
 free(ts)
 ```
 
+### Grupo de threads (`import "std/sync"`)
+
+Quando as threads não devolvem resultado (o resultado vai por um canal, um mutex ou um atomic), um `sync.Group` espera todas de uma vez:
+
+```
+g := sync.group(8)                      // espaço para 8 threads (aloca)
+for i := 0; i < 8; i++ {
+    g.add(thread.spawn(worker, ctx(i), thread.STACK_64KB))   // o grupo fica com o handle
+}
+g.wait()                                // espera todas e libera o grupo
+```
+
+O verificador cobra o `wait`, como cobra o `join` de cada thread, e `add` só aceita `*thread.Thread` (sem resultado): um resultado dono não pode sumir sem ninguém recebê-lo. Com o grupo cheio, `add` espera a thread e dá panic.
+
 ## Canais (`import "std/chan"`)
 
 Um canal passa valores de uma thread para outra **por posse**. Ele é usado por várias threads ao mesmo tempo, mas no MLC cada coisa tem um dono só. Por isso o canal tem **pontas**, e cada ponta é um dono:

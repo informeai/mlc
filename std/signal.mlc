@@ -1,0 +1,56 @@
+// Sinais do sistema: Ctrl+C (INT), o pedido de parada do Docker, do
+// systemd e do Kubernetes (TERM) e os outros que um serviço costuma tratar.
+// Sem listen, o sinal faz o que sempre fez (INT e TERM encerram o programa
+// na hora). Com listen, o sinal só é anotado: o programa confere
+// (received) ou espera (wait) e decide o que fazer, no ponto que escolher,
+// fechando conexões e gravando o que falta.
+//
+//     signal.listen_shutdown()                  // INT e TERM
+//     for !signal.received(signal.INT) && !signal.received(signal.TERM) {
+//         ... trabalho em pedaços (accept com timeout, por exemplo) ...
+//     }
+//     ... encerra com calma ...
+//
+//     // ou, com o trabalho em outras threads:
+//     sig := signal.wait(-1)                    // dorme até chegar um sinal
+//
+// O tratador de verdade (no C) só marca o sinal e acorda quem está em
+// wait: nada de alocar, travar ou escrever dentro dele. A marca vale para
+// todas as threads e fica até clear.
+
+// códigos dos sinais (iguais em todos os sistemas; o runtime traduz)
+pub const HUP = 1   // o terminal fechou; costuma pedir para recarregar a configuração
+pub const INT = 2   // Ctrl+C
+pub const QUIT = 3  // Ctrl+\
+pub const USR1 = 10 // livres para o programa
+pub const USR2 = 12
+pub const TERM = 15 // pedido de parada (kill, docker stop, systemctl stop)
+
+// listen passa a anotar o sinal em vez de fazer o que ele faz normalmente.
+pub extern fn listen(sig int)
+
+// listen_shutdown anota INT e TERM: os dois pedidos de parada.
+pub fn listen_shutdown() {
+    listen(INT)
+    listen(TERM)
+}
+
+// ignore faz o programa não ver o sinal (nem anotar).
+pub extern fn ignore(sig int)
+
+// restore volta ao comportamento normal do sinal.
+pub extern fn restore(sig int)
+
+// received diz se o sinal chegou (desde o começo, ou desde o último clear).
+pub extern fn received(sig int) bool
+
+// clear esquece que o sinal chegou.
+pub extern fn clear(sig int)
+
+// wait espera até chegar um dos sinais anotados com listen (ou até passar
+// ms milissegundos; -1: sem limite) e devolve o código dele, ou 0 se o tempo
+// acabou. Se algum já tiver chegado (e não tiver sido limpo), volta na hora.
+pub extern fn wait(ms int) int
+
+// raise manda o sinal para o próprio programa (útil em testes).
+pub extern fn raise(sig int)

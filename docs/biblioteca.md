@@ -644,6 +644,7 @@ l.close()
 | `listen(host, port, &err) ?*Listener` | escuta em `host:port` |
 | `l.accept(&err) ?*Conn` | espera a próxima conexão |
 | `l.port() int` | a porta (útil com a porta 0) |
+| `l.set_timeout(ms)` | limite de espera do `accept` (-1: sem limite); passado o tempo, `accept` devolve `nil` com `err` `TIMEOUT`, e o laço pode conferir um `signal.received` antes de voltar a esperar |
 | `connect(host, port, &err) ?*Conn` | conecta (nomes são resolvidos, IPv4 e IPv6) |
 | `c.read(dst) Result[int, int]` | lê o que chegar; `Ok(0)`: o outro lado fechou |
 | `c.write(data) Result[int, int]` | manda tudo |
@@ -655,6 +656,73 @@ l.close()
 Uma conexão é um `io.Reader`: `bufio.new[net.Conn]()` lê linhas dela (protocolos de texto, como HTTP e SMTP).
 
 Escrever numa conexão que o outro lado fechou devolve `RESET`, em vez de encerrar o programa com `SIGPIPE`. `tests/run/servidor.mlc` tem um serviço completo: uma thread por conexão, pedido e resposta em JSON.
+
+### `std/signal`
+
+Sinais do sistema: Ctrl+C (`INT`), o pedido de parada do Docker, do systemd e do Kubernetes (`TERM`), `HUP`, `QUIT`, `USR1` e `USR2`. Sem `listen`, o sinal faz o que sempre fez (`INT` e `TERM` encerram o programa na hora). Com `listen`, ele só é **anotado**: o programa confere (`received`) ou espera (`wait`) e decide, no ponto que escolher, como encerrar (fechar conexões, gravar o que falta). O tratador de verdade, no C, só marca o sinal e acorda quem está em `wait`.
+
+```
+signal.listen_shutdown()                     // INT e TERM
+l.set_timeout(200)                           // o accept acorda para conferir
+for !signal.received(signal.TERM) && !signal.received(signal.INT) {
+    c := l.accept(&err)
+    if c == nil { continue }                 // TIMEOUT
+    ...
+}
+... encerra com calma ...
+```
+
+| Declaração | O que faz |
+|---|---|
+| `listen(sig)`, `listen_shutdown()` | passa a anotar o sinal (`listen_shutdown`: `INT` e `TERM`) |
+| `received(sig) bool`, `clear(sig)` | o sinal chegou? (vale para todas as threads e fica até `clear`) |
+| `wait(ms) int` | espera um sinal anotado (ou `ms` milissegundos; `-1`: sem limite) e devolve o código, ou `0` se o tempo acabou; volta na hora se um já chegou |
+| `ignore(sig)`, `restore(sig)` | não ver o sinal; voltar ao comportamento normal |
+| `raise(sig)` | manda o sinal para o próprio programa (útil em testes) |
+| `HUP` (1), `INT` (2), `QUIT` (3), `USR1` (10), `USR2` (12), `TERM` (15) | os códigos, iguais em todos os sistemas (o runtime traduz: `SIGUSR1` é 30 no macOS) |
+
+### `std/log`
+
+Registro com nível, horário e linhas inteiras mesmo com várias threads. O logger é um **objeto**, não um estado global: quem o cria passa adiante (emprestado, ou um `clone` para outra thread) e fecha.
+
+```
+lg := log.new(log.STDERR, log.INFO)
+lg.info("servidor ouvindo na porta {}", port)
+lg.warn("conexão lenta: {} ms", ms)
+lg.debug("não sai: abaixo de INFO")
+t := thread.spawn(worker, lg.clone(), thread.STACK_64KB)
+...
+lg.close()
+```
+
+```
+2026-10-19T14:03:22.123-03:00 INFO  servidor ouvindo na porta 8080
+2026-10-19T14:03:22.124-03:00 WARN  conexão lenta: 812 ms
+```
+
+| Declaração | O que faz |
+|---|---|
+| `new(dest, level) *Logger` | logger em `STDOUT` ou `STDERR`, do nível `level` para cima |
+| `open(path, level, &err) ?*Logger` | logger num arquivo (acrescenta no fim; cria se preciso) |
+| `lg.debug(...)`, `lg.info(...)`, `lg.warn(...)`, `lg.error(...)` | uma linha, com o formato do `io.printf` (conferido na compilação) |
+| `lg.write(level, msg)` | uma linha já pronta |
+| `lg.enabled(level) bool`, `lg.level()`, `lg.set_level(level)` | o nível mínimo (vale para todos os handles) |
+| `lg.set_time(on)` | liga ou desliga o horário (desligado, a saída fica igual em toda execução) |
+| `lg.clone() *Logger`, `lg.close()` | outro handle para outra thread; cada um precisa de `close`, e o último fecha o arquivo |
+| `DEBUG`, `INFO`, `WARN`, `ERROR` | os níveis |
+
+Os métodos com formato são escritos pelo compilador como o `w.printf`: os valores são calculados sempre (da esquerda para a direita), mas só são formatados se o nível estiver ativo. A linha é montada num buffer da thread no runtime (2048 bytes; o que passar fica de fora) e escrita de uma vez, com a trava do logger. Nada aloca por linha.
+
+### `std/sync`
+
+Um grupo de threads esperadas de uma vez. Veja [concorrencia.md](concorrencia.md#grupo-de-threads-import-stdsync).
+
+| Declaração | O que faz |
+|---|---|
+| `group(cap) *Group` | cria o grupo, com espaço para `cap` threads |
+| `g.add(t *thread.Thread)` | o grupo fica com a thread (só threads sem resultado); cheio, espera a thread e dá panic |
+| `g.len() int` | quantas threads estão no grupo |
+| `g.wait()` | espera todas, na ordem em que entraram, e libera o grupo (o verificador cobra) |
 
 ### `std/json`
 

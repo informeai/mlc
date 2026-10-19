@@ -1,0 +1,13 @@
+// erro: esperado *thread.Thread, encontrado *thread.Thread[int]
+import "std/sync"
+import "std/thread"
+
+fn worker(n int) int {
+    return n
+}
+
+fn main() {
+    g := sync.group(2)
+    g.add(thread.spawn(worker, 1, thread.STACK_64KB))
+    g.wait()
+}

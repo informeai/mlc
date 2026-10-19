@@ -1,0 +1,40 @@
+// Grupo de threads: várias threads esperadas de uma vez, em vez de um
+// thread.join para cada handle.
+//
+//     g := sync.group(8)                         // espaço para 8 threads (aloca)
+//     for i := 0; i < 8; i++ {
+//         g.add(thread.spawn(worker, ctx(i), thread.STACK_64KB))
+//     }
+//     g.wait()                                   // espera todas e libera o grupo
+//
+// O grupo é dono das threads que recebe, e o verificador cobra o wait,
+// como cobra o join de cada thread. Só entram threads sem resultado
+// (*thread.Thread): os resultados voltam por um canal, um mutex ou um
+// atomic, ou use thread.join, que devolve o resultado de cada uma.
+import "std/thread"
+
+// Group guarda as threads até o wait.
+pub extern "C" type Group
+
+// group cria um grupo com espaço para cap threads.
+pub extern fn group(cap int) *Group
+
+extern fn add_raw(g &Group, t *thread.Thread)
+extern fn len_raw(g &Group) int
+extern fn wait_raw(g *Group)
+
+// add põe a thread no grupo (o handle é movido). Com o grupo cheio, espera
+// a thread e dá panic.
+pub fn (g &Group) add(t *thread.Thread) {
+    add_raw(g, t)
+}
+
+// len diz quantas threads estão no grupo.
+pub fn (g &Group) len() int {
+    return len_raw(g)
+}
+
+// wait espera todas as threads, na ordem em que entraram, e libera o grupo.
+pub fn (g *Group) wait() {
+    wait_raw(g)
+}

@@ -44,6 +44,20 @@ const (
 	sObligation = sLive | sNull | sDead
 )
 
+// closerOf devolve o nome do método que consome um handle da biblioteca
+// padrão (receptor *T, sem outros parâmetros): close, ou wait no sync.Group.
+func closerOf(s *Struct) string {
+	if s.Methods["close"] != nil {
+		return "close"
+	}
+	for name, m := range s.Methods {
+		if _, ok := m.Params[0].Type.(*Pointer); ok && m.Method && len(m.Params) == 1 {
+			return name
+		}
+	}
+	return "close"
+}
+
 // pathKey identifica um caminho: a variável raiz e os campos a partir dela
 // ("" para a própria variável, "prox.prox" para p.prox.prox).
 type pathKey struct {
@@ -358,9 +372,10 @@ func (o *ownChecker) leaks(ls []*Local, pos token.Pos, where string) {
 				o.errorf(pos, "vazamento: o mutex %s (linha %d) pode ainda estar aberto %s; feche com %s.close()",
 					l.Name, o.origin[k].Line, where, l.Name)
 			} else if st := p.Elem.(*Struct); st.mod != nil && st.mod.std && st.ChanEnd == 0 {
-				// handle da biblioteca padrão (atomic.Int): fecha com close()
-				o.errorf(pos, "vazamento: %s (%s, linha %d) pode ainda estar aberto %s; feche com %s.close()",
-					l.Name, st.Name, o.origin[k].Line, where, l.Name)
+				// handle da biblioteca padrão (atomic.Int): fecha com close(),
+				// ou com o método que o consome (sync.Group: wait())
+				o.errorf(pos, "vazamento: %s (%s, linha %d) pode ainda estar aberto %s; feche com %s.%s()",
+					l.Name, st.Name, o.origin[k].Line, where, l.Name, closerOf(st))
 			} else if isChanEnd(p) {
 				o.errorf(pos, "vazamento: a ponta de canal %s (linha %d) pode ainda estar aberta %s; feche com %s.close()",
 					l.Name, o.origin[k].Line, where, l.Name)

@@ -1,0 +1,39 @@
+import "std/atomic"
+import "std/sync"
+import "std/testing"
+import "std/thread"
+
+fn add_ten(n *atomic.Int) {
+    for i := 0; i < 10; i++ {
+        n.add(1)
+    }
+    n.close()
+}
+
+fn test_group() {
+    n := atomic.new_int(0)
+    g := sync.group(8)
+    for i := 0; i < 8; i++ {
+        g.add(thread.spawn(add_ten, n.clone(), thread.STACK_64KB))
+    }
+    testing.eq_int(g.len(), 8)
+    g.wait()
+    testing.eq_int(n.load(), 80) // wait só volta depois de todas
+    n.close()
+}
+
+fn test_empty_group() {
+    g := sync.group(0)
+    g.wait()
+}
+
+fn nothing(n int) {
+}
+
+fn test_full_group() {
+    testing.expect_panic()
+    g := sync.group(1)
+    g.add(thread.spawn(nothing, 1, thread.STACK_64KB))
+    g.add(thread.spawn(nothing, 2, thread.STACK_64KB))
+    g.wait()
+}
