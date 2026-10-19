@@ -5,6 +5,7 @@
 // compilador em chamadas aos métodos write (da interface Display) de cada
 // valor, sobre um Writer. Toda a formatação está aqui, em MLC; só a dos
 // números reais e a escrita no arquivo ficam no runtime C.
+import "std/result"
 
 // write escreve os bytes de s, sem quebra de linha.
 pub extern fn write(s &[]byte)
@@ -16,6 +17,47 @@ pub extern fn write_line(s &[]byte)
 // bytes leu. Se a linha não couber, o resto fica para a próxima chamada.
 // No fim da entrada devolve -1.
 pub extern fn read_line(dst &[]byte) int
+
+// ---------- leitura genérica ----------
+
+// EOF é o erro que os leitores com buffer (std/bufio) devolvem no fim dos
+// dados.
+pub const EOF = 1003
+
+// Reader é qualquer fonte de bytes: fs.File, net.Conn, io.stdin() ou um
+// tipo seu. read lê até len(dst) bytes no começo de dst e devolve quantos
+// leu; Ok(0) (com dst não vazio) é o fim dos dados. Pode ler menos que
+// len(dst) mesmo antes do fim. std/bufio lê linhas e blocos de qualquer
+// Reader.
+pub interface Reader {
+    fn read(self &Self, dst &[]byte) result.Result[int, int]
+}
+
+// Stdin é a entrada padrão como Reader. Ele lê pelo mesmo buffer de
+// io.read_line, então os dois podem ser misturados.
+pub struct Stdin {
+    fd int
+}
+
+extern fn read_stdin(dst &[]byte) int
+
+// stdin devolve a entrada padrão como Reader (um valor na pilha, sem nada
+// para liberar).
+pub fn stdin() Stdin {
+    return Stdin{fd: 0}
+}
+
+// read lê o que estiver disponível, até len(dst) bytes, parando depois de
+// um \n (no terminal, uma linha por vez).
+pub fn (s &Stdin) read(dst &[]byte) result.Result[int, int] {
+    n := read_stdin(dst)
+    if n < 0 {
+        return result.Result.Err(-n)
+    }
+    return result.Result.Ok(n)
+}
+
+impl Reader for Stdin
 
 // ---------- escrita formatada ----------
 

@@ -1,0 +1,246 @@
+import "std/bufio"
+import "std/fs"
+import "std/io"
+import "std/net"
+import "std/result"
+import "std/str"
+import "std/testing"
+import "std/thread"
+
+// Chunks é uma fonte falsa: entrega data[:n] em pedaços de no máximo step
+// bytes e, se fail não for 0, termina com Err(fail) em vez do fim.
+struct Chunks {
+    data [128]byte
+    n int
+    pos int
+    step int
+    fail int
+}
+
+fn (c &Chunks) read(dst &[]byte) result.Result[int, int] {
+    if c.pos == c.n {
+        if c.fail != 0 {
+            return result.Result.Err(c.fail)
+        }
+        return result.Result.Ok(0)
+    }
+    k := c.n - c.pos
+    if k > c.step {
+        k = c.step
+    }
+    if k > len(dst) {
+        k = len(dst)
+    }
+    for i := 0; i < k; i++ {
+        dst[i] = c.data[c.pos + i]
+    }
+    c.pos += k
+    return result.Result.Ok(k)
+}
+
+impl io.Reader for Chunks
+
+fn chunks(s string, step int, fail int) Chunks {
+    c := Chunks{}
+    c.n = str.copy(&c.data, s)
+    c.step = step
+    c.fail = fail
+    return c
+}
+
+// line lê uma linha e confere o texto.
+fn line(br &bufio.Reader[Chunks], src &Chunks, want string) {
+    var buf [32]byte
+    match br.read_line(src, &buf) {
+        Ok(n) => testing.eq_str(&buf[:n], want)
+        Err(code) => testing.eq_int(code, 0)
+    }
+}
+
+fn expect_err(r result.Result[int, int], want int) {
+    match r {
+        Ok(n) => testing.eq_int(n, -want)
+        Err(code) => testing.eq_int(code, want)
+    }
+}
+
+fn test_read_line_in_small_chunks() {
+    src := chunks("um\ndois\r\n\ntrês sem fim", 3, 0)
+    br := bufio.new[Chunks]()
+    line(&br, &src, "um")
+    line(&br, &src, "dois")
+    line(&br, &src, "")
+    line(&br, &src, "três sem fim")
+    var buf [32]byte
+    r1 := br.read_line(&src, &buf)
+    expect_err(r1, io.EOF)
+    r2 := br.read_line(&src, &buf)
+    expect_err(r2, io.EOF) // o fim continua valendo
+}
+
+fn test_line_too_long() {
+    src := chunks("abcdefghij\nxy\n", 4, 0)
+    br := bufio.new[Chunks]()
+    var buf [4]byte
+    r3 := br.read_line(&src, &buf)
+    expect_err(r3, bufio.TOO_LONG)
+    testing.eq_str(&buf, "abcd") // dst fica cheio
+    r4 := br.read_line(&src, &buf)
+    expect_err(r4, bufio.TOO_LONG)
+    testing.eq_str(&buf, "efgh")
+    line(&br, &src, "ij") // o resto da linha
+    line(&br, &src, "xy")
+}
+
+fn test_read_until() {
+    src := chunks("a,bb,ccc", 2, 0)
+    br := bufio.new[Chunks]()
+    var buf [8]byte
+    match br.read_until(&src, ',', &buf) {
+        Ok(n) => testing.eq_str(&buf[:n], "a,")
+        Err(code) => testing.eq_int(code, 0)
+    }
+    match br.read_until(&src, ',', &buf) {
+        Ok(n) => testing.eq_str(&buf[:n], "bb,")
+        Err(code) => testing.eq_int(code, 0)
+    }
+    match br.read_until(&src, ',', &buf) {
+        Ok(n) => testing.eq_str(&buf[:n], "ccc") // acabou sem o delimitador
+        Err(code) => testing.eq_int(code, 0)
+    }
+    r5 := br.read_until(&src, ',', &buf)
+    expect_err(r5, io.EOF)
+}
+
+fn test_read_exact_and_byte() {
+    src := chunks("0123456789", 3, 0)
+    br := bufio.new[Chunks]()
+    var four [4]byte
+    match br.read_exact(&src, &four) {
+        Ok(n) => testing.eq_int(n, 4)
+        Err(code) => testing.eq_int(code, 0)
+    }
+    testing.eq_str(&four, "0123")
+    match br.read_byte(&src) {
+        Ok(c) => testing.eq_int(int(c), int('4'))
+        Err(code) => testing.eq_int(code, 0)
+    }
+    testing.eq_int(br.buffered(), 1) // o 5 do pedaço "345"
+    var buf [16]byte
+    match br.read(&src, &buf) {
+        Ok(n) => testing.eq_str(&buf[:n], "5") // primeiro o que está no buffer
+        Err(code) => testing.eq_int(code, 0)
+    }
+    r6 := br.read_exact(&src, &buf)
+    expect_err(r6, io.EOF) // só sobram 4 bytes
+    match br.read_byte(&src) {
+        Ok(_) => testing.fail("os dados acabaram")
+        Err(code) => testing.eq_int(code, io.EOF)
+    }
+}
+
+fn test_source_error() {
+    src := chunks("ok\nmeio", 16, 5)
+    br := bufio.new[Chunks]()
+    line(&br, &src, "ok")
+    var buf [16]byte
+    r7 := br.read_line(&src, &buf)
+    expect_err(r7, 5) // o erro da fonte chega como veio
+}
+
+fn test_file() {
+    var p [64]byte
+    n := str.copy(&p, "/tmp/mlc-std-bufio-test.txt")
+    var text [1200]byte
+    k := 0
+    for i := 0; i < 200; i++ {
+        k += str.format(&text[k:], "{}\n", i)
+    }
+    match fs.write_file(&p[:n], &text[:k]) {
+        Ok(_) => {}
+        Err(code) => testing.eq_int(code, 0)
+    }
+    err := 0
+    f := fs.open(&p[:n], fs.READ, &err)
+    if f == nil {
+        testing.fail("open falhou")
+        return
+    }
+    br := bufio.new[fs.File]()
+    var buf [16]byte
+    count := 0
+    sum := 0
+    for {
+        match br.read_line(&f, &buf) {
+            Ok(m) => {
+                count++
+                v := 0
+                if !str.parse_int(&buf[:m], &v) {
+                    testing.fail("linha sem número")
+                }
+                sum += v
+            }
+            Err(code) => {
+                testing.eq_int(code, io.EOF)
+                break
+            }
+        }
+    }
+    f.close()
+    fs.remove_file(&p[:n])
+    testing.eq_int(count, 200)
+    testing.eq_int(sum, 199 * 200 / 2)
+}
+
+// servidor: manda três linhas e fecha
+fn send_lines(l *net.Listener) int {
+    err := 0
+    c := l.accept(&err)
+    if c != nil {
+        var msg [64]byte
+        k := str.copy(&msg, "HELLO 1\r\nlinha dois\nsem quebra")
+        c.write(&msg[:k])
+        c.close()
+    }
+    l.close()
+    return 0
+}
+
+fn test_conn() {
+    var h [16]byte
+    hn := str.copy(&h, "127.0.0.1")
+    err := 0
+    l := net.listen(&h[:hn], 0, &err)
+    if l == nil {
+        testing.fail("listen falhou")
+        return
+    }
+    port := l.port()
+    t := thread.spawn(send_lines, l, thread.STACK_64KB)
+    c := net.connect(&h[:hn], port, &err)
+    if c == nil {
+        testing.fail("connect falhou")
+        thread.join(t)
+        return
+    }
+    br := bufio.new[net.Conn]()
+    var buf [32]byte
+    match br.read_line(&c, &buf) {
+        Ok(n) => testing.eq_str(&buf[:n], "HELLO 1")
+        Err(code) => testing.eq_int(code, 0)
+    }
+    match br.read_line(&c, &buf) {
+        Ok(n) => testing.eq_str(&buf[:n], "linha dois")
+        Err(code) => testing.eq_int(code, 0)
+    }
+    match br.read_line(&c, &buf) {
+        Ok(n) => testing.eq_str(&buf[:n], "sem quebra")
+        Err(code) => testing.eq_int(code, 0)
+    }
+    match br.read_line(&c, &buf) {
+        Ok(_) => testing.fail("a conexão foi fechada")
+        Err(code) => testing.eq_int(code, io.EOF)
+    }
+    c.close()
+    thread.join(t)
+}

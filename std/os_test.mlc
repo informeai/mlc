@@ -60,3 +60,25 @@ fn test_cwd_chdir() {
         Err(code) => testing.eq_int(code, 0)
     }
 }
+
+fn test_error_text() {
+    var msg [160]byte
+    n := os.error_text(os.NOT_FOUND, &msg)
+    testing.eq_str(&msg[:n], "não existe")
+    n = os.error_text(os.TOO_LONG, &msg)
+    testing.eq_str(&msg[:n], "longo demais para o buffer")
+    n = os.error_text(1003, &msg) // io.EOF
+    testing.eq_str(&msg[:n], "fim dos dados")
+    n = os.error_text(2001, &msg) // net.REFUSED
+    testing.eq_str(&msg[:n], "conexão recusada: ninguém escuta nessa porta")
+    n = os.error_text(99999, &msg)
+    testing.eq_str(&msg[:n], "erro desconhecido (99999)")
+    n = os.error_text(-5, &msg)
+    testing.eq_str(&msg[:n], "erro desconhecido (-5)")
+}
+
+fn test_error_text_small_buffer() {
+    testing.expect_panic()
+    var msg [4]byte
+    os.error_text(os.NOT_FOUND, &msg)
+}

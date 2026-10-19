@@ -90,7 +90,7 @@ Os métodos de um impl também podem ser chamados direto: `n.tamanho()` com `n i
 - O impl fica **no arquivo do tipo ou no arquivo da interface**: dois módulos não podem implementar a mesma coisa de jeitos diferentes.
 - Um tipo implementa cada interface uma vez só.
 - O impl precisa ter todos os métodos da interface, com as assinaturas certas, e nenhum outro.
-- Ponteiros e empréstimos não implementam interfaces (implemente para o tipo apontado). Slices e structs com donos podem: os métodos só recebem emprestado.
+- Ponteiros e empréstimos não implementam interfaces (implemente para o tipo apontado). Slices e structs com donos podem: os métodos só recebem emprestado. Tipos de C opacos também (`impl io.Reader for File`); num genérico, eles só entram com a restrição `ref` (veja [ffi.md](ffi.md#handles-de-c)).
 - Um dono (`*T`, `[]T`) não pode ser **argumento de tipo** de um genérico, como em toda a linguagem nesta versão: `maior(&s, &s)` com `s []int` é recusado, mas `s.tamanho()` funciona.
 
 ## Impressão: io.Display

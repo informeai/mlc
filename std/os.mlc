@@ -3,8 +3,13 @@
 import "std/result"
 
 // códigos de erro de arg e getenv
-pub const NOT_FOUND = 1 // argumento ou variável que não existe
-pub const TOO_LONG = 2  // não cabe no buffer
+pub const NOT_FOUND = 2   // argumento ou variável que não existe (o ENOENT do sistema)
+pub const TOO_LONG = 1002 // não cabe no buffer
+
+// Os códigos de erro da biblioteca formam um espaço só: os abaixo de 1000
+// são os do sistema (errno), e os de 1000 em diante são do MLC (fs.TOO_BIG,
+// fs.NOT_EMPTY, os.TOO_LONG, io.EOF, net.REFUSED...), iguais em todos os
+// sistemas. error_text dá o texto de qualquer um deles.
 
 // arg_count devolve quantos argumentos o programa recebeu (o 0 é o nome dele).
 pub extern fn arg_count() int
@@ -40,6 +45,23 @@ pub fn cwd(dst &[]byte) result.Result[int, int] {
 // chdir muda o diretório atual.
 pub fn chdir(path &[]byte) result.Result[int, int] {
     return wrap(chdir_raw(path))
+}
+
+extern fn error_text_raw(code int, dst &[]byte) int
+
+// error_text escreve em dst o texto do código de erro (de fs, os, net,
+// process, io...) e devolve quantos bytes usou. Um [160]byte sempre basta.
+//
+//     match fs.read_file(&path, &buf) {
+//         Ok(n) => ...
+//         Err(code) => {
+//             var msg [160]byte
+//             k := os.error_text(code, &msg)
+//             io.eprintf("erro: {:s}\n", &msg[:k])
+//         }
+//     }
+pub fn error_text(code int, dst &[]byte) int {
+    return error_text_raw(code, dst)
 }
 
 // exit encerra o programa com o código dado, sem voltar.

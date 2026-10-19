@@ -200,7 +200,7 @@ m.each_with(&t, add)          // C deduzido: Totals
 m.each_with[Totals](&t, add)  // ou escrito
 ```
 
-- Um método pode ter parâmetros de tipo próprios (`each_with[C ref]`), além dos da struct. Eles são deduzidos dos argumentos da chamada (sem o receptor) ou escritos (`m.each_with[Totals](...)`), e cada combinação gera uma instância, como uma função genérica. Vale também em structs comuns (`fn (c &Clock) run[C ref](...)`).
+- Um método pode ter parâmetros de tipo próprios (`each_with[C ref]`), além dos da struct. Eles são deduzidos dos argumentos da chamada (sem o receptor) ou escritos (`m.each_with[Totals](...)`), e cada combinação gera uma instância, como uma função genérica. Vale também em structs comuns (`fn (c &Clock) run[C ref](...)`). A restrição `ref` também aceita tipos de C opacos (`extern "C" type`), que só existem atrás de ponteiro; combinada com uma interface (`[R ref + io.Reader]`), é a do `bufio.Reader`.
 - **`ref`** é a restrição do contexto: aceita qualquer tipo (inclusive structs com donos, como um `vec` onde o callback guarda resultados), porque o parâmetro só aparece emprestado. Usar `C` por valor no corpo é erro.
 - O contexto é emprestado durante a chamada: a função pode alterá-lo, mas não guardá-lo. A memória é de quem chama (na pilha, com `var`, ou com `alloc`), e nada é alocado escondido.
 - Na biblioteca: `map.each_with`, `vec.each_with`, `sort.sort_by_with`, `slices.index_by` e `slices.count_by`.

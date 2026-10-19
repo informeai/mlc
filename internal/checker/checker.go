@@ -188,7 +188,8 @@ type checker struct {
 	impls       []*Impl                       // impl de todos os arquivos já checados
 	paramIfaces map[*ast.TypeParam]*Interface // interface de cada restrição (resolvida na declaração)
 	tvMethods   map[string]*Func
-	autos       []autoImpl // impl auto do arquivo atual, para conferir os campos
+	autos       []autoImpl            // impl auto do arquivo atual, para conferir os campos
+	declared    map[declaredImpl]bool // impl do arquivo atual, anunciados antes das assinaturas
 	funcTypes   map[string]*FuncType
 	outHandles  map[*Pointer]*OutHandle
 	optArgs     map[Type]*OptArg
@@ -294,8 +295,10 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 		c.collectStructs(src.AST)
 		c.collectEnumVariants(src.AST)
 		c.collectInterfaces(src.AST)
+		c.declareImpls(src.AST)
 		c.collectFuncs(src.AST)
 		c.collectImpls(src.AST)
+		c.declared = nil
 		c.probeOwned(src.AST)
 		for _, fn := range c.info.Funcs {
 			if fn.mod == c.mod && !fn.queued {

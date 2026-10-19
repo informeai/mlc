@@ -18,7 +18,7 @@ import "std/result"
 
 pub const NOT_FOUND = 2   // o programa não existe (ENOENT)
 pub const TOO_BIG = 1000  // a saída não coube no buffer (o resto foi descartado)
-pub const TOO_LONG = 1001 // os argumentos não cabem no Cmd
+pub const TOO_LONG = 1002 // os argumentos não cabem no Cmd
 
 // Cmd é a linha de comando: o programa e os argumentos, separados por zero.
 pub struct Cmd {

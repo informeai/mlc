@@ -193,11 +193,20 @@ func (c *checker) satisfiesParam(t Type, p *ast.TypeParam) bool {
 	if builtin != "" && !satisfies(t, builtin) {
 		return false
 	}
+	if isOpaque(t) && builtin != "ref" {
+		return false // só existe atrás de ponteiro: o parâmetro precisa aparecer só emprestado
+	}
 	if iface == "" {
 		return true
 	}
 	i := c.paramIface(p)
 	return i != nil && c.implementsAs(t, i, builtin == "owned")
+}
+
+// isOpaque diz se t é um tipo de C opaco (extern "C" type).
+func isOpaque(t Type) bool {
+	s, ok := t.(*Struct)
+	return ok && s.Extern
 }
 
 // implements diz se t implementa a interface i.
@@ -212,12 +221,52 @@ func (c *checker) implementsAs(t Type, i *Interface, owned bool) bool {
 	if (IsOwner(t) && !owned) || isBorrow(t) || isResource(t) || t == Void || t == NilType || t == Invalid || isUntyped(t) {
 		return false
 	}
-	if c.findImpl(i, t) != nil {
+	if c.findImpl(i, t) != nil || c.declared[declaredImpl{i, typeKey(t)}] {
 		return true
 	}
 	// [N]T usa o impl de []T, através de uma visão do array
 	a, ok := t.(*Array)
 	return ok && c.findImpl(i, c.sliceOf(a.Elem)) != nil
+}
+
+// declaredImpl é um impl anunciado: a interface e a chave do tipo.
+type declaredImpl struct {
+	iface *Interface
+	key   string
+}
+
+// declareImpls anuncia os impl de tipos simples do arquivo (struct ou enum
+// não genéricos, do próprio arquivo) antes das assinaturas das funções, que
+// podem usar o tipo como argumento de um genérico com restrição de
+// interface (fn f(r &bufio.Reader[MinhaFonte])). Os métodos são conferidos
+// depois, em collectImpls, que dá os erros.
+func (c *checker) declareImpls(f *ast.File) {
+	for _, d := range f.Impls {
+		t := d.Type
+		if d.Iface.Mod != ast.TypeNamed || len(d.Iface.Args) > 0 || t == nil || t.Mod != ast.TypeNamed || t.Module != "" || len(t.Args) > 0 || len(d.TypeParams) > 0 {
+			continue
+		}
+		name := d.Iface.Name
+		if d.Iface.Module != "" {
+			name = d.Iface.Module + "." + name
+		}
+		iface := c.lookupIface(name, d.Iface.P, false)
+		if iface == nil {
+			continue
+		}
+		var typ Type
+		if s := c.mod.structs[t.Name]; s != nil && s.Params == nil {
+			typ = s
+		} else if e := c.mod.enums[t.Name]; e != nil && e.Params == nil {
+			typ = e
+		} else {
+			continue
+		}
+		if c.declared == nil {
+			c.declared = map[declaredImpl]bool{}
+		}
+		c.declared[declaredImpl{iface, typeKey(typ)}] = true
+	}
 }
 
 // collectImpls registra os impl do arquivo. Vem depois dos métodos das

@@ -1,0 +1,16 @@
+// erro: FILE é um tipo de C opaco e só existe atrás de ponteiro: o genérico precisa da restrição ref
+extern "C" type FILE
+
+extern "C" fn fopen(caminho string, modo string) ?*FILE
+extern "C" fn fclose(f *FILE) int32
+
+fn show[T any](x &T) {
+}
+
+fn main() {
+    f := fopen("/dev/null", "r")
+    if f != nil {
+        show(&f)
+        fclose(f)
+    }
+}

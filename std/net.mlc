@@ -24,6 +24,7 @@
 // O host é um nome ou endereço (localhost, 127.0.0.1, ::1, exemplo.com).
 // Escrever numa conexão que o outro lado fechou devolve RESET, em vez de
 // encerrar o programa.
+import "std/io"
 import "std/result"
 
 // códigos de erro (os outros são o errno do sistema)
@@ -98,6 +99,9 @@ pub fn (c &Conn) shutdown() result.Result[int, int] {
 pub fn (c *Conn) close() {
     close_raw(c)
 }
+
+// uma conexão é um io.Reader: std/bufio lê linhas dela
+impl io.Reader for Conn
 
 fn wrap(n int) result.Result[int, int] {
     if n < 0 {

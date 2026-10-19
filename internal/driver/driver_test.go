@@ -157,7 +157,7 @@ fn main() {
 		"t2 = (t3 = mlc_fn_a(), mlc_fn_soma(t3, mlc_fn_b()))",
 		"t4 = (t5 = mlc_fn_a(), mlc_sub_i64(t5, mlc_fn_b(), __FILE__, __LINE__))",
 		// io.print calcula todos os argumentos antes de escrever
-		"t4 = (t5 = mlc_fn_a(), mlc_sub_i64(t5, mlc_fn_b(), __FILE__, __LINE__)), mlc_fn_m0_io__impl_Display__int__write(&t2, &t1)",
+		"t4 = (t5 = mlc_fn_a(), mlc_sub_i64(t5, mlc_fn_b(), __FILE__, __LINE__)), mlc_fn_m1_io__impl_Display__int__write(&t2, &t1)",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("C gerado não contém %q:\n%s", want, body)

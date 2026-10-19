@@ -71,6 +71,8 @@ fn main() {
 - precisa ser **passado a uma função de C que o recebe por posse** (`fn fecha(b *Banco)`); esquecer é vazamento, detectado na compilação;
 - não dá para usar `free` nele, ver o conteúdo, criá-lo com `alloc` ou guardá-lo num `Vec` genérico (o `drop` não saberia que função de C o fecha).
 
+O tipo opaco pode implementar interfaces (`impl io.Reader for Banco`, com métodos de receptor `&Banco`) e ser argumento de um genérico cuja restrição é `ref`, que só usa o tipo emprestado (`&T`): é assim que `bufio.new[fs.File]()` e `bufio.new[net.Conn]()` funcionam. Com outra restrição (`[T any]`, `[T io.Reader]`), o genérico poderia usar `T` por valor, e o tipo opaco é recusado com a sugestão de `[T ref + ...]`.
+
 ## Handles devolvidos por ponteiro (`&?*X`)
 
 Muitas bibliotecas devolvem o handle num parâmetro e usam o retorno para o código de erro:

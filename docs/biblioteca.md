@@ -28,6 +28,16 @@ Tudo que vem com a linguagem está aqui, inclusive entrada e saída (`std/io`) e
   }
   ```
 
+- **Um só espaço de códigos de erro.** Abaixo de 1000 são os do sistema (`errno`: `fs.NOT_FOUND` e `os.NOT_FOUND` são 2, `fs.DENIED` é 13); de 1000 em diante são do MLC e iguais em todos os sistemas (`fs.TOO_BIG` 1000, `fs.NOT_EMPTY` 1001, `os.TOO_LONG`/`process.TOO_LONG`/`bufio.TOO_LONG` 1002, `io.EOF` 1003, `net.REFUSED`... 2001–2005). `os.error_text(code, &msg)` escreve o texto de qualquer um deles:
+
+  ```
+  Err(code) => {
+      var msg [160]byte                  // sempre basta
+      k := os.error_text(code, &msg)     // "não existe", "fim dos dados", "conexão recusada: ..."
+      io.eprintf("erro: {:s}\n", &msg[:k])
+  }
+  ```
+
 - **Nomes em inglês**, como todo o runtime.
 - **Testada em MLC.** Cada módulo tem testes em `std/<módulo>_test.mlc`, que rodam com `mlc test std` (ou `make test-std`) e no `go test`. Veja [testes.md](testes.md).
 - **O que precisa do sistema** (arquivos, relógio, `libm`) é declarado como `extern fn` e implementado no runtime C (`mlc_std_<módulo>_<nome>`). `extern fn` só é aceita dentro da biblioteca padrão; o resto é MLC comum, com as mesmas checagens de posse e de tipos de qualquer programa.
@@ -37,6 +47,20 @@ Tudo que vem com a linguagem está aqui, inclusive entrada e saída (`std/io`) e
 ### `std/io` e `std/str`
 
 Entrada e saída (`io.print`, `io.printf`, `io.eprint`, `io.eprintf`, `io.write`, `io.write_line`, `io.read_line`), a interface `io.Display` e o `io.Writer` (escrita com buffer fixo na pilha), veja [interfaces.md](interfaces.md); e texto em buffers (`str.copy`, `str.put_int`, `str.parse_int`, `str.format`, `str.format_len`, ...). Veja [texto.md](texto.md). As funções de `str` que podem dar panic por falta de espaço são `extern fn`, para o panic apontar a linha de quem chamou; as outras (`int_len`, `eq`, `eq_bytes`, `parse_int`) são MLC, em [`std/str.mlc`](../std/str.mlc).
+
+**Leitura genérica:** a interface `io.Reader` é qualquer fonte de bytes, e o `std/bufio` lê linhas e blocos de qualquer uma delas.
+
+```
+pub interface Reader {
+    fn read(self &Self, dst &[]byte) result.Result[int, int]   // Ok(0): fim dos dados
+}
+```
+
+| Declaração | O que é |
+|---|---|
+| `io.Reader` | implementada por `fs.File`, `net.Conn`, `io.Stdin` e pelos tipos do programa (`impl io.Reader for MinhaFonte`) |
+| `io.stdin() Stdin` | a entrada padrão como `Reader` (um valor na pilha, nada para liberar); `read` para depois de um `\n`. Usa o mesmo buffer de `io.read_line`, então os dois podem ser misturados |
+| `io.EOF` (1003) | o erro dos leitores com buffer no fim dos dados |
 
 ### `std/result`
 
@@ -288,7 +312,8 @@ conta.free()                              // libera cada chave e o mapa
 | `cwd(dst) Result[int, int]` | copia o diretório atual |
 | `chdir(path) Result[int, int]` | muda o diretório atual |
 | `exit(code int)` | encerra o programa |
-| `NOT_FOUND`, `TOO_LONG` | códigos de erro: não existe; não cabe em `dst` |
+| `error_text(code int, dst) int` | escreve o texto (em português) de qualquer código de erro da biblioteca; um `[160]byte` sempre basta |
+| `NOT_FOUND` (2), `TOO_LONG` (1002) | códigos de erro: não existe; não cabe em `dst` |
 
 ### `std/args`
 
@@ -403,6 +428,8 @@ if f != nil {
 | `f.seek(pos) Result[int, int]` | vai para `pos` (do começo); com `pos` negativo, para o fim |
 | `f.close()` | fecha |
 
+Um arquivo aberto é um `io.Reader`: `std/bufio` lê linhas dele.
+
 **Diretórios:**
 
 ```
@@ -418,6 +445,66 @@ if d != nil {
 }
 ```
 | `NOT_FOUND` (2), `DENIED` (13), `TOO_BIG` (1000) | códigos de erro; os demais são o `errno` do sistema |
+
+### `std/bufio`
+
+Leitura com buffer de qualquer `io.Reader`. O `bufio.Reader` guarda um buffer fixo de 4096 bytes dentro dele mesmo (na pilha, se for uma variável local): nada aloca. A fonte **não fica guardada**: cada chamada a recebe emprestada, então quem abriu o arquivo continua dono dele e o fecha quando quiser (o verificador cobra o `close` como sempre).
+
+```
+f := fs.open(&path, fs.READ, &err)
+if f != nil {
+    br := bufio.new[fs.File]()
+    var line [1024]byte
+    for {
+        match br.read_line(&f, &line) {
+            Ok(n) => io.printf("{:s}\n", &line[:n])
+            Err(code) => {
+                if code == bufio.TOO_LONG {
+                    continue                     // line ficou cheio; o resto da linha vem na próxima
+                }
+                if code != io.EOF {
+                    ... erro da fonte ...
+                }
+                break
+            }
+        }
+    }
+    f.close()
+}
+```
+
+| Declaração | O que faz |
+|---|---|
+| `new[R ref + io.Reader]() Reader[R]` | um leitor vazio para fontes do tipo `R` (`bufio.new[fs.File]()`, `bufio.new[net.Conn]()`, `bufio.new[io.Stdin]()`) |
+| `br.read_line(src, dst) Result[int, int]` | uma linha, sem o `\n` (nem o `\r` de um `\r\n`); a última pode não ter `\n` |
+| `br.read_until(src, delim, dst) Result[int, int]` | até o byte `delim`, inclusive; sem ele, o que houver até o fim |
+| `br.read(src, dst) Result[int, int]` | o que estiver no buffer, ou uma leitura da fonte; pode ler menos que `len(dst)` |
+| `br.read_exact(src, dst) Result[int, int]` | enche `dst` inteiro, ou `Err(io.EOF)` se os dados acabarem antes |
+| `br.read_byte(src) Result[byte, int]` | um byte |
+| `br.buffered() int` | quantos bytes já estão no buffer |
+| `TOO_LONG` (1002) | a linha (ou o pedaço até `delim`) não coube: `dst` fica cheio e o resto vem na próxima chamada |
+
+O fim dos dados é `Err(io.EOF)`, e continua valendo nas chamadas seguintes. Os erros da fonte chegam como vieram, depois dos dados que já estavam no buffer. Use sempre a mesma fonte com o mesmo `Reader`: os bytes no buffer são dela.
+
+### `std/path`
+
+Caminhos com barras (`/`), só pelo texto (nada olha o disco). Cada função escreve o resultado num buffer de quem chama e devolve quantos bytes usou; o resultado nunca é maior que a entrada (no `join`, que a soma das duas mais a barra), e não caber é panic.
+
+```
+var out [4096]byte
+n := path.join_str(&out, &dir[:k], "config.json")   // "docs/" + "config.json" → "docs/config.json"
+var e [16]byte
+m := path.ext(&e, &out[:n])                          // ".json"
+```
+
+| Declaração | O que faz |
+|---|---|
+| `clean(dst, p) int` | a forma mais curta equivalente, com as regras do `path.Clean` do Go: junta barras repetidas, tira os `.`, resolve os `..` (num caminho relativo, os que sobram no começo ficam; num absoluto, somem) e tira a barra do fim; vazio vira `.` (`"a//b/./c/../d/"` → `"a/b/d"`) |
+| `join(dst, a, b) int`, `join_str(dst, a, b string) int` | `a/b`, limpo; se `b` for absoluto, o resultado é `b` |
+| `dir(dst, p) int` | tudo menos o último elemento, limpo (`"a/b/c.txt"` → `"a/b"`, `"c.txt"` → `"."`) |
+| `base(dst, p) int` | o último elemento (`"a/b/"` → `"b"`, `"/"` → `"/"`, `""` → `"."`) |
+| `ext(dst, p) int` | a extensão do último elemento, com o ponto (`"x.tar.gz"` → `".gz"`; sem extensão, 0) |
+| `is_abs(p) bool` | começa em `/` |
 
 ### `std/testing`
 
@@ -484,6 +571,8 @@ l.close()
 | `c.shutdown() Result[int, int]` | avisa que não vai mandar mais nada (o outro lado lê `Ok(0)`) |
 | `close()` | fecha o listener ou a conexão |
 | `REFUSED`, `NO_HOST`, `IN_USE`, `TIMEOUT`, `RESET` | códigos de erro iguais em todos os sistemas |
+
+Uma conexão é um `io.Reader`: `bufio.new[net.Conn]()` lê linhas dela (protocolos de texto, como HTTP e SMTP).
 
 Escrever numa conexão que o outro lado fechou devolve `RESET`, em vez de encerrar o programa com `SIGPIPE`. `tests/run/servidor.mlc` tem um serviço completo: uma thread por conexão, pedido e resposta em JSON.
 

@@ -1,0 +1,157 @@
+// Caminhos de arquivo com barras (/), como no Linux e no macOS. As funções
+// trabalham só com o texto (não olham o disco) e escrevem o resultado num
+// buffer de quem chama, devolvendo quantos bytes usaram; dão panic se não
+// couber. O resultado nunca é maior que a entrada (mais um byte, no caso de
+// "" virar "."), então um buffer do tamanho da entrada (ou da soma das duas,
+// no join) basta.
+//
+//     var out [4096]byte
+//     n := path.join(&out, &dir[:k], &name[:m])      // "docs" + "a.txt" → "docs/a.txt"
+//     e := path.ext(&ext, &out[:n])                  // ".txt"
+import "std/str"
+
+// clean deixa o caminho na forma mais curta equivalente, só pelo texto:
+// junta barras repetidas, tira os ".", resolve os ".." (que, no começo de um
+// caminho relativo, ficam; num absoluto, somem: "/.." é "/") e tira a barra
+// do fim. Um caminho vazio vira ".".
+//
+//     "a//b/./c/../d/" → "a/b/d"
+pub fn clean(dst &[]byte, p &[]byte) int {
+    if len(p) == 0 {
+        return str.copy(dst, ".")
+    }
+    n := str.copy_bytes(dst, p)
+    return clean_in_place(dst, n)
+}
+
+// join junta a e b com uma barra e limpa o resultado (clean). Se b for
+// absoluto, o resultado é b.
+pub fn join(dst &[]byte, a &[]byte, b &[]byte) int {
+    if is_abs(b) || len(a) == 0 {
+        return clean(dst, b)
+    }
+    n := str.copy_bytes(dst, a)
+    n += str.copy(&dst[n:], "/")
+    n += str.copy_bytes(&dst[n:], b)
+    return clean_in_place(dst, n)
+}
+
+// join_str é join com o segundo pedaço escrito no programa:
+// path.join_str(&out, &dir, "config.json").
+pub fn join_str(dst &[]byte, a &[]byte, b string) int {
+    if (len(b) > 0 && b[0] == '/') || len(a) == 0 {
+        n := str.copy(dst, b)
+        if n == 0 {
+            return str.copy(dst, ".")
+        }
+        return clean_in_place(dst, n)
+    }
+    n := str.copy_bytes(dst, a)
+    n += str.copy(&dst[n:], "/")
+    n += str.copy(&dst[n:], b)
+    return clean_in_place(dst, n)
+}
+
+// is_abs diz se o caminho começa na raiz (/).
+pub fn is_abs(p &[]byte) bool {
+    return len(p) > 0 && p[0] == '/'
+}
+
+// base escreve o último elemento do caminho: "a/b/c.txt" → "c.txt",
+// "a/b/" → "b", "/" → "/", "" → ".".
+pub fn base(dst &[]byte, p &[]byte) int {
+    if len(p) == 0 {
+        return str.copy(dst, ".")
+    }
+    end := len(p)
+    for end > 0 && p[end - 1] == '/' {
+        end--
+    }
+    if end == 0 {
+        return str.copy(dst, "/")
+    }
+    start := end
+    for start > 0 && p[start - 1] != '/' {
+        start--
+    }
+    return str.copy_bytes(dst, &p[start:end])
+}
+
+// dir escreve tudo menos o último elemento, limpo: "a/b/c.txt" → "a/b",
+// "c.txt" → ".", "/c" → "/".
+pub fn dir(dst &[]byte, p &[]byte) int {
+    k := len(p)
+    for k > 0 && p[k - 1] != '/' {
+        k--
+    }
+    if k == 0 {
+        return str.copy(dst, ".")
+    }
+    return clean(dst, &p[:k])
+}
+
+// ext escreve a extensão do último elemento, com o ponto: "a/b.tar.gz" →
+// ".gz", "a/b" → "" (devolve 0), ".bashrc" → ".bashrc".
+pub fn ext(dst &[]byte, p &[]byte) int {
+    for i := len(p) - 1; i >= 0 && p[i] != '/'; i-- {
+        if p[i] == '.' {
+            return str.copy_bytes(dst, &p[i:])
+        }
+    }
+    return 0
+}
+
+// clean_in_place limpa b[:n] no próprio buffer: quem escreve nunca passa de
+// quem lê, então ler e escrever no mesmo lugar é seguro.
+fn clean_in_place(b &[]byte, n int) int {
+    rooted := b[0] == '/'
+    r := 0      // próximo byte a ler
+    w := 0      // próximo byte a escrever
+    dotdot := 0 // até onde um ".." pode voltar
+    if rooted {
+        r = 1
+        w = 1
+        dotdot = 1
+    }
+    for r < n {
+        if b[r] == '/' {
+            r++ // barra repetida
+        } else if b[r] == '.' && (r + 1 == n || b[r + 1] == '/') {
+            r++ // "."
+        } else if b[r] == '.' && b[r + 1] == '.' && (r + 2 == n || b[r + 2] == '/') {
+            r += 2 // "..": volta um elemento, se der
+            if w > dotdot {
+                w--
+                for w > dotdot && b[w] != '/' {
+                    w--
+                }
+            } else if !rooted {
+                // não dá para voltar num caminho relativo: o ".." fica
+                if w > 0 {
+                    b[w] = '/'
+                    w++
+                }
+                b[w] = '.'
+                b[w + 1] = '.'
+                w += 2
+                dotdot = w
+            }
+        } else {
+            // um elemento: a barra antes dele (se não for o primeiro) e os bytes
+            if (rooted && w != 1) || (!rooted && w != 0) {
+                b[w] = '/'
+                w++
+            }
+            for r < n && b[r] != '/' {
+                b[w] = b[r]
+                w++
+                r++
+            }
+        }
+    }
+    if w == 0 {
+        b[0] = '.'
+        w = 1
+    }
+    return w
+}

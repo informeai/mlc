@@ -162,6 +162,23 @@ int64_t mlc_std_io_read_line(mlc_sl_byte *dst, const char *file, int line) {
     return n;
 }
 
+int64_t mlc_std_io_read_stdin(mlc_sl_byte *dst, const char *file, int line) {
+    (void)file;
+    (void)line;
+    fflush(stdout); /* como em read_line */
+    int64_t n = 0;
+    while (n < dst->len) {
+        int c = getchar();
+        if (c == EOF) {
+            if (n == 0 && ferror(stdin)) return -EIO;
+            return n;
+        }
+        dst->ptr[n++] = (uint8_t)c;
+        if (c == '\n') break;
+    }
+    return n;
+}
+
 /* Escreve x com o menor número de dígitos que, lido de volta, dá o mesmo
  * valor (como o Go imprime: 0.1, 3, 1000, 1e+06). digits é 17 para float64 e 9 para
  * float32. Devolve o tamanho. */
@@ -294,7 +311,7 @@ bool mlc_std_math_is_inf(double x, const char *file, int line) {
 /* std/os */
 static int64_t mlc_copy_cstr(mlc_sl_byte *dst, const char *s) {
     size_t n = strlen(s);
-    if ((int64_t)n > dst->len) return -2; /* TOO_LONG */
+    if ((int64_t)n > dst->len) return -1002; /* os.TOO_LONG */
     if (n > 0) memcpy(dst->ptr, s, n);
     return (int64_t)n;
 }
@@ -308,7 +325,7 @@ int64_t mlc_std_os_arg_count(const char *file, int line) {
 int64_t mlc_std_os_arg_copy(int64_t i, mlc_sl_byte *dst, const char *file, int line) {
     (void)file;
     (void)line;
-    if (i < 0 || i >= mlc_argc) return -1; /* NOT_FOUND */
+    if (i < 0 || i >= mlc_argc) return -ENOENT; /* os.NOT_FOUND */
     return mlc_copy_cstr(dst, mlc_argv[i]);
 }
 
@@ -316,11 +333,11 @@ int64_t mlc_std_os_getenv_copy(mlc_str name, mlc_sl_byte *dst, const char *file,
     (void)file;
     (void)line;
     char buf[256];
-    if (name.len >= (int64_t)sizeof buf) return -1;
+    if (name.len >= (int64_t)sizeof buf) return -1002; /* os.TOO_LONG */
     if (name.len > 0) memcpy(buf, name.ptr, (size_t)name.len);
     buf[name.len] = '\0';
     const char *v = getenv(buf);
-    if (v == NULL) return -1;
+    if (v == NULL) return -ENOENT; /* os.NOT_FOUND */
     return mlc_copy_cstr(dst, v);
 }
 
@@ -565,7 +582,7 @@ int64_t mlc_std_os_setenv_raw(mlc_str name, mlc_sl_byte *value, const char *file
     (void)file;
     (void)line;
     char n[256], v[4096];
-    if (name.len <= 0 || name.len >= (int64_t)sizeof n || value->len >= (int64_t)sizeof v) return -2; /* TOO_LONG */
+    if (name.len <= 0 || name.len >= (int64_t)sizeof n || value->len >= (int64_t)sizeof v) return -1002; /* os.TOO_LONG */
     memcpy(n, name.ptr, (size_t)name.len);
     n[name.len] = '\0';
     if (value->len > 0) memcpy(v, value->ptr, (size_t)value->len);
@@ -1422,3 +1439,63 @@ int64_t mlc_std_time_local_offset(int64_t ms, const char *file, int line) {
 void mlc_std_hash_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
 
 void mlc_std_encoding_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
+
+/* os.error_text: o texto de um código de erro da biblioteca. Os códigos
+ * abaixo de 1000 são os do sistema (errno), com os mais comuns em português;
+ * os de 1000 em diante são do MLC e valem em todos os sistemas. */
+static const char *mlc_error_text(int64_t code) {
+    switch (code) {
+    case 0: return "sem erro";
+    case 1000: return "não cabe no buffer";
+    case 1001: return "o diretório não está vazio";
+    case 1002: return "longo demais para o buffer";
+    case 1003: return "fim dos dados";
+    case 2001: return "conexão recusada: ninguém escuta nessa porta";
+    case 2002: return "o nome do servidor não foi encontrado";
+    case 2003: return "a porta já está em uso";
+    case 2004: return "passou do tempo limite";
+    case 2005: return "a conexão foi fechada pelo outro lado";
+    case EPERM: return "operação não permitida";
+    case ENOENT: return "não existe";
+    case EIO: return "erro de entrada e saída";
+    case EBADF: return "descritor de arquivo inválido";
+    case ENOMEM: return "memória esgotada";
+    case EACCES: return "permissão negada";
+    case EBUSY: return "o recurso está ocupado";
+    case EEXIST: return "já existe";
+    case EXDEV: return "não dá para mover entre sistemas de arquivos diferentes";
+    case ENOTDIR: return "não é um diretório";
+    case EISDIR: return "é um diretório";
+    case EINVAL: return "argumento inválido";
+    case ENFILE:
+    case EMFILE: return "arquivos abertos demais";
+    case EFBIG: return "arquivo grande demais";
+    case ENOSPC: return "sem espaço no disco";
+    case EROFS: return "sistema de arquivos só de leitura";
+    case ENAMETOOLONG: return "nome longo demais";
+    case ELOOP: return "links simbólicos demais (provável ciclo)";
+    case EINTR: return "interrompido por um sinal";
+    case EAGAIN: return "recurso temporariamente indisponível";
+    case EPIPE: return "a outra ponta foi fechada";
+    case ENETUNREACH: return "a rede está inacessível";
+    case EHOSTUNREACH: return "o servidor está inacessível";
+    case ECONNABORTED: return "a conexão foi abortada";
+    case ENOTCONN: return "não conectado";
+    case EADDRNOTAVAIL: return "endereço não disponível nesta máquina";
+    }
+    return NULL;
+}
+
+int64_t mlc_std_os_error_text_raw(int64_t code, mlc_sl_byte *dst, const char *file, int line) {
+    char buf[160];
+    const char *t = mlc_error_text(code);
+    if (t == NULL) {
+        if (code > 0 && code < 1000) {
+            snprintf(buf, sizeof buf, "%s (erro %" PRId64 " do sistema)", strerror((int)code), code);
+        } else {
+            snprintf(buf, sizeof buf, "erro desconhecido (%" PRId64 ")", code);
+        }
+        t = buf;
+    }
+    return mlc_put_bytes(dst, t, (int64_t)strlen(t), "os.error_text", file, line);
+}

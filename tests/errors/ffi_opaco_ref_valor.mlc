@@ -1,0 +1,14 @@
+// erro: T tem a restrição ref e só pode aparecer emprestado
+extern "C" type FILE
+
+extern "C" fn fopen(caminho string, modo string) ?*FILE
+extern "C" fn fclose(f *FILE) int32
+
+// um tipo de C opaco pode ser argumento de [T ref], mas o genérico nunca
+// usa T por valor
+fn copy_of[T ref](x &T) T {
+    return *x
+}
+
+fn main() {
+}

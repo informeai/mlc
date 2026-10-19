@@ -22,8 +22,8 @@ vec: 10 11 1 100
 3 4 2
 rand: true true
 os: true
-erro 1
-erro 1
+erro 2
+erro 2
 PATH tem texto: true
 fs: false
 ok 8

@@ -92,6 +92,7 @@ const (
 	ctxBorrowElem                // o T de &T (aceita slices)
 	ctxSliceElem                 // o T de []T
 	ctxArrayElem                 // o T de [N]T
+	ctxTypeArg                   // argumento de tipo (Vec[T]): como ctxVar, mas aceita tipos de C opacos (a restrição ref decide)
 )
 
 func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
@@ -138,7 +139,7 @@ func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 		case ctx == ctxElem || ctx == ctxBorrowElem:
 			c.errorf(t.P, "ponteiro para ponteiro não é suportado")
 			return Invalid
-		case t.Mod == ast.TypeBorrow && ctx != ctxParam && ctx != ctxResult && ctx != ctxVar:
+		case t.Mod == ast.TypeBorrow && ctx != ctxParam && ctx != ctxResult && ctx != ctxVar && ctx != ctxTypeArg:
 			c.errorf(t.P, "um empréstimo (&T) não pode ser guardado em campos, slices ou arrays: só em parâmetros, variáveis e retornos")
 			return Invalid
 		}
@@ -205,7 +206,7 @@ func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 		if len(t.Args) > 0 {
 			c.errorf(t.P, "%s é um parâmetro de tipo e não recebe argumentos", t.Name)
 		}
-		if tv, ok := c.typeParams[t.Name].(*TypeVar); ok && tv.Constraint == "ref" && ctx != ctxBorrowElem {
+		if tv, ok := c.typeParams[t.Name].(*TypeVar); ok && tv.Constraint == "ref" && ctx != ctxBorrowElem && ctx != ctxTypeArg {
 			c.errorf(t.P, "%s tem a restrição ref e só pode aparecer emprestado (&%s): o tipo pode ter donos e não ser copiável", t.Name, t.Name)
 			return Invalid
 		}
@@ -236,7 +237,7 @@ func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 	case s.Params != nil:
 		var args []Type
 		for _, a := range t.Args {
-			args = append(args, c.resolveType(a, ctxVar))
+			args = append(args, c.resolveType(a, ctxTypeArg))
 		}
 		inst, ok := c.instStruct(s, args, t.P).(*Struct)
 		if !ok {
@@ -244,11 +245,11 @@ func (c *checker) resolveType(t *ast.TypeExpr, ctx typeCtx) Type {
 		}
 		s = inst
 	}
-	if s.Extern && ctx != ctxElem && ctx != ctxBorrowElem {
+	if s.Extern && ctx != ctxElem && ctx != ctxBorrowElem && ctx != ctxTypeArg {
 		c.errorf(t.P, "%s é um tipo de C opaco: só existe atrás de ponteiro (?*%s, *%s ou &%s)", s.Name, s.Name, s.Name, s.Name)
 		return Invalid
 	}
-	if s.Resource && (ctx == ctxVar || ctx == ctxParam || ctx == ctxResult) {
+	if s.Resource && (ctx == ctxVar || ctx == ctxTypeArg || ctx == ctxParam || ctx == ctxResult) {
 		c.errorf(t.P, "%s contém ponteiros donos e só pode ser usada através de um ponteiro: use *%s, ?*%s ou &%s", s.Name, s.Name, s.Name, s.Name)
 		return Invalid
 	}

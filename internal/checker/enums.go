@@ -199,7 +199,7 @@ func (c *checker) resolveEnum(en *Enum, t *ast.TypeExpr) Type {
 	case en.Params != nil:
 		var args []Type
 		for _, a := range t.Args {
-			args = append(args, c.resolveType(a, ctxVar))
+			args = append(args, c.resolveType(a, ctxTypeArg))
 		}
 		return c.instEnum(en, args, t.P)
 	}

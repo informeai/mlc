@@ -1,0 +1,91 @@
+import "std/path"
+import "std/str"
+import "std/testing"
+
+// check_clean limpa o texto s e confere o resultado.
+fn check_clean(s string, want string) {
+    var src [64]byte
+    n := str.copy(&src, s)
+    var out [64]byte
+    k := path.clean(&out, &src[:n])
+    testing.eq_str(&out[:k], want)
+}
+
+fn test_clean() {
+    check_clean("", ".")
+    check_clean(".", ".")
+    check_clean("/", "/")
+    check_clean("a//b", "a/b")
+    check_clean("a/./b/", "a/b")
+    check_clean("a/b/../c", "a/c")
+    check_clean("a//b/./c/../d/", "a/b/d")
+    check_clean("../a", "../a")
+    check_clean("../../a/..", "../..")
+    check_clean("a/../..", "..")
+    check_clean("/../a", "/a")
+    check_clean("/a/b/../../..", "/")
+    check_clean("./x", "x")
+    check_clean("abc/def/ghi/../../jkl", "abc/jkl")
+}
+
+fn joined(a string, b string, want string) {
+    var ab [64]byte
+    n := str.copy(&ab, a)
+    var bb [64]byte
+    m := str.copy(&bb, b)
+    var out [128]byte
+    k := path.join(&out, &ab[:n], &bb[:m])
+    testing.eq_str(&out[:k], want)
+    k = path.join_str(&out, &ab[:n], b)
+    testing.eq_str(&out[:k], want)
+}
+
+fn test_join() {
+    joined("docs", "a.txt", "docs/a.txt")
+    joined("docs/", "/etc/x", "/etc/x") // b absoluto
+    joined("a/b", "../c", "a/c")
+    joined("", "x", "x")
+    joined("a", "", "a")
+    joined("/", "x", "/x")
+}
+
+fn parts(s string, want_base string, want_dir string, want_ext string) {
+    var src [64]byte
+    n := str.copy(&src, s)
+    var out [64]byte
+    k := path.base(&out, &src[:n])
+    testing.eq_str(&out[:k], want_base)
+    k = path.dir(&out, &src[:n])
+    testing.eq_str(&out[:k], want_dir)
+    k = path.ext(&out, &src[:n])
+    testing.eq_str(&out[:k], want_ext)
+}
+
+fn test_base_dir_ext() {
+    parts("a/b/c.txt", "c.txt", "a/b", ".txt")
+    parts("c.txt", "c.txt", ".", ".txt")
+    parts("/c", "c", "/", "")
+    parts("a/b/", "b", "a/b", "")
+    parts("/", "/", "/", "")
+    parts("", ".", ".", "")
+    parts("x.tar.gz", "x.tar.gz", ".", ".gz")
+    parts("dir.d/file", "file", "dir.d", "") // o ponto do diretório não conta
+    parts(".bashrc", ".bashrc", ".", ".bashrc")
+}
+
+fn test_is_abs() {
+    var b [8]byte
+    n := str.copy(&b, "/x")
+    testing.check(path.is_abs(&b[:n]), "/x é absoluto")
+    n = str.copy(&b, "x/y")
+    testing.check(!path.is_abs(&b[:n]), "x/y é relativo")
+    testing.check(!path.is_abs(&b[:0]), "vazio é relativo")
+}
+
+fn test_small_destination() {
+    testing.expect_panic()
+    var src [16]byte
+    n := str.copy(&src, "abcdef")
+    var out [3]byte
+    path.clean(&out, &src[:n])
+}

@@ -240,6 +240,8 @@ func (c *checker) checkTypeArgs(what string, params []*ast.TypeParam, args []Typ
 				if _, why := ownedOK(args[i]); why != "" {
 					reason = " (" + why + ")"
 				}
+			case isOpaque(args[i]) && builtin != "ref":
+				reason = fmt.Sprintf(" (%s é um tipo de C opaco e só existe atrás de ponteiro: o genérico precisa da restrição ref, que usa %s só emprestado, como [%s %s])", args[i], p.Name, p.Name, refConstraint(iface))
 			case builtin == "ref" && isBorrow(args[i]):
 				reason = " (um empréstimo não pode ser argumento de tipo: o parâmetro já é usado como &" + p.Name + ")"
 			case builtin != "" && builtin != "owned" && !satisfies(args[i], builtin) && (IsOwner(args[i]) || isBorrow(args[i]) || isResource(args[i])):
@@ -262,6 +264,15 @@ func (c *checker) checkTypeArgs(what string, params []*ast.TypeParam, args []Typ
 		}
 	}
 	return ok
+}
+
+// refConstraint escreve a restrição ref, com a interface de iface se houver
+// (para o exemplo da mensagem de erro).
+func refConstraint(iface string) string {
+	if iface == "" {
+		return "ref"
+	}
+	return "ref + " + iface
 }
 
 // ---------- structs genéricas ----------
@@ -574,16 +585,16 @@ func unify(p, a Type, vars map[*TypeVar]bool, bound map[*TypeVar]Type) {
 // Par[int, string]{...}).
 func (c *checker) exprType(e ast.Expr) Type {
 	if u, ok := e.(*ast.UnaryExpr); ok && (u.Op == token.MUL || u.Op == token.AMP) {
-		return c.resolveType(typeExprOf(u), ctxVar)
+		return c.resolveType(typeExprOf(u), ctxTypeArg)
 	}
 	switch e := e.(type) {
 	case *ast.TypeArg:
-		return c.resolveType(e.Type, ctxVar)
+		return c.resolveType(e.Type, ctxTypeArg)
 	case *ast.Ident:
-		return c.resolveType(&ast.TypeExpr{Name: e.Name, P: e.P}, ctxVar)
+		return c.resolveType(&ast.TypeExpr{Name: e.Name, P: e.P}, ctxTypeArg)
 	case *ast.SelectorExpr:
 		if id, ok := e.X.(*ast.Ident); ok {
-			return c.resolveType(&ast.TypeExpr{Module: id.Name, Name: e.Sel, P: e.SelPos}, ctxVar)
+			return c.resolveType(&ast.TypeExpr{Module: id.Name, Name: e.Sel, P: e.SelPos}, ctxTypeArg)
 		}
 	case *ast.IndexExpr, *ast.IndexListExpr:
 		base, args := splitIndex(e)
@@ -593,10 +604,10 @@ func (c *checker) exprType(e ast.Expr) Type {
 		}
 		switch b := base.(type) {
 		case *ast.Ident:
-			return c.resolveType(&ast.TypeExpr{Name: b.Name, Args: targs, P: b.P}, ctxVar)
+			return c.resolveType(&ast.TypeExpr{Name: b.Name, Args: targs, P: b.P}, ctxTypeArg)
 		case *ast.SelectorExpr:
 			if id, ok := b.X.(*ast.Ident); ok {
-				return c.resolveType(&ast.TypeExpr{Module: id.Name, Name: b.Sel, Args: targs, P: b.SelPos}, ctxVar)
+				return c.resolveType(&ast.TypeExpr{Module: id.Name, Name: b.Sel, Args: targs, P: b.SelPos}, ctxTypeArg)
 			}
 		}
 	}

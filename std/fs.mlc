@@ -3,6 +3,7 @@
 // o buffer; para arquivos grandes, abra com open e leia em pedaços.
 // Os caminhos são []byte (por exemplo, vindos de os.arg); para um literal,
 // copie-o antes com str.copy.
+import "std/io"
 import "std/result"
 
 // códigos de erro (os números são os do sistema, errno, menos os que mudam
@@ -106,6 +107,9 @@ pub fn (f &File) seek(pos int) result.Result[int, int] {
 pub fn (f *File) close() {
     file_close(f)
 }
+
+// um arquivo aberto é um io.Reader: std/bufio lê linhas dele
+impl io.Reader for File
 
 // ---------- diretórios ----------
 
