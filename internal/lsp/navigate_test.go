@@ -397,3 +397,20 @@ func TestNavigationMutex(t *testing.T) {
 		}
 	}
 }
+
+// w.printf: hover com a documentação própria.
+func TestNavigationWriterPrintf(t *testing.T) {
+	src := "import \"std/io\"\n\nfn main() {\n    w := io.stdout()\n    w.printf(\"{}\\n\", 1)\n    w.flush()\n}\n"
+	path := filepath.Join(t.TempDir(), "main.mlc")
+	os.WriteFile(path, []byte(src), 0o644)
+	read := driver.Overlay(nil)
+	prog := driver.Analyze(path, read)
+	if prog == nil {
+		t.Fatal("não analisou")
+	}
+	off := strings.Index(src, "printf(")
+	sym, _ := newNavigator(prog, read, []byte(src)).resolve(off)
+	if sym == nil || !strings.Contains(sym.doc, "sem criar outro e sem `flush`") {
+		t.Errorf("hover de w.printf: %+v", sym)
+	}
+}

@@ -502,6 +502,9 @@ func (g *gen) cond(e ast.Expr) string {
 // é quantos bytes foram escritos.
 func (g *gen) ioPrint(call *ast.CallExpr) string {
 	plan := g.info.Prints[call]
+	if plan.Mode == checker.PrintWriter {
+		return g.writerPrintf(plan)
+	}
 	w := g.temp(plan.Writer)
 	fd := plan.Fd
 	switch plan.Mode {
@@ -510,10 +513,8 @@ func (g *gen) ioPrint(call *ast.CallExpr) string {
 	case checker.PrintCount:
 		fd = -2 // io.COUNT
 	}
-	parts := []string{
-		fmt.Sprintf("%s = %s", w, zeroValue(plan.Writer)),
-		fmt.Sprintf("%s.f_fd = INT64_C(%d)", w, fd),
-	}
+	parts := writerInit(plan.Writer, w)
+	parts = append(parts, fmt.Sprintf("%s.f_fd = INT64_C(%d)", w, fd))
 	if plan.Mode == checker.PrintSink {
 		// o destino é calculado primeiro, como o primeiro argumento
 		parts = append(parts, fmt.Sprintf("%s.f_sink = mlc_sink_push(%s, __FILE__, __LINE__)", w, g.expr(plan.Dst)))
@@ -523,6 +524,21 @@ func (g *gen) ioPrint(call *ast.CallExpr) string {
 		vals[i] = g.temp(plan.ArgTypes[i])
 		parts = append(parts, vals[i]+" = "+g.expr(a))
 	}
+	parts = append(parts, g.printParts(plan, w, vals)...)
+	parts = append(parts, fmt.Sprintf("%s(&%s)", plan.Flush.CName, w))
+	switch plan.Mode {
+	case checker.PrintSink:
+		parts = append(parts, fmt.Sprintf("mlc_sink_pop(%s.f_sink, __FILE__, __LINE__)", w))
+	case checker.PrintCount:
+		parts = append(parts, w+".f_total")
+	}
+	return "(" + strings.Join(parts, ", ") + ")"
+}
+
+// printParts escreve as partes do formato (os textos fixos e os valores,
+// já calculados em vals) no Writer w.
+func (g *gen) printParts(plan *checker.PrintPlan, w string, vals []string) []string {
+	var parts []string
 	for _, p := range plan.Parts {
 		if p.Arg < 0 {
 			parts = append(parts, fmt.Sprintf("%s(&%s, %s)", plan.PutStr.CName, w, constant(p.Lit, checker.String)))
@@ -547,14 +563,58 @@ func (g *gen) ioPrint(call *ast.CallExpr) string {
 		}
 		parts = append(parts, g.specWrite(plan, p.Spec, w, write)...)
 	}
-	parts = append(parts, fmt.Sprintf("%s(&%s)", plan.Flush.CName, w))
-	switch plan.Mode {
-	case checker.PrintSink:
-		parts = append(parts, fmt.Sprintf("mlc_sink_pop(%s.f_sink, __FILE__, __LINE__)", w))
-	case checker.PrintCount:
-		parts = append(parts, w+".f_total")
+	return parts
+}
+
+// writerPrintf traduz w.printf: as partes vão para o Writer de quem chama,
+// sem criar um novo e sem flush. Se houver especificações, os campos dela
+// são guardados antes e devolvidos no fim, porque o w.printf pode estar
+// dentro do write de um valor que tem a própria especificação.
+func (g *gen) writerPrintf(plan *checker.PrintPlan) string {
+	wp := g.temp(&checker.Pointer{Elem: plan.Writer})
+	recv := g.expr(plan.Recv)
+	switch g.typeOf(plan.Recv).(type) {
+	case *checker.Borrow, *checker.Pointer:
+	default:
+		recv = "&" + recv
 	}
-	return "(" + strings.Join(parts, ", ") + ")"
+	w := "(*" + wp + ")"
+	parts := []string{wp + " = " + recv}
+	vals := make([]string, len(plan.Args))
+	for i, a := range plan.Args {
+		vals[i] = g.temp(plan.ArgTypes[i])
+		parts = append(parts, vals[i]+" = "+g.expr(a))
+	}
+	hasSpec := false
+	for _, p := range plan.Parts {
+		hasSpec = hasSpec || p.Spec != nil
+	}
+	var restore []string
+	if hasSpec {
+		for _, f := range []string{"width", "zero", "prec", "base", "upper", "alt"} {
+			field := plan.Writer.Field(f)
+			t := g.temp(field.Type)
+			parts = append(parts, fmt.Sprintf("%s = %s.f_%s", t, w, f))
+			restore = append(restore, fmt.Sprintf("%s.f_%s = %s", w, f, t))
+		}
+	}
+	parts = append(parts, g.printParts(plan, w, vals)...)
+	parts = append(parts, restore...)
+	return "(" + strings.Join(parts, ", ") + ", (void)0)"
+}
+
+// writerInit zera os campos do Writer w, menos o buffer (um array): ele é
+// sempre escrito antes de ser lido (o flush só lê buf[:n]), e zerar os 256
+// bytes a cada io.printf custava mais que formatar um número.
+func writerInit(writer *checker.Struct, w string) []string {
+	var parts []string
+	for _, f := range writer.Fields {
+		if _, isArray := f.Type.(*checker.Array); isArray {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s.f_%s = %s", w, f.Name, zeroValue(f.Type)))
+	}
+	return parts
 }
 
 // specWrite escreve um valor com especificação ({:>8.2}): os campos do

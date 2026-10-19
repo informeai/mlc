@@ -167,6 +167,23 @@ Toda a formatação é MLC, em `std/io.mlc`: o `Writer`, a escrita de inteiros, 
 | `w.put_float(x float64)`, `w.put_f32(x float32)` | reais, no formato do Go |
 | `w.put_bool(b bool)` | `true` / `false` |
 | `w.flush()` | escreve o que está no buffer (também acontece quando ele enche) |
+| `w.printf("...", a, ...)` | o formato do `io.printf` (inclusive as especificações), escrito em `w`, sem criar outro Writer e sem `flush` |
+
+`w.printf` serve para dois casos:
+
+- **Laços que escrevem muito:** cada `io.printf` cria um Writer e o descarrega no fim, então a saída sai linha a linha (no terminal, uma chamada ao sistema por linha). Com um Writer reaproveitado, ela sai em blocos de 256 bytes:
+
+  ```
+  w := io.stdout()
+  for i := 0; i < 1000000; i++ {
+      w.printf("{:>7}\n", i)
+  }
+  w.flush()                       // o que sobrou no buffer
+  ```
+
+- **Métodos `write` próprios:** o `&io.Writer` do parâmetro aceita `w.printf`, então o formato fica legível: `fn (p &Price) write(w &io.Writer) { w.printf("R$ {}.{:02}", p.cents / 100, p.cents % 100) }`.
+
+O Writer precisa estar numa variável ou campo (ou ser um `&io.Writer` ou `*io.Writer`): um Writer temporário (`io.stdout().printf(...)`) perderia o que foi escrito e é recusado.
 
 Durante o `write` de um valor com especificação, os campos do Writer (`base`, `prec`, `zero`, `width`, `upper`, `alt`) fazem `put_int`, `put_uint` e `put_float` seguirem a especificação. Um `write` escrito à mão herda isso sem fazer nada. O alinhamento é feito em volta do `write` pelos métodos `measure`, `pad_before` e `pad_after`, também em MLC.
 

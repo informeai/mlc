@@ -38,15 +38,17 @@ type PrintPlan struct {
 	Fd       int      // 1: saída padrão; 2: erro padrão
 	Mode     int      // PrintFile, PrintSink (str.format) ou PrintCount (str.format_len)
 	Dst      ast.Expr // str.format: o destino (&[]byte)
+	Recv     ast.Expr // w.printf: o Writer (variável, &io.Writer ou *io.Writer)
 
 	// métodos do Writer usados com especificação ({:...})
 	SpecBegin, SpecEnd, Measure, PadBefore, PadAfter, PutBytes *Func
 }
 
 const (
-	PrintFile  = iota // io.print, io.printf: num arquivo
-	PrintSink         // str.format: no destino
-	PrintCount        // str.format_len: só conta
+	PrintFile   = iota // io.print, io.printf: num arquivo
+	PrintSink          // str.format: no destino
+	PrintCount         // str.format_len: só conta
+	PrintWriter        // w.printf: num Writer que já existe, sem flush no fim
 )
 
 // FormatSpec é a especificação de um {} do formato: {:[[fill]align][#][0][width][.prec][x|X|b|o|s]}.
@@ -92,6 +94,19 @@ func ioBuiltin(m *module, sel string) string {
 	return ""
 }
 
+// writerPrintf checa w.printf("...", a, ...): o formato do io.printf sobre
+// um Writer que já existe, sem flush no fim (quem chama faz w.flush()).
+func (c *checker) writerPrintf(e *ast.CallExpr, sel *ast.SelectorExpr, t Type) Type {
+	if !isBorrow(t) && !isPointerType(t) && !isPlace(sel.X) {
+		c.errorf(sel.X.Pos(), "w.printf escreve num Writer guardado numa variável ou campo (ou num &io.Writer): um Writer temporário perderia o que foi escrito")
+		c.checkArgs(e)
+		return Void
+	}
+	c.printRecv = sel.X
+	defer func() { c.printRecv = nil }()
+	return c.ioPrint(e, "wprintf")
+}
+
 // ioPrint checa io.print(a, b, ...), io.printf("...", a, b, ...),
 // str.format(&dst, "...", a, ...) e str.format_len("...", a, ...).
 func (c *checker) ioPrint(e *ast.CallExpr, kind string) Type {
@@ -109,6 +124,8 @@ func (c *checker) ioPrint(e *ast.CallExpr, kind string) Type {
 		plan.Mode, name, result = PrintSink, "str.format", Int
 	case "format_len":
 		plan.Mode, name, result = PrintCount, "str.format_len", Int
+	case "wprintf":
+		plan.Mode, plan.Recv, name = PrintWriter, c.printRecv, "Writer.printf"
 	}
 	args := e.Args
 	if kind == "format" {

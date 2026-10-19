@@ -127,3 +127,54 @@ fn bench_format(b &testing.B) {
         str.format(&out, "{} {:.2} {:>8} {:x}", i, 3.14159, "texto", 255)
     }
 }
+
+struct Price {
+    cents int
+}
+
+// um write escrito com w.printf
+fn (p &Price) write(w &io.Writer) {
+    w.printf("R$ {}.{:02}", p.cents / 100, p.cents % 100)
+}
+
+impl io.Display for Price
+
+fn test_writer_printf_inside_write() {
+    b := alloc([]byte, 64)
+    n := str.format(&b, "[{}] [{:>12}] [{:<11}] {:x}", Price{cents: 1205}, Price{cents: 99}, Price{cents: 100000}, 255)
+    testing.eq_str(&b[:n], "[R$ 12.05] [     R$ 0.99] [R$ 1000.00 ] ff")
+    free(b)
+}
+
+struct Pair {
+    a int
+    b int
+}
+
+// especificações dentro do write, com o alinhamento de fora em volta
+fn (p &Pair) write(w &io.Writer) {
+    w.printf("<{:x}|{:04}>", p.a, p.b)
+    w.put_int(p.a) // depois do w.printf, os números voltam ao normal
+}
+
+impl io.Display for Pair
+
+fn test_writer_printf_with_specs_inside() {
+    b := alloc([]byte, 64)
+    n := str.format(&b, "[{:>16}] [{}]", Pair{a: 255, b: 7}, Pair{a: 10, b: 12345})
+    testing.eq_str(&b[:n], "[    <ff|0007>255] [<a|12345>10]")
+    free(b)
+}
+
+fn test_fast_put_int_edges() {
+    b := alloc([]byte, 128)
+    n := str.format(&b, "{} {} {} {} {} {}", 0, 9, 10, 99, 100, -1)
+    testing.eq_str(&b[:n], "0 9 10 99 100 -1")
+    n = str.format(&b, "{} {}", 9223372036854775807, -9223372036854775807 - 1)
+    testing.eq_str(&b[:n], "9223372036854775807 -9223372036854775808")
+    n = str.format(&b, "{} {}", uint64(18446744073709551615), uint64(0))
+    testing.eq_str(&b[:n], "18446744073709551615 0")
+    n = str.format(&b, "{:>6} {:<5}|", -42, 7)
+    testing.eq_str(&b[:n], "   -42 7    |")
+    free(b)
+}

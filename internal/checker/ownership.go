@@ -1069,6 +1069,9 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 		if plan := o.c.info.Prints[e]; plan != nil && plan.Dst != nil {
 			o.formatAlias(plan)
 		}
+		if plan := o.c.info.Prints[e]; plan != nil && plan.Recv != nil {
+			o.read(plan.Recv) // o Writer de w.printf
+		}
 		return
 	}
 

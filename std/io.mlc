@@ -110,10 +110,90 @@ pub fn (w &Writer) put_str(s string) {
     }
 }
 
-// put_int escreve n em decimal (ou na base da especificação). Os dígitos
-// são tirados com n negativo, para o menor int (que não tem positivo
-// correspondente) funcionar também.
+// PAIRS tem os pares de dígitos de 00 a 99: o put_int rápido escreve dois
+// dígitos por divisão.
+const PAIRS = "00010203040506070809101112131415161718192021222324252627282930313233343536373839404142434445464748495051525354555657585960616263646566676869707172737475767778798081828384858687888990919293949596979899"
+
+// put_int escreve n em decimal (ou na base da especificação).
 pub fn (w &Writer) put_int(n int) {
+    if w.base != 0 || w.zero || w.alt {
+        w.put_int_spec(n)
+        return
+    }
+    // a magnitude sem sinal, sem estourar no menor int (que não tem positivo)
+    var u uint64 = 0
+    if n < 0 {
+        u = uint64(-(n + 1)) + 1
+    } else {
+        u = uint64(n)
+    }
+    var d [20]byte
+    k := decimal(&d, u)
+    if n < 0 {
+        k--
+        d[k] = '-'
+    }
+    w.put_ascii(&d[k:])
+}
+
+pub fn (w &Writer) put_uint(n uint64) {
+    if w.base != 0 || w.zero || w.alt {
+        w.put_uint_spec(n)
+        return
+    }
+    var d [20]byte
+    k := decimal(&d, n)
+    w.put_ascii(&d[k:])
+}
+
+// decimal escreve u em decimal no fim de d (20 posições bastam para
+// qualquer uint64) e devolve onde os dígitos começam. Divide por 100, uma
+// constante (que o compilador C troca por uma multiplicação), e escreve dois
+// dígitos por vez.
+fn decimal(d &[]byte, u uint64) int {
+    k := len(d)
+    for u >= 100 {
+        q := u / 100
+        r := int(u -% q *% 100) * 2
+        k -= 2
+        d[k] = PAIRS[r]
+        d[k + 1] = PAIRS[r + 1]
+        u = q
+    }
+    if u >= 10 {
+        r := int(u) * 2
+        k -= 2
+        d[k] = PAIRS[r]
+        d[k + 1] = PAIRS[r + 1]
+    } else {
+        k--
+        d[k] = byte(int('0') + int(u))
+    }
+    return k
+}
+
+// put_ascii escreve bytes ASCII (os dígitos e o sinal de um número): sem
+// bytes de continuação de UTF-8, cada byte é um caractere, e a cópia vai
+// direto para o buffer quando cabe.
+fn (w &Writer) put_ascii(b &[]byte) {
+    if w.n + len(b) > len(w.buf) {
+        w.flush()
+        if len(b) > len(w.buf) {
+            w.put_bytes(b)
+            return
+        }
+    }
+    for i := 0; i < len(b); i++ {
+        w.buf[w.n + i] = b[i]
+    }
+    w.n += len(b)
+    w.total += len(b)
+    w.chars += len(b)
+}
+
+// put_int_spec escreve n com a especificação ({:x}, {:08}, {:#b}). Os
+// dígitos são tirados com n negativo, para o menor int funcionar também.
+fn (w &Writer) put_int_spec(n int) {
     neg := n < 0
     if !neg {
         n = -n
@@ -132,7 +212,7 @@ pub fn (w &Writer) put_int(n int) {
     w.put_number(neg, &d[k:])
 }
 
-pub fn (w &Writer) put_uint(n uint64) {
+fn (w &Writer) put_uint_spec(n uint64) {
     base := uint64(w.radix())
     var d [64]byte
     k := len(d)

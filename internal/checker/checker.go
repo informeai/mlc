@@ -195,6 +195,7 @@ type checker struct {
 	chans       map[chanKey]*Struct
 	mutexes     map[mutexKey]*Struct
 	inExternC   bool           // resolvendo a assinatura de uma extern "C" fn (aceita &?*X)
+	printRecv   ast.Expr       // w.printf: o Writer, enquanto ioPrint checa a chamada
 	probes      map[*Func]bool // instâncias de verificação de posse (T owned = []byte)
 	probing     bool           // checando uma delas
 	muted       bool           // erros silenciados (tipos de uma instância de verificação)

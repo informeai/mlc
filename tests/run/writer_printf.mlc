@@ -1,0 +1,25 @@
+import "std/io"
+
+// w.printf: o formato do io.printf sobre um Writer reaproveitado, sem
+// flush a cada chamada
+fn table(w &io.Writer, n int) {
+    for i := 1; i <= n; i++ {
+        w.printf("{:>3} | {:>5} | {:#06x}\n", i, i * i, i * 100) // num &io.Writer recebido
+    }
+}
+
+fn main() {
+    w := io.stdout()
+    w.printf("{:>3} | {:>5} | {}\n", "n", "n²", "hex")
+    table(&w, 4)
+    w.flush()
+
+    e := io.stderr()
+    e.printf("aviso: {}\n", 1)
+    e.flush()
+
+    p := alloc(io.stdout()) // num *io.Writer
+    p.printf("{:.2}\n", 3.14159)
+    p.flush()
+    free(p)
+}

@@ -75,6 +75,7 @@ str.format(&linha, "{} itens, R$ {:.2}", qtd, total)
 
 - O formato e os valores seguem as regras do `io.printf`, inclusive as especificações (abaixo) e os tipos com `io.Display`: um `write` escrito para o `io.printf` também serve para o `str.format`.
 - Para continuar escrevendo depois do que já está no buffer: `k += str.format(&buf[k:], "...", x)`.
+- Para escrever muito na saída (um laço com milhares de linhas), reaproveite um `io.Writer` com `w.printf(...)` em vez de chamar `io.printf` a cada linha. Veja [interfaces.md](interfaces.md#iowriter).
 - `dst` não pode ser também um dos valores (`str.format(&b, "{}", b)` é erro), porque o texto seria lido enquanto é sobrescrito.
 - Nada aloca. O texto passa por um `io.Writer` com buffer na pilha, que o entrega a `dst`. O `Writer` não guarda `dst`: ele guarda um índice de destino que o runtime confere, e esse destino só existe durante o `str.format`. Por isso não há um `Writer` sobre `[]byte` que se possa guardar numa variável: isso precisaria de empréstimos guardados em structs, item 8 do roteiro.
 

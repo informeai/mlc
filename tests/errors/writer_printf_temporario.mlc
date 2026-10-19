@@ -1,0 +1,6 @@
+// erro: w.printf escreve num Writer guardado numa variável ou campo
+import "std/io"
+
+fn main() {
+    io.stdout().printf("x")
+}
