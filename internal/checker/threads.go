@@ -113,6 +113,7 @@ func (c *checker) threadSpawn(e *ast.CallExpr) Type {
 		c.valueAs(e.Args[1], ctx, "o contexto de thread.spawn")
 	}
 	c.valueAs(e.Args[2], Int, "o tamanho da pilha de thread.spawn")
+	c.spawnSites = append(c.spawnSites, spawnSite{e, c.mod})
 	c.info.Spawns[e] = &SpawnPlan{Fn: ft, Ctx: ctx, Result: ft.Result}
 	c.info.Calls[e] = Callee{Builtin: ThreadSpawn}
 	return c.pointerTo(c.threadType(ft.Result), false)

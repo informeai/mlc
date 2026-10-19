@@ -1,0 +1,19 @@
+// erro: a thread de work precisa de cerca de 489 KB de pilha, e thread.spawn pede 64 KB (o maior peso é a variável body [500000]byte (489 KB) em fill): ponha o buffer no heap com alloc([]byte, 500000), ou peça uma pilha maior (thread.STACK_1MB)
+import "std/thread"
+
+fn fill(n int) int {
+    var body [500000]byte
+    for i := 0; i < len(body); i++ {
+        body[i] = byte(i % 7)
+    }
+    return int(body[n])
+}
+
+fn work(n int) int {
+    return fill(n)
+}
+
+fn main() {
+    t := thread.spawn(work, 3, thread.STACK_64KB)
+    thread.join(t)
+}

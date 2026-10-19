@@ -1,0 +1,1 @@
+panic: pilha_thread.mlc:4: estouro de pilha: o quadro da função (cerca de 489 KB) não cabe no que resta da pilha desta thread (peça uma pilha maior no thread.spawn, ou ponha os buffers grandes no heap com alloc)

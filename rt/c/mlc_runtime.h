@@ -25,6 +25,7 @@ typedef struct {
 /* Funções geradas que podem não ser chamadas (instâncias de verificação de
  * genéricos, métodos de biblioteca sem uso). */
 #define MLC_MAYBE_UNUSED __attribute__((unused))
+#define MLC_NOINLINE __attribute__((noinline))
 
 /* Nome de um símbolo de C para rótulos de assembly (extern "C" fn): no macOS
  * os símbolos têm um _ na frente, que __USER_LABEL_PREFIX__ informa. */
@@ -55,6 +56,22 @@ static inline void *mlc_nonnull(void *p, const char *file, int line) {
 
 /* Chamada através de um valor fn que ficou com o valor zero. */
 _Noreturn void mlc_null_fn(const char *file, int line);
+
+/* Pilha. mlc_stack_low é o endereço mais baixo que a thread pode usar: o fim
+ * da pilha mais uma reserva, para o que o C usa além das variáveis do MLC e
+ * para o panic. Vale 0 numa thread criada fora do MLC (um callback de C),
+ * que fica sem conferência. Antes de entrar numa função de quadro grande, o
+ * código gerado confere se o quadro cabe no que resta: se não couber, dá
+ * panic em vez de pular a página de guarda e escrever em memória alheia. */
+extern _Thread_local uintptr_t mlc_stack_low;
+void mlc_stack_init(void);
+_Noreturn void mlc_stack_overflow(int64_t need, const char *file, int line);
+static inline void mlc_stack_need(int64_t need, const char *file, int line) {
+    uintptr_t sp = (uintptr_t)__builtin_frame_address(0);
+    if (mlc_stack_low != 0 && (sp < mlc_stack_low || sp - mlc_stack_low < (uintptr_t)need))
+        mlc_stack_overflow(need, file, line);
+}
+#define MLC_STACK_NEED(n) mlc_stack_need((n), __FILE__, __LINE__)
 
 /* Memória. mlc_alloc devolve memória zerada e dá panic se faltar memória,
  * então um ponteiro *T nunca é nulo. O contador de alocações vivas é uma

@@ -1,0 +1,15 @@
+import "std/io"
+import "std/thread"
+
+fn work(n int) int {
+    var body [500000]byte
+    body[n] = 1
+    return int(body[n])
+}
+
+fn main() {
+    // o tamanho vem de uma conta: o checker não confere, o runtime sim
+    stack := thread.STACK_64KB
+    t := thread.spawn(work, 3, stack * 1)
+    io.printf("{}\n", thread.join(t))
+}

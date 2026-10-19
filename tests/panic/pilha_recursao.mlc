@@ -1,0 +1,17 @@
+import "std/io"
+
+// Cada chamada põe 4000 bytes na pilha: a recursão funda para com panic
+// antes de passar da página de guarda, em vez de escrever em memória alheia.
+fn deep(n int) int {
+    var buf [4000]byte
+    buf[n % 4000] = byte(n % 256)
+    if n == 0 {
+        return 0
+    }
+    return deep(n - 1) + int(buf[n % 4000])
+}
+
+fn main() {
+    io.printf("{}\n", deep(100))
+    io.printf("{}\n", deep(100000000))
+}

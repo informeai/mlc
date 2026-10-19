@@ -81,6 +81,9 @@ type Func struct {
 	// BorrowFrom: numa função que devolve &T, o parâmetro (1 + índice) de onde
 	// o empréstimo vem; 0 se não devolve empréstimo
 	BorrowFrom int
+	// Frame: o quadro estimado da função na pilha, em bytes (stack.go)
+	Frame    int64
+	frameTop *stackItem
 }
 
 type Builtin int
@@ -194,6 +197,7 @@ type checker struct {
 	outHandles  map[*Pointer]*OutHandle
 	optArgs     map[Type]*OptArg
 	threads     map[Type]*Struct // thread.Thread[R], por R
+	spawnSites  []spawnSite      // os thread.spawn, para conferir a pilha
 	chans       map[chanKey]*Struct
 	mutexes     map[mutexKey]*Struct
 	inExternC   bool           // resolvendo a assinatura de uma extern "C" fn (aceita &?*X)
@@ -328,6 +332,9 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 			}
 		}
 		c.probing, c.instName = false, ""
+	}
+	if len(c.errs) == 0 {
+		c.checkStacks()
 	}
 	// Erros na ordem dos arquivos e, dentro de cada um, na ordem do código.
 	sort.SliceStable(c.errs, func(i, j int) bool {

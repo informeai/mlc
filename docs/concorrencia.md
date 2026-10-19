@@ -49,6 +49,7 @@ fn main() {
 - **Toda thread tem dono.** O handle precisa ir para `thread.join`, e esquecer é vazamento detectado na compilação, como um `free` esquecido. Ele não aceita `free` nem `alloc`, e não entra num `Vec` genérico (o `drop` não saberia esperar a thread). Para várias threads, use um slice `[]?*thread.Thread[R]` com `replace` e `drain`.
 - **O resultado volta por posse.** Se `R` é dono (`[]byte`, `*T`), quem chama o `join` passa a ser dono dele e precisa liberá-lo.
 - **A pilha é escolhida por quem cria a thread**, em bytes (pelo menos 16 KB). É memória, e quem programa deve saber quanto usa.
+- **A pilha é conferida.** Na compilação, o checker estima a pilha da função da thread (as variáveis locais, os parâmetros e os valores grandes de cada função, mais a maior pilha entre as funções que ela chama) e recusa um `spawn` que não cabe no tamanho pedido, dizendo qual variável pesa mais e que constante usar. Recursão, chamadas por valor `fn` e tamanhos calculados ficam para a conferência em execução: antes de entrar numa função de quadro grande, o C gerado confere se ele cabe no que resta da pilha e, se não couber, dá panic. Um buffer grande nunca pula a página de guarda para escrever em memória de outra thread. Veja [memoria.md](memoria.md#pilha).
 - **Um panic em qualquer thread encerra o programa inteiro**, com a mesma mensagem e o mesmo código de saída de um panic comum.
 
 ### Várias threads

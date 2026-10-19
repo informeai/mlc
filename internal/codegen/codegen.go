@@ -174,6 +174,10 @@ func cType(t checker.Type) string {
 }
 
 func signature(fn *checker.Func) string {
+	return signatureNamed(fn, fn.CName)
+}
+
+func signatureNamed(fn *checker.Func, name string) string {
 	params := make([]string, len(fn.Params))
 	for i, p := range fn.Params {
 		params[i] = cType(p.Type) + " l_" + p.Name
@@ -182,7 +186,7 @@ func signature(fn *checker.Func) string {
 	if len(params) > 0 {
 		list = strings.Join(params, ", ")
 	}
-	return fmt.Sprintf("%s %s(%s)", cType(fn.Result), fn.CName, list)
+	return fmt.Sprintf("%s %s(%s)", cType(fn.Result), name, list)
 }
 
 func (g *gen) function(fn *checker.Func) {
@@ -199,13 +203,38 @@ func (g *gen) function(fn *checker.Func) {
 	g.indent--
 	g.buf = outer
 
+	big := fn.Frame >= checker.BigFrame
 	g.lineDirective(fn.Decl.P)
-	g.raw("static %s {\n", signature(fn))
+	if big {
+		g.raw("static MLC_NOINLINE %s {\n", signatureNamed(fn, fn.CName+"__frame"))
+	} else {
+		g.raw("static %s {\n", signature(fn))
+	}
 	for _, t := range g.temps {
 		g.raw("    %s;\n", t)
 	}
 	g.buf.WriteString(body.String())
 	g.raw("}\n\n")
+	if big {
+		g.frameCheck(fn)
+	}
+}
+
+// frameCheck gera a função de entrada de uma função de quadro grande: ela
+// confere se o quadro cabe no que resta da pilha (o quadro estimado pelo
+// checker, mais a reserva do runtime) e só então chama o corpo, que não é
+// inlined para que o quadro grande só exista depois da conferência.
+func (g *gen) frameCheck(fn *checker.Func) {
+	args := make([]string, len(fn.Params))
+	for i, p := range fn.Params {
+		args[i] = "l_" + p.Name
+	}
+	call := fmt.Sprintf("%s__frame(%s)", fn.CName, strings.Join(args, ", "))
+	if fn.Result != checker.Void {
+		call = "return " + call
+	}
+	g.lineDirective(fn.Decl.P)
+	g.raw("static %s { MLC_STACK_NEED(%d); %s; }\n\n", signature(fn), fn.Frame, call) // numa linha: o panic aponta para a declaração
 }
 
 func (g *gen) block(b *ast.Block) {

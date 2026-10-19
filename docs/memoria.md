@@ -34,7 +34,7 @@ struct No {                    // campo dono: a lista é dona do próximo nó
 
 ## Memória sem heap: arrays
 
-Um array `[N]T` tem tamanho fixo, conhecido na compilação, e é um valor: vive na pilha (ou dentro de uma struct) e some quando o escopo termina, sem `alloc` nem `free`. É a forma mais explícita de memória: o tipo diz exatamente quantos bytes ocupa. Para não estourar a pilha, um array tem no máximo 1 MiB; para mais, use um slice.
+Um array `[N]T` tem tamanho fixo, conhecido na compilação, e é um valor: vive na pilha (ou dentro de uma struct) e some quando o escopo termina, sem `alloc` nem `free`. É a forma mais explícita de memória: o tipo diz exatamente quantos bytes ocupa. Para não estourar a pilha, um array tem no máximo 1 MiB; para mais, use um slice. A soma das variáveis de cada thread também é conferida contra a pilha dela (veja [Pilha](#pilha)).
 
 ## Slices
 
@@ -249,12 +249,29 @@ O runtime conta as alocações vivas. No fim do `main`, se sobrou alguma, o prog
 | vazamento de memória | dono vivo ao sair do escopo; `free` exige campos liberados | compilação |
 | ponteiro nulo | `*T` nunca é nulo; `?*T` exige checagem, acompanhada pelo fluxo | compilação |
 | ponteiro pendente para a pilha | empréstimo não pode ser guardado | compilação |
+| estouro de pilha (quadro que pula a página de guarda) | pilha estimada contra o `thread.spawn` e o `main`; quadro grande conferido ao entrar | compilação e execução (panic) |
 | variável não inicializada | valor zero obrigatório | compilação |
 | estouro de inteiro com sinal | `__builtin_*_overflow` | execução (panic) |
 | divisão por zero | checagem antes de dividir | execução (panic) |
 | ordem de avaliação indefinida | esquerda para a direita, escrita no C gerado | compilação |
 | string de formato (`printf`) | formato de `io.printf` conferido contra os valores; cada um escrito pelo seu `io.Display` | compilação |
 | buffer overflow | checagem de limites em slices e strings | execução (panic) |
+
+## Pilha
+
+Arrays e structs com arrays vivem na pilha, e a pilha também é memória com tamanho conhecido: 8 MB na thread principal e o valor escrito no `thread.spawn` nas outras. No C, uma função cujo quadro é maior que o resto da pilha não falha na entrada: o quadro pula a página de guarda, e as escritas caem na memória de outra coisa (a pilha de outra thread, o heap). O MLC fecha essa porta em duas camadas:
+
+- **Na compilação**, o checker estima a pilha de cada função: o quadro (parâmetros, variáveis locais e os valores grandes que o C guarda em temporárias) mais a maior pilha entre as funções que ela chama direto. Um `thread.spawn` com tamanho constante, o `main` e os testes são conferidos contra a pilha que terão, menos uma reserva (1/8 da pilha, entre 4 KB e 32 KB) para o que o C usa além das variáveis e para o panic:
+
+  ```text
+  a thread de work precisa de cerca de 489 KB de pilha, e thread.spawn pede 64 KB
+  (o maior peso é a variável body [500000]byte (489 KB) em fill): ponha o buffer
+  no heap com alloc([]byte, 500000), ou peça uma pilha maior (thread.STACK_1MB)
+  ```
+
+- **Na execução**, toda função com quadro estimado a partir de 2 KB ganha uma entrada que confere, antes de o quadro existir, se ele cabe no que resta da pilha da thread. Se não couber, dá panic apontando a função. Isso cobre o que a compilação não alcança: recursão (a profundidade depende dos dados), chamadas por valor `fn` e um tamanho de pilha calculado. Funções de quadro pequeno não pagam nada: um estouro delas sempre cai na página de guarda.
+
+A estimativa é a soma das variáveis, como se todas vivessem ao mesmo tempo, então tende a sobrar. A conferência em execução usa a mesma estimativa e a pilha real da thread (`pthread_get_stackaddr_np` no macOS, `pthread_getattr_np` no Linux). Uma thread criada por código C (um callback) fica sem conferência.
 
 ## O que o MLC não garante
 

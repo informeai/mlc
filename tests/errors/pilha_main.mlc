@@ -1,0 +1,34 @@
+// erro: main precisa de cerca de 8,6 MB de pilha, e a thread principal tem 8 MB
+fn a(n int) int {
+    var x [1000000]byte
+    x[n] = 1
+    return b(n) + int(x[n])
+}
+
+fn b(n int) int {
+    var y [1000000]byte
+    var z [1000000]byte
+    var w [1000000]byte
+    y[n] = 1
+    z[n] = 1
+    w[n] = 1
+    return c(n) + int(y[n]) + int(z[n]) + int(w[n])
+}
+
+fn c(n int) int {
+    var p [1000000]byte
+    var q [1000000]byte
+    var r [1000000]byte
+    var s [1000000]byte
+    var t [1000000]byte
+    p[n] = 1
+    q[n] = 1
+    r[n] = 1
+    s[n] = 1
+    t[n] = 1
+    return int(p[n]) + int(q[n]) + int(r[n]) + int(s[n]) + int(t[n])
+}
+
+fn main() {
+    a(1)
+}

@@ -3,6 +3,7 @@
 #define _POSIX_C_SOURCE 200809L
 #define _DEFAULT_SOURCE
 #define _DARWIN_C_SOURCE
+#define _GNU_SOURCE /* pthread_getattr_np, para achar a pilha no Linux */
 
 #include "mlc_runtime.h"
 
@@ -265,6 +266,7 @@ static int mlc_argc;
 static char **mlc_argv;
 
 void mlc_args_init(int argc, char **argv) {
+    mlc_stack_init(); /* chamada no começo do main: a pilha da thread principal */
     mlc_argc = argc;
     mlc_argv = argv;
 }
@@ -825,6 +827,44 @@ void mlc_null_fn(const char *file, int line) {
     mlc_panic(file, line, "chamada de um valor fn nulo (o valor zero de um fn: a variável ou o campo não recebeu uma função)");
 }
 
+_Thread_local uintptr_t mlc_stack_low = 0;
+
+/* mlc_stack_init descobre a pilha da thread atual. A reserva é a mesma conta
+ * do checker (checker.StackReserve): 1/8 da pilha, entre 4 KB e 32 KB. */
+void mlc_stack_init(void) {
+    uintptr_t low = 0, size = 0;
+#if defined(__APPLE__)
+    pthread_t self = pthread_self();
+    size = (uintptr_t)pthread_get_stacksize_np(self);
+    low = (uintptr_t)pthread_get_stackaddr_np(self) - size; /* o endereço é o topo */
+#elif defined(__linux__)
+    pthread_attr_t attr;
+    if (pthread_getattr_np(pthread_self(), &attr) == 0) {
+        void *addr;
+        size_t n;
+        if (pthread_attr_getstack(&attr, &addr, &n) == 0) {
+            low = (uintptr_t)addr;
+            size = n;
+        }
+        pthread_attr_destroy(&attr);
+    }
+#endif
+    if (size == 0) return; /* sistema desconhecido: sem conferência */
+    uintptr_t reserve = size / 8;
+    if (reserve < 4096) reserve = 4096;
+    if (reserve > 32768) reserve = 32768;
+    mlc_stack_low = low + reserve;
+}
+
+void mlc_stack_overflow(int64_t need, const char *file, int line) {
+    char msg[256];
+    snprintf(msg, sizeof msg,
+             "estouro de pilha: o quadro da função (cerca de %" PRId64
+             " KB) não cabe no que resta da pilha desta thread (peça uma pilha maior no thread.spawn, ou ponha os buffers grandes no heap com alloc)",
+             (need + 1023) / 1024);
+    mlc_panic(file, line, msg);
+}
+
 /* std/map */
 void mlc_std_map_fail(mlc_str msg, const char *file, int line) {
     mlc_std_vec_fail(msg, file, line);
@@ -978,6 +1018,7 @@ void mlc_std_testing_expect_panic(const char *file, int line) {
 
 static void *mlc_thread_entry(void *p) {
     mlc_thread *t = p;
+    mlc_stack_init();
     t->run(t);
     t->done = 1;
     return NULL;
