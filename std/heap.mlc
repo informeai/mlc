@@ -1,0 +1,180 @@
+// Fila de prioridade: pop devolve sempre o menor elemento (ou o maior, com
+// new_max), em O(log n). É um heap binário num slice, e a alocação está
+// visível aqui como no vec: new aloca, push chama grow quando falta espaço,
+// e grow dobra a capacidade com realloc.
+//
+// A ordem é a de cmp.Ord: números, string, slices e structs com impl cmp.Ord
+// (escrito à mão, para ordenar por um campo, ou impl auto). Os elementos
+// podem ser donos: push move o valor para dentro, pop devolve a posse, e
+// free libera cada elemento (drop) e o heap.
+//
+//     struct Timer {
+//         due int
+//         id int
+//     }
+//     fn (t &Timer) cmp(o &Timer) int {
+//         return t.due.cmp(&o.due)
+//     }
+//     impl cmp.Ord for Timer
+//
+//     timers := heap.new[Timer](16)
+//     timers.push(Timer{due: 30, id: 1})
+//     timers.push(Timer{due: 10, id: 2})
+//     next := timers.pop()            // o de due 10
+//     timers.free()
+//
+// Elementos equivalentes (cmp == 0) saem em qualquer ordem entre si: para
+// desempatar, compare mais um campo (um contador de chegada, por exemplo).
+//
+// Para itens com donos (um Job com nome alocado), o heap guarda só a chave
+// e o índice (Timer acima, com id sendo a posição num vec.Vec[?*Job]): um
+// ponteiro ?*Job não implementa cmp.Ord nesta versão.
+import "std/cmp"
+
+pub struct Heap[T owned + cmp.Ord] {
+    items []T
+    count int
+    max bool // true: o maior sai primeiro
+}
+
+extern fn fail(msg string)
+
+// new cria um heap em que o menor elemento sai primeiro.
+pub fn new[T owned + cmp.Ord](cap int) *Heap[T] {
+    return alloc(Heap[T]{items: alloc([]T, cap), count: 0, max: false})
+}
+
+// new_max cria um heap em que o maior elemento sai primeiro.
+pub fn new_max[T owned + cmp.Ord](cap int) *Heap[T] {
+    return alloc(Heap[T]{items: alloc([]T, cap), count: 0, max: true})
+}
+
+// push põe x no heap (x é movido para dentro).
+pub fn (h &Heap[T]) push(x T) {
+    if h.count == len(h.items) {
+        h.grow()
+    }
+    old := replace(&h.items[h.count], x)
+    drop(old) // a posição depois do fim estava vazia
+    h.count++
+    h.up(h.count - 1)
+}
+
+// pop tira o primeiro elemento (o menor, ou o maior com new_max) e devolve
+// a posse dele.
+pub fn (h &Heap[T]) pop() T {
+    if h.count == 0 {
+        fail("heap.pop: heap vazio")
+    }
+    h.count--
+    h.swap(0, h.count)
+    x := take(&h.items[h.count])
+    h.down(0)
+    return x
+}
+
+// replace_top troca o primeiro elemento por x e devolve o antigo: o mesmo
+// que pop seguido de push, numa passada só. É o passo de um top-K: com um
+// heap dos K maiores (new, o menor no topo), cada valor maior que o topo
+// entra no lugar dele.
+pub fn (h &Heap[T]) replace_top(x T) T {
+    if h.count == 0 {
+        fail("heap.replace_top: heap vazio")
+    }
+    old := replace(&h.items[0], x)
+    h.down(0)
+    return old
+}
+
+// peek empresta o primeiro elemento, sem tirá-lo. Enquanto o empréstimo é
+// usado, o heap fica congelado.
+pub fn (h &Heap[T]) peek() &T {
+    if h.count == 0 {
+        fail("heap.peek: heap vazio")
+    }
+    return &h.items[0]
+}
+
+pub fn (h &Heap[T]) len() int {
+    return h.count
+}
+
+pub fn (h &Heap[T]) cap() int {
+    return len(h.items)
+}
+
+// grow dobra a capacidade (realloc).
+pub fn (h &Heap[T]) grow() {
+    h.items = realloc(h.items, len(h.items) * 2 + 1)
+}
+
+// clear libera os elementos (drop) e deixa o heap vazio, com a mesma
+// capacidade.
+pub fn (h &Heap[T]) clear() {
+    for i := 0; i < h.count; i++ {
+        x := take(&h.items[i])
+        drop(x)
+    }
+    h.count = 0
+}
+
+// free libera cada elemento (drop) e o heap.
+pub fn (h *Heap[T]) free() {
+    for x in drain(h.items) {
+        drop(x)
+    }
+    free(h.items)
+    free(h)
+}
+
+// before diz se o elemento i deve sair antes do j.
+fn (h &Heap[T]) before(i int, j int) bool {
+    c := h.items[i].cmp(&h.items[j])
+    if h.max {
+        return c > 0
+    }
+    return c < 0
+}
+
+// up sobe o elemento i enquanto ele deve sair antes do pai.
+fn (h &Heap[T]) up(i int) {
+    for i > 0 {
+        parent := (i - 1) / 2
+        if !h.before(i, parent) {
+            return
+        }
+        h.swap(i, parent)
+        i = parent
+    }
+}
+
+// down desce o elemento i enquanto um dos filhos deve sair antes dele.
+fn (h &Heap[T]) down(i int) {
+    for {
+        first := i
+        l := 2 * i + 1
+        r := l + 1
+        if l < h.count && h.before(l, first) {
+            first = l
+        }
+        if r < h.count && h.before(r, first) {
+            first = r
+        }
+        if first == i {
+            return
+        }
+        h.swap(i, first)
+        i = first
+    }
+}
+
+// swap troca os elementos i e j, por posse.
+fn (h &Heap[T]) swap(i int, j int) {
+    if i == j {
+        return
+    }
+    a := take(&h.items[i])
+    b := replace(&h.items[j], a)
+    old := replace(&h.items[i], b)
+    drop(old) // o zero deixado pelo take
+}

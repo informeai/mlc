@@ -1,0 +1,153 @@
+// Fila com as duas pontas rápidas: push e pop no começo e no fim em O(1).
+// Por baixo é um buffer circular, e a alocação está visível aqui como no
+// vec: new aloca, os push chamam grow quando falta espaço, e grow dobra a
+// capacidade com realloc.
+//
+// Os elementos podem ser donos (T owned: ?*X ou []X): push move o valor para
+// dentro, pop devolve a posse, e free libera cada elemento (drop) e a fila.
+//
+//     q := deque.new[int](16)
+//     q.push_back(1)              // fila: tira do começo, põe no fim
+//     q.push_back(2)
+//     x := q.pop_front()          // 1
+//     q.free()
+//
+// Para guardar só os últimos N, tire o mais antigo antes de pôr:
+//
+//     if hist.len() == N {
+//         old := hist.pop_front()
+//         drop(old)
+//     }
+//     hist.push_back(line)
+
+pub struct Deque[T owned] {
+    items []T // buffer circular: os elementos vão de head, count posições
+    head int
+    count int
+}
+
+extern fn fail(msg string)
+
+pub fn new[T owned](cap int) *Deque[T] {
+    return alloc(Deque[T]{items: alloc([]T, cap), head: 0, count: 0})
+}
+
+// push_back põe x no fim (x é movido para a fila).
+pub fn (q &Deque[T]) push_back(x T) {
+    if q.count == len(q.items) {
+        q.grow()
+    }
+    old := replace(&q.items[q.slot(q.count)], x)
+    drop(old) // a posição depois do fim estava vazia
+    q.count++
+}
+
+// push_front põe x no começo.
+pub fn (q &Deque[T]) push_front(x T) {
+    if q.count == len(q.items) {
+        q.grow()
+    }
+    q.head = (q.head - 1 + len(q.items)) % len(q.items)
+    old := replace(&q.items[q.head], x)
+    drop(old)
+    q.count++
+}
+
+// pop_front tira o primeiro elemento e devolve a posse dele.
+pub fn (q &Deque[T]) pop_front() T {
+    if q.count == 0 {
+        fail("deque.pop_front: fila vazia")
+    }
+    x := take(&q.items[q.head])
+    q.head = (q.head + 1) % len(q.items)
+    q.count--
+    return x
+}
+
+// pop_back tira o último elemento e devolve a posse dele.
+pub fn (q &Deque[T]) pop_back() T {
+    if q.count == 0 {
+        fail("deque.pop_back: fila vazia")
+    }
+    q.count--
+    return take(&q.items[q.slot(q.count)])
+}
+
+// front empresta o primeiro elemento, sem tirá-lo. Enquanto o empréstimo é
+// usado, a fila fica congelada.
+pub fn (q &Deque[T]) front() &T {
+    if q.count == 0 {
+        fail("deque.front: fila vazia")
+    }
+    return &q.items[q.head]
+}
+
+// back empresta o último elemento.
+pub fn (q &Deque[T]) back() &T {
+    if q.count == 0 {
+        fail("deque.back: fila vazia")
+    }
+    return &q.items[q.slot(q.count - 1)]
+}
+
+// at empresta o elemento i (0 é o primeiro).
+pub fn (q &Deque[T]) at(i int) &T {
+    if i < 0 || i >= q.count {
+        fail("deque.at: índice fora da fila")
+    }
+    return &q.items[q.slot(i)]
+}
+
+// get devolve uma cópia do elemento i (só para T copiável).
+pub fn (q &Deque[T any]) get(i int) T {
+    if i < 0 || i >= q.count {
+        fail("deque.get: índice fora da fila")
+    }
+    return q.items[q.slot(i)]
+}
+
+pub fn (q &Deque[T]) len() int {
+    return q.count
+}
+
+pub fn (q &Deque[T]) cap() int {
+    return len(q.items)
+}
+
+// grow dobra a capacidade (realloc). Se os elementos davam a volta no fim
+// do buffer, a parte do começo vai para depois do fim antigo, por posse.
+pub fn (q &Deque[T]) grow() {
+    c := len(q.items)
+    q.items = realloc(q.items, c * 2 + 1)
+    wrapped := q.head + q.count - c
+    for i := 0; i < wrapped; i++ {
+        x := take(&q.items[i])
+        old := replace(&q.items[c + i], x)
+        drop(old) // as posições novas estavam vazias
+    }
+}
+
+// clear libera os elementos (drop) e deixa a fila vazia, com a mesma
+// capacidade.
+pub fn (q &Deque[T]) clear() {
+    for i := 0; i < q.count; i++ {
+        x := take(&q.items[q.slot(i)])
+        drop(x)
+    }
+    q.head = 0
+    q.count = 0
+}
+
+// free libera cada elemento (drop) e a fila.
+pub fn (q *Deque[T]) free() {
+    for x in drain(q.items) {
+        drop(x)
+    }
+    free(q.items)
+    free(q)
+}
+
+// slot é a posição no buffer do elemento i.
+fn (q &Deque[T]) slot(i int) int {
+    return (q.head + i) % len(q.items)
+}

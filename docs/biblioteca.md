@@ -214,6 +214,62 @@ nomes.free()               // libera cada nome (drop) e o vetor
 
 Os índices são checados: fora de `0..len-1`, panic.
 
+### `std/deque`
+
+Fila com as duas pontas rápidas (buffer circular): `push` e `pop` no começo e no fim em O(1). É a fila de uma thread só (busca em largura, tarefas pendentes, histórico com limite, janela deslizante); entre threads, use `std/chan`. Aloca como o `vec`: `new` aloca, os `push` chamam `grow` quando falta espaço, e `free` libera. Os elementos podem ser donos: `push` move para dentro, `pop` devolve a posse.
+
+```
+q := deque.new[int](16)
+q.push_back(start)
+for q.len() > 0 {
+    p := q.pop_front()
+    ... q.push_back(vizinho) ...
+}
+q.free()
+```
+
+| Método | O que faz |
+|---|---|
+| `deque.new[T owned](cap) *Deque[T]` | cria (aloca o buffer) |
+| `push_back(x)`, `push_front(x)` | põe no fim ou no começo (move `x`) |
+| `pop_front() T`, `pop_back() T` | tira e devolve a posse; panic se vazia |
+| `front() &T`, `back() &T`, `at(i) &T` | empresta, sem tirar (a fila fica congelada enquanto o empréstimo é usado) |
+| `get(i) T` | cópia do elemento `i` (só `T` copiável) |
+| `len()`, `cap()`, `grow()` | tamanho, capacidade, dobrar a capacidade |
+| `clear()`, `free()` | liberam os elementos; `free` libera também a fila |
+
+Para guardar só os últimos N, tire o mais antigo antes de pôr (`if q.len() == N { old := q.pop_front(); drop(old) }`): com `new[T](N)`, a fila nunca cresce.
+
+### `std/heap`
+
+Fila de prioridade: `pop` devolve sempre o menor elemento (ou o maior, com `new_max`), em O(log n). A ordem é a de `cmp.Ord`: números, `string`, slices e structs com `impl cmp.Ord` (à mão, para ordenar por um campo) ou `impl auto cmp.Ord`. Aloca como o `vec`, e os elementos podem ser donos.
+
+```
+struct Timer {
+    due int
+    id int
+}
+fn (t &Timer) cmp(o &Timer) int { return t.due.cmp(&o.due) }
+impl cmp.Ord for Timer
+
+timers := heap.new[Timer](16)
+timers.push(Timer{due: 30, id: 1})
+timers.push(Timer{due: 10, id: 2})
+next := timers.pop()                    // o de due 10
+timers.free()
+```
+
+| Método | O que faz |
+|---|---|
+| `heap.new[T owned + cmp.Ord](cap) *Heap[T]`, `heap.new_max[...]` | cria: o menor sai primeiro, ou o maior |
+| `push(x)` | põe (move `x`) |
+| `pop() T` | tira o primeiro e devolve a posse; panic se vazio |
+| `peek() &T` | empresta o primeiro, sem tirar |
+| `replace_top(x) T` | troca o primeiro por `x` e devolve o antigo, numa passada (o passo de um top-K: com `new` e K elementos, cada valor maior que o topo entra no lugar dele) |
+| `len()`, `cap()`, `grow()`, `clear()`, `free()` | como no `vec` |
+
+Elementos equivalentes (`cmp` igual a 0) saem em qualquer ordem entre si; para desempatar, compare mais um campo. Um ponteiro `?*Job` não implementa `cmp.Ord` nesta versão: para itens com donos, o heap guarda a chave e o índice (o `Timer` acima, com `id` sendo a posição num `vec.Vec[?*Job]`).
+
 ### `std/rand`
 
 Escrito em MLC (splitmix64 com `+%`, `*%`, `^` e `>>`).

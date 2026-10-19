@@ -1,0 +1,113 @@
+import "std/deque"
+import "std/str"
+import "std/testing"
+
+fn test_queue_and_stack() {
+    q := deque.new[int](2)
+    for i := 1; i <= 5; i++ {
+        q.push_back(i)
+    }
+    testing.eq_int(q.len(), 5)
+    testing.eq_int(q.pop_front(), 1) // fila
+    testing.eq_int(q.pop_back(), 5)  // pilha
+    testing.eq_int(*q.front(), 2)
+    testing.eq_int(*q.back(), 4)
+    testing.eq_int(q.get(1), 3)
+    q.free()
+}
+
+fn test_both_ends() {
+    q := deque.new[int](0) // capacidade 0: o primeiro push já cresce
+    for i := 0; i < 4; i++ {
+        q.push_front(i)
+        q.push_back(10 + i)
+    }
+    // 3 2 1 0 10 11 12 13
+    testing.eq_int(q.len(), 8)
+    testing.eq_int(q.get(0), 3)
+    testing.eq_int(q.get(3), 0)
+    testing.eq_int(q.get(4), 10)
+    testing.eq_int(q.get(7), 13)
+    *q.at(4) = 99
+    testing.eq_int(q.get(4), 99)
+    q.free()
+}
+
+// grow com os elementos dando a volta no fim do buffer
+fn test_grow_wrapped() {
+    q := deque.new[int](4)
+    for i := 0; i < 4; i++ {
+        q.push_back(i)
+    }
+    q.pop_front()
+    q.pop_front()
+    q.push_back(4)
+    q.push_back(5) // agora: 2 3 | 4 5 dando a volta
+    testing.eq_int(q.cap(), 4)
+    q.push_back(6) // cresce
+    testing.check(q.cap() > 4, "cresceu")
+    for i := 2; i <= 6; i++ {
+        testing.eq_int(q.pop_front(), i)
+    }
+    testing.eq_int(q.len(), 0)
+    q.free()
+}
+
+// janela dos últimos N: tira o mais antigo antes de pôr
+fn test_last_n() {
+    q := deque.new[int](3)
+    for i := 0; i < 10; i++ {
+        if q.len() == 3 {
+            q.pop_front()
+        }
+        q.push_back(i)
+    }
+    testing.eq_int(q.cap(), 3) // nunca cresceu
+    testing.eq_int(q.get(0), 7)
+    testing.eq_int(q.get(2), 9)
+    q.free()
+}
+
+fn text(s string) []byte {
+    b := alloc([]byte, len(s))
+    str.copy(&b, s)
+    return b
+}
+
+// donos: a posse entra no push e sai no pop; free e clear liberam o resto
+fn test_owners() {
+    q := deque.new[[]byte](1)
+    q.push_back(text("b"))
+    q.push_front(text("a"))
+    q.push_back(text("c"))
+    q.push_front(text("z"))
+    first := q.pop_front()
+    testing.eq_str(&first, "z")
+    free(first)
+    last := q.pop_back()
+    testing.eq_str(&last, "c")
+    free(last)
+    testing.eq_str(q.front(), "a")
+    q.clear()
+    testing.eq_int(q.len(), 0)
+    q.push_back(text("d"))
+    q.push_back(text("e"))
+    q.free() // libera d e e
+}
+
+fn test_pop_empty() {
+    testing.expect_panic()
+    q := deque.new[int](4)
+    q.push_back(1)
+    q.pop_back()
+    q.pop_front()
+    q.free()
+}
+
+fn test_at_out_of_range() {
+    testing.expect_panic()
+    q := deque.new[int](4)
+    q.push_back(1)
+    q.at(1)
+    q.free()
+}

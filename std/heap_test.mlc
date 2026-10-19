@@ -1,0 +1,149 @@
+import "std/cmp"
+import "std/heap"
+import "std/rand"
+import "std/str"
+import "std/testing"
+import "std/vec"
+
+fn test_min_order() {
+    h := heap.new[int](1)
+    var values [8]int = [8]int{5, 3, 8, 1, 9, 2, 7, 1}
+    for i := 0; i < 8; i++ {
+        h.push(values[i])
+    }
+    testing.eq_int(h.len(), 8)
+    testing.eq_int(*h.peek(), 1)
+    var want [8]int = [8]int{1, 1, 2, 3, 5, 7, 8, 9}
+    for i := 0; i < 8; i++ {
+        testing.eq_int(h.pop(), want[i])
+    }
+    testing.eq_int(h.len(), 0)
+    h.free()
+}
+
+fn test_max_order() {
+    h := heap.new_max[int](4)
+    for i := 0; i < 10; i++ {
+        h.push(i * 7 % 10) // 0 7 4 1 8 5 2 9 6 3
+    }
+    for i := 9; i >= 0; i-- {
+        testing.eq_int(h.pop(), i)
+    }
+    h.free()
+}
+
+// muitos valores aleatórios saem em ordem
+fn test_random() {
+    r := rand.new(42)
+    h := heap.new[int](16)
+    for i := 0; i < 1000; i++ {
+        h.push(r.int_n(500))
+    }
+    prev := -1
+    for h.len() > 0 {
+        x := h.pop()
+        testing.check(x >= prev, "em ordem")
+        prev = x
+    }
+    h.free()
+}
+
+// top-K: os 3 maiores com um heap dos menores e replace_top
+fn test_top_k() {
+    var values [9]int = [9]int{4, 10, 1, 7, 3, 12, 9, 2, 11}
+    h := heap.new[int](3)
+    for i := 0; i < 9; i++ {
+        if h.len() < 3 {
+            h.push(values[i])
+        } else if values[i] > *h.peek() {
+            h.replace_top(values[i])
+        }
+    }
+    testing.eq_int(h.pop(), 10)
+    testing.eq_int(h.pop(), 11)
+    testing.eq_int(h.pop(), 12)
+    h.free()
+}
+
+// uma struct ordenada por um campo, com cmp escrito à mão
+struct Timer {
+    due int
+    id int
+}
+
+fn (t &Timer) cmp(o &Timer) int {
+    return t.due.cmp(&o.due)
+}
+
+impl cmp.Ord for Timer
+
+fn test_struct() {
+    h := heap.new[Timer](4)
+    h.push(Timer{due: 30, id: 1})
+    h.push(Timer{due: 10, id: 2})
+    h.push(Timer{due: 20, id: 3})
+    testing.eq_int(h.peek().id, 2)
+    testing.eq_int(h.pop().id, 2)
+    testing.eq_int(h.pop().id, 3)
+    testing.eq_int(h.pop().id, 1)
+    h.free()
+}
+
+fn text(s string) []byte {
+    b := alloc([]byte, len(s))
+    str.copy(&b, s)
+    return b
+}
+
+// donos: a posse entra no push e sai no pop; free libera o resto
+fn test_owners() {
+    h := heap.new[[]byte](2)
+    h.push(text("pera"))
+    h.push(text("banana"))
+    h.push(text("uva"))
+    h.push(text("abacaxi"))
+    a := h.pop()
+    testing.eq_str(&a, "abacaxi")
+    free(a)
+    old := h.replace_top(text("caqui")) // sai banana, entra caqui
+    testing.eq_str(&old, "banana")
+    free(old)
+    testing.eq_str(h.peek(), "caqui")
+    h.free() // libera caqui, pera e uva
+}
+
+fn test_clear() {
+    h := heap.new[[]byte](2)
+    h.push(text("x"))
+    h.push(text("y"))
+    h.clear()
+    testing.eq_int(h.len(), 0)
+    h.push(text("z"))
+    testing.eq_str(h.peek(), "z")
+    h.free()
+}
+
+fn test_pop_empty() {
+    testing.expect_panic()
+    h := heap.new[int](2)
+    h.pop()
+    h.free()
+}
+
+// itens com donos: o heap guarda a chave e o índice, e os donos ficam num vec
+fn test_keys_into_vec() {
+    names := vec.new[[]byte](4)
+    names.push(text("relatório"))
+    names.push(text("backup"))
+    names.push(text("e-mail"))
+    h := heap.new[Timer](4)
+    h.push(Timer{due: 50, id: 0})
+    h.push(Timer{due: 5, id: 1})
+    h.push(Timer{due: 20, id: 2})
+    first := h.pop()
+    testing.eq_str(names.at(first.id), "backup")
+    second := h.pop()
+    testing.eq_str(names.at(second.id), "e-mail")
+    h.free()
+    names.free()
+}

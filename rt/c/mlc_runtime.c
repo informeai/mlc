@@ -821,6 +821,14 @@ void mlc_std_map_fail(mlc_str msg, const char *file, int line) {
     mlc_std_vec_fail(msg, file, line);
 }
 
+void mlc_std_deque_fail(mlc_str msg, const char *file, int line) {
+    mlc_std_vec_fail(msg, file, line);
+}
+
+void mlc_std_heap_fail(mlc_str msg, const char *file, int line) {
+    mlc_std_vec_fail(msg, file, line);
+}
+
 /* std/testing. Cada teste roda num processo: o mlc test passa o índice do
  * teste como argumento, e o código de saída diz o resultado (0 ok, 1
  * verificação falhou, 2 panic, 3 vazamento). As falhas não interrompem o
