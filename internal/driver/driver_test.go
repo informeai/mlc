@@ -348,18 +348,7 @@ func TestStdLibrary(t *testing.T) {
 // na hora (tests/ffi/counter.c), que devolve handles por ponteiro (&?*X).
 func TestFFIOutHandle(t *testing.T) {
 	requireCC(t)
-	cc := os.Getenv("CC")
-	if cc == "" {
-		cc = "cc"
-	}
-	dir := t.TempDir()
-	obj := filepath.Join(dir, "counter.o")
-	if out, err := exec.Command(cc, "-c", "-o", obj, filepath.Join(testsDir, "ffi", "counter.c")).CombinedOutput(); err != nil {
-		t.Fatalf("compilando counter.c: %v\n%s", err, out)
-	}
-	if out, err := exec.Command("ar", "rcs", filepath.Join(dir, "libcounter.a"), obj).CombinedOutput(); err != nil {
-		t.Fatalf("ar: %v\n%s", err, out)
-	}
+	dir := counterLib(t)
 	path := filepath.Join(testsDir, "ffi", "out_handle.mlc")
 	exe := filepath.Join(dir, "prog")
 	if err := BuildOpts(filepath.Base(path), []byte(readExpected(t, path)), exe, dirLoader(path), Options{LibDirs: []string{dir}}); err != nil {
@@ -396,5 +385,85 @@ func TestBenchRunner(t *testing.T) {
 	r = RunBench(exe, 1, 1)
 	if r.Status != Panicked || !strings.Contains(string(r.Output), "fora dos limites") {
 		t.Errorf("bench_panics: %v\n%s", r.Status, r.Output)
+	}
+}
+
+// counterLib compila tests/ffi/counter.c numa libcounter.a e devolve a pasta.
+func counterLib(t *testing.T) string {
+	t.Helper()
+	cc := os.Getenv("CC")
+	if cc == "" {
+		cc = "cc"
+	}
+	dir := t.TempDir()
+	obj := filepath.Join(dir, "counter.o")
+	if out, err := exec.Command(cc, "-c", "-o", obj, filepath.Join(testsDir, "ffi", "counter.c")).CombinedOutput(); err != nil {
+		t.Fatalf("compilando counter.c: %v\n%s", err, out)
+	}
+	if out, err := exec.Command("ar", "rcs", filepath.Join(dir, "libcounter.a"), obj).CombinedOutput(); err != nil {
+		t.Fatalf("ar: %v\n%s", err, out)
+	}
+	return dir
+}
+
+// TestCCFlags confere -cflags, -ldflags e as variáveis CFLAGS e LDFLAGS.
+func TestCCFlags(t *testing.T) {
+	requireCC(t)
+	src := []byte("import \"std/io\"\n\nfn main() {\n    io.print(42)\n}\n")
+	exe := filepath.Join(t.TempDir(), "prog")
+	run := func() string {
+		out, err := exec.Command(exe).CombinedOutput()
+		if err != nil {
+			t.Fatalf("%v\n%s", err, out)
+		}
+		return string(out)
+	}
+
+	if err := BuildOpts("p.mlc", src, exe, os.ReadFile, Options{CFlags: SplitFlags("-O0 -g -DMLC_FLAG=1")}); err != nil {
+		t.Fatalf("-cflags válidas: %v", err)
+	}
+	if got := run(); got != "42\n" {
+		t.Errorf("saída %q", got)
+	}
+
+	err := BuildOpts("p.mlc", src, exe, os.ReadFile, Options{CFlags: []string{"-fnao-existe-mlc"}})
+	if err == nil || !strings.Contains(err.Error(), "recusou a compilação com as flags") || strings.HasPrefix(err.Error(), "erro interno:") {
+		t.Errorf("flag inválida deveria apontar a flag, não um erro interno: %v", err)
+	}
+
+	err = BuildOpts("p.mlc", src, exe, os.ReadFile, Options{LDFlags: []string{"-lnao-existe-mlc"}})
+	var le *LinkError
+	if !errors.As(err, &le) || !strings.Contains(err.Error(), "flags de ligação (-lnao-existe-mlc)") {
+		t.Errorf("ldflag inválida: %v", err)
+	}
+
+	t.Setenv("CFLAGS", "-fnao-existe-ambiente")
+	err = BuildOpts("p.mlc", src, exe, os.ReadFile, Options{})
+	if err == nil || !strings.Contains(err.Error(), "-fnao-existe-ambiente") {
+		t.Errorf("CFLAGS do ambiente deveria valer: %v", err)
+	}
+	t.Setenv("CFLAGS", "")
+
+	// a pasta da biblioteca por -ldflags, em vez de -L
+	dir := counterLib(t)
+	path := filepath.Join(testsDir, "ffi", "out_handle.mlc")
+	if err := BuildOpts(filepath.Base(path), []byte(readExpected(t, path)), exe, dirLoader(path), Options{LDFlags: []string{"-L" + dir}}); err != nil {
+		t.Fatalf("-ldflags -L: %v", err)
+	}
+	if got, want := run(), readExpected(t, filepath.Join(testsDir, "ffi", "out_handle.out")); got != want {
+		t.Errorf("saída:\n%s\nesperado:\n%s", got, want)
+	}
+
+	// sanitizers pelas duas opções: o executável tem o AddressSanitizer
+	asan := Options{CFlags: []string{"-fsanitize=address"}, LDFlags: []string{"-fsanitize=address"}}
+	if err := BuildOpts("p.mlc", src, exe, os.ReadFile, asan); err != nil {
+		t.Skipf("o compilador C não tem AddressSanitizer: %v", err)
+	}
+	if got := run(); got != "42\n" {
+		t.Errorf("com AddressSanitizer: %q", got)
+	}
+	bin, _ := os.ReadFile(exe)
+	if !bytes.Contains(bin, []byte("asan")) {
+		t.Errorf("o executável deveria ter o AddressSanitizer")
 	}
 }

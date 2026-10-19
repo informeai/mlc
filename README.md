@@ -41,6 +41,9 @@ bin/mlc build -o exemplo exemplo.mlc     # gera o executável
 bin/mlc build -emit-c exemplo.mlc        # mostra o C gerado
 bin/mlc build -L /opt/lib prog.mlc       # -L: onde procurar as bibliotecas de C de link "nome"
 bin/mlc build -I ~/mlc-libs prog.mlc     # -I: onde procurar os imports, além do projeto
+bin/mlc build -cflags "-O3 -march=native" prog.mlc               # flags a mais para o compilador C
+bin/mlc build -ldflags "-framework Cocoa" prog.mlc               # e para a ligação
+bin/mlc test -cflags "-fsanitize=address" -ldflags "-fsanitize=address" std   # testes com AddressSanitizer
 bin/mlc fmt .                            # formata os .mlc da pasta (no lugar)
 bin/mlc fmt -l .                         # só lista os que mudariam
 bin/mlc test std                         # roda os testes dos *_test.mlc (aqui, os da std)
@@ -48,6 +51,17 @@ bin/mlc test -bench . std                # e mede os benchmarks (fn bench_*)
 make test                                # roda os testes
 make check                               # gofmt, mlc fmt -l, go vet e testes
 ```
+
+## O compilador C
+
+O `mlc build` gera C e chama o compilador C em duas etapas: compila o programa e o runtime (`-std=c11 -O2 -Wall -pthread`) e liga com as bibliotecas (`link "nome"`, `-L`) e a `libm`. Dá para acrescentar flags, que vêm depois das do `mlc` (e por isso ganham numa contradição, como `-O3` depois do `-O2`):
+
+| Onde | Compilação | Ligação |
+|---|---|---|
+| variável de ambiente | `CFLAGS` | `LDFLAGS` |
+| opção do `build`, `run` e `test` | `-cflags "..."` | `-ldflags "..."` |
+
+`CC` escolhe o compilador (`CC=gcc mlc build ...`). As flags são separadas por espaço, sem aspas. As que o `mlc` precisa (`-std=c11`, `-pthread`, `-lm`) continuam lá. Se o compilador recusar uma flag, a mensagem diz que pode ter sido ela, em vez de acusar um erro interno do `mlc`.
 
 ## Formatação (`mlc fmt`)
 

@@ -25,7 +25,13 @@ O verificador decide na compilação. Para saber se ele acertou, o programa acei
 
 > **Todo programa que o verificador aceita precisa rodar limpo sob essas ferramentas.** Se não roda, achamos um buraco no verificador (ou no gerador de C, o que também é bug).
 
-Os sanitizers pedem compilar o C gerado com flags próprias (`-fsanitize=address,undefined` ou `-fsanitize=thread`, `-g`, `-O1`). Hoje isso é feito à mão com `mlc build -emit-c`; a fase 1 transforma isso num modo do driver.
+Os sanitizers pedem compilar o C gerado com flags próprias (`-fsanitize=address,undefined` ou `-fsanitize=thread`, `-g`). Isso já dá para fazer com `-cflags` e `-ldflags`:
+
+```sh
+mlc test -cflags "-fsanitize=address,undefined -g" -ldflags "-fsanitize=address,undefined" std
+```
+
+A fase 1 acrescenta um atalho (`-sanitize address|thread`) sobre esse mesmo mecanismo e roda a suíte inteira assim.
 
 Cada problema achado em qualquer fase vira um teste permanente: em `tests/errors` (se o programa devia ser recusado) ou em `tests/run` (se devia ser aceito e o C gerado estava errado), com o menor exemplo que reproduz o caso.
 
@@ -34,7 +40,7 @@ Cada problema achado em qualquer fase vira um teste permanente: em `tests/errors
 **O quê:** rodar toda a suíte de execução (`tests/run`, `tests/panic`, os testes da `std` e `tests/ffi`) com os sanitizers.
 
 **Entregas:**
-- uma opção no driver para compilar com sanitizers (`Options.Sanitize`, com os valores `address`, `thread` e `none`), usada pelo `mlc build`, `mlc run` e `mlc test` com `-sanitize address|thread`;
+- um atalho para os sanitizers (`-sanitize address|thread` no `mlc build`, `mlc run` e `mlc test`), que monta as `-cflags` e `-ldflags` certas;
 - `make sanitize`: roda `go test` com os testes de execução sob AddressSanitizer + UndefinedBehaviorSanitizer, e os que usam threads também sob ThreadSanitizer;
 - a CI (quando existir) roda o `make sanitize` além do `make check`.
 

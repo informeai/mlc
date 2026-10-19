@@ -82,10 +82,21 @@ var extraCFlags []string
 type Options struct {
 	LibDirs    []string // -L: pastas onde procurar as bibliotecas de C de link "nome"
 	ImportDirs []string // -I: pastas onde procurar os imports (além de lib/ e MLC_PATH)
+	CFlags     []string // -cflags: flags a mais para a compilação do C (depois das do ambiente, CFLAGS)
+	LDFlags    []string // -ldflags: flags a mais para a ligação (depois das do ambiente, LDFLAGS)
+}
+
+// SplitFlags separa uma lista de flags escrita como texto ("-O3
+// -march=native") pelos espaços. Não há aspas: uma flag com espaço dentro
+// não cabe aqui.
+func SplitFlags(s string) []string {
+	return strings.Fields(s)
 }
 
 // Build compila src até um executável em out. O compilador C é o da
-// variável CC, ou cc.
+// variável CC, ou cc. As flags do C são as do mlc, depois as das variáveis
+// CFLAGS e LDFLAGS, depois as de Options (que, por virem por último, ganham
+// numa contradição, como -O3 depois do -O2 do mlc).
 func Build(file string, src []byte, out string) error {
 	return BuildWith(file, src, out, os.ReadFile)
 }
@@ -98,10 +109,17 @@ func BuildWith(file string, src []byte, out string, read Loader) error {
 // LinkError é uma falha ao ligar o programa: uma biblioteca de C (link
 // "nome") ou um símbolo (extern "C" fn) que não foi encontrado. É erro do
 // programa, não do mlc.
-type LinkError struct{ Output string }
+type LinkError struct {
+	Output string
+	Flags  string // as flags de ligação de quem compila (LDFLAGS e -ldflags), se houver
+}
 
 func (e *LinkError) Error() string {
-	return "não foi possível ligar o programa: uma biblioteca de C (link \"...\") ou uma função de C (extern \"C\" fn) não foi encontrada\n" + e.Output
+	msg := "não foi possível ligar o programa: uma biblioteca de C (link \"...\") ou uma função de C (extern \"C\" fn) não foi encontrada"
+	if e.Flags != "" {
+		msg += ", ou uma das flags de ligação (" + e.Flags + ") não vale nesse compilador"
+	}
+	return msg + "\n" + e.Output
 }
 
 // BuildOpts é BuildWith com opções. O C é compilado em duas etapas: a
@@ -170,19 +188,31 @@ func buildC(csrc string, links []string, out string, opts Options) error {
 	if cc == "" {
 		cc = "cc"
 	}
+	// as flags de quem compila: do ambiente, depois da linha de comando
+	userC := append(SplitFlags(os.Getenv("CFLAGS")), opts.CFlags...)
+	userLD := append(SplitFlags(os.Getenv("LDFLAGS")), opts.LDFlags...)
 	var objs []string
 	for _, name := range []string{"program", "mlc_runtime"} {
 		obj := filepath.Join(dir, name+".o")
 		args := append([]string{"-std=c11", "-O2", "-Wall", "-Wno-unused-function", "-pthread"}, extraCFlags...)
+		args = append(args, userC...)
 		args = append(args, "-I", dir, "-c", "-o", obj, filepath.Join(dir, name+".c"))
 		output, err := exec.Command(cc, args...).CombinedOutput()
 		if err != nil {
+			if len(userC) > 0 {
+				// com flags de quem compila, a falha pode ser delas
+				return fmt.Errorf("o compilador C (%s) recusou a compilação com as flags %q (de CFLAGS e -cflags): confira se elas existem nesse compilador; sem elas, seria um erro interno do mlc\n%s", cc, strings.Join(userC, " "), output)
+			}
 			// Se o checker aceitou o programa, o C gerado deveria compilar:
 			// uma falha aqui é bug do mlc, não do programa do usuário.
 			return fmt.Errorf("erro interno: %s rejeitou o código gerado: %v\n%s", cc, err, output)
 		}
 		if len(output) > 0 {
-			fmt.Fprintf(os.Stderr, "mlc: aviso do compilador C (provável bug do mlc):\n%s", output)
+			if len(userC) > 0 {
+				fmt.Fprintf(os.Stderr, "mlc: aviso do compilador C (com as flags %q):\n%s", strings.Join(userC, " "), output)
+			} else {
+				fmt.Fprintf(os.Stderr, "mlc: aviso do compilador C (provável bug do mlc):\n%s", output)
+			}
 		}
 		objs = append(objs, obj)
 	}
@@ -190,12 +220,13 @@ func buildC(csrc string, links []string, out string, opts Options) error {
 	for _, d := range opts.LibDirs {
 		args = append(args, "-L", d)
 	}
+	args = append(args, userLD...)
 	for _, l := range links {
 		args = append(args, "-l"+l)
 	}
 	args = append(args, "-lm") // libm, para std/math
 	if output, err := exec.Command(cc, args...).CombinedOutput(); err != nil {
-		return &LinkError{Output: string(output)}
+		return &LinkError{Output: string(output), Flags: strings.Join(userLD, " ")}
 	}
 	return nil
 }

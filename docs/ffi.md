@@ -45,7 +45,7 @@ fn main() {
   | qualquer um dos de cima, quando o C aceita `NULL` | `?&T`, `?&[]T`, `?&?*X` |
 
 - **Funções variádicas** (`printf`, `open` com modo) **não são aceitas**: a forma de passar os argumentos muda conforme a plataforma.
-- `link "nome"` pede a biblioteca `libnome` na ligação (`-lnome`). `mlc build -L pasta` e `mlc run -L pasta` dizem onde procurá-la.
+- `link "nome"` pede a biblioteca `libnome` na ligação (`-lnome`). `mlc build -L pasta` e `mlc run -L pasta` dizem onde procurá-la. Para o resto da ligação (um `-framework` do macOS, um `-Wl,-rpath,pasta`, uma biblioteca estática pelo caminho), use `-ldflags "..."` ou a variável `LDFLAGS`; veja [O compilador C](../README.md#o-compilador-c).
 
 ## O que atravessa a fronteira
 
