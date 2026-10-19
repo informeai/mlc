@@ -55,8 +55,13 @@ io.write_line(&buf[:k])
 | `str.eq(a &[]byte, s string) bool` | `a` tem o mesmo texto que `s`? |
 | `str.eq_bytes(a &[]byte, b &[]byte) bool` | `a` e `b` têm o mesmo texto? |
 | `str.parse_int(s &[]byte, out &int) bool` | lê um inteiro decimal (com sinal opcional) de `s` inteiro; em caso de sucesso grava em `out` e devolve `true` |
+| `str.parse_uint(s &[]byte, out &uint64) bool` | lê um inteiro sem sinal em decimal (para valores acima do maior `int`) |
+| `str.parse_int_base(s &[]byte, base int, out &int) bool` | lê um inteiro na base dada (2 a 36), com sinal opcional; com 16, 2 ou 8 aceita o prefixo `0x`, `0b` ou `0o`; com base 0, o prefixo escolhe a base e, sem prefixo, é decimal |
+| `str.parse_bool(s &[]byte, out &bool) bool` | lê exatamente `true` ou `false` |
 | `str.put_float(dst &[]byte, x float64) int` | escreve `x` com o menor número de dígitos que o representa exatamente (como o `io.print`) |
 | `str.parse_float(s &[]byte, out &float64) bool` | lê um decimal (`2.5`, `1e9`) de `s` inteiro |
+
+As funções `parse_*` leem o texto inteiro (sem espaços em volta: apare antes com `text.trim_start` e `text.trim_end`) e devolvem `false`, sem panic, para texto inválido ou para um número que não cabe no tipo.
 
 As funções que escrevem dão panic se o texto não couber em `dst`, com uma mensagem como `str.copy: o texto (3 bytes) não cabe no destino (2 bytes)`.
 

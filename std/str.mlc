@@ -111,3 +111,122 @@ pub fn parse_int(s &[]byte, out &int) bool {
     *out = v
     return true
 }
+
+const MAX_UINT = 18446744073709551615
+
+// parse_uint lê um inteiro sem sinal em decimal de s inteiro (para valores
+// acima do maior int, como hashes e contadores grandes). Em caso de sucesso
+// grava em out e devolve true; texto inválido, sinal ou estouro devolvem
+// false.
+pub fn parse_uint(s &[]byte, out &uint64) bool {
+    if len(s) == 0 {
+        return false
+    }
+    var v uint64 = 0
+    for i := 0; i < len(s); i++ {
+        c := s[i]
+        if c < '0' || c > '9' {
+            return false
+        }
+        d := uint64(c - '0')
+        if v > (MAX_UINT - d) / 10 {
+            return false // v * 10 + d passaria do maior uint64
+        }
+        v = v * 10 + d
+    }
+    *out = v
+    return true
+}
+
+// parse_int_base lê um inteiro na base dada (de 2 a 36; letras de a a z,
+// maiúsculas ou minúsculas, depois do 9), com sinal opcional, de s inteiro.
+// Com base 16, 2 ou 8, o prefixo 0x, 0b ou 0o é aceito. Com base 0, o
+// prefixo escolhe a base (0x1F, 0b1010, 0o17) e, sem prefixo, é decimal. Em
+// caso de sucesso grava em out e devolve true; texto inválido, base fora de
+// 0 e 2 a 36, ou estouro devolvem false.
+pub fn parse_int_base(s &[]byte, base int, out &int) bool {
+    if base != 0 && (base < 2 || base > 36) {
+        return false
+    }
+    i := 0
+    neg := false
+    if len(s) > 0 && (s[0] == '-' || s[0] == '+') {
+        neg = s[0] == '-'
+        i = 1
+    }
+    if i + 1 < len(s) && s[i] == '0' {
+        p := s[i + 1]
+        prefixed := 0
+        if p == 'x' || p == 'X' {
+            prefixed = 16
+        } else if p == 'b' || p == 'B' {
+            prefixed = 2
+        } else if p == 'o' || p == 'O' {
+            prefixed = 8
+        }
+        if prefixed != 0 && (base == 0 || base == prefixed) {
+            base = prefixed
+            i += 2
+        }
+    }
+    if base == 0 {
+        base = 10
+    }
+    if i == len(s) {
+        return false
+    }
+    // acumula no negativo, para alcançar o menor int sem estourar
+    limit := MIN_INT / base
+    v := 0
+    for i < len(s) {
+        d := digit_value(s[i])
+        if d < 0 || d >= base {
+            return false
+        }
+        if v < limit {
+            return false // v * base passaria do menor int
+        }
+        v = v * base
+        if v < MIN_INT + d {
+            return false
+        }
+        v = v - d
+        i++
+    }
+    if !neg {
+        if v == MIN_INT {
+            return false
+        }
+        v = -v
+    }
+    *out = v
+    return true
+}
+
+// digit_value é o valor de um dígito em qualquer base até 36, ou -1.
+fn digit_value(c byte) int {
+    if c >= '0' && c <= '9' {
+        return int(c) - int('0')
+    }
+    if c >= 'a' && c <= 'z' {
+        return int(c) - int('a') + 10
+    }
+    if c >= 'A' && c <= 'Z' {
+        return int(c) - int('A') + 10
+    }
+    return -1
+}
+
+// parse_bool lê "true" ou "false" (exatamente) de s. Em caso de sucesso
+// grava em out e devolve true; qualquer outro texto devolve false.
+pub fn parse_bool(s &[]byte, out &bool) bool {
+    if eq(s, "true") {
+        *out = true
+        return true
+    }
+    if eq(s, "false") {
+        *out = false
+        return true
+    }
+    return false
+}

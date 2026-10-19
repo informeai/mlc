@@ -151,3 +151,93 @@ fn test_format_nested() {
     testing.eq_str(&b[:n], "total:    R$ 123.45")
     free(b)
 }
+
+fn uint_of(s string, ok &bool) uint64 {
+    var b [32]byte
+    n := copy(&b, s)
+    var v uint64 = 7
+    *ok = str.parse_uint(&b[:n], &v)
+    return v
+}
+
+fn test_parse_uint() {
+    ok := false
+    testing.eq_uint(uint_of("18446744073709551615", &ok), 18446744073709551615)
+    testing.check(ok, "o maior uint64")
+    testing.eq_uint(uint_of("0", &ok), 0)
+    testing.check(ok, "zero")
+    uint_of("18446744073709551616", &ok)
+    testing.check(!ok, "estoura")
+    uint_of("-1", &ok)
+    testing.check(!ok, "sem sinal")
+    uint_of("", &ok)
+    testing.check(!ok, "vazio")
+    uint_of("12a", &ok)
+    testing.check(!ok, "letra")
+}
+
+fn int_base(s string, base int, ok &bool) int {
+    var b [80]byte
+    n := copy(&b, s)
+    v := 7
+    *ok = str.parse_int_base(&b[:n], base, &v)
+    return v
+}
+
+fn test_parse_int_base() {
+    ok := false
+    testing.eq_int(int_base("ff", 16, &ok), 255)
+    testing.check(ok, "ff")
+    testing.eq_int(int_base("FF", 16, &ok), 255)
+    testing.eq_int(int_base("0xff", 16, &ok), 255) // prefixo aceito com a base dele
+    testing.check(ok, "0xff com base 16")
+    testing.eq_int(int_base("-0x1F", 0, &ok), -31) // base 0: o prefixo escolhe
+    testing.check(ok, "-0x1F com base 0")
+    testing.eq_int(int_base("0b1010", 0, &ok), 10)
+    testing.eq_int(int_base("0o17", 0, &ok), 15)
+    testing.eq_int(int_base("123", 0, &ok), 123) // base 0 sem prefixo: decimal
+    testing.eq_int(int_base("z", 36, &ok), 35)
+    testing.check(ok, "base 36")
+    testing.eq_int(int_base("1010", 2, &ok), 10)
+    int_base("102", 2, &ok)
+    testing.check(!ok, "2 não é dígito binário")
+    int_base("0x10", 10, &ok)
+    testing.check(!ok, "0x com base 10")
+    int_base("ff", 37, &ok)
+    testing.check(!ok, "base fora de 2 a 36")
+    int_base("0x", 0, &ok)
+    testing.check(!ok, "só o prefixo")
+}
+
+fn test_parse_int_base_limits() {
+    ok := false
+    testing.eq_int(int_base("7fffffffffffffff", 16, &ok), 9223372036854775807)
+    testing.check(ok, "o maior int em hex")
+    testing.eq_int(int_base("-8000000000000000", 16, &ok), -9223372036854775807 - 1)
+    testing.check(ok, "o menor int em hex")
+    int_base("8000000000000000", 16, &ok)
+    testing.check(!ok, "o maior int + 1 estoura")
+    testing.eq_int(int_base("-1000000000000000000000000000000000000000000000000000000000000000", 2, &ok), -9223372036854775807 - 1)
+    testing.check(ok, "o menor int em binário")
+    int_base("-1000000000000000000000000000000000000000000000000000000000000001", 2, &ok)
+    testing.check(!ok, "o menor int - 1 estoura")
+    testing.eq_int(int_base("-9223372036854775808", 10, &ok), -9223372036854775807 - 1)
+    testing.check(ok, "o menor int em decimal")
+}
+
+fn test_parse_bool() {
+    var b [8]byte
+    v := false
+    n := str.copy(&b, "true")
+    testing.check(str.parse_bool(&b[:n], &v) && v, "true")
+    n = str.copy(&b, "false")
+    testing.check(str.parse_bool(&b[:n], &v) && !v, "false")
+    n = str.copy(&b, "True")
+    testing.check(!str.parse_bool(&b[:n], &v), "só minúsculas")
+    n = str.copy(&b, "1")
+    testing.check(!str.parse_bool(&b[:n], &v), "1 não é bool")
+}
+
+fn copy(dst &[]byte, s string) int {
+    return str.copy(dst, s)
+}
