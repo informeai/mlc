@@ -16,6 +16,8 @@
 //     conta.free()
 import "std/hash"
 
+// Map é a tabela: chaves e valores em slices paralelos, e o estado de cada
+// posição.
 pub struct Map[K owned + hash.Hash, V owned] {
     keys []K
     vals []V
@@ -117,6 +119,7 @@ pub fn (m &Map[K, V]) set(k &K, v V) bool {
     return true
 }
 
+// has diz se a chave k está na tabela.
 pub fn (m &Map[K, V]) has(k &K) bool {
     return m.find(k) >= 0
 }
@@ -197,6 +200,7 @@ pub fn (m &Map[K, V]) remove(k &K) bool {
     return true
 }
 
+// len devolve quantas entradas há na tabela.
 pub fn (m &Map[K, V]) len() int {
     return m.count
 }

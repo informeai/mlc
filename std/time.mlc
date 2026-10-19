@@ -8,6 +8,7 @@ pub extern fn now_ms() int
 // medir quanto tempo algo levou (a diferença entre duas leituras).
 pub extern fn mono_ns() int
 
+// sleep_ms espera ms milissegundos.
 pub extern fn sleep_ms(ms int)
 
 // ---------- datas ----------

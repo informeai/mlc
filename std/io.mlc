@@ -128,6 +128,7 @@ pub fn (w &Writer) flush() {
     }
 }
 
+// put_byte escreve um byte.
 pub fn (w &Writer) put_byte(b byte) {
     if w.n == len(w.buf) {
         w.flush()
@@ -140,12 +141,14 @@ pub fn (w &Writer) put_byte(b byte) {
     }
 }
 
+// put_bytes escreve os bytes de b.
 pub fn (w &Writer) put_bytes(b &[]byte) {
     for i := 0; i < len(b); i++ {
         w.put_byte(b[i])
     }
 }
 
+// put_str escreve o texto de s.
 pub fn (w &Writer) put_str(s string) {
     for i := 0; i < len(s); i++ {
         w.put_byte(s[i])
@@ -178,6 +181,7 @@ pub fn (w &Writer) put_int(n int) {
     w.put_ascii(&d[k:])
 }
 
+// put_uint escreve n, sem sinal, com o formato pedido ({:x}, {:08}...).
 pub fn (w &Writer) put_uint(n uint64) {
     if w.base != 0 || w.zero || w.alt {
         w.put_uint_spec(n)
@@ -326,6 +330,7 @@ pub fn (w &Writer) put_float(x float64) {
     w.put_real(&d[:k])
 }
 
+// put_f32 escreve x, com o formato pedido ({:.2}...).
 pub fn (w &Writer) put_f32(x float32) {
     var d [352]byte
     k := 0
@@ -345,6 +350,7 @@ fn (w &Writer) put_real(d &[]byte) {
     }
 }
 
+// put_bool escreve true ou false.
 pub fn (w &Writer) put_bool(b bool) {
     if b {
         w.put_str("true")

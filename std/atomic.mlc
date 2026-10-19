@@ -13,8 +13,10 @@
 // sequencialmente consistentes. add dá panic se estourar, como as contas do
 // MLC.
 
+// Int é um inteiro atômico, compartilhado entre threads pelos handles.
 pub extern "C" type Int
 
+// Bool é um bool atômico, compartilhado entre threads pelos handles.
 pub extern "C" type Bool
 
 // new_int aloca um inteiro atômico com o valor v.
@@ -48,10 +50,12 @@ pub fn (a *Int) close() {
     close_int(a)
 }
 
+// load lê o valor.
 pub fn (a &Int) load() int {
     return load_int(a)
 }
 
+// store troca o valor por v.
 pub fn (a &Int) store(v int) {
     store_int(a, v)
 }
@@ -71,26 +75,32 @@ pub fn (a &Int) compare_swap(expected int, v int) bool {
     return cas_int(a, expected, v)
 }
 
+// clone cria outro handle para o mesmo valor (para outra thread).
 pub fn (a &Bool) clone() *Bool {
     return clone_bool(a)
 }
 
+// close fecha o handle; o último libera o valor.
 pub fn (a *Bool) close() {
     close_bool(a)
 }
 
+// load lê o valor.
 pub fn (a &Bool) load() bool {
     return load_bool(a)
 }
 
+// store troca o valor por v.
 pub fn (a &Bool) store(v bool) {
     store_bool(a, v)
 }
 
+// swap troca o valor por v e devolve o antigo.
 pub fn (a &Bool) swap(v bool) bool {
     return swap_bool(a, v)
 }
 
+// compare_swap troca o valor por v só se ele for expected, e diz se trocou.
 pub fn (a &Bool) compare_swap(expected bool, v bool) bool {
     return cas_bool(a, expected, v)
 }

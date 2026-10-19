@@ -48,6 +48,7 @@ bin/mlc fmt .                            # formata os .mlc da pasta (no lugar)
 bin/mlc fmt -l .                         # só lista os que mudariam
 bin/mlc test std                         # roda os testes dos *_test.mlc (aqui, os da std)
 bin/mlc test -bench . std                # e mede os benchmarks (fn bench_*)
+bin/mlc doc http.Message                 # a documentação de um tipo, função ou módulo
 make test                                # roda os testes
 make check                               # gofmt, mlc fmt -l, go vet e testes
 ```
@@ -66,6 +67,23 @@ O `mlc build` gera C e chama o compilador C em duas etapas: compila o programa e
 ## Formatação (`mlc fmt`)
 
 `mlc fmt` reescreve os arquivos na forma canônica, como o `gofmt`: indentação de 4 espaços, um espaço em volta dos operadores binários e depois das vírgulas, nenhum depois de operador unário (`-x`, `*p`, `&s`), comentários de fim de linha alinhados. As quebras de linha, os parênteses e os comentários de quem escreveu são mantidos; linhas em branco seguidas viram uma só. Um arquivo com erro de sintaxe não é formatado. `mlc fmt -` lê da entrada padrão e escreve na saída padrão (para editores).
+
+## Documentação (`mlc doc`)
+
+`mlc doc` mostra no terminal a documentação tirada dos comentários `//` logo acima de cada declaração e do comentário do começo do arquivo (a descrição do módulo), como o `go doc`:
+
+```sh
+mlc doc                          # os módulos da biblioteca padrão, com a descrição de cada um
+mlc doc http                     # o módulo: descrição, constantes, tipos com os métodos, funções
+mlc doc http.Message             # um tipo: a declaração (com os campos), a descrição e os métodos
+mlc doc http.Message.read_body   # um método (mlc doc http Message.read_body também vale)
+mlc doc http.respond             # uma função; constantes, interfaces e variantes de enum também
+mlc doc util/texto.limpa         # uma biblioteca sua, procurada como o import (-I e MLC_PATH valem)
+mlc doc prog.mlc                 # um arquivo
+mlc doc alloc                    # um embutido (io.printf, thread.spawn, owned...); mlc doc builtin lista todos
+```
+
+Só aparece o que é `pub`, a não ser num arquivo sem nada `pub` (um programa), que mostra tudo; `-all` mostra tudo sempre. Os nomes dos símbolos não diferenciam maiúsculas. O comentário de uma declaração é o bloco de linhas `//` colado nela; uma linha em branco o separa. Linhas recuadas em 4 espaços dentro do comentário são exemplos de código. O hover do LSP usa os mesmos comentários.
 
 ## Testes (`mlc test`)
 
@@ -189,6 +207,7 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 - [x] **Hash map em MLC:** `std/map` (`Map[K owned + hash.Hash, V owned]`, endereçamento aberto) e a interface `hash.Hash` para inteiros, `bool`, `string` e slices; restrições combinadas com `+`. Veja [docs/biblioteca.md](docs/biblioteca.md)
 - [x] **Empréstimos devolvidos e guardados:** `fn (v &Vec[T]) at(i int) &T`, `x := m.get(&k)`, `x := &a[i]`; a origem fica congelada enquanto o empréstimo é usado, conferido na compilação. `vec.at`/`last` e `map.get`/`key_ref`/`value_ref`. Veja [docs/memoria.md](docs/memoria.md)
 - [x] **Testes:** `mlc test` roda as funções `test_*` dos arquivos `*_test.mlc`, cada uma num processo, e aceita `-run` e `-v`. As verificações ficam em `std/testing` (`eq_int`, `eq_str`, `near`, `expect_panic`, ...) e apontam a linha que falhou. Cada módulo da `std` tem os testes dele. Veja [docs/testes.md](docs/testes.md)
+- [x] **Documentação no terminal:** `mlc doc` (módulo, tipo, função, método ou embutido, da biblioteca padrão ou de bibliotecas suas), com toda declaração `pub` da `std` comentada (conferido em teste). Veja [Documentação](#documentação-mlc-doc)
 - [x] **LSP:** `mlc lsp` com diagnósticos ao digitar, cores, formatação, hover, ir para a definição e sugestões ao digitar; extensão para VS Code e configuração para Neovim. Veja [Editores](#editores)
 
 ### Próximos passos (em ordem de prioridade)

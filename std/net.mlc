@@ -75,10 +75,13 @@ pub fn (l &Listener) set_timeout(ms int) {
     listener_timeout_raw(l, ms)
 }
 
+// port devolve a porta em que o listener escuta (útil com a porta 0, que o
+// sistema escolhe).
 pub fn (l &Listener) port() int {
     return port_raw(l)
 }
 
+// close para de escutar e libera o listener.
 pub fn (l *Listener) close() {
     close_listener(l)
 }
@@ -106,6 +109,7 @@ pub fn (c &Conn) shutdown() result.Result[int, int] {
     return wrap(shutdown_raw(c))
 }
 
+// close fecha a conexão e libera o handle.
 pub fn (c *Conn) close() {
     close_raw(c)
 }

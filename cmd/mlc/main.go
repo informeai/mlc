@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"mlc/internal/doc"
 	"mlc/internal/driver"
 	"mlc/internal/format"
 	"mlc/internal/lsp"
@@ -41,6 +42,12 @@ Uso:
       -benchtime ms: quanto tempo medir cada benchmark (padrão 500)
   mlc fmt [-l] [arquivos ou pastas]            formata no lugar (padrão: a pasta atual)
   mlc fmt -                                    formata a entrada padrão na saída padrão
+  mlc doc [-I dir] [-all] [módulo[.símbolo]] [símbolo]
+                                               mostra a documentação no terminal
+      sem argumentos: os módulos da biblioteca padrão
+      mlc doc http · mlc doc http.Message · mlc doc http.Message.read_body
+      mlc doc util/texto (biblioteca sua, procurada como o import) · mlc doc alloc
+      -all: mostra também o que não é pub
   mlc lsp                                      servidor de linguagem (LSP) para editores
 `
 
@@ -58,6 +65,8 @@ func main() {
 		os.Exit(testCmd(os.Args[2:]))
 	case "fmt":
 		os.Exit(fmtCmd(os.Args[2:]))
+	case "doc":
+		os.Exit(docCmd(os.Args[2:]))
 	case "lsp":
 		os.Exit(lsp.Run(os.Stdin, os.Stdout))
 	case "help", "-h", "--help":
@@ -337,6 +346,31 @@ func runBenches(file, exe string, names []string, bc benchConfig) bool {
 		fmt.Printf("ok\t%s\tnenhum benchmark com %q\n", file, bc.filter)
 	}
 	return true
+}
+
+// docCmd mostra a documentação de um módulo, de um símbolo dele ou de um
+// embutido, tirada dos comentários // acima de cada declaração.
+func docCmd(args []string) int {
+	fs := flag.NewFlagSet("doc", flag.ExitOnError)
+	all := fs.Bool("all", false, "mostra também o que não é pub")
+	var importDirs dirList
+	fs.Var(&importDirs, "I", "pasta onde procurar os imports (pode repetir)")
+	fs.Parse(args)
+	switch {
+	case fs.NArg() == 0:
+		doc.WriteIndex(os.Stdout)
+		return 0
+	case fs.NArg() == 1 && (fs.Arg(0) == "builtin" || fs.Arg(0) == "builtins"):
+		doc.WriteBuiltins(os.Stdout)
+		return 0
+	}
+	q, err := doc.Lookup(fs.Args(), driver.SearchDirs(".", importDirs), *all)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "mlc doc:", err)
+		return 1
+	}
+	q.Write(os.Stdout)
+	return 0
 }
 
 // fmtCmd formata arquivos .mlc no lugar. Com -l, só lista os que mudariam.

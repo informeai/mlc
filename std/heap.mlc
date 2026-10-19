@@ -31,6 +31,7 @@
 // ponteiro ?*Job não implementa cmp.Ord nesta versão.
 import "std/cmp"
 
+// Heap é a fila de prioridade, um heap binário num slice.
 pub struct Heap[T owned + cmp.Ord] {
     items []T
     count int
@@ -95,10 +96,12 @@ pub fn (h &Heap[T]) peek() &T {
     return &h.items[0]
 }
 
+// len devolve quantos elementos há no heap.
 pub fn (h &Heap[T]) len() int {
     return h.count
 }
 
+// cap devolve quantos elementos cabem antes de crescer.
 pub fn (h &Heap[T]) cap() int {
     return len(h.items)
 }

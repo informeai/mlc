@@ -24,6 +24,8 @@ import "std/os"
 import "std/result"
 import "std/str"
 
+// Args percorre os argumentos da linha de comando, um por vez, com o atual
+// copiado para um buffer fixo (até 4 KB).
 pub struct Args {
     cur [4096]byte // o argumento atual
     n int

@@ -11,6 +11,8 @@
 //     b.free()
 import "std/str"
 
+// Buf é um texto que cresce: os bytes ficam em data[:len], e a capacidade
+// é len(data). Crescer (reserve, push_*) é um realloc à vista.
 pub struct Buf {
     data []byte // a capacidade é len(data); o texto é data[:len]
     len int
@@ -38,22 +40,26 @@ pub fn (b &Buf) reserve(n int) {
     b.data = realloc(b.data, size)
 }
 
+// push_byte acrescenta um byte (cresce se preciso).
 pub fn (b &Buf) push_byte(c byte) {
     b.reserve(1)
     b.data[b.len] = c
     b.len++
 }
 
+// push_str acrescenta o texto de s (cresce se preciso).
 pub fn (b &Buf) push_str(s string) {
     b.reserve(len(s))
     b.len += str.copy(&b.data[b.len:], s)
 }
 
+// push_bytes acrescenta os bytes de s (cresce se preciso).
 pub fn (b &Buf) push_bytes(s &[]byte) {
     b.reserve(len(s))
     b.len += str.copy_bytes(&b.data[b.len:], s)
 }
 
+// push_int acrescenta n em decimal (cresce se preciso).
 pub fn (b &Buf) push_int(n int) {
     b.reserve(str.int_len(n))
     b.len += str.put_int(&b.data[b.len:], n)
@@ -77,6 +83,7 @@ pub fn (b &Buf) eq(s string) bool {
     return str.eq(&b.data[:b.len], s)
 }
 
+// free libera o texto e o Buf.
 pub fn (b *Buf) free() {
     free(b.data)
     free(b)

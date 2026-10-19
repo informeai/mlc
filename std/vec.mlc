@@ -13,6 +13,7 @@
 //     nomes.set(0, nome)         // e vai de novo para o vetor
 //     nomes.free()               // libera cada nome e o vetor
 
+// Vec é o vetor: os elementos em items[:count], e a capacidade é len(items).
 pub struct Vec[T owned] {
     items []T
     count int
@@ -20,6 +21,7 @@ pub struct Vec[T owned] {
 
 extern fn fail(msg string)
 
+// new aloca um vetor vazio com espaço para cap elementos.
 pub fn new[T owned](cap int) *Vec[T] {
     return alloc(Vec[T]{items: alloc([]T, cap), count: 0})
 }
@@ -103,10 +105,12 @@ pub fn (v &Vec[T]) each_with[C ref](ctx &C, f fn(&C, &T)) {
     }
 }
 
+// len devolve quantos elementos há no vetor.
 pub fn (v &Vec[T]) len() int {
     return v.count
 }
 
+// cap devolve quantos elementos cabem antes de crescer.
 pub fn (v &Vec[T]) cap() int {
     return len(v.items)
 }

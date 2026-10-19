@@ -27,6 +27,7 @@ extern fn read_raw(path &[]byte, dst &[]byte) int
 extern fn write_raw(path &[]byte, data &[]byte, append bool) int
 extern fn remove_raw(path &[]byte) int
 
+// exists diz se há um arquivo ou diretório em path.
 pub extern fn exists(path &[]byte) bool
 
 // file_size devolve o tamanho do arquivo em bytes.
@@ -50,6 +51,7 @@ pub fn append_file(path &[]byte, data &[]byte) result.Result[int, int] {
     return wrap(write_raw(path, data, true))
 }
 
+// remove_file apaga o arquivo.
 pub fn remove_file(path &[]byte) result.Result[int, int] {
     return wrap(remove_raw(path))
 }
@@ -138,6 +140,7 @@ pub fn (d &Dir) next(name &[]byte) int {
     return dir_next(d, name)
 }
 
+// close fecha o diretório aberto com open_dir.
 pub fn (d *Dir) close() {
     dir_close(d)
 }

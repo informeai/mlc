@@ -20,6 +20,7 @@
 //     }
 //     hist.push_back(line)
 
+// Deque é a fila de duas pontas, sobre um buffer circular.
 pub struct Deque[T owned] {
     items []T // buffer circular: os elementos vão de head, count posições
     head int
@@ -28,6 +29,7 @@ pub struct Deque[T owned] {
 
 extern fn fail(msg string)
 
+// new aloca uma fila vazia com espaço para cap elementos.
 pub fn new[T owned](cap int) *Deque[T] {
     return alloc(Deque[T]{items: alloc([]T, cap), head: 0, count: 0})
 }
@@ -106,10 +108,12 @@ pub fn (q &Deque[T any]) get(i int) T {
     return q.items[q.slot(i)]
 }
 
+// len devolve quantos elementos há na fila.
 pub fn (q &Deque[T]) len() int {
     return q.count
 }
 
+// cap devolve quantos elementos cabem antes de crescer.
 pub fn (q &Deque[T]) cap() int {
     return len(q.items)
 }

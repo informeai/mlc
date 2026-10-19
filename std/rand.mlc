@@ -3,10 +3,12 @@
 //     r := rand.new(uint64(time.now_ms()))
 //     dado := r.range(1, 7)
 
+// Rand é um gerador: um estado de 64 bits, sem alocação.
 pub struct Rand {
     state uint64
 }
 
+// new cria um gerador a partir da semente (a mesma semente dá a mesma sequência).
 pub fn new(seed uint64) Rand {
     return Rand{state: seed}
 }

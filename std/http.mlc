@@ -430,11 +430,13 @@ pub fn (m &Message) header_count() int {
     return m.nfields
 }
 
+// header_name copia o nome do campo i (de 0 a header_count() - 1) para dst.
 pub fn (m &Message) header_name(i int, dst &[]byte) int {
     f := m.fields[i]
     return str.copy_bytes(dst, &m.buf[f.name_at:f.name_at + f.name_n])
 }
 
+// header_value copia o valor do campo i (de 0 a header_count() - 1) para dst.
 pub fn (m &Message) header_value(i int, dst &[]byte) int {
     f := m.fields[i]
     return str.copy_bytes(dst, &m.buf[f.value_at:f.value_at + f.value_n])

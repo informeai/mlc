@@ -1,14 +1,17 @@
 // Funções de texto sobre bytes. Nenhuma aloca: buscam, comparam ou alteram
 // no lugar.
 
+// is_space diz se b é espaço, tab, \n ou \r.
 pub fn is_space(b byte) bool {
     return b == ' ' || b == '\t' || b == '\n' || b == '\r'
 }
 
+// is_digit diz se b é um dígito de 0 a 9.
 pub fn is_digit(b byte) bool {
     return b >= '0' && b <= '9'
 }
 
+// is_letter diz se b é uma letra ASCII (a-z ou A-Z).
 pub fn is_letter(b byte) bool {
     return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }
@@ -33,14 +36,17 @@ pub fn index_of(s &[]byte, sub string) int {
     return -1
 }
 
+// contains diz se sub aparece em s.
 pub fn contains(s &[]byte, sub string) bool {
     return index_of(s, sub) >= 0
 }
 
+// starts_with diz se s começa com prefix.
 pub fn starts_with(s &[]byte, prefix string) bool {
     return len(prefix) <= len(s) && matches(s, 0, prefix)
 }
 
+// ends_with diz se s termina com suffix.
 pub fn ends_with(s &[]byte, suffix string) bool {
     return len(suffix) <= len(s) && matches(s, len(s) - len(suffix), suffix)
 }
@@ -54,6 +60,7 @@ fn matches(s &[]byte, at int, sub string) bool {
     return true
 }
 
+// count_byte conta quantas vezes b aparece em s.
 pub fn count_byte(s &[]byte, b byte) int {
     n := 0
     for c in s {
@@ -101,6 +108,7 @@ pub fn field_end(s &[]byte, sep byte, start int) int {
     return len(s)
 }
 
+// to_upper passa as letras ASCII de s para maiúsculas, no lugar.
 pub fn to_upper(s &[]byte) {
     for i := 0; i < len(s); i++ {
         if s[i] >= 'a' && s[i] <= 'z' {
@@ -109,6 +117,7 @@ pub fn to_upper(s &[]byte) {
     }
 }
 
+// to_lower passa as letras ASCII de s para minúsculas, no lugar.
 pub fn to_lower(s &[]byte) {
     for i := 0; i < len(s); i++ {
         if s[i] >= 'A' && s[i] <= 'Z' {

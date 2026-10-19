@@ -3,6 +3,7 @@
 pub const PI = 3.141592653589793
 pub const E = 2.718281828459045
 
+// abs devolve o valor absoluto de x.
 pub fn abs[T number](x T) T {
     if x < T(0) {
         return -x
@@ -10,6 +11,7 @@ pub fn abs[T number](x T) T {
     return x
 }
 
+// min devolve o menor entre a e b.
 pub fn min[T ordered](a T, b T) T {
     if a < b {
         return a
@@ -17,6 +19,7 @@ pub fn min[T ordered](a T, b T) T {
     return b
 }
 
+// max devolve o maior entre a e b.
 pub fn max[T ordered](a T, b T) T {
     if a > b {
         return a
@@ -35,26 +38,41 @@ pub fn clamp[T ordered](x T, lo T, hi T) T {
     return x
 }
 
+// sqrt devolve raiz quadrada de x.
 pub extern fn sqrt(x float64) float64
+// pow devolve x elevado a y.
 pub extern fn pow(x float64, y float64) float64
+// floor devolve o maior inteiro (como real) que não passa de x.
 pub extern fn floor(x float64) float64
+// ceil devolve o menor inteiro (como real) que não fica abaixo de x.
 pub extern fn ceil(x float64) float64
+// round devolve x arredondado para o inteiro mais perto (metade para longe do zero).
 pub extern fn round(x float64) float64
+// sin devolve seno de x (em radianos).
 pub extern fn sin(x float64) float64
+// cos devolve cosseno de x (em radianos).
 pub extern fn cos(x float64) float64
+// tan devolve tangente de x (em radianos).
 pub extern fn tan(x float64) float64
+// atan2 devolve ângulo, em radianos, do ponto (x, y): o arco tangente de y/x no quadrante certo.
 pub extern fn atan2(y float64, x float64) float64
+// log devolve logaritmo natural de x.
 pub extern fn log(x float64) float64
+// exp devolve e elevado a x.
 pub extern fn exp(x float64) float64
+// is_nan diz se x é NaN.
 pub extern fn is_nan(x float64) bool
+// is_inf diz se x é infinito (positivo ou negativo).
 pub extern fn is_inf(x float64) bool
 
 // float64_bits devolve os bits de x no formato IEEE 754 (o mesmo valor que
 // o C guarda na memória); float64_from_bits faz o caminho de volta. Servem
 // para gravar reais em binário (std/binary) e para comparar NaN bit a bit.
 pub extern fn float64_bits(x float64) uint64
+// float64_from_bits monta o float64 cujos bits IEEE 754 são u.
 pub extern fn float64_from_bits(u uint64) float64
 
 // float32_bits e float32_from_bits são o mesmo para float32.
 pub extern fn float32_bits(x float32) uint32
+// float32_from_bits monta o float32 cujos bits IEEE 754 são u.
 pub extern fn float32_from_bits(u uint32) float32
