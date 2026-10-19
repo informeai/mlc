@@ -302,6 +302,38 @@ bool mlc_std_math_is_nan(double x, const char *file, int line) {
     return isnan(x);
 }
 
+uint64_t mlc_std_math_float64_bits(double x, const char *file, int line) {
+    (void)file;
+    (void)line;
+    uint64_t u;
+    memcpy(&u, &x, sizeof u);
+    return u;
+}
+
+double mlc_std_math_float64_from_bits(uint64_t u, const char *file, int line) {
+    (void)file;
+    (void)line;
+    double x;
+    memcpy(&x, &u, sizeof x);
+    return x;
+}
+
+uint32_t mlc_std_math_float32_bits(float x, const char *file, int line) {
+    (void)file;
+    (void)line;
+    uint32_t u;
+    memcpy(&u, &x, sizeof u);
+    return u;
+}
+
+float mlc_std_math_float32_from_bits(uint32_t u, const char *file, int line) {
+    (void)file;
+    (void)line;
+    float x;
+    memcpy(&x, &u, sizeof x);
+    return x;
+}
+
 bool mlc_std_math_is_inf(double x, const char *file, int line) {
     (void)file;
     (void)line;
@@ -1439,6 +1471,8 @@ int64_t mlc_std_time_local_offset(int64_t ms, const char *file, int line) {
 void mlc_std_hash_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
 
 void mlc_std_encoding_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
+
+void mlc_std_binary_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
 
 /* os.error_text: o texto de um código de erro da biblioteca. Os códigos
  * abaixo de 1000 são os do sistema (errno), com os mais comuns em português;

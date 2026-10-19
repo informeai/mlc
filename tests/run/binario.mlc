@@ -1,0 +1,30 @@
+import "std/binary"
+import "std/io"
+
+// Um registro num formato binário próprio: cabeçalho fixo em big-endian e
+// os valores como varints, o jeito comum de formatos de arquivo e de rede.
+const MAGIC = 0x4D4C_4301 // "MLC" e a versão 1
+
+fn encode(dst &[]byte, values &[]int) int {
+    binary.put_u32_be(dst, MAGIC)
+    binary.put_u16_be(&dst[4:], uint16(len(values)))
+    n := 6
+    for i := 0; i < len(values); i++ {
+        n += binary.put_varint(&dst[n:], values[i])
+    }
+    return n
+}
+
+fn main() {
+    var values [5]int = [5]int{0, -1, 300, -70000, 9000000000}
+    var buf [64]byte
+    n := encode(&buf, &values)
+    io.printf("{} bytes; magic {:#x}; {} valores\n", n, binary.u32_be(&buf), binary.u16_be(&buf[4:]))
+    pos := 6
+    for pos < n {
+        v := 0
+        k := binary.varint(&buf[pos:n], &v)
+        io.printf("{} ({} bytes)\n", v, k)
+        pos += k
+    }
+}

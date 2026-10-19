@@ -48,3 +48,13 @@ pub extern fn log(x float64) float64
 pub extern fn exp(x float64) float64
 pub extern fn is_nan(x float64) bool
 pub extern fn is_inf(x float64) bool
+
+// float64_bits devolve os bits de x no formato IEEE 754 (o mesmo valor que
+// o C guarda na memória); float64_from_bits faz o caminho de volta. Servem
+// para gravar reais em binário (std/binary) e para comparar NaN bit a bit.
+pub extern fn float64_bits(x float64) uint64
+pub extern fn float64_from_bits(u uint64) float64
+
+// float32_bits e float32_from_bits são o mesmo para float32.
+pub extern fn float32_bits(x float32) uint32
+pub extern fn float32_from_bits(u uint32) float32

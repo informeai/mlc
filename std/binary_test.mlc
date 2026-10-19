@@ -1,0 +1,154 @@
+import "std/binary"
+import "std/encoding"
+import "std/math"
+import "std/testing"
+
+// hex_of confere os bytes de b em hexadecimal.
+fn hex_of(b &[]byte, want string) {
+    var txt [32]byte
+    n := encoding.hex(&txt, b)
+    testing.eq_str(&txt[:n], want)
+}
+
+fn test_unsigned() {
+    var b [8]byte
+    binary.put_u16_be(&b, 0x1234)
+    hex_of(&b[:2], "1234")
+    testing.check(binary.u16_be(&b) == 0x1234, "u16_be")
+    binary.put_u16_le(&b, 0x1234)
+    hex_of(&b[:2], "3412")
+    testing.check(binary.u16_le(&b) == 0x1234, "u16_le")
+
+    binary.put_u32_be(&b, 0xDEAD_BEEF)
+    hex_of(&b[:4], "deadbeef")
+    testing.check(binary.u32_be(&b) == 0xDEAD_BEEF, "u32_be")
+    binary.put_u32_le(&b, 0xDEAD_BEEF)
+    hex_of(&b[:4], "efbeadde")
+    testing.check(binary.u32_le(&b) == 0xDEAD_BEEF, "u32_le")
+
+    binary.put_u64_be(&b, 0x0102_0304_0506_0708)
+    hex_of(&b, "0102030405060708")
+    testing.check(binary.u64_be(&b) == 0x0102_0304_0506_0708, "u64_be")
+    binary.put_u64_le(&b, 0xFFEE_DDCC_BBAA_9988)
+    hex_of(&b, "8899aabbccddeeff")
+    testing.check(binary.u64_le(&b) == 0xFFEE_DDCC_BBAA_9988, "u64_le")
+}
+
+fn test_signed() {
+    var b [8]byte
+    binary.put_i16_be(&b, -2)
+    hex_of(&b[:2], "fffe")
+    testing.eq_int(int(binary.i16_be(&b)), -2)
+    binary.put_i16_le(&b, -32768)
+    hex_of(&b[:2], "0080")
+    testing.eq_int(int(binary.i16_le(&b)), -32768)
+
+    binary.put_i32_be(&b, -1)
+    hex_of(&b[:4], "ffffffff")
+    testing.eq_int(int(binary.i32_be(&b)), -1)
+    binary.put_i32_le(&b, 2147483647)
+    testing.eq_int(int(binary.i32_le(&b)), 2147483647)
+
+    binary.put_i64_be(&b, -9223372036854775807 - 1)
+    hex_of(&b, "8000000000000000")
+    testing.eq_int(binary.i64_be(&b), -9223372036854775807 - 1)
+    binary.put_i64_le(&b, -300)
+    testing.eq_int(binary.i64_le(&b), -300)
+    binary.put_i64_le(&b, 123456789)
+    testing.eq_int(binary.i64_le(&b), 123456789)
+}
+
+fn test_floats() {
+    var b [8]byte
+    binary.put_f64_be(&b, 1.0)
+    hex_of(&b, "3ff0000000000000")
+    testing.check(binary.f64_be(&b) == 1.0, "f64_be")
+    binary.put_f64_le(&b, -0.1)
+    testing.check(binary.f64_le(&b) == -0.1, "f64_le")
+    binary.put_f32_be(&b, 1.5)
+    hex_of(&b[:4], "3fc00000")
+    testing.check(binary.f32_be(&b) == 1.5, "f32_be")
+    binary.put_f32_le(&b, -2.25)
+    testing.check(binary.f32_le(&b) == -2.25, "f32_le")
+    testing.check(math.float64_bits(0.0) == 0, "bits de 0.0")
+    testing.check(math.float64_from_bits(0x7FF0_0000_0000_0000) > 1e308, "+Inf")
+}
+
+fn test_offsets() {
+    var b [12]byte
+    binary.put_u32_be(&b, 7)
+    binary.put_u16_le(&b[4:], 0xABCD)
+    binary.put_f32_be(&b[6:], 3.0)
+    testing.check(binary.u32_be(&b) == 7, "começo")
+    testing.check(binary.u16_le(&b[4:]) == 0xABCD, "no meio")
+    testing.check(binary.f32_be(&b[6:]) == 3.0, "depois")
+}
+
+fn uv(v uint64, want string) {
+    var b [binary.MAX_VARINT]byte
+    n := binary.put_uvarint(&b, v)
+    testing.eq_int(n, binary.uvarint_len(v))
+    hex_of(&b[:n], want)
+    var back uint64 = 0
+    testing.eq_int(binary.uvarint(&b[:n], &back), n)
+    testing.check(back == v, "uvarint ida e volta")
+}
+
+fn test_uvarint() {
+    uv(0, "00")
+    uv(1, "01")
+    uv(127, "7f")
+    uv(128, "8001")
+    uv(300, "ac02")
+    uv(0xFFFF_FFFF_FFFF_FFFF, "ffffffffffffffffff01")
+}
+
+fn test_uvarint_short_and_overflow() {
+    var b [11]byte
+    b[0] = 0x80
+    b[1] = 0x80
+    var v uint64 = 0
+    testing.eq_int(binary.uvarint(&b[:2], &v), 0) // faltam bytes
+    testing.eq_int(binary.uvarint(&b[:0], &v), 0)
+    for i := 0; i < 9; i++ {
+        b[i] = 0xFF
+    }
+    b[9] = 0x02 // passa de 64 bits
+    testing.eq_int(binary.uvarint(&b[:10], &v), -1)
+    b[9] = 0x80
+    b[10] = 0x01 // 11 bytes
+    testing.eq_int(binary.uvarint(&b, &v), -1)
+}
+
+fn sv(v int, want string) {
+    var b [binary.MAX_VARINT]byte
+    n := binary.put_varint(&b, v)
+    testing.eq_int(n, binary.varint_len(v))
+    hex_of(&b[:n], want)
+    back := 0
+    testing.eq_int(binary.varint(&b[:n], &back), n)
+    testing.eq_int(back, v)
+}
+
+fn test_varint() {
+    sv(0, "00")
+    sv(-1, "01")
+    sv(1, "02")
+    sv(-2, "03")
+    sv(-64, "7f")
+    sv(64, "8001")
+    sv(9223372036854775807, "feffffffffffffffff01")
+    sv(-9223372036854775807 - 1, "ffffffffffffffffff01")
+}
+
+fn test_short_slice() {
+    testing.expect_panic()
+    var b [3]byte
+    binary.u32_be(&b)
+}
+
+fn test_short_varint_destination() {
+    testing.expect_panic()
+    var b [1]byte
+    binary.put_uvarint(&b, 300)
+}

@@ -79,6 +79,7 @@ pub interface Reader {
 | `sqrt`, `floor`, `ceil`, `round`, `sin`, `cos`, `tan`, `log`, `exp` | `float64` → `float64`, da `libm` |
 | `pow(x, y)`, `atan2(y, x)` | `float64` |
 | `is_nan(x)`, `is_inf(x)` | `bool` |
+| `float64_bits(x) uint64`, `float64_from_bits(u) float64` | os bits IEEE 754 de um real, e de volta (`float32_bits`, `float32_from_bits` para `float32`) |
 
 ### `std/sort`
 
@@ -255,6 +256,29 @@ n := encoding.hex(&txt, &digest)        // "ba7816bf..."
 ```
 
 O SHA-256 serve para integridade e identificadores, mas não é criptografia completa: assinaturas, senhas e cifras pedem uma biblioteca de C pela FFI.
+
+### `std/binary`
+
+Números em bytes, para formatos de arquivo e protocolos binários: inteiros e reais de tamanho fixo em big-endian (`_be`, a ordem das redes) ou little-endian (`_le`, a do x86 e do ARM), e inteiros de tamanho variável (varint, o formato do protobuf e do Go). Quem lê recebe um slice emprestado e lê o começo dele; quem escreve escreve no começo de `dst`. A posição fica com quem chama, num sub-slice. Um slice curto demais é panic.
+
+```
+var hdr [14]byte
+binary.put_u32_be(&hdr, MAGIC)
+binary.put_u16_le(&hdr[4:], version)
+binary.put_f64_le(&hdr[6:], ratio)
+
+size := binary.u32_be(&buf[off:])
+```
+
+| Declaração | O que faz |
+|---|---|
+| `u16_be(src) uint16`, `u32_be`, `u64_be` e os `_le` | lê um inteiro sem sinal |
+| `put_u16_be(dst, v uint16)`, `put_u32_be`, `put_u64_be` e os `_le` | escreve |
+| `i16_be(src) int16`, `i32_be(src) int32`, `i64_be(src) int`, `put_i16_be`... e os `_le` | com sinal, em complemento de dois |
+| `f32_be(src) float32`, `f64_be(src) float64`, `put_f32_be`, `put_f64_be` e os `_le` | reais IEEE 754 |
+| `put_uvarint(dst, v uint64) int`, `put_varint(dst, v int) int` | varint (7 bits por byte; com sinal, em zigzag: números pequenos ocupam poucos bytes); devolve quantos bytes usou |
+| `uvarint(src, &v) int`, `varint(src, &v) int` | lê um varint; devolve os bytes usados, `0` se `src` acabou no meio (leia mais e tente de novo) ou `-1` se não cabe em 64 bits |
+| `uvarint_len(v) int`, `varint_len(v) int`, `MAX_VARINT` (10) | o tamanho de antemão; um `[binary.MAX_VARINT]byte` sempre basta |
 
 ### `std/encoding`
 

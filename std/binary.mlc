@@ -1,0 +1,325 @@
+// Números em bytes: inteiros e reais de tamanho fixo, em big-endian (_be: o
+// byte mais significativo primeiro, a ordem das redes e da maioria dos
+// formatos de arquivo) ou little-endian (_le: o menos significativo
+// primeiro, a ordem do x86 e do ARM), e inteiros de tamanho variável
+// (varint, o formato do protobuf e do Go).
+//
+// Nada aloca: quem lê recebe um slice emprestado e lê o começo dele; quem
+// escreve escreve no começo de dst. A posição fica com quem chama, num
+// sub-slice:
+//
+//     var hdr [14]byte
+//     binary.put_u32_be(&hdr, MAGIC)
+//     binary.put_u16_le(&hdr[4:], version)
+//     binary.put_f64_le(&hdr[6:], ratio)
+//
+//     size := binary.u32_be(&buf[off:])
+//
+// Um slice curto demais para o valor dá panic (put_f64_le(&hdr[8:], x)
+// acima: só sobram 6 bytes).
+import "std/math"
+
+extern fn fail(msg string)
+
+fn need(b &[]byte, n int) {
+    if len(b) < n {
+        fail("binary: o slice é curto demais para o valor")
+    }
+}
+
+// ---------- sem sinal ----------
+
+pub fn u16_be(src &[]byte) uint16 {
+    need(src, 2)
+    return (uint16(src[0]) << 8) | uint16(src[1])
+}
+
+pub fn u16_le(src &[]byte) uint16 {
+    need(src, 2)
+    return uint16(src[0]) | (uint16(src[1]) << 8)
+}
+
+pub fn put_u16_be(dst &[]byte, v uint16) {
+    need(dst, 2)
+    dst[0] = byte(v >> 8)
+    dst[1] = byte(v & 0xFF)
+}
+
+pub fn put_u16_le(dst &[]byte, v uint16) {
+    need(dst, 2)
+    dst[0] = byte(v & 0xFF)
+    dst[1] = byte(v >> 8)
+}
+
+pub fn u32_be(src &[]byte) uint32 {
+    need(src, 4)
+    return (uint32(src[0]) << 24) | (uint32(src[1]) << 16) | (uint32(src[2]) << 8) | uint32(src[3])
+}
+
+pub fn u32_le(src &[]byte) uint32 {
+    need(src, 4)
+    return uint32(src[0]) | (uint32(src[1]) << 8) | (uint32(src[2]) << 16) | (uint32(src[3]) << 24)
+}
+
+pub fn put_u32_be(dst &[]byte, v uint32) {
+    need(dst, 4)
+    for i := 0; i < 4; i++ {
+        dst[i] = byte((v >> (24 - 8 * i)) & 0xFF)
+    }
+}
+
+pub fn put_u32_le(dst &[]byte, v uint32) {
+    need(dst, 4)
+    for i := 0; i < 4; i++ {
+        dst[i] = byte((v >> (8 * i)) & 0xFF)
+    }
+}
+
+pub fn u64_be(src &[]byte) uint64 {
+    need(src, 8)
+    var v uint64 = 0
+    for i := 0; i < 8; i++ {
+        v = (v << 8) | uint64(src[i])
+    }
+    return v
+}
+
+pub fn u64_le(src &[]byte) uint64 {
+    need(src, 8)
+    var v uint64 = 0
+    for i := 7; i >= 0; i-- {
+        v = (v << 8) | uint64(src[i])
+    }
+    return v
+}
+
+pub fn put_u64_be(dst &[]byte, v uint64) {
+    need(dst, 8)
+    for i := 0; i < 8; i++ {
+        dst[i] = byte((v >> (56 - 8 * i)) & 0xFF)
+    }
+}
+
+pub fn put_u64_le(dst &[]byte, v uint64) {
+    need(dst, 8)
+    for i := 0; i < 8; i++ {
+        dst[i] = byte((v >> (8 * i)) & 0xFF)
+    }
+}
+
+// ---------- com sinal (complemento de dois) ----------
+
+pub fn i16_be(src &[]byte) int16 {
+    return signed16(u16_be(src))
+}
+
+pub fn i16_le(src &[]byte) int16 {
+    return signed16(u16_le(src))
+}
+
+pub fn put_i16_be(dst &[]byte, v int16) {
+    put_u16_be(dst, unsigned16(v))
+}
+
+pub fn put_i16_le(dst &[]byte, v int16) {
+    put_u16_le(dst, unsigned16(v))
+}
+
+pub fn i32_be(src &[]byte) int32 {
+    return signed32(u32_be(src))
+}
+
+pub fn i32_le(src &[]byte) int32 {
+    return signed32(u32_le(src))
+}
+
+pub fn put_i32_be(dst &[]byte, v int32) {
+    put_u32_be(dst, unsigned32(v))
+}
+
+pub fn put_i32_le(dst &[]byte, v int32) {
+    put_u32_le(dst, unsigned32(v))
+}
+
+pub fn i64_be(src &[]byte) int {
+    return signed64(u64_be(src))
+}
+
+pub fn i64_le(src &[]byte) int {
+    return signed64(u64_le(src))
+}
+
+pub fn put_i64_be(dst &[]byte, v int) {
+    put_u64_be(dst, unsigned64(v))
+}
+
+pub fn put_i64_le(dst &[]byte, v int) {
+    put_u64_le(dst, unsigned64(v))
+}
+
+// Os bits de um negativo em complemento de dois: ^x é não negativo (-x-1),
+// e inverter os bits dele de volta dá o padrão de x. Assim nenhuma
+// conversão sai da faixa.
+fn unsigned16(x int16) uint16 {
+    if x < 0 {
+        return ^uint16(^x)
+    }
+    return uint16(x)
+}
+
+fn signed16(u uint16) int16 {
+    if u >= 0x8000 {
+        return ^int16(^u)
+    }
+    return int16(u)
+}
+
+fn unsigned32(x int32) uint32 {
+    if x < 0 {
+        return ^uint32(^x)
+    }
+    return uint32(x)
+}
+
+fn signed32(u uint32) int32 {
+    if u >= 0x8000_0000 {
+        return ^int32(^u)
+    }
+    return int32(u)
+}
+
+fn unsigned64(x int) uint64 {
+    if x < 0 {
+        return ^uint64(^x)
+    }
+    return uint64(x)
+}
+
+fn signed64(u uint64) int {
+    if u >= 0x8000_0000_0000_0000 {
+        return ^int(^u)
+    }
+    return int(u)
+}
+
+// ---------- reais (IEEE 754) ----------
+
+pub fn f32_be(src &[]byte) float32 {
+    return math.float32_from_bits(u32_be(src))
+}
+
+pub fn f32_le(src &[]byte) float32 {
+    return math.float32_from_bits(u32_le(src))
+}
+
+pub fn put_f32_be(dst &[]byte, x float32) {
+    put_u32_be(dst, math.float32_bits(x))
+}
+
+pub fn put_f32_le(dst &[]byte, x float32) {
+    put_u32_le(dst, math.float32_bits(x))
+}
+
+pub fn f64_be(src &[]byte) float64 {
+    return math.float64_from_bits(u64_be(src))
+}
+
+pub fn f64_le(src &[]byte) float64 {
+    return math.float64_from_bits(u64_le(src))
+}
+
+pub fn put_f64_be(dst &[]byte, x float64) {
+    put_u64_be(dst, math.float64_bits(x))
+}
+
+pub fn put_f64_le(dst &[]byte, x float64) {
+    put_u64_le(dst, math.float64_bits(x))
+}
+
+// ---------- varint ----------
+
+// MAX_VARINT é o maior tamanho de um varint de 64 bits: um [10]byte sempre
+// basta.
+pub const MAX_VARINT = 10
+
+// uvarint_len diz quantos bytes put_uvarint usa para v (1 a 10).
+pub fn uvarint_len(v uint64) int {
+    n := 1
+    for v >= 0x80 {
+        v >>= 7
+        n++
+    }
+    return n
+}
+
+// put_uvarint escreve v em 7 bits por byte, o menos significativo primeiro
+// (o bit 0x80 diz que vem mais um byte), e devolve quantos bytes usou.
+pub fn put_uvarint(dst &[]byte, v uint64) int {
+    need(dst, uvarint_len(v))
+    i := 0
+    for v >= 0x80 {
+        dst[i] = byte(v & 0x7F) | 0x80
+        v >>= 7
+        i++
+    }
+    dst[i] = byte(v)
+    return i + 1
+}
+
+// uvarint lê um varint do começo de src para out e devolve quantos bytes
+// usou; 0 se src acabar no meio (faltam bytes: leia mais e tente de novo) e
+// -1 se o número não couber em 64 bits.
+pub fn uvarint(src &[]byte, out &uint64) int {
+    var v uint64 = 0
+    shift := 0
+    for i := 0; i < len(src); i++ {
+        if i == MAX_VARINT {
+            return -1
+        }
+        b := src[i]
+        if b < 0x80 {
+            if i == MAX_VARINT - 1 && b > 1 {
+                return -1
+            }
+            *out = v | (uint64(b) << shift)
+            return i + 1
+        }
+        v |= uint64(b & 0x7F) << shift
+        shift += 7
+    }
+    return 0
+}
+
+// Os varints com sinal usam zigzag: 0, -1, 1, -2, 2... viram 0, 1, 2, 3,
+// 4..., então números pequenos, positivos ou negativos, ocupam poucos bytes.
+
+// varint_len diz quantos bytes put_varint usa para v.
+pub fn varint_len(v int) int {
+    return uvarint_len(zigzag(v))
+}
+
+// put_varint escreve v (com sinal) e devolve quantos bytes usou.
+pub fn put_varint(dst &[]byte, v int) int {
+    return put_uvarint(dst, zigzag(v))
+}
+
+// varint lê um varint com sinal; o retorno é o mesmo de uvarint.
+pub fn varint(src &[]byte, out &int) int {
+    var u uint64 = 0
+    n := uvarint(src, &u)
+    if n > 0 {
+        v := int(u >> 1)
+        if u & 1 != 0 {
+            v = ^v
+        }
+        *out = v
+    }
+    return n
+}
+
+fn zigzag(v int) uint64 {
+    if v < 0 {
+        return (uint64(^v) << 1) | 1
+    }
+    return uint64(v) << 1
+}
