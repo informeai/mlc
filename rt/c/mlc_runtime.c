@@ -979,6 +979,7 @@ void mlc_std_testing_expect_panic(const char *file, int line) {
 static void *mlc_thread_entry(void *p) {
     mlc_thread *t = p;
     t->run(t);
+    t->done = 1;
     return NULL;
 }
 
@@ -994,6 +995,7 @@ void mlc_thread_start(mlc_thread *t, void (*run)(mlc_thread *), int64_t stack, c
         mlc_panic(file, line, "thread.spawn: tamanho de pilha recusado pelo sistema");
     }
     t->run = run;
+    t->done = 0;
     int err = pthread_create(&t->th, &attr, mlc_thread_entry, t);
     pthread_attr_destroy(&attr);
     if (err != 0) mlc_panic(file, line, "thread.spawn: o sistema não criou a thread (limite de threads ou de memória)");
@@ -1515,6 +1517,8 @@ void mlc_std_encoding_fail(mlc_str msg, const char *file, int line) { mlc_std_pr
 
 void mlc_std_binary_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
 
+void mlc_std_http_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
+
 /* os.error_text: o texto de um código de erro da biblioteca. Os códigos
  * abaixo de 1000 são os do sistema (errno), com os mais comuns em português;
  * os de 1000 em diante são do MLC e valem em todos os sistemas. */
@@ -1530,6 +1534,8 @@ static const char *mlc_error_text(int64_t code) {
     case 2003: return "a porta já está em uso";
     case 2004: return "passou do tempo limite";
     case 2005: return "a conexão foi fechada pelo outro lado";
+    case 3001: return "mensagem HTTP inválida";
+    case 3002: return "cabeçalho HTTP grande demais";
     case EPERM: return "operação não permitida";
     case ENOENT: return "não existe";
     case EIO: return "erro de entrada e saída";
@@ -1869,13 +1875,36 @@ mlc_group *mlc_std_sync_group(int64_t cap, const char *file, int line) {
     return g;
 }
 
+/* reap espera as threads que já terminaram e tira-as do grupo, mantendo a
+ * ordem das outras. */
+int64_t mlc_std_sync_reap_raw(mlc_group *g, const char *file, int line) {
+    int64_t k = 0, freed = 0;
+    for (int64_t i = 0; i < g->len; i++) {
+        mlc_thread *t = g->threads[i];
+        if (t->done) {
+            mlc_thread_join(t, file, line);
+            mlc_free(t);
+            freed++;
+        } else {
+            g->threads[k++] = t;
+        }
+    }
+    g->len = k;
+    return freed;
+}
+
 void mlc_std_sync_add_raw(mlc_group *g, mlc_thread *t, const char *file, int line) {
-    if (g->len == g->cap) {
-        /* a thread já está rodando: espera por ela antes do panic, para não
-         * deixá-la solta */
+    if (g->cap == 0) {
         mlc_thread_join(t, file, line);
         mlc_free(t);
-        mlc_panic(file, line, "sync.Group.add: o grupo está cheio (aumente a capacidade de sync.group)");
+        mlc_panic(file, line, "sync.Group.add: um grupo de capacidade 0 não recebe threads");
+    }
+    if (g->len == g->cap && mlc_std_sync_reap_raw(g, file, line) == 0) {
+        /* cheio e ninguém terminou: espera a mais antiga */
+        mlc_thread_join(g->threads[0], file, line);
+        mlc_free(g->threads[0]);
+        memmove(&g->threads[0], &g->threads[1], (size_t)(g->len - 1) * sizeof g->threads[0]);
+        g->len--;
     }
     g->threads[g->len++] = t;
 }

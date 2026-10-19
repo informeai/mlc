@@ -2,6 +2,7 @@ import "std/atomic"
 import "std/sync"
 import "std/testing"
 import "std/thread"
+import "std/time"
 
 fn add_ten(n *atomic.Int) {
     for i := 0; i < 10; i++ {
@@ -30,10 +31,33 @@ fn test_empty_group() {
 fn nothing(n int) {
 }
 
-fn test_full_group() {
-    testing.expect_panic()
-    g := sync.group(1)
+// mais threads que a capacidade: add espera uma vaga
+fn test_more_threads_than_capacity() {
+    n := atomic.new_int(0)
+    g := sync.group(3)
+    for i := 0; i < 50; i++ {
+        g.add(thread.spawn(add_ten, n.clone(), thread.STACK_64KB))
+        testing.check(g.len() <= 3, "nunca mais que a capacidade")
+    }
+    g.wait()
+    testing.eq_int(n.load(), 500)
+    n.close()
+}
+
+fn test_reap() {
+    g := sync.group(4)
     g.add(thread.spawn(nothing, 1, thread.STACK_64KB))
     g.add(thread.spawn(nothing, 2, thread.STACK_64KB))
+    time.sleep_ms(50) // as duas terminam
+    testing.eq_int(g.reap(), 2)
+    testing.eq_int(g.len(), 0)
+    testing.eq_int(g.reap(), 0)
+    g.wait()
+}
+
+fn test_zero_capacity() {
+    testing.expect_panic()
+    g := sync.group(0)
+    g.add(thread.spawn(nothing, 1, thread.STACK_64KB))
     g.wait()
 }

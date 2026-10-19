@@ -1,0 +1,1015 @@
+// HTTP/1.1 sobre qualquer Stream (net.Conn, ou um tipo seu nos testes):
+// o servidor lê pedidos e escreve respostas, o cliente escreve pedidos e lê
+// respostas. Nada aloca: a mensagem recebida (Message) guarda um buffer
+// fixo de 8 KB dentro dela, onde ficam o cabeçalho e o começo do corpo, e
+// a que sai (Builder) monta o cabeçalho num buffer de 4 KB. O corpo vai e
+// vem por buffers de quem chama.
+//
+// Servidor (uma conexão; o laço do accept e as threads ficam com quem
+// chama, veja tests/run/http_servico.mlc):
+//
+//     var m http.Message
+//     for {
+//         match m.read_request(&c) {
+//             Ok(_) => {}
+//             Err(_) => break            // io.EOF: o cliente fechou
+//         }
+//         if m.method_is("GET") && m.path_is("/health") {
+//             http.respond_str(&c, 200, "text/plain", "ok\n")
+//         } else {
+//             http.respond_str(&c, 404, "text/plain", "não encontrado\n")
+//         }
+//         if !m.keep_alive() {
+//             break
+//         }
+//     }
+//
+// Cliente:
+//
+//     var b http.Builder
+//     b.request("GET", "/api/itens")
+//     b.header("Host", "exemplo.com")
+//     b.send_str(&c, "")
+//     var m http.Message
+//     m.read_response(&c)                // m.status() é o código
+//     match m.read_all(&c, &body) {
+//         Ok(n) => ... &body[:n] ...
+//         Err(code) => ...
+//     }
+//
+// Sem TLS: para HTTPS, ponha o serviço atrás de um proxy (nginx, Caddy, o
+// balanceador da nuvem). Os textos (método, caminho, cabeçalhos) são
+// copiados para buffers de quem chama, ou comparados sem cópia (method_is,
+// path_is, header_is).
+import "std/io"
+import "std/net"
+import "std/result"
+import "std/str"
+
+// códigos de erro (os da fonte, como net.TIMEOUT, chegam como vieram)
+pub const BAD_MESSAGE = 3001  // a mensagem não é HTTP/1.x válido
+pub const HEAD_TOO_BIG = 3002 // o cabeçalho não cabe nos 8 KB (ou tem mais de 64 campos)
+pub const TOO_BIG = 1000      // read_all: o corpo não cabe em dst
+
+pub const MAX_HEADERS = 64
+
+// Stream é por onde a mensagem passa: uma conexão.
+pub interface Stream {
+    fn read(self &Self, dst &[]byte) result.Result[int, int]
+    fn write(self &Self, data &[]byte) result.Result[int, int]
+}
+
+impl Stream for net.Conn
+
+// ---------- mensagem recebida ----------
+
+struct Field {
+    name_at int
+    name_n int
+    value_at int
+    value_n int
+}
+
+// como o corpo termina
+const BODY_NONE = 0
+const BODY_LENGTH = 1
+const BODY_CHUNKED = 2
+const BODY_UNTIL_CLOSE = 3
+
+// no corpo chunked: o que vem a seguir
+const CHUNK_SIZE = 0 // a linha com o tamanho do pedaço
+const CHUNK_DATA = 1 // os bytes do pedaço (left)
+const CHUNK_END = 2  // o \r\n depois dos bytes
+
+// Message é um pedido (no servidor) ou uma resposta (no cliente) recebida.
+// O valor zero está pronto para usar; numa conexão com keep-alive, a mesma
+// Message lê um pedido depois do outro (o corpo que não foi lido é
+// descartado).
+pub struct Message {
+    buf [8192]byte
+    n int    // bytes válidos em buf
+    head int // fim do cabeçalho (depois da linha vazia); 0: nada lido
+    pos int  // próximo byte do corpo em buf
+    request bool
+    method_at int
+    method_n int
+    target_at int
+    target_n int
+    code int
+    minor int // HTTP/1.minor
+    fields [64]Field
+    nfields int
+    mode int
+    left int // LENGTH: bytes que faltam; CHUNKED: bytes que faltam no pedaço
+    chunk int
+    done bool
+    keep bool
+    length int // Content-Length, ou -1
+}
+
+// read_request lê o cabeçalho de um pedido. Err(io.EOF) quando a conexão
+// fechou antes de começar um pedido (o fim normal de um keep-alive).
+pub fn (m &Message) read_request[S ref + Stream](c &S) result.Result[int, int] {
+    return m.read_head(c, true)
+}
+
+// read_response lê o cabeçalho de uma resposta.
+pub fn (m &Message) read_response[S ref + Stream](c &S) result.Result[int, int] {
+    return m.read_head(c, false)
+}
+
+fn (m &Message) read_head[S ref + Stream](c &S, request bool) result.Result[int, int] {
+    if m.head > 0 {
+        // a mensagem anterior: descarta o resto do corpo e o que foi usado
+        if !m.done {
+            match m.skip_body(c) {
+                Ok(_) => {}
+                Err(code) => {
+                    return result.Result.Err(code)
+                }
+            }
+        }
+        k := m.n - m.pos
+        for i := 0; i < k; i++ {
+            m.buf[i] = m.buf[m.pos + i]
+        }
+        m.n = k
+    }
+    m.head = 0
+    m.pos = 0
+    m.request = request
+    m.nfields = 0
+    m.done = false
+    m.length = -1
+    m.left = 0
+    m.chunk = CHUNK_SIZE
+    scanned := 0
+    for {
+        end := find_blank_line(&m.buf, scanned, m.n)
+        if end > 0 {
+            m.head = end
+            m.pos = end
+            break
+        }
+        if m.n > 3 {
+            scanned = m.n - 3
+        }
+        if m.n == len(m.buf) {
+            return result.Result.Err(HEAD_TOO_BIG)
+        }
+        match c.read(&m.buf[m.n:]) {
+            Ok(k) => {
+                if k == 0 {
+                    if m.n == 0 {
+                        return result.Result.Err(io.EOF)
+                    }
+                    return result.Result.Err(BAD_MESSAGE)
+                }
+                m.n += k
+            }
+            Err(code) => {
+                return result.Result.Err(code)
+            }
+        }
+    }
+    code := m.parse()
+    if code != 0 {
+        m.head = 0 // não reaproveita uma conexão com lixo
+        m.n = 0
+        return result.Result.Err(code)
+    }
+    return result.Result.Ok(m.head)
+}
+
+// find_blank_line procura \r\n\r\n em b[from:n] e devolve a posição depois
+// dele, ou 0.
+fn find_blank_line(b &[]byte, from int, n int) int {
+    for i := from; i + 3 < n; i++ {
+        if b[i] == '\r' && b[i + 1] == '\n' && b[i + 2] == '\r' && b[i + 3] == '\n' {
+            return i + 4
+        }
+    }
+    return 0
+}
+
+// parse lê a primeira linha e os campos de buf[:head]; devolve 0 ou o erro.
+fn (m &Message) parse() int {
+    i := line_end(&m.buf, 0, m.head)
+    if m.request {
+        // GET /caminho?x=1 HTTP/1.1
+        sp1 := index_byte(&m.buf, ' ', 0, i)
+        if sp1 <= 0 {
+            return BAD_MESSAGE
+        }
+        sp2 := index_byte(&m.buf, ' ', sp1 + 1, i)
+        if sp2 < 0 || sp2 == sp1 + 1 {
+            return BAD_MESSAGE
+        }
+        m.method_at = 0
+        m.method_n = sp1
+        m.target_at = sp1 + 1
+        m.target_n = sp2 - sp1 - 1
+        if !m.version(sp2 + 1, i) {
+            return BAD_MESSAGE
+        }
+    } else {
+        // HTTP/1.1 200 OK
+        sp := index_byte(&m.buf, ' ', 0, i)
+        if sp < 0 || !m.version(0, sp) || sp + 4 > i {
+            return BAD_MESSAGE
+        }
+        m.code = 0
+        for k := sp + 1; k < sp + 4; k++ {
+            d := m.buf[k]
+            if d < '0' || d > '9' {
+                return BAD_MESSAGE
+            }
+            m.code = m.code * 10 + int(d) - int('0')
+        }
+    }
+    // os campos: nome: valor
+    at := i + 2
+    for at < m.head - 2 {
+        e := line_end(&m.buf, at, m.head)
+        colon := index_byte(&m.buf, ':', at, e)
+        if colon <= at {
+            return BAD_MESSAGE
+        }
+        if m.nfields == MAX_HEADERS {
+            return HEAD_TOO_BIG
+        }
+        v := colon + 1
+        for v < e && (m.buf[v] == ' ' || m.buf[v] == '\t') {
+            v++
+        }
+        ve := e
+        for ve > v && (m.buf[ve - 1] == ' ' || m.buf[ve - 1] == '\t') {
+            ve--
+        }
+        m.fields[m.nfields] = Field{name_at: at, name_n: colon - at, value_at: v, value_n: ve - v}
+        m.nfields++
+        at = e + 2
+    }
+    return m.body_kind()
+}
+
+// version confere HTTP/1.x em buf[a:b].
+fn (m &Message) version(a int, b int) bool {
+    if b - a != 8 || !prefix_at(&m.buf, a, "HTTP/1.") {
+        return false
+    }
+    d := m.buf[a + 7]
+    if d != '0' && d != '1' {
+        return false
+    }
+    m.minor = int(d) - int('0')
+    return true
+}
+
+// body_kind decide como o corpo termina e se a conexão continua.
+fn (m &Message) body_kind() int {
+    m.keep = m.minor == 1
+    i := m.field("Connection")
+    if i >= 0 {
+        if m.value_eq(i, "close") {
+            m.keep = false
+        } else if m.value_eq(i, "keep-alive") {
+            m.keep = true
+        }
+    }
+    te := m.field("Transfer-Encoding")
+    cl := m.field("Content-Length")
+    if te >= 0 {
+        if !m.value_eq(te, "chunked") {
+            return BAD_MESSAGE // só chunked é aceito
+        }
+        m.mode = BODY_CHUNKED
+        return 0
+    }
+    if cl >= 0 {
+        f := m.fields[cl]
+        n := 0
+        if !str.parse_int(&m.buf[f.value_at:f.value_at + f.value_n], &n) || n < 0 {
+            return BAD_MESSAGE
+        }
+        m.length = n
+        m.mode = BODY_LENGTH
+        m.left = n
+        m.done = n == 0
+        return 0
+    }
+    if m.request || m.code < 200 || m.code == 204 || m.code == 304 {
+        m.mode = BODY_NONE
+        m.done = true
+        return 0
+    }
+    m.mode = BODY_UNTIL_CLOSE // resposta sem tamanho: até a conexão fechar
+    m.keep = false
+    return 0
+}
+
+// ---------- o que veio ----------
+
+// method_is compara o método (GET, POST...).
+pub fn (m &Message) method_is(s string) bool {
+    return str.eq(&m.buf[m.method_at:m.method_at + m.method_n], s)
+}
+
+// method copia o método para dst.
+pub fn (m &Message) method(dst &[]byte) int {
+    return str.copy_bytes(dst, &m.buf[m.method_at:m.method_at + m.method_n])
+}
+
+// target copia o alvo do pedido como veio (caminho e consulta: /a/b?x=1).
+pub fn (m &Message) target(dst &[]byte) int {
+    return str.copy_bytes(dst, &m.buf[m.target_at:m.target_at + m.target_n])
+}
+
+// path copia o caminho, sem a consulta e sem decodificar (/a%20b fica
+// assim; use http.unescape).
+pub fn (m &Message) path(dst &[]byte) int {
+    return str.copy_bytes(dst, &m.buf[m.target_at:m.path_end()])
+}
+
+// path_is compara o caminho (sem a consulta).
+pub fn (m &Message) path_is(s string) bool {
+    return str.eq(&m.buf[m.target_at:m.path_end()], s)
+}
+
+// path_has_prefix diz se o caminho começa com s (para rotas como /api/).
+pub fn (m &Message) path_has_prefix(s string) bool {
+    e := m.path_end()
+    return e - m.target_at >= len(s) && prefix_at(&m.buf, m.target_at, s)
+}
+
+fn (m &Message) path_end() int {
+    q := index_byte(&m.buf, '?', m.target_at, m.target_at + m.target_n)
+    if q < 0 {
+        return m.target_at + m.target_n
+    }
+    return q
+}
+
+// query copia a consulta (o que vem depois do ?), sem decodificar.
+pub fn (m &Message) query(dst &[]byte) int {
+    e := m.path_end()
+    end := m.target_at + m.target_n
+    if e == end {
+        return 0
+    }
+    return str.copy_bytes(dst, &m.buf[e + 1:end])
+}
+
+// query_param copia o valor do parâmetro name da consulta, decodificado
+// (%41 e +), e devolve o tamanho; -1 se ele não existe (ou se a codificação
+// é inválida).
+pub fn (m &Message) query_param(name string, dst &[]byte) int {
+    at := m.path_end() + 1
+    end := m.target_at + m.target_n
+    for at < end {
+        amp := index_byte(&m.buf, '&', at, end)
+        if amp < 0 {
+            amp = end
+        }
+        eq := index_byte(&m.buf, '=', at, amp)
+        key_end := amp
+        if eq >= 0 {
+            key_end = eq
+        }
+        if str.eq(&m.buf[at:key_end], name) {
+            if eq < 0 {
+                return 0 // ?flag, sem valor
+            }
+            return unescape(dst, &m.buf[eq + 1:amp])
+        }
+        at = amp + 1
+    }
+    return -1
+}
+
+// status é o código da resposta (200, 404...).
+pub fn (m &Message) status() int {
+    return m.code
+}
+
+// keep_alive diz se a conexão pode ser usada para outra mensagem.
+pub fn (m &Message) keep_alive() bool {
+    return m.keep
+}
+
+// content_length é o Content-Length, ou -1 se não veio.
+pub fn (m &Message) content_length() int {
+    return m.length
+}
+
+// header copia o valor do campo name (sem diferenciar maiúsculas no nome)
+// e devolve o tamanho; -1 se ele não veio.
+pub fn (m &Message) header(name string, dst &[]byte) int {
+    i := m.field(name)
+    if i < 0 {
+        return -1
+    }
+    f := m.fields[i]
+    return str.copy_bytes(dst, &m.buf[f.value_at:f.value_at + f.value_n])
+}
+
+// has_header diz se o campo veio.
+pub fn (m &Message) has_header(name string) bool {
+    return m.field(name) >= 0
+}
+
+// header_is compara o valor do campo, sem diferenciar maiúsculas
+// (Connection: Close, application/JSON).
+pub fn (m &Message) header_is(name string, value string) bool {
+    i := m.field(name)
+    return i >= 0 && m.value_eq(i, value)
+}
+
+// header_count, header_name e header_value percorrem todos os campos.
+pub fn (m &Message) header_count() int {
+    return m.nfields
+}
+
+pub fn (m &Message) header_name(i int, dst &[]byte) int {
+    f := m.fields[i]
+    return str.copy_bytes(dst, &m.buf[f.name_at:f.name_at + f.name_n])
+}
+
+pub fn (m &Message) header_value(i int, dst &[]byte) int {
+    f := m.fields[i]
+    return str.copy_bytes(dst, &m.buf[f.value_at:f.value_at + f.value_n])
+}
+
+fn (m &Message) field(name string) int {
+    for i := 0; i < m.nfields; i++ {
+        f := m.fields[i]
+        if f.name_n == len(name) && fold_eq(&m.buf, f.name_at, name) {
+            return i
+        }
+    }
+    return -1
+}
+
+fn (m &Message) value_eq(i int, s string) bool {
+    f := m.fields[i]
+    return f.value_n == len(s) && fold_eq(&m.buf, f.value_at, s)
+}
+
+// ---------- o corpo ----------
+
+// read_body lê até len(dst) bytes do corpo (já sem o chunked) e devolve
+// quantos leu; Ok(0) é o fim do corpo. Pode ler menos que len(dst).
+pub fn (m &Message) read_body[S ref + Stream](c &S, dst &[]byte) result.Result[int, int] {
+    if m.done || len(dst) == 0 {
+        return result.Result.Ok(0)
+    }
+    if m.mode == BODY_LENGTH {
+        k := m.left
+        if k > len(dst) {
+            k = len(dst)
+        }
+        match m.take(c, &dst[:k], false) {
+            Ok(got) => {
+                m.left -= got
+                m.done = m.left == 0
+                return result.Result.Ok(got)
+            }
+            Err(code) => {
+                return result.Result.Err(code)
+            }
+        }
+    }
+    if m.mode == BODY_UNTIL_CLOSE {
+        match m.take(c, dst, true) {
+            Ok(got) => {
+                m.done = got == 0
+                return result.Result.Ok(got)
+            }
+            Err(code) => {
+                return result.Result.Err(code)
+            }
+        }
+    }
+    // chunked: tamanho em hex, \r\n, os bytes, \r\n; um pedaço 0 termina
+    for {
+        if m.chunk == CHUNK_DATA {
+            k := m.left
+            if k > len(dst) {
+                k = len(dst)
+            }
+            match m.take(c, &dst[:k], false) {
+                Ok(got) => {
+                    m.left -= got
+                    if m.left == 0 {
+                        m.chunk = CHUNK_END
+                    }
+                    return result.Result.Ok(got)
+                }
+                Err(code) => {
+                    return result.Result.Err(code)
+                }
+            }
+        }
+        match m.line(c) {
+            Ok(e) => {
+                if m.chunk == CHUNK_END {
+                    if e != m.pos {
+                        return result.Result.Err(BAD_MESSAGE) // esperava só \r\n
+                    }
+                    m.pos = e + 2
+                    m.chunk = CHUNK_SIZE
+                } else {
+                    size := parse_hex(&m.buf, m.pos, e)
+                    m.pos = e + 2
+                    if size < 0 {
+                        return result.Result.Err(BAD_MESSAGE)
+                    }
+                    if size == 0 {
+                        // fim: pula os campos finais (trailers) até a linha vazia
+                        for {
+                            match m.line(c) {
+                                Ok(t) => {
+                                    blank := t == m.pos
+                                    m.pos = t + 2
+                                    if blank {
+                                        m.done = true
+                                        return result.Result.Ok(0)
+                                    }
+                                }
+                                Err(code) => {
+                                    return result.Result.Err(code)
+                                }
+                            }
+                        }
+                    }
+                    m.left = size
+                    m.chunk = CHUNK_DATA
+                }
+            }
+            Err(code) => {
+                return result.Result.Err(code)
+            }
+        }
+    }
+}
+
+// read_all lê o corpo inteiro para dst e devolve o tamanho; Err(TOO_BIG)
+// se não couber (o que coube fica em dst).
+pub fn (m &Message) read_all[S ref + Stream](c &S, dst &[]byte) result.Result[int, int] {
+    n := 0
+    for {
+        if n == len(dst) {
+            var probe [1]byte
+            match m.read_body(c, &probe) {
+                Ok(k) => {
+                    if k == 0 {
+                        return result.Result.Ok(n)
+                    }
+                    return result.Result.Err(TOO_BIG)
+                }
+                Err(code) => {
+                    return result.Result.Err(code)
+                }
+            }
+        }
+        match m.read_body(c, &dst[n:]) {
+            Ok(k) => {
+                if k == 0 {
+                    return result.Result.Ok(n)
+                }
+                n += k
+            }
+            Err(code) => {
+                return result.Result.Err(code)
+            }
+        }
+    }
+}
+
+// skip_body lê e descarta o resto do corpo.
+pub fn (m &Message) skip_body[S ref + Stream](c &S) result.Result[int, int] {
+    var trash [1024]byte
+    total := 0
+    for {
+        match m.read_body(c, &trash) {
+            Ok(k) => {
+                if k == 0 {
+                    return result.Result.Ok(total)
+                }
+                total += k
+            }
+            Err(code) => {
+                return result.Result.Err(code)
+            }
+        }
+    }
+}
+
+// take entrega até len(dst) bytes: primeiro os que estão em buf, senão uma
+// leitura da conexão direto para dst. Ok(0) só com eof_ok (corpo até
+// fechar); senão a conexão fechar no meio é BAD_MESSAGE.
+fn (m &Message) take[S ref + Stream](c &S, dst &[]byte, eof_ok bool) result.Result[int, int] {
+    if m.pos < m.n {
+        k := m.n - m.pos
+        if k > len(dst) {
+            k = len(dst)
+        }
+        for i := 0; i < k; i++ {
+            dst[i] = m.buf[m.pos + i]
+        }
+        m.pos += k
+        return result.Result.Ok(k)
+    }
+    match c.read(dst) {
+        Ok(k) => {
+            if k == 0 && !eof_ok {
+                return result.Result.Err(BAD_MESSAGE)
+            }
+            return result.Result.Ok(k)
+        }
+        Err(code) => {
+            return result.Result.Err(code)
+        }
+    }
+}
+
+// line garante uma linha inteira (até \r\n) em buf a partir de pos e
+// devolve a posição do \r. Para ler mais, move o que sobrou para logo
+// depois do cabeçalho.
+fn (m &Message) line[S ref + Stream](c &S) result.Result[int, int] {
+    for {
+        for i := m.pos; i + 1 < m.n; i++ {
+            if m.buf[i] == '\r' && m.buf[i + 1] == '\n' {
+                return result.Result.Ok(i)
+            }
+        }
+        k := m.n - m.pos
+        for i := 0; i < k; i++ {
+            m.buf[m.head + i] = m.buf[m.pos + i]
+        }
+        m.pos = m.head
+        m.n = m.head + k
+        if m.n == len(m.buf) {
+            return result.Result.Err(HEAD_TOO_BIG)
+        }
+        match c.read(&m.buf[m.n:]) {
+            Ok(got) => {
+                if got == 0 {
+                    return result.Result.Err(BAD_MESSAGE)
+                }
+                m.n += got
+            }
+            Err(code) => {
+                return result.Result.Err(code)
+            }
+        }
+    }
+}
+
+// ---------- mensagem que sai ----------
+
+// Builder monta o cabeçalho de uma resposta (response) ou de um pedido
+// (request) e o manda com o corpo (send). O Content-Length é posto por
+// send. O valor zero está pronto para usar, e o mesmo Builder serve para
+// várias mensagens (response e request recomeçam).
+pub struct Builder {
+    buf [4096]byte
+    n int
+    has_length bool
+    no_body bool // 1xx, 204, 304: sem corpo nem Content-Length
+}
+
+// response começa uma resposta: HTTP/1.1 200 OK.
+pub fn (b &Builder) response(status int) {
+    b.n = str.copy(&b.buf, "HTTP/1.1 ")
+    b.n += str.put_int(&b.buf[b.n:], status)
+    b.n += str.copy(&b.buf[b.n:], " ")
+    b.n += str.copy(&b.buf[b.n:], status_text(status))
+    b.n += str.copy(&b.buf[b.n:], "\r\n")
+    b.has_length = false
+    b.no_body = status < 200 || status == 204 || status == 304
+}
+
+// request começa um pedido: GET /caminho HTTP/1.1. Lembre do campo Host.
+pub fn (b &Builder) request(method string, target string) {
+    b.n = str.copy(&b.buf, method)
+    b.n += str.copy(&b.buf[b.n:], " ")
+    b.n += str.copy(&b.buf[b.n:], target)
+    b.n += str.copy(&b.buf[b.n:], " HTTP/1.1\r\n")
+    b.has_length = false
+    b.no_body = false
+}
+
+// request_bytes é request com o alvo montado em tempo de execução.
+pub fn (b &Builder) request_bytes(method string, target &[]byte) {
+    b.n = str.copy(&b.buf, method)
+    b.n += str.copy(&b.buf[b.n:], " ")
+    b.n += str.copy_bytes(&b.buf[b.n:], target)
+    b.n += str.copy(&b.buf[b.n:], " HTTP/1.1\r\n")
+    b.has_length = false
+    b.no_body = false
+}
+
+// header acrescenta um campo. Um Content-Length escrito aqui substitui o
+// automático (para mandar o corpo depois, com start).
+pub fn (b &Builder) header(name string, value string) {
+    b.name(name)
+    b.n += str.copy(&b.buf[b.n:], value)
+    b.n += str.copy(&b.buf[b.n:], "\r\n")
+}
+
+// header_bytes acrescenta um campo com o valor montado em tempo de execução.
+pub fn (b &Builder) header_bytes(name string, value &[]byte) {
+    b.name(name)
+    b.n += str.copy_bytes(&b.buf[b.n:], value)
+    b.n += str.copy(&b.buf[b.n:], "\r\n")
+}
+
+// header_int acrescenta um campo com valor inteiro.
+pub fn (b &Builder) header_int(name string, value int) {
+    b.name(name)
+    b.n += str.put_int(&b.buf[b.n:], value)
+    b.n += str.copy(&b.buf[b.n:], "\r\n")
+}
+
+fn (b &Builder) name(name string) {
+    if b.n == 0 {
+        fail("http.Builder: comece com response ou request")
+    }
+    if len(name) == len("Content-Length") && fold_eq_str(name, "Content-Length") {
+        b.has_length = true
+    }
+    b.n += str.copy(&b.buf[b.n:], name)
+    b.n += str.copy(&b.buf[b.n:], ": ")
+}
+
+// send termina o cabeçalho (com o Content-Length do corpo) e manda o
+// cabeçalho e o corpo. Um corpo pequeno vai junto, numa escrita só.
+pub fn (b &Builder) send[S ref + Stream](c &S, body &[]byte) result.Result[int, int] {
+    if !b.has_length && !b.no_body {
+        b.header_int("Content-Length", len(body))
+    }
+    b.end_head()
+    if b.n + len(body) <= len(b.buf) {
+        b.n += str.copy_bytes(&b.buf[b.n:], body)
+        return write_all(c, &b.buf[:b.n])
+    }
+    match write_all(c, &b.buf[:b.n]) {
+        Ok(_) => {}
+        Err(code) => {
+            return result.Result.Err(code)
+        }
+    }
+    return write_all(c, body)
+}
+
+// send_str é send com o corpo escrito no programa.
+pub fn (b &Builder) send_str[S ref + Stream](c &S, body string) result.Result[int, int] {
+    if !b.has_length && !b.no_body {
+        b.header_int("Content-Length", len(body))
+    }
+    b.end_head()
+    k := len(body)
+    if b.n + k > len(b.buf) {
+        match write_all(c, &b.buf[:b.n]) {
+            Ok(_) => {}
+            Err(code) => {
+                return result.Result.Err(code)
+            }
+        }
+        b.n = 0
+    }
+    b.n += str.copy(&b.buf[b.n:], body)
+    return write_all(c, &b.buf[:b.n])
+}
+
+// start manda só o cabeçalho, com o Content-Length length: o corpo vai
+// depois, em pedaços, com c.write (para arquivos grandes).
+pub fn (b &Builder) start[S ref + Stream](c &S, length int) result.Result[int, int] {
+    if !b.has_length && !b.no_body {
+        b.header_int("Content-Length", length)
+    }
+    b.end_head()
+    return write_all(c, &b.buf[:b.n])
+}
+
+fn (b &Builder) end_head() {
+    if b.n == 0 {
+        fail("http.Builder: comece com response ou request")
+    }
+    b.n += str.copy(&b.buf[b.n:], "\r\n")
+}
+
+fn write_all[S ref + Stream](c &S, data &[]byte) result.Result[int, int] {
+    return c.write(data)
+}
+
+// respond manda uma resposta completa: o código, o Content-Type e o corpo.
+pub fn respond[S ref + Stream](c &S, status int, content_type string, body &[]byte) result.Result[int, int] {
+    var b Builder
+    b.response(status)
+    b.header("Content-Type", content_type)
+    return b.send(c, body)
+}
+
+// respond_str é respond com o corpo escrito no programa.
+pub fn respond_str[S ref + Stream](c &S, status int, content_type string, body string) result.Result[int, int] {
+    var b Builder
+    b.response(status)
+    b.header("Content-Type", content_type)
+    return b.send_str(c, body)
+}
+
+// status_text é a frase de um código (200: OK, 404: Not Found).
+pub fn status_text(code int) string {
+    match code {
+        100 => return "Continue"
+        101 => return "Switching Protocols"
+        200 => return "OK"
+        201 => return "Created"
+        202 => return "Accepted"
+        204 => return "No Content"
+        206 => return "Partial Content"
+        301 => return "Moved Permanently"
+        302 => return "Found"
+        303 => return "See Other"
+        304 => return "Not Modified"
+        307 => return "Temporary Redirect"
+        308 => return "Permanent Redirect"
+        400 => return "Bad Request"
+        401 => return "Unauthorized"
+        403 => return "Forbidden"
+        404 => return "Not Found"
+        405 => return "Method Not Allowed"
+        408 => return "Request Timeout"
+        409 => return "Conflict"
+        411 => return "Length Required"
+        413 => return "Content Too Large"
+        414 => return "URI Too Long"
+        415 => return "Unsupported Media Type"
+        422 => return "Unprocessable Content"
+        429 => return "Too Many Requests"
+        431 => return "Request Header Fields Too Large"
+        500 => return "Internal Server Error"
+        501 => return "Not Implemented"
+        502 => return "Bad Gateway"
+        503 => return "Service Unavailable"
+        504 => return "Gateway Timeout"
+        _ => return "Unknown"
+    }
+}
+
+// ---------- codificação de URL ----------
+
+// unescape decodifica %XX e + (espaço) de src para dst e devolve o tamanho,
+// ou -1 se um % não for seguido de dois dígitos hex.
+pub fn unescape(dst &[]byte, src &[]byte) int {
+    n := 0
+    i := 0
+    for i < len(src) {
+        c := src[i]
+        if c == '%' {
+            if i + 2 >= len(src) {
+                return -1
+            }
+            hi := hex_value(src[i + 1])
+            lo := hex_value(src[i + 2])
+            if hi < 0 || lo < 0 {
+                return -1
+            }
+            c = byte(hi * 16 + lo)
+            i += 2
+        } else if c == '+' {
+            c = ' '
+        }
+        if n == len(dst) {
+            fail("http.unescape: o destino é pequeno demais")
+        }
+        dst[n] = c
+        n++
+        i++
+    }
+    return n
+}
+
+// escape codifica src para usar num caminho ou numa consulta: letras,
+// dígitos e - _ . ~ ficam, o resto vira %XX.
+pub fn escape(dst &[]byte, src &[]byte) int {
+    n := 0
+    for i := 0; i < len(src); i++ {
+        c := src[i]
+        if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~' {
+            if n == len(dst) {
+                fail("http.escape: o destino é pequeno demais")
+            }
+            dst[n] = c
+            n++
+        } else {
+            if n + 3 > len(dst) {
+                fail("http.escape: o destino é pequeno demais")
+            }
+            dst[n] = '%'
+            dst[n + 1] = HEX[int(c >> 4)]
+            dst[n + 2] = HEX[int(c & 0x0F)]
+            n += 3
+        }
+    }
+    return n
+}
+
+const HEX = "0123456789ABCDEF"
+
+// ---------- auxiliares ----------
+
+extern fn fail(msg string)
+
+fn line_end(b &[]byte, from int, limit int) int {
+    for i := from; i + 1 < limit; i++ {
+        if b[i] == '\r' && b[i + 1] == '\n' {
+            return i
+        }
+    }
+    return limit
+}
+
+fn index_byte(b &[]byte, c byte, from int, to int) int {
+    for i := from; i < to; i++ {
+        if b[i] == c {
+            return i
+        }
+    }
+    return -1
+}
+
+fn prefix_at(b &[]byte, at int, s string) bool {
+    if at + len(s) > len(b) {
+        return false
+    }
+    for i := 0; i < len(s); i++ {
+        if b[at + i] != s[i] {
+            return false
+        }
+    }
+    return true
+}
+
+fn lower(c byte) byte {
+    if c >= 'A' && c <= 'Z' {
+        return c + 32
+    }
+    return c
+}
+
+// fold_eq compara b[at:at+len(s)] com s sem diferenciar maiúsculas.
+fn fold_eq(b &[]byte, at int, s string) bool {
+    for i := 0; i < len(s); i++ {
+        if lower(b[at + i]) != lower(s[i]) {
+            return false
+        }
+    }
+    return true
+}
+
+fn fold_eq_str(a string, s string) bool {
+    for i := 0; i < len(s); i++ {
+        if lower(a[i]) != lower(s[i]) {
+            return false
+        }
+    }
+    return true
+}
+
+fn hex_value(c byte) int {
+    if c >= '0' && c <= '9' {
+        return int(c) - int('0')
+    }
+    if c >= 'a' && c <= 'f' {
+        return int(c) - int('a') + 10
+    }
+    if c >= 'A' && c <= 'F' {
+        return int(c) - int('A') + 10
+    }
+    return -1
+}
+
+// parse_hex lê o tamanho de um pedaço chunked em b[a:e] (ignorando as
+// extensões depois de ;); -1 se for inválido.
+fn parse_hex(b &[]byte, a int, e int) int {
+    n := 0
+    digits := 0
+    for i := a; i < e && b[i] != ';'; i++ {
+        if b[i] == ' ' || b[i] == '\t' {
+            continue
+        }
+        d := hex_value(b[i])
+        if d < 0 || digits == 15 {
+            return -1
+        }
+        n = n * 16 + d
+        digits++
+    }
+    if digits == 0 {
+        return -1
+    }
+    return n
+}

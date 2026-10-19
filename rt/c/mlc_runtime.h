@@ -8,6 +8,7 @@
 #endif
 
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -195,6 +196,7 @@ void mlc_args_init(int argc, char **argv);
 typedef struct mlc_thread {
     pthread_t th;
     void (*run)(struct mlc_thread *);
+    _Atomic int done; /* a função da thread voltou (sync.Group.reap) */
 } mlc_thread;
 
 void mlc_thread_start(mlc_thread *t, void (*run)(mlc_thread *), int64_t stack, const char *file, int line);

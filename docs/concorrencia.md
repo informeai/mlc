@@ -83,7 +83,9 @@ for i := 0; i < 8; i++ {
 g.wait()                                // espera todas e libera o grupo
 ```
 
-O verificador cobra o `wait`, como cobra o `join` de cada thread, e `add` só aceita `*thread.Thread` (sem resultado): um resultado dono não pode sumir sem ninguém recebê-lo. Com o grupo cheio, `add` espera a thread e dá panic.
+A capacidade é o limite de threads vivas no grupo: com ele cheio, `add` recolhe as que já terminaram e, se nenhuma terminou, espera a mais antiga. Num servidor, `sync.group(64)` é "no máximo 64 conexões ao mesmo tempo", e o laço do `accept` espera uma vaga (veja `tests/run/http_servico.mlc`). `g.reap()` recolhe as que terminaram sem esperar as outras.
+
+O verificador cobra o `wait`, como cobra o `join` de cada thread, e `add` só aceita `*thread.Thread` (sem resultado): um resultado dono não pode sumir sem ninguém recebê-lo.
 
 ## Canais (`import "std/chan"`)
 

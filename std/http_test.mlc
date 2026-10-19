@@ -1,0 +1,326 @@
+import "std/http"
+import "std/io"
+import "std/net"
+import "std/result"
+import "std/str"
+import "std/testing"
+import "std/thread"
+
+// Pipe é uma conexão falsa: read entrega input[:n] em pedaços de no máximo
+// step bytes, e write junta tudo em out.
+struct Pipe {
+    input [10000]byte
+    n int
+    pos int
+    step int
+    out [2048]byte
+    out_n int
+}
+
+fn (p &Pipe) read(dst &[]byte) result.Result[int, int] {
+    k := p.n - p.pos
+    if k > p.step {
+        k = p.step
+    }
+    if k > len(dst) {
+        k = len(dst)
+    }
+    for i := 0; i < k; i++ {
+        dst[i] = p.input[p.pos + i]
+    }
+    p.pos += k
+    return result.Result.Ok(k)
+}
+
+fn (p &Pipe) write(data &[]byte) result.Result[int, int] {
+    p.out_n += str.copy_bytes(&p.out[p.out_n:], data)
+    return result.Result.Ok(len(data))
+}
+
+impl http.Stream for Pipe
+
+fn pipe(s string, step int) Pipe {
+    p := Pipe{}
+    p.n = str.copy(&p.input, s)
+    p.step = step
+    return p
+}
+
+fn ok(r result.Result[int, int]) {
+    match r {
+        Ok(_) => {}
+        Err(code) => testing.eq_int(code, 0)
+    }
+}
+
+fn err_is(r result.Result[int, int], want int) {
+    match r {
+        Ok(n) => testing.eq_int(n, -want)
+        Err(code) => testing.eq_int(code, want)
+    }
+}
+
+fn test_request_line_and_headers() {
+    c := pipe("GET /api/itens?nome=caf%C3%A9+com+leite&n=3&flag HTTP/1.1\r\nHost: exemplo.com\r\nX-Coisa:   com espaços   \r\nACCEPT: */*\r\n\r\n", 7)
+    var m http.Message
+    r := m.read_request(&c)
+    ok(r)
+    testing.check(m.method_is("GET"), "método")
+    testing.check(m.path_is("/api/itens"), "caminho")
+    testing.check(m.path_has_prefix("/api/"), "prefixo")
+    testing.check(!m.path_has_prefix("/api/itens/x"), "prefixo maior que o caminho")
+    var buf [64]byte
+    n := m.target(&buf)
+    testing.eq_str(&buf[:n], "/api/itens?nome=caf%C3%A9+com+leite&n=3&flag")
+    n = m.query_param("nome", &buf)
+    testing.eq_str(&buf[:n], "café com leite")
+    n = m.query_param("n", &buf)
+    testing.eq_str(&buf[:n], "3")
+    testing.eq_int(m.query_param("flag", &buf), 0)
+    testing.eq_int(m.query_param("falta", &buf), -1)
+    n = m.header("host", &buf) // nome sem diferenciar maiúsculas
+    testing.eq_str(&buf[:n], "exemplo.com")
+    n = m.header("X-Coisa", &buf)
+    testing.eq_str(&buf[:n], "com espaços")
+    testing.check(m.header_is("Accept", "*/*"), "header_is")
+    testing.eq_int(m.header("Falta", &buf), -1)
+    testing.eq_int(m.header_count(), 3)
+    n = m.header_name(2, &buf)
+    testing.eq_str(&buf[:n], "ACCEPT")
+    testing.check(m.keep_alive(), "HTTP/1.1 mantém a conexão")
+    testing.eq_int(m.content_length(), -1)
+    r = m.read_body(&c, &buf)
+    match r {
+        Ok(k) => testing.eq_int(k, 0) // pedido sem corpo
+        Err(code) => testing.eq_int(code, 0)
+    }
+}
+
+fn test_body_with_length_and_keep_alive() {
+    // dois pedidos na mesma conexão; o corpo do primeiro não é lido inteiro
+    c := pipe("POST /a HTTP/1.1\r\nContent-Length: 11\r\n\r\nhello worldPOST /b HTTP/1.1\r\nContent-Length: 3\r\nConnection: close\r\n\r\nabc", 5)
+    var m http.Message
+    ok(m.read_request(&c))
+    testing.eq_int(m.content_length(), 11)
+    var part [4]byte
+    match m.read_body(&c, &part) {
+        Ok(k) => testing.eq_str(&part[:k], "hell")
+        Err(code) => testing.eq_int(code, 0)
+    }
+    ok(m.read_request(&c)) // descarta "o world"
+    testing.check(m.path_is("/b"), "segundo pedido")
+    testing.check(!m.keep_alive(), "Connection: close")
+    var body [16]byte
+    match m.read_all(&c, &body) {
+        Ok(k) => testing.eq_str(&body[:k], "abc")
+        Err(code) => testing.eq_int(code, 0)
+    }
+    r := m.read_request(&c)
+    err_is(r, io.EOF) // a conexão acabou entre pedidos
+}
+
+fn test_chunked() {
+    c := pipe("POST /up HTTP/1.1\r\nTransfer-Encoding: Chunked\r\n\r\n5\r\nhello\r\n7;ext=1\r\n, mundo\r\n0\r\nX-Fim: 1\r\n\r\nGET /next HTTP/1.1\r\n\r\n", 3)
+    var m http.Message
+    ok(m.read_request(&c))
+    var body [32]byte
+    match m.read_all(&c, &body) {
+        Ok(k) => testing.eq_str(&body[:k], "hello, mundo")
+        Err(code) => testing.eq_int(code, 0)
+    }
+    ok(m.read_request(&c))
+    testing.check(m.path_is("/next"), "depois do chunked")
+}
+
+fn test_body_too_big() {
+    c := pipe("POST / HTTP/1.1\r\nContent-Length: 10\r\n\r\n0123456789", 64)
+    var m http.Message
+    ok(m.read_request(&c))
+    var small [4]byte
+    r := m.read_all(&c, &small)
+    err_is(r, http.TOO_BIG)
+}
+
+fn test_bad_messages() {
+    var m http.Message
+    c := pipe("GET\r\n\r\n", 64)
+    r := m.read_request(&c)
+    err_is(r, http.BAD_MESSAGE)
+    var m2 http.Message
+    c2 := pipe("GET / HTTP/2.0\r\n\r\n", 64)
+    r2 := m2.read_request(&c2)
+    err_is(r2, http.BAD_MESSAGE)
+    var m3 http.Message
+    c3 := pipe("GET / HTTP/1.1\r\nSemDoisPontos\r\n\r\n", 64)
+    r3 := m3.read_request(&c3)
+    err_is(r3, http.BAD_MESSAGE)
+    var m4 http.Message
+    c4 := pipe("GET / HTTP/1.1\r\nHost: x", 64) // a conexão fecha no meio
+    r4 := m4.read_request(&c4)
+    err_is(r4, http.BAD_MESSAGE)
+    var m5 http.Message
+    c5 := pipe("POST / HTTP/1.1\r\nContent-Length: x\r\n\r\n", 64)
+    r5 := m5.read_request(&c5)
+    err_is(r5, http.BAD_MESSAGE)
+}
+
+fn test_too_many_fields() {
+    c := Pipe{}
+    c.step = 4096
+    c.n = str.copy(&c.input, "GET / HTTP/1.1\r\n")
+    for i := 0; i < 65; i++ {
+        c.n += str.copy(&c.input[c.n:], "X: y\r\n")
+    }
+    c.n += str.copy(&c.input[c.n:], "\r\n")
+    var m http.Message
+    r := m.read_request(&c)
+    err_is(r, http.HEAD_TOO_BIG) // mais de 64 campos
+}
+
+fn test_head_too_big() {
+    c := Pipe{}
+    c.step = 4096
+    c.n = str.copy(&c.input, "GET / HTTP/1.1\r\nX: ")
+    for c.n < 9000 {
+        c.input[c.n] = 'a'
+        c.n++
+    }
+    var m http.Message
+    r := m.read_request(&c)
+    err_is(r, http.HEAD_TOO_BIG) // não cabe nos 8 KB
+}
+
+fn test_response() {
+    c := pipe("", 64)
+    var b http.Builder
+    b.response(201)
+    b.header("Content-Type", "application/json")
+    b.header_int("X-Id", 7)
+    ok(b.send_str(&c, "{}"))
+    testing.eq_str(&c.out[:c.out_n], "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nX-Id: 7\r\nContent-Length: 2\r\n\r\n{}")
+    c.out_n = 0
+    b.response(204)
+    ok(b.send_str(&c, ""))
+    testing.eq_str(&c.out[:c.out_n], "HTTP/1.1 204 No Content\r\n\r\n")
+    c.out_n = 0
+    ok(http.respond_str(&c, 404, "text/plain", "não"))
+    testing.eq_str(&c.out[:c.out_n], "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 4\r\n\r\nnão")
+}
+
+fn test_client_side() {
+    c := pipe("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nolá!", 4)
+    var b http.Builder
+    b.request("GET", "/x?y=1")
+    b.header("Host", "exemplo.com")
+    ok(b.send_str(&c, ""))
+    testing.eq_str(&c.out[:c.out_n], "GET /x?y=1 HTTP/1.1\r\nHost: exemplo.com\r\nContent-Length: 0\r\n\r\n")
+    var m http.Message
+    ok(m.read_response(&c))
+    testing.eq_int(m.status(), 200)
+    var body [16]byte
+    match m.read_all(&c, &body) {
+        Ok(k) => testing.eq_str(&body[:k], "olá!")
+        Err(code) => testing.eq_int(code, 0)
+    }
+}
+
+// resposta sem tamanho: o corpo vai até a conexão fechar
+fn test_response_until_close() {
+    c := pipe("HTTP/1.0 200 OK\r\n\r\ntudo até o fim", 3)
+    var m http.Message
+    ok(m.read_response(&c))
+    testing.check(!m.keep_alive(), "sem keep-alive")
+    var body [32]byte
+    match m.read_all(&c, &body) {
+        Ok(k) => testing.eq_str(&body[:k], "tudo até o fim")
+        Err(code) => testing.eq_int(code, 0)
+    }
+}
+
+fn test_escape() {
+    var src [32]byte
+    n := str.copy(&src, "a b/ç?")
+    var out [64]byte
+    k := http.escape(&out, &src[:n])
+    testing.eq_str(&out[:k], "a%20b%2F%C3%A7%3F")
+    var back [32]byte
+    m := http.unescape(&back, &out[:k])
+    testing.eq_str(&back[:m], "a b/ç?")
+    n = str.copy(&src, "%4")
+    testing.eq_int(http.unescape(&back, &src[:n]), -1)
+    n = str.copy(&src, "%zz")
+    testing.eq_int(http.unescape(&back, &src[:n]), -1)
+}
+
+// servidor de verdade, numa thread, com um cliente pela rede
+fn serve_one(l *net.Listener) int {
+    err := 0
+    served := 0
+    c := l.accept(&err)
+    if c != nil {
+        var m http.Message
+        for {
+            match m.read_request(&c) {
+                Ok(_) => {}
+                Err(_) => break
+            }
+            var body [64]byte
+            k := 0
+            match m.read_all(&c, &body) {
+                Ok(got) => k = got
+                Err(_) => break
+            }
+            served++
+            var b http.Builder
+            b.response(200)
+            b.header("Content-Type", "text/plain")
+            b.send(&c, &body[:k])
+            if !m.keep_alive() {
+                break
+            }
+        }
+        c.close()
+    }
+    l.close()
+    return served
+}
+
+fn test_over_tcp() {
+    var h [16]byte
+    hn := str.copy(&h, "127.0.0.1")
+    err := 0
+    l := net.listen(&h[:hn], 0, &err)
+    if l == nil {
+        testing.fail("listen falhou")
+        return
+    }
+    port := l.port()
+    t := thread.spawn(serve_one, l, thread.STACK_64KB)
+    c := net.connect(&h[:hn], port, &err)
+    if c == nil {
+        testing.fail("connect falhou")
+        thread.join(t)
+        return
+    }
+    var b http.Builder
+    var m http.Message
+    var body [64]byte
+    for i := 0; i < 3; i++ {
+        b.request("POST", "/eco")
+        b.header("Host", "localhost")
+        if i == 2 {
+            b.header("Connection", "close")
+        }
+        var msg [16]byte
+        k := str.format(&msg, "pedido {}", i)
+        ok(b.send(&c, &msg[:k]))
+        ok(m.read_response(&c))
+        testing.eq_int(m.status(), 200)
+        match m.read_all(&c, &body) {
+            Ok(got) => testing.eq_bytes(&body[:got], &msg[:k])
+            Err(code) => testing.eq_int(code, 0)
+        }
+    }
+    c.close()
+    testing.eq_int(thread.join(t), 3) // três pedidos na mesma conexão
+}

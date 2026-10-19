@@ -68,7 +68,7 @@ fn main() {
     }
     l.set_timeout(20)
     cl := thread.spawn(client, l.port(), thread.STACK_64KB)
-    workers := sync.group(16) // até 16 conexões neste exemplo
+    workers := sync.group(16) // no máximo 16 conexões ao mesmo tempo
     id := 0
     for !signal.received(signal.TERM) && !signal.received(signal.INT) {
         c := l.accept(&err)

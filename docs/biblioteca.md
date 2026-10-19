@@ -720,9 +720,78 @@ Um grupo de threads esperadas de uma vez. Veja [concorrencia.md](concorrencia.md
 | Declaração | O que faz |
 |---|---|
 | `group(cap) *Group` | cria o grupo, com espaço para `cap` threads |
-| `g.add(t *thread.Thread)` | o grupo fica com a thread (só threads sem resultado); cheio, espera a thread e dá panic |
+| `g.add(t *thread.Thread)` | o grupo fica com a thread (só threads sem resultado); cheio, recolhe as que terminaram ou espera a mais antiga |
+| `g.reap() int` | espera as que já terminaram (sem bloquear nas outras) e devolve quantas |
 | `g.len() int` | quantas threads estão no grupo |
 | `g.wait()` | espera todas, na ordem em que entraram, e libera o grupo (o verificador cobra) |
+
+### `std/http`
+
+HTTP/1.1 sobre qualquer `http.Stream` (a interface `read` + `write`, implementada por `net.Conn`; nos testes, por uma conexão falsa). O servidor lê pedidos e escreve respostas, o cliente escreve pedidos e lê respostas. **Nada aloca:** a mensagem recebida (`Message`) guarda um buffer fixo de 8 KB dentro dela, onde ficam o cabeçalho e o começo do corpo; a que sai (`Builder`) monta o cabeçalho num buffer de 4 KB; o corpo vai e vem por buffers de quem chama. Os textos (método, caminho, campos) são copiados para buffers seus ou comparados sem cópia.
+
+```
+// servidor: uma conexão (o accept e as threads ficam com você)
+var m http.Message
+for {
+    match m.read_request(&c) {
+        Ok(_) => {}
+        Err(_) => break                          // io.EOF: o cliente fechou
+    }
+    if m.method_is("GET") && m.path_is("/health") {
+        http.respond_str(&c, 200, "text/plain", "ok\n")
+    } else {
+        http.respond_str(&c, 404, "text/plain", "não encontrado\n")
+    }
+    if !m.keep_alive() { break }
+}
+
+// cliente
+var b http.Builder
+b.request("POST", "/api/itens")
+b.header("Host", "exemplo.com")
+b.header("Content-Type", "application/json")
+b.send(&c, &json[:n])                            // Content-Length automático
+var r http.Message
+r.read_response(&c)
+match r.read_all(&c, &body) { ... }              // r.status() é o código
+```
+
+**Mensagem recebida (`Message`):**
+
+| Método | O que faz |
+|---|---|
+| `read_request(&c)`, `read_response(&c)` | lê o cabeçalho; na mesma conexão (keep-alive), lê o próximo, descartando o corpo que sobrou |
+| `method_is(s)`, `method(dst)` | o método |
+| `path_is(s)`, `path_has_prefix(s)`, `path(dst)` | o caminho, sem a consulta (sem decodificar) |
+| `target(dst)`, `query(dst)` | o alvo inteiro; a consulta |
+| `query_param(name, dst) int` | o valor de um parâmetro, decodificado (`%41`, `+`); `-1` se não veio |
+| `header(name, dst) int`, `has_header(name)`, `header_is(name, value)` | um campo (nome sem diferenciar maiúsculas); `-1` se não veio |
+| `header_count()`, `header_name(i, dst)`, `header_value(i, dst)` | todos os campos |
+| `status()`, `keep_alive()`, `content_length()` | o código da resposta; se a conexão continua; o tamanho declarado (`-1`) |
+| `read_body(&c, dst)` | até `len(dst)` bytes do corpo, já sem o `chunked`; `Ok(0)` é o fim |
+| `read_all(&c, dst)` | o corpo inteiro; `Err(TOO_BIG)` se não couber |
+| `skip_body(&c)` | descarta o resto do corpo |
+
+**Mensagem que sai (`Builder`):**
+
+| Método | O que faz |
+|---|---|
+| `response(status)` | começa uma resposta (`HTTP/1.1 200 OK`) |
+| `request(method, target)`, `request_bytes(method, target)` | começa um pedido (lembre do `Host`) |
+| `header(name, value)`, `header_bytes`, `header_int` | um campo |
+| `send(&c, body)`, `send_str(&c, body)` | termina o cabeçalho (com o `Content-Length`) e manda tudo; um corpo pequeno vai na mesma escrita |
+| `start(&c, length)` | manda só o cabeçalho; o corpo vai depois, em pedaços, com `c.write` |
+
+| Função | O que faz |
+|---|---|
+| `respond(&c, status, content_type, body)`, `respond_str(...)` | uma resposta completa numa linha |
+| `status_text(code) string` | `"Not Found"` |
+| `escape(dst, src)`, `unescape(dst, src)` | codificação de URL (`%XX`; `unescape` também troca `+` por espaço e devolve `-1` se for inválida) |
+| `BAD_MESSAGE` (3001), `HEAD_TOO_BIG` (3002), `TOO_BIG` (1000) | erros: não é HTTP/1.x; o cabeçalho não cabe nos 8 KB (ou tem mais de 64 campos); o corpo não cabe em `dst` |
+
+O corpo pode vir com `Content-Length`, `Transfer-Encoding: chunked` ou, numa resposta sem tamanho, até a conexão fechar. Respostas `1xx`, `204` e `304` não têm corpo. Fica de fora nesta versão: TLS (para HTTPS, ponha o serviço atrás de um proxy, como nginx, Caddy ou o balanceador da nuvem), `Expect: 100-continue`, HTTP/2 e respostas a `HEAD` no cliente.
+
+`tests/run/http_servico.mlc` tem um serviço completo: rotas, JSON, uma thread por conexão (no máximo 64 ao mesmo tempo, pelo `sync.group`), log e encerramento limpo com `TERM`.
 
 ### `std/json`
 
