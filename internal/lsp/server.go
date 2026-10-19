@@ -7,7 +7,8 @@
 //     aparecem na linha;
 //   - semantic tokens: cores para palavras reservadas, tipos, funções,
 //     literais e comentários, mesmo em editores sem gramática própria;
-//   - formatação do documento pelo mlc fmt.
+//   - formatação do documento pelo mlc fmt;
+//   - hover, ir para a definição e sugestões ao digitar (complete.go).
 package lsp
 
 import (
@@ -25,14 +26,15 @@ import (
 
 type server struct {
 	conn     *conn
-	docs     map[string]string // URI → texto atual
+	docs     map[string]string          // URI → texto atual
+	lastProg map[string]*driver.Program // URI → a última análise que deu certo (para as sugestões)
 	shutdown bool
 }
 
 // Run atende um cliente LSP em r/w até a mensagem exit. Devolve o código de
 // saída do processo: 0 se o cliente pediu shutdown antes, 1 se não.
 func Run(r io.Reader, w io.Writer) int {
-	s := &server{conn: newConn(r, w), docs: map[string]string{}}
+	s := &server{conn: newConn(r, w), docs: map[string]string{}, lastProg: map[string]*driver.Program{}}
 	for {
 		m, err := s.conn.read()
 		if err != nil {
@@ -60,6 +62,7 @@ func (s *server) handle(m *message) {
 					"save":      false,
 				},
 				"documentFormattingProvider": true,
+				"completionProvider":         map[string]any{"triggerCharacters": []string{".", "\""}},
 				"hoverProvider":              true,
 				"definitionProvider":         true,
 				"semanticTokensProvider": map[string]any{
@@ -92,6 +95,7 @@ func (s *server) handle(m *message) {
 		var p docParams
 		if json.Unmarshal(m.Params, &p) == nil {
 			delete(s.docs, p.TextDocument.URI)
+			delete(s.lastProg, p.TextDocument.URI)
 			s.publish(p.TextDocument.URI, nil)
 			s.diagnoseAll()
 		}
@@ -104,6 +108,8 @@ func (s *server) handle(m *message) {
 		s.formatting(m, p.TextDocument.URI)
 	case "textDocument/hover":
 		s.hover(m)
+	case "textDocument/completion":
+		s.completion(m)
 	case "textDocument/definition":
 		s.definition(m)
 	case "textDocument/semanticTokens/full":

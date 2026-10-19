@@ -371,6 +371,7 @@ func (c *checker) collectImpl(d *ast.ImplDecl) {
 		c.makeImplMethods(im, im, binding)
 	}
 	c.impls = append(c.impls, im)
+	c.info.Impls = append(c.info.Impls, im)
 }
 
 func typeKeys(ts []Type) string {
@@ -446,6 +447,7 @@ func (c *checker) implFromStruct(im *Impl, t Type) {
 	}
 	if ok {
 		c.impls = append(c.impls, im)
+		c.info.Impls = append(c.info.Impls, im)
 	}
 }
 

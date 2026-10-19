@@ -126,6 +126,7 @@ type Info struct {
 	Main         *Func                      // fn main do arquivo principal
 	Tests        []*Func                    // fn test_*() de um arquivo de teste, na ordem do código
 	Benches      []*Func                    // fn bench_*(b &testing.B) de um arquivo de teste
+	Impls        []*Impl                    // os impl de todos os arquivos (para o editor)
 	TestMode     bool                       // arquivo de teste: o main roda testes e benchmarks
 	Structs      []*Struct                  // cada struct depois das que ela contém
 	Slices       []*Slice                   // tipos slice usados, para o gerador declarar

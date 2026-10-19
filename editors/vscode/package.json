@@ -1,7 +1,7 @@
 {
   "name": "mlc",
   "displayName": "MLC (My Lang C)",
-  "description": "Cores, erros ao digitar e formatação para a linguagem MLC, via mlc lsp",
+  "description": "Cores, erros ao digitar, formatação, hover, ir para a definição e sugestões para a linguagem MLC, via mlc lsp",
   "version": "0.1.0",
   "publisher": "mlc-lang",
   "license": "UNLICENSED",
