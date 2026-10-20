@@ -45,6 +45,7 @@ import "std/io"
 import "std/net"
 import "std/result"
 import "std/str"
+import "std/url"
 
 // códigos de erro (os da fonte, como net.TIMEOUT, chegam como vieram)
 pub const BAD_MESSAGE = 3001  // a mensagem não é HTTP/1.x válido
@@ -364,27 +365,12 @@ pub fn (m &Message) query(dst &[]byte) int {
 // (%41 e +), e devolve o tamanho; -1 se ele não existe (ou se a codificação
 // é inválida).
 pub fn (m &Message) query_param(name string, dst &[]byte) int {
-    at := m.path_end() + 1
+    e := m.path_end()
     end := m.target_at + m.target_n
-    for at < end {
-        amp := index_byte(&m.buf, '&', at, end)
-        if amp < 0 {
-            amp = end
-        }
-        eq := index_byte(&m.buf, '=', at, amp)
-        key_end := amp
-        if eq >= 0 {
-            key_end = eq
-        }
-        if str.eq(&m.buf[at:key_end], name) {
-            if eq < 0 {
-                return 0 // ?flag, sem valor
-            }
-            return unescape(dst, &m.buf[eq + 1:amp])
-        }
-        at = amp + 1
+    if e == end {
+        return -1
     }
-    return -1
+    return url.query_value(&m.buf[e + 1:end], name, dst)
 }
 
 // status é o código da resposta (200, 404...).
@@ -864,62 +850,335 @@ pub fn status_text(code int) string {
 // ---------- codificação de URL ----------
 
 // unescape decodifica %XX e + (espaço) de src para dst e devolve o tamanho,
-// ou -1 se um % não for seguido de dois dígitos hex.
+// ou -1 se um % não for seguido de dois dígitos hex (o mesmo que
+// url.unescape).
 pub fn unescape(dst &[]byte, src &[]byte) int {
-    n := 0
-    i := 0
-    for i < len(src) {
-        c := src[i]
-        if c == '%' {
-            if i + 2 >= len(src) {
-                return -1
-            }
-            hi := hex_value(src[i + 1])
-            lo := hex_value(src[i + 2])
-            if hi < 0 || lo < 0 {
-                return -1
-            }
-            c = byte(hi * 16 + lo)
-            i += 2
-        } else if c == '+' {
-            c = ' '
-        }
-        if n == len(dst) {
-            fail("http.unescape: o destino é pequeno demais")
-        }
-        dst[n] = c
-        n++
-        i++
-    }
-    return n
+    return url.unescape(dst, src)
 }
 
 // escape codifica src para usar num caminho ou numa consulta: letras,
-// dígitos e - _ . ~ ficam, o resto vira %XX.
+// dígitos e - _ . ~ ficam, o resto vira %XX (o mesmo que url.escape).
 pub fn escape(dst &[]byte, src &[]byte) int {
-    n := 0
-    for i := 0; i < len(src); i++ {
-        c := src[i]
-        if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~' {
-            if n == len(dst) {
-                fail("http.escape: o destino é pequeno demais")
-            }
-            dst[n] = c
-            n++
-        } else {
-            if n + 3 > len(dst) {
-                fail("http.escape: o destino é pequeno demais")
-            }
-            dst[n] = '%'
-            dst[n + 1] = HEX[int(c >> 4)]
-            dst[n + 2] = HEX[int(c & 0x0F)]
-            n += 3
-        }
-    }
-    return n
+    return url.escape(dst, src)
 }
 
-const HEX = "0123456789ABCDEF"
+// ---------- cliente ----------
+
+// UNSUPPORTED_SCHEME: a URL não é http:// (https precisa de TLS, que esta
+// versão não tem; ponha um proxy na frente ou use um programa externo).
+pub const UNSUPPORTED_SCHEME = 3003
+
+// dial abre uma conexão com o host e a porta de u (só http://). Se não
+// conseguir, devolve nil e põe o código em err.
+pub fn dial(u &url.URL, err &int) ?*net.Conn {
+    if !u.scheme_is("http") {
+        *err = UNSUPPORTED_SCHEME
+        return nil
+    }
+    var h [256]byte
+    n := u.dial_host(&h)
+    return net.connect(&h[:n], u.port(), err)
+}
+
+// request_to começa um pedido para u: a linha do pedido com o alvo de u e
+// o cabeçalho Host. Depois vêm os outros cabeçalhos e o send.
+//
+//     var u url.URL
+//     url.parse_str("http://api.local:8080/v1/itens", &u)
+//     err := 0
+//     c := http.dial(&u, &err)
+//     ...
+//     var b http.Builder
+//     b.request_to("GET", &u)
+//     b.header("Authorization", "Bearer ...")
+//     b.send_str(&c, "")
+pub fn (b &Builder) request_to(method string, u &url.URL) {
+    var t [2048]byte
+    k := u.target(&t)
+    b.request_bytes(method, &t[:k])
+    var h [300]byte
+    n := u.host(&h)
+    if u.has_port() {
+        n += str.copy(&h[n:], ":")
+        n += str.put_int(&h[n:], u.port())
+    }
+    b.header_bytes("Host", &h[:n])
+}
+
+// get faz um GET em rawurl e lê a resposta inteira: m guarda o código e os
+// cabeçalhos (m.status(), m.header(...)), e o corpo vai para body. Devolve o
+// tamanho do corpo, ou Err com o código: url.BAD_URL, UNSUPPORTED_SCHEME, os
+// de net.connect (NO_HOST, REFUSED...), TOO_BIG se o corpo não cabe em body.
+// A conexão é aberta e fechada aqui (Connection: close).
+pub fn get(rawurl string, m &Message, body &[]byte) result.Result[int, int] {
+    var u [2048]byte
+    if len(rawurl) > len(u) {
+        return result.Result.Err(url.BAD_URL)
+    }
+    n := str.copy(&u, rawurl)
+    return request("GET", &u[:n], "", &u[:0], m, body)
+}
+
+// post faz um POST em rawurl com data e o Content-Type, e lê a resposta
+// como get.
+pub fn post(rawurl string, content_type string, data &[]byte, m &Message, body &[]byte) result.Result[int, int] {
+    var u [2048]byte
+    if len(rawurl) > len(u) {
+        return result.Result.Err(url.BAD_URL)
+    }
+    n := str.copy(&u, rawurl)
+    return request("POST", &u[:n], content_type, data, m, body)
+}
+
+// request faz um pedido com qualquer método e a URL montada em tempo de
+// execução. content_type vazio não manda o cabeçalho. Para cabeçalhos
+// próprios, use dial e Builder.request_to.
+pub fn request(method string, rawurl &[]byte, content_type string, data &[]byte, m &Message, body &[]byte) result.Result[int, int] {
+    var u url.URL
+    if !url.parse(rawurl, &u) {
+        return result.Result.Err(url.BAD_URL)
+    }
+    err := 0
+    c := dial(&u, &err)
+    if c == nil {
+        return result.Result.Err(err)
+    }
+    var b Builder
+    b.request_to(method, &u)
+    b.header("Connection", "close")
+    if len(content_type) > 0 {
+        b.header("Content-Type", content_type)
+    }
+    r := b.send(&c, data)
+    match r {
+        Ok(_) => r = m.read_response(&c)
+        Err(_) => {}
+    }
+    match r {
+        Ok(_) => r = m.read_all(&c, body)
+        Err(_) => {}
+    }
+    c.close()
+    return r
+}
+
+// ---------- roteador ----------
+
+// MAX_PARAMS é quantos {nome} uma rota pode ter.
+pub const MAX_PARAMS = 8
+
+// MAX_ROUTES é quantas rotas cabem num Router.
+pub const MAX_ROUTES = 64
+
+// Params são os pedaços do caminho que casaram com os {nome} da rota, já
+// decodificados (%20 e +), num buffer de 1 KB dentro dele.
+pub struct Params {
+    buf [1024]byte
+    n int
+    pattern string // o padrão da rota (os nomes ficam nele)
+    name_at [8]int
+    name_n [8]int
+    at [8]int
+    size [8]int
+    count int
+}
+
+// find devolve o índice do parâmetro name, ou -1.
+fn (p &Params) find(name string) int {
+    for i := 0; i < p.count; i++ {
+        if p.name_n[i] != len(name) {
+            continue
+        }
+        same := true
+        for k := 0; k < len(name); k++ {
+            if p.pattern[p.name_at[i] + k] != name[k] {
+                same = false
+                break
+            }
+        }
+        if same {
+            return i
+        }
+    }
+    return -1
+}
+
+// get copia o valor do parâmetro name para dst; -1 se a rota não o tem.
+pub fn (p &Params) get(name string, dst &[]byte) int {
+    i := p.find(name)
+    if i < 0 {
+        return -1
+    }
+    return str.copy_bytes(dst, &p.buf[p.at[i]:p.at[i] + p.size[i]])
+}
+
+// is diz se o parâmetro name é igual a s.
+pub fn (p &Params) is(name string, s string) bool {
+    i := p.find(name)
+    return i >= 0 && str.eq(&p.buf[p.at[i]:p.at[i] + p.size[i]], s)
+}
+
+// int lê o parâmetro name como inteiro; false se ele não existe ou não é
+// um número.
+pub fn (p &Params) int(name string, out &int) bool {
+    i := p.find(name)
+    return i >= 0 && str.parse_int(&p.buf[p.at[i]:p.at[i] + p.size[i]], out)
+}
+
+// match_path diz se path (o caminho de um pedido, sem a consulta) casa com
+// pattern, e guarda os parâmetros em p. No padrão, {nome} casa com um
+// pedaço não vazio entre barras, e {nome...} no fim casa com todo o resto
+// (inclusive barras):
+//
+//     /itens                    só /itens
+//     /itens/{id}               /itens/7, não /itens nem /itens/7/x
+//     /users/{id}/posts/{post}  /users/3/posts/9
+//     /arquivos/{caminho...}    /arquivos/a/b/c.txt
+pub fn match_path(pattern string, path &[]byte, p &Params) bool {
+    p.count = 0
+    p.n = 0
+    p.pattern = pattern
+    i := 0 // no padrão
+    j := 0 // no caminho
+    for i < len(pattern) {
+        if pattern[i] != '{' {
+            if j >= len(path) || path[j] != pattern[i] {
+                return false
+            }
+            i++
+            j++
+            continue
+        }
+        end_br := i
+        for end_br < len(pattern) && pattern[end_br] != '}' {
+            end_br++
+        }
+        if end_br == len(pattern) || p.count == MAX_PARAMS {
+            fail("http.match_path: padrão inválido (falta } ou há {nome} demais)")
+        }
+        rest := end_br - i > 4 && pattern[end_br - 3] == '.' && pattern[end_br - 2] == '.' && pattern[end_br - 1] == '.'
+        name_end := end_br
+        if rest {
+            name_end = end_br - 3
+        }
+        end := j
+        for end < len(path) && (rest || path[end] != '/') {
+            end++
+        }
+        if end == j {
+            return false // pedaço vazio
+        }
+        k := unescape(&p.buf[p.n:], &path[j:end])
+        if k < 0 {
+            return false
+        }
+        p.name_at[p.count] = i + 1
+        p.name_n[p.count] = name_end - i - 1
+        p.at[p.count] = p.n
+        p.size[p.count] = k
+        p.count++
+        p.n += k
+        i = end_br + 1
+        j = end
+    }
+    return j == len(path)
+}
+
+// Route é uma rota: o método ("" para qualquer um), o padrão e a função.
+pub struct Route[C any] {
+    method string
+    pattern string
+    h fn(&net.Conn, &Message, &Params, &C)
+}
+
+// Router escolhe a função de cada pedido pelo método e pelo caminho. A
+// tabela é um array fixo (MAX_ROUTES rotas), sem alocação; C é o estado que
+// cada função recebe (um logger, uma conexão de banco, contadores).
+//
+//     fn get_item(c &net.Conn, m &http.Message, p &http.Params, app &App) {
+//         id := 0
+//         if !p.int("id", &id) { ... 400 ... }
+//         ...
+//     }
+//
+//     var r http.Router[App]
+//     r.handle("GET", "/itens/{id}", get_item)
+//     r.handle("POST", "/itens", create_item)
+//     ...
+//     http.serve_conn(&c, &r, &app)     // numa thread por conexão
+pub struct Router[C any] {
+    routes [64]Route[C]
+    n int
+}
+
+// handle acrescenta uma rota. As rotas são tentadas na ordem em que foram
+// acrescentadas.
+pub fn (r &Router[C]) handle(method string, pattern string, h fn(&net.Conn, &Message, &Params, &C)) {
+    if r.n == MAX_ROUTES {
+        fail("http.Router: rotas demais (o máximo é 64)")
+    }
+    r.routes[r.n] = Route[C]{method: method, pattern: pattern, h: h}
+    r.n++
+}
+
+// dispatch chama a função da rota do pedido m. Sem rota para o caminho,
+// responde 404; com rota para o caminho mas não para o método, 405.
+pub fn (r &Router[C]) dispatch(c &net.Conn, m &Message, ctx &C) {
+    var path [2048]byte
+    n := m.path(&path)
+    if n < 0 {
+        n = 0
+    }
+    var p Params
+    path_found := false
+    for i := 0; i < r.n; i++ {
+        rt := r.routes[i]
+        if !match_path(rt.pattern, &path[:n], &p) {
+            continue
+        }
+        path_found = true
+        if len(rt.method) > 0 && !m.method_is(rt.method) {
+            continue
+        }
+        rt.h(c, m, &p, ctx)
+        return
+    }
+    if path_found {
+        respond_str(c, 405, "text/plain", "método não permitido\n")
+        return
+    }
+    respond_str(c, 404, "text/plain", "não encontrado\n")
+}
+
+// serve_conn atende uma conexão até ela fechar: lê cada pedido, chama o
+// Router e descarta o corpo que a função não leu (para o próximo pedido da
+// conexão chegar inteiro). Responde 431 a um cabeçalho grande demais e 400
+// a um pedido inválido. O timeout fica com quem chama (c.set_timeout), e a
+// conexão continua aberta: quem chama a fecha.
+pub fn serve_conn[C any](c &net.Conn, r &Router[C], ctx &C) {
+    var m Message
+    for {
+        match m.read_request(c) {
+            Ok(_) => {}
+            Err(code) => {
+                if code == HEAD_TOO_BIG {
+                    respond_str(c, 431, "text/plain", "cabeçalho grande demais\n")
+                } else if code == BAD_MESSAGE {
+                    respond_str(c, 400, "text/plain", "pedido inválido\n")
+                }
+                return
+            }
+        }
+        r.dispatch(c, &m, ctx)
+        match m.skip_body(c) {
+            Ok(_) => {}
+            Err(_) => return
+        }
+        if !m.keep_alive() {
+            return
+        }
+    }
+}
 
 // ---------- auxiliares ----------
 

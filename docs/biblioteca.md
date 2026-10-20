@@ -845,44 +845,72 @@ O corpo pode vir com `Content-Length`, `Transfer-Encoding: chunked` ou, numa res
 
 `tests/run/http_rotas.mlc` monta o equivalente a um `http.ListenAndServe` à mão: handlers `fn(&net.Conn, &http.Message, &Ctx)` numa tabela fixa de rotas (`Router`, com prefixo para `/itens/{id}`, 404 e 405), o laço de keep-alive com timeout, 431 para cabeçalho grande, 413 para corpo grande e `skip_body` depois de cada handler.
 
-### `std/json`
+#### Roteador
 
-JSON sem alocação: um leitor que devolve um token por vez, sem árvore. Quem lê decide o que guardar e onde alocar.
+`Router[C]` escolhe a função de cada pedido pelo método e pelo caminho, numa tabela fixa (até 64 rotas), sem alocação. `C` é o estado que cada função recebe (um logger, uma conexão de banco, contadores). No padrão, `{nome}` casa com um pedaço entre barras e `{nome...}`, no fim, com todo o resto; os valores chegam decodificados em `Params`.
 
-```
-r := json.reader()
-for {
-    match r.next(&doc) {
-        Key(a, b) => {
-            if str.eq(&doc[a:b], "name") {
-                match r.next(&doc) {
-                    String(x, y) => n := json.unescape(&name, &doc[x:y])
-                    _ => ...
-                }
-            } else {
-                r.skip(&doc)                    // ignora o valor desta chave
-            }
-        }
-        End => break
-        Error(pos) => ...                       // texto inválido em pos
-        _ => {}
+```mlc
+fn get_item(c &net.Conn, m &http.Message, p &http.Params, app &App) {
+    id := 0
+    if !p.int("id", &id) {
+        http.respond_str(c, 400, "text/plain", "id inválido\n")
+        return
     }
+    ...
 }
+
+var r http.Router[App]
+r.handle("GET", "/itens/{id}", get_item)
+r.handle("POST", "/itens", create_item)
+r.handle("GET", "/arquivos/{caminho...}", serve_file)
+...
+// numa thread por conexão (o accept, o limite de conexões e o timeout ficam com você):
+c.set_timeout(5000)
+http.serve_conn(&c, &r, &app)
+c.close()
 ```
 
 | Declaração | O que faz |
 |---|---|
-| `reader() Reader` | começa a ler (o estado fica na pilha) |
-| `r.next(s) Token` | o próximo token: `ObjectStart`, `ObjectEnd`, `ArrayStart`, `ArrayEnd`, `Key(a, b)`, `String(a, b)`, `Number(a, b)`, `True`, `False`, `Null`, `End` ou `Error(at)` |
-| `r.skip(s) bool` | pula o próximo valor inteiro (objetos e arrays com tudo dentro) |
-| `unescape(dst, raw) int` | tira os escapes de uma string (`\n`, `\u00e9`, pares de surrogates); um `dst` do tamanho de `raw` sempre basta |
-| `escape(dst, s) int`, `escape_len(s) int` | põem os escapes, para montar JSON com `str.format` |
+| `r.handle(method, pattern, h)` | acrescenta uma rota (`method` vazio: qualquer um); tentadas na ordem |
+| `r.dispatch(&c, &m, &ctx)` | chama a função da rota; 404 sem rota para o caminho, 405 com rota para o caminho mas não para o método |
+| `serve_conn(&c, &r, &ctx)` | atende uma conexão até ela fechar: lê cada pedido, chama `dispatch`, descarta o corpo não lido; 431 e 400 para pedidos ruins |
+| `p.get(name, &dst) int`, `p.int(name, &out) bool`, `p.is(name, s) bool` | os parâmetros da rota |
+| `match_path(pattern, &path, &p) bool` | o casamento sozinho, para testar ou montar outro roteador |
 
-`&doc[a:b]` é o conteúdo de uma string (sem as aspas, com os escapes) ou o texto de um número (para `str.parse_int` ou `str.parse_float`). O leitor confere a estrutura e a gramática, e aceita até 64 níveis de profundidade.
+#### Cliente
 
-Para escrever:
+| Declaração | O que faz |
+|---|---|
+| `get(url, &m, &body)` | GET; `m` guarda o código e os cabeçalhos, o corpo vai para `body`; devolve o tamanho |
+| `post(url, content_type, &data, &m, &body)` | POST |
+| `request(method, &url, content_type, &data, &m, &body)` | qualquer método, com a URL montada em tempo de execução |
+| `dial(&u, &err) ?*net.Conn` e `b.request_to(method, &u)` | para cabeçalhos próprios: abre a conexão e começa o pedido (linha e `Host`) |
 
+```mlc
+var m http.Message
+var body [4096]byte
+match http.get("http://127.0.0.1:8080/itens/7", &m, &body) {
+    Ok(n) => io.printf("{} {:s}\n", m.status(), &body[:n])
+    Err(code) => io.printf("erro {}\n", code)   // url.BAD_URL, UNSUPPORTED_SCHEME, net.REFUSED, TOO_BIG...
+}
 ```
-n := json.escape(&esc, &name[:k])
-m := str.format(&out, "{{\"name\": \"{:s}\", \"age\": {}}}", &esc[:n], 30)
-```
+
+Os erros são `url.BAD_URL`, `UNSUPPORTED_SCHEME` (https precisa de TLS, que esta versão não tem), os de `net.connect` e `TOO_BIG` (o corpo não cabe em `body`). Cada chamada abre e fecha a conexão (`Connection: close`).
+
+### `std/url`
+
+URLs (RFC 3986). A `URL` guarda uma cópia do texto num buffer fixo de 2 KB, e as partes são copiadas para buffers de quem chama (ou comparadas sem cópia).
+
+| Declaração | O que faz |
+|---|---|
+| `parse(&s, &u) bool`, `parse_str(s, &u) bool` | lê `esquema://[user@]host[:porta]/caminho?consulta#fragmento`, ou só `/caminho?consulta` |
+| `u.scheme(&dst)`, `u.scheme_is(s)`, `u.host(&dst)`, `u.host_is(s)` | esquema e host (os `_is` sem diferenciar maiúsculas) |
+| `u.port() int`, `u.has_port() bool` | a porta escrita, ou a do esquema (80, 443, 21); -1 se não há como saber |
+| `u.path(&dst)`, `u.query(&dst)`, `u.fragment(&dst)`, `u.user(&dst)` | as partes, sem decodificar (-1 quando não existem) |
+| `u.query_param(name, &dst) int` | um parâmetro da consulta, decodificado |
+| `u.target(&dst)` | o alvo de um pedido HTTP: caminho (`/` se vazio) e consulta |
+| `u.dial_host(&dst)` | o host como `net.connect` espera (IPv6 sem colchetes) |
+| `Query` com `q.add(name, &value)`, `add_str`, `add_int` | monta uma consulta já codificada em `&q.buf[:q.n]` |
+| `query_value(&query, name, &dst)`, `escape`, `unescape` | as peças soltas (o `http.escape` e o `http.unescape` são estas) |
+

@@ -1,0 +1,111 @@
+import "std/str"
+import "std/testing"
+import "std/url"
+
+fn test_full_url() {
+    var u url.URL
+    testing.check(url.parse_str("HTTPS://user:pw@Api.Exemplo.com:8443/v1/itens?id=7&q=caf%C3%A9+quente&flag#topo", &u), "parse")
+    var b [256]byte
+    n := u.scheme(&b)
+    testing.eq_str(&b[:n], "HTTPS")
+    testing.check(u.scheme_is("https"), "esquema sem diferenciar maiúsculas")
+    n = u.host(&b)
+    testing.eq_str(&b[:n], "Api.Exemplo.com")
+    testing.check(u.host_is("api.exemplo.com"), "host_is")
+    testing.check(u.has_port(), "porta escrita")
+    testing.eq_int(u.port(), 8443)
+    n = u.user(&b)
+    testing.eq_str(&b[:n], "user:pw")
+    n = u.path(&b)
+    testing.eq_str(&b[:n], "/v1/itens")
+    n = u.query(&b)
+    testing.eq_str(&b[:n], "id=7&q=caf%C3%A9+quente&flag")
+    n = u.query_param("q", &b)
+    testing.eq_str(&b[:n], "café quente")
+    n = u.query_param("id", &b)
+    testing.eq_str(&b[:n], "7")
+    testing.eq_int(u.query_param("flag", &b), 0)
+    testing.eq_int(u.query_param("falta", &b), -1)
+    n = u.fragment(&b)
+    testing.eq_str(&b[:n], "topo")
+    n = u.target(&b)
+    testing.eq_str(&b[:n], "/v1/itens?id=7&q=caf%C3%A9+quente&flag")
+}
+
+fn test_defaults() {
+    var u url.URL
+    testing.check(url.parse_str("http://exemplo.com", &u), "parse")
+    testing.check(!u.has_port(), "sem porta")
+    testing.eq_int(u.port(), 80)
+    var b [64]byte
+    testing.eq_int(u.path(&b), 0)
+    n := u.target(&b)
+    testing.eq_str(&b[:n], "/") // o alvo de um pedido nunca é vazio
+    testing.eq_int(u.query(&b), -1)
+    testing.eq_int(u.fragment(&b), -1)
+    testing.eq_int(u.user(&b), -1)
+    testing.check(url.parse_str("https://exemplo.com/", &u), "https")
+    testing.eq_int(u.port(), 443)
+    testing.check(url.parse_str("mailto://x", &u), "esquema sem porta conhecida")
+    testing.eq_int(u.port(), -1)
+}
+
+fn test_ipv6_and_reference() {
+    var u url.URL
+    testing.check(url.parse_str("http://[::1]:8080/a", &u), "IPv6")
+    var b [64]byte
+    n := u.host(&b)
+    testing.eq_str(&b[:n], "[::1]")
+    n = u.dial_host(&b)
+    testing.eq_str(&b[:n], "::1")
+    testing.eq_int(u.port(), 8080)
+    // só o alvo, como no pedido HTTP
+    testing.check(url.parse_str("/itens/7?x=1", &u), "referência")
+    testing.eq_int(u.scheme(&b), 0)
+    testing.eq_int(u.host(&b), 0)
+    n = u.path(&b)
+    testing.eq_str(&b[:n], "/itens/7")
+    n = u.query_param("x", &b)
+    testing.eq_str(&b[:n], "1")
+}
+
+fn test_invalid() {
+    var u url.URL
+    testing.check(!url.parse_str("http:/x", &u), "esquema sem //")
+    testing.check(!url.parse_str("http://x:porta/", &u), "porta não numérica")
+    testing.check(!url.parse_str("http://x:70000/", &u), "porta grande demais")
+    testing.check(!url.parse_str("http://x:/", &u), "porta vazia")
+    testing.check(!url.parse_str("http://[::1/", &u), "IPv6 sem ]")
+    var b [8]byte
+    testing.check(url.parse_str("http://x/?q=%zz", &u), "a consulta é lida sem decodificar")
+    testing.eq_int(u.query_param("q", &b), -1)
+}
+
+fn test_query_builder() {
+    var q url.Query
+    q.add_str("busca", "café com leite")
+    q.add_int("pagina", 2)
+    var v [8]byte
+    k := str.copy(&v, "a&b=c")
+    q.add("filtro", &v[:k])
+    testing.eq_str(&q.buf[:q.n], "busca=caf%C3%A9%20com%20leite&pagina=2&filtro=a%26b%3Dc")
+    // e de volta
+    var out [64]byte
+    n := url.query_value(&q.buf[:q.n], "filtro", &out)
+    testing.eq_str(&out[:n], "a&b=c")
+    n = url.query_value(&q.buf[:q.n], "busca", &out)
+    testing.eq_str(&out[:n], "café com leite")
+}
+
+fn test_escape() {
+    var src [32]byte
+    n := str.copy(&src, "a b/ç?")
+    var out [64]byte
+    k := url.escape(&out, &src[:n])
+    testing.eq_str(&out[:k], "a%20b%2F%C3%A7%3F")
+    var back [32]byte
+    m := url.unescape(&back, &out[:k])
+    testing.eq_str(&back[:m], "a b/ç?")
+    n = str.copy(&src, "%4")
+    testing.eq_int(url.unescape(&back, &src[:n]), -1)
+}

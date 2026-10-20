@@ -1590,6 +1590,8 @@ void mlc_std_binary_fail(mlc_str msg, const char *file, int line) { mlc_std_proc
 
 void mlc_std_http_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
 
+void mlc_std_url_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
+
 /* os.error_text: o texto de um código de erro da biblioteca. Os códigos
  * abaixo de 1000 são os do sistema (errno), com os mais comuns em português;
  * os de 1000 em diante são do MLC e valem em todos os sistemas. */
@@ -1607,6 +1609,8 @@ static const char *mlc_error_text(int64_t code) {
     case 2005: return "a conexão foi fechada pelo outro lado";
     case 3001: return "mensagem HTTP inválida";
     case 3002: return "cabeçalho HTTP grande demais";
+    case 3003: return "esquema de URL sem suporte (https precisa de TLS)";
+    case 3101: return "URL inválida";
     case EPERM: return "operação não permitida";
     case ENOENT: return "não existe";
     case EIO: return "erro de entrada e saída";
