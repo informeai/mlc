@@ -1,6 +1,6 @@
-// Testes, rodados com mlc test. Um arquivo nome_test.mlc declara funções
-// fn test_nome(), sem parâmetros; o mlc test roda cada uma num processo
-// separado, então um panic ou um vazamento fica no teste que o causou.
+// Tests, run with mlc test. A name_test.mlc file declares functions
+// fn test_name(), without parameters; mlc test runs each one in a separate
+// process, so a panic or a leak stays in the test that caused it.
 //
 //     import "std/testing"
 //     import "std/vec"
@@ -12,44 +12,44 @@
 //         vec.free(v)
 //     }
 //
-// Uma verificação que falha mostra a linha dela e o teste continua. Nada
-// aqui aloca: os textos são comparados onde estão.
+// A failing check shows its line and the test goes on. Nothing
+// here allocates: texts are compared where they are.
 
-// check falha com msg se ok for false.
+// check fails with msg if ok is false.
 pub extern fn check(ok bool, msg string)
 
-// fail falha com msg.
+// fail fails with msg.
 pub extern fn fail(msg string)
 
-// eq_int compara inteiros (got: o que veio; want: o esperado).
+// eq_int compares integers (got: what came; want: the expected).
 pub extern fn eq_int(got int, want int)
 
-// eq_uint compara inteiros sem sinal (hashes, máscaras de bits).
+// eq_uint compares unsigned integers (hashes, bit masks).
 pub extern fn eq_uint(got uint64, want uint64)
 
-// eq_bool compara bools.
+// eq_bool compares bools.
 pub extern fn eq_bool(got bool, want bool)
 
-// eq_float compara floats exatamente; para contas com arredondamento, near.
+// eq_float compares floats exactly; for arithmetic with rounding, near.
 pub extern fn eq_float(got float64, want float64)
 
-// near aceita uma diferença de até tol.
+// near accepts a difference of up to tol.
 pub extern fn near(got float64, want float64, tol float64)
 
-// eq_str compara um texto num buffer com o esperado.
+// eq_str compares a text in a buffer with the expected one.
 pub extern fn eq_str(got &[]byte, want string)
 
-// eq_bytes compara dois buffers.
+// eq_bytes compares two buffers.
 pub extern fn eq_bytes(got &[]byte, want &[]byte)
 
-// B é o estado de um benchmark: fn bench_nome(b &testing.B) repete o
-// trecho medido b.n vezes, e o mlc test -bench escolhe b.n até a medida
-// durar o bastante.
+// B is a benchmark's state: fn bench_name(b &testing.B) repeats the
+// measured section b.n times, and mlc test -bench picks b.n until the measurement
+// lasts long enough.
 //
 //     fn bench_sort(b &testing.B) {
 //         s := alloc([]int, 1000)
 //         for i := 0; i < b.n; i++ {
-//             preenche(&s)
+//             fill(&s)
 //             sort.sort(&s)
 //         }
 //         free(s)
@@ -58,6 +58,6 @@ pub struct B {
     n int
 }
 
-// expect_panic diz que o teste precisa terminar em panic (por exemplo, um
-// índice fora dos limites); terminar sem panic é falha.
+// expect_panic says the test must end in a panic (for example, an
+// out-of-bounds index); ending without a panic is a failure.
 pub extern fn expect_panic()

@@ -12,7 +12,7 @@ fn test_listen_and_received() {
     testing.check(!signal.received(signal.USR1), "clear esquece")
 }
 
-// Ctrl+C anotado não encerra o programa
+// a recorded Ctrl+C doesn't end the program
 fn test_interrupt_does_not_kill() {
     signal.listen_shutdown()
     signal.raise(signal.INT)
@@ -23,15 +23,15 @@ fn test_interrupt_does_not_kill() {
 fn test_wait() {
     signal.listen(signal.USR2)
     start := time.mono_ns()
-    testing.eq_int(signal.wait(50), 0) // nada chegou: volta pelo tempo
+    testing.eq_int(signal.wait(50), 0) // nothing arrived: returns by timeout
     testing.check(time.mono_ns() - start >= 40000000, "esperou o tempo")
     signal.raise(signal.USR2)
-    testing.eq_int(signal.wait(-1), signal.USR2) // já chegou: volta na hora
+    testing.eq_int(signal.wait(-1), signal.USR2) // already arrived: returns at once
 }
 
 fn test_ignore() {
     signal.ignore(signal.HUP)
-    signal.raise(signal.HUP) // ignorado: nem encerra, nem anota
+    signal.raise(signal.HUP) // ignored: neither ends nor records
     testing.check(!signal.received(signal.HUP), "ignorado")
     signal.restore(signal.HUP)
 }

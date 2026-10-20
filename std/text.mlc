@@ -1,22 +1,22 @@
-// Funções de texto sobre bytes. Nenhuma aloca: buscam, comparam ou alteram
-// no lugar.
+// Text functions over bytes. None allocates: they search, compare or change
+// in place.
 
-// is_space diz se b é espaço, tab, \n ou \r.
+// is_space says whether b is a space, tab, \n or \r.
 pub fn is_space(b byte) bool {
     return b == ' ' || b == '\t' || b == '\n' || b == '\r'
 }
 
-// is_digit diz se b é um dígito de 0 a 9.
+// is_digit says whether b is a digit from 0 to 9.
 pub fn is_digit(b byte) bool {
     return b >= '0' && b <= '9'
 }
 
-// is_letter diz se b é uma letra ASCII (a-z ou A-Z).
+// is_letter says whether b is an ASCII letter (a-z or A-Z).
 pub fn is_letter(b byte) bool {
     return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }
 
-// index_byte devolve a posição do primeiro b em s, ou -1.
+// index_byte returns the position of the first b in s, or -1.
 pub fn index_byte(s &[]byte, b byte) int {
     for i := 0; i < len(s); i++ {
         if s[i] == b {
@@ -26,7 +26,7 @@ pub fn index_byte(s &[]byte, b byte) int {
     return -1
 }
 
-// index_of devolve a posição da primeira ocorrência de sub em s, ou -1.
+// index_of returns the position of the first occurrence of sub in s, or -1.
 pub fn index_of(s &[]byte, sub string) int {
     for i := 0; i + len(sub) <= len(s); i++ {
         if matches(s, i, sub) {
@@ -36,17 +36,17 @@ pub fn index_of(s &[]byte, sub string) int {
     return -1
 }
 
-// contains diz se sub aparece em s.
+// contains says whether sub appears in s.
 pub fn contains(s &[]byte, sub string) bool {
     return index_of(s, sub) >= 0
 }
 
-// starts_with diz se s começa com prefix.
+// starts_with says whether s starts with prefix.
 pub fn starts_with(s &[]byte, prefix string) bool {
     return len(prefix) <= len(s) && matches(s, 0, prefix)
 }
 
-// ends_with diz se s termina com suffix.
+// ends_with says whether s ends with suffix.
 pub fn ends_with(s &[]byte, suffix string) bool {
     return len(suffix) <= len(s) && matches(s, len(s) - len(suffix), suffix)
 }
@@ -60,7 +60,7 @@ fn matches(s &[]byte, at int, sub string) bool {
     return true
 }
 
-// count_byte conta quantas vezes b aparece em s.
+// count_byte counts how many times b appears in s.
 pub fn count_byte(s &[]byte, b byte) int {
     n := 0
     for c in s {
@@ -71,7 +71,7 @@ pub fn count_byte(s &[]byte, b byte) int {
     return n
 }
 
-// trim_start devolve a posição do primeiro byte que não é espaço.
+// trim_start returns the position of the first byte that isn't a space.
 pub fn trim_start(s &[]byte) int {
     i := 0
     for i < len(s) && is_space(s[i]) {
@@ -80,8 +80,8 @@ pub fn trim_start(s &[]byte) int {
     return i
 }
 
-// trim_end devolve o fim (exclusivo) do texto sem os espaços do final:
-// &s[trim_start(s):trim_end(s)] é o texto aparado.
+// trim_end returns the (exclusive) end of the text without the trailing spaces:
+// &s[trim_start(s):trim_end(s)] is the trimmed text.
 pub fn trim_end(s &[]byte) int {
     j := len(s)
     for j > 0 && is_space(s[j - 1]) {
@@ -90,14 +90,14 @@ pub fn trim_end(s &[]byte) int {
     return j
 }
 
-// field_end devolve onde termina o campo que começa em start, separado por
-// sep: o índice do próximo sep, ou len(s). Para percorrer os campos:
+// field_end returns where the field that starts at start ends, separated by
+// sep: the index of the next sep, or len(s). To walk the fields:
 //
 //     i := 0
-//     for i <= len(linha) {
-//         fim := text.field_end(&linha, ',', i)
-//         ... campo em &linha[i:fim] ...
-//         i = fim + 1
+//     for i <= len(line) {
+//         end := text.field_end(&line, ',', i)
+//         ... field in &line[i:end] ...
+//         i = end + 1
 //     }
 pub fn field_end(s &[]byte, sep byte, start int) int {
     for i := start; i < len(s); i++ {
@@ -108,7 +108,7 @@ pub fn field_end(s &[]byte, sep byte, start int) int {
     return len(s)
 }
 
-// to_upper passa as letras ASCII de s para maiúsculas, no lugar.
+// to_upper turns the ASCII letters of s into uppercase, in place.
 pub fn to_upper(s &[]byte) {
     for i := 0; i < len(s); i++ {
         if s[i] >= 'a' && s[i] <= 'z' {
@@ -117,7 +117,7 @@ pub fn to_upper(s &[]byte) {
     }
 }
 
-// to_lower passa as letras ASCII de s para minúsculas, no lugar.
+// to_lower turns the ASCII letters of s into lowercase, in place.
 pub fn to_lower(s &[]byte) {
     for i := 0; i < len(s); i++ {
         if s[i] >= 'A' && s[i] <= 'Z' {
@@ -126,15 +126,15 @@ pub fn to_lower(s &[]byte) {
     }
 }
 
-// Span é um pedaço de um texto: &s[span.start:span.end].
+// Span is a piece of a text: &s[span.start:span.end].
 pub struct Span {
     start int
     end int
 }
 
-// split_next devolve o próximo campo de s separado por sep, a partir de
-// *pos, e avança *pos para depois do separador. Os campos vazios contam
-// ("a,,b" tem três). Quando *pos passa de len(s), acabou:
+// split_next returns the next field of s separated by sep, starting at
+// *pos, and advances *pos past the separator. Empty fields count
+// ("a,,b" has three). When *pos goes past len(s), it's over:
 //
 //     pos := 0
 //     for pos <= len(line) {
@@ -148,9 +148,9 @@ pub fn split_next(s &[]byte, sep byte, pos &int) Span {
     return Span{start: start, end: end}
 }
 
-// word_next devolve a próxima palavra (separada por espaços, tabs ou quebras
-// de linha) a partir de *pos, e avança *pos. Sem mais palavras, devolve um
-// Span vazio com start == len(s):
+// word_next returns the next word (separated by spaces, tabs or line
+// breaks) starting at *pos, and advances *pos. With no more words, returns an
+// empty Span with start == len(s):
 //
 //     pos := 0
 //     for {

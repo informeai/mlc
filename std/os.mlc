@@ -1,28 +1,28 @@
-// Argumentos da linha de comando, variáveis de ambiente e saída do programa.
-// Nada aqui aloca: o texto é copiado para buffers de quem chama.
+// Command-line arguments, environment variables and program exit.
+// Nothing here allocates: the text is copied into the caller's buffers.
 import "std/result"
 
-// códigos de erro de arg e getenv
-pub const NOT_FOUND = 2   // argumento ou variável que não existe (o ENOENT do sistema)
-pub const TOO_LONG = 1002 // não cabe no buffer
+// error codes of arg and getenv
+pub const NOT_FOUND = 2   // argument or variable that doesn't exist (the system's ENOENT)
+pub const TOO_LONG = 1002 // doesn't fit in the buffer
 
-// Os códigos de erro da biblioteca formam um espaço só: os abaixo de 1000
-// são os do sistema (errno), e os de 1000 em diante são do MLC (fs.TOO_BIG,
-// fs.NOT_EMPTY, os.TOO_LONG, io.EOF, net.REFUSED...), iguais em todos os
-// sistemas. error_text dá o texto de qualquer um deles.
+// The library's error codes form a single space: those below 1000
+// are the system's (errno), and those from 1000 up are MLC's (fs.TOO_BIG,
+// fs.NOT_EMPTY, os.TOO_LONG, io.EOF, net.REFUSED...), the same on every
+// system. error_text gives the text of any of them.
 
-// arg_count devolve quantos argumentos o programa recebeu (o 0 é o nome dele).
+// arg_count returns how many arguments the program received (0 is its name).
 pub extern fn arg_count() int
 
 extern fn arg_copy(i int, dst &[]byte) int
 extern fn getenv_copy(name string, dst &[]byte) int
 
-// arg copia o argumento i para dst e devolve quantos bytes usou.
+// arg copies argument i into dst and returns how many bytes it used.
 pub fn arg(i int, dst &[]byte) result.Result[int, int] {
     return wrap(arg_copy(i, dst))
 }
 
-// getenv copia o valor da variável de ambiente name para dst.
+// getenv copies the value of the environment variable name into dst.
 pub fn getenv(name string, dst &[]byte) result.Result[int, int] {
     return wrap(getenv_copy(name, dst))
 }
@@ -31,40 +31,40 @@ extern fn setenv_raw(name string, value &[]byte) int
 extern fn cwd_raw(dst &[]byte) int
 extern fn chdir_raw(path &[]byte) int
 
-// setenv define a variável de ambiente name (vale para este programa e para
-// os que ele rodar com std/process).
+// setenv sets the environment variable name (applies to this program and to
+// the ones it runs with std/process).
 pub fn setenv(name string, value &[]byte) result.Result[int, int] {
     return wrap(setenv_raw(name, value))
 }
 
-// cwd copia o diretório atual para dst.
+// cwd copies the current directory into dst.
 pub fn cwd(dst &[]byte) result.Result[int, int] {
     return wrap(cwd_raw(dst))
 }
 
-// chdir muda o diretório atual.
+// chdir changes the current directory.
 pub fn chdir(path &[]byte) result.Result[int, int] {
     return wrap(chdir_raw(path))
 }
 
 extern fn error_text_raw(code int, dst &[]byte) int
 
-// error_text escreve em dst o texto do código de erro (de fs, os, net,
-// process, io...) e devolve quantos bytes usou. Um [160]byte sempre basta.
+// error_text writes into dst the text of the error code (from fs, os, net,
+// process, io...) and returns how many bytes it used. A [160]byte is always enough.
 //
 //     match fs.read_file(&path, &buf) {
 //         Ok(n) => ...
 //         Err(code) => {
 //             var msg [160]byte
 //             k := os.error_text(code, &msg)
-//             io.eprintf("erro: {:s}\n", &msg[:k])
+//             io.eprintf("error: {:s}\n", &msg[:k])
 //         }
 //     }
 pub fn error_text(code int, dst &[]byte) int {
     return error_text_raw(code, dst)
 }
 
-// exit encerra o programa com o código dado, sem voltar.
+// exit ends the program with the given code, without returning.
 pub extern fn exit(code int)
 
 fn wrap(n int) result.Result[int, int] {

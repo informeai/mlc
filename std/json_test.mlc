@@ -9,7 +9,7 @@ fn doc(dst &[]byte, s string) int {
     return str.copy(dst, s)
 }
 
-// tokens escreve os tokens do documento, um por linha, num buffer.
+// tokens writes the document's tokens, one per line, into a buffer.
 fn tokens(s &[]byte, out &[]byte) int {
     r := json.reader()
     n := 0
@@ -150,9 +150,9 @@ fn test_unescape() {
     var out [64]byte
     n := json.unescape(&out, &d[:k])
     testing.eq_str(&out[:n], "a\n\"b\\cé😀/")
-    k = doc(&d, "\\ud800x") // surrogate sozinho
+    k = doc(&d, "\\ud800x") // lone surrogate
     n = json.unescape(&out, &d[:k])
-    testing.eq_int(n, 4) // U+FFFD (3 bytes) e x
+    testing.eq_int(n, 4) // U+FFFD (3 bytes) and x
     testing.eq_int(utf8.decode(&out[:n], 0).code, utf8.INVALID)
     testing.eq_int(int(out[3]), int('x'))
 }
@@ -167,7 +167,7 @@ fn test_escape_round_trip() {
     var back [32]byte
     m := json.unescape(&back, &e[:n])
     testing.eq_bytes(&back[:m], &s[:k])
-    s[0] = 1 // caractere de controle vira \u0001
+    s[0] = 1 // a control character becomes \u0001
     n = json.escape(&e, &s[:1])
     testing.eq_str(&e[:n], "\\u0001")
 }
@@ -181,13 +181,13 @@ fn test_build_document_with_format() {
     m := str.format(&out, "{{\"name\": \"{:s}\", \"age\": {}}}", &esc[:n], 30)
     testing.eq_str(&out[:m], "{\"name\": \"Ana \\\"A\\\"\", \"age\": 30}")
     testing.check(!is_error_bytes(&out[:m]), "o documento montado é válido")
-    io.print("") // usa io (o Display dos tokens)
+    io.print("") // uses io (the tokens' Display)
 }
 
-// ---------- escrita ----------
+// ---------- writing ----------
 
 fn test_writer_document() {
-    w := json.writer(16) // pequeno de propósito: cresce
+    w := json.writer(16) // small on purpose: it grows
     w.object()
     w.field_int("id", 7)
     w.field_str("nome", "café \"forte\"\n")
@@ -213,7 +213,7 @@ fn test_writer_document() {
     w.end()
     testing.check(w.done(), "documento completo")
     testing.eq_str(&w.buf[:w.n], "{\"id\":7,\"nome\":\"café \\\"forte\\\"\\n\",\"tags\":[\"quente\",-3,2.5,false,null,{},[]],\"ativo\":true,\"dono\":null,\"nan\":null,\"bruto\":{\"x\":1}}")
-    // o que o Writer escreve, o Reader lê
+    // what the Writer writes, the Reader reads
     var out [1024]byte
     n := tokens(&w.buf[:w.n], &out)
     testing.check(n > 4 && str.eq(&out[n - 4:n], "End "), "lido de volta sem erro")
@@ -228,7 +228,7 @@ fn test_writer_value_without_key() {
     testing.expect_panic()
     w := json.writer(64)
     w.object()
-    w.int(1) // falta a key
+    w.int(1) // the key is missing
     w.free()
 }
 

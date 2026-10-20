@@ -1,9 +1,9 @@
-// Hashes não criptográficos, para tabelas e checagens rápidas. As contas dão
-// a volta de propósito (*%), e nada aloca.
+// Non-cryptographic hashes, for tables and quick checks. The arithmetic
+// wraps around on purpose (*%), and nothing allocates.
 //
-//     h := hash.fnv64(&dados)
+//     h := hash.fnv64(&data)
 
-// fnv32 é o FNV-1a de 32 bits dos bytes de s.
+// fnv32 is the 32-bit FNV-1a of the bytes of s.
 pub fn fnv32(s &[]byte) uint32 {
     var h uint32 = 0x811C_9DC5
     for i := 0; i < len(s); i++ {
@@ -13,7 +13,7 @@ pub fn fnv32(s &[]byte) uint32 {
     return h
 }
 
-// fnv64 é o FNV-1a de 64 bits dos bytes de s.
+// fnv64 is the 64-bit FNV-1a of the bytes of s.
 pub fn fnv64(s &[]byte) uint64 {
     var h uint64 = 0xCBF2_9CE4_8422_2325
     for i := 0; i < len(s); i++ {
@@ -23,7 +23,7 @@ pub fn fnv64(s &[]byte) uint64 {
     return h
 }
 
-// fnv64_str é o fnv64 de uma string fixa.
+// fnv64_str is fnv64 of a fixed string.
 pub fn fnv64_str(s string) uint64 {
     var h uint64 = 0xCBF2_9CE4_8422_2325
     for i := 0; i < len(s); i++ {
@@ -33,18 +33,18 @@ pub fn fnv64_str(s string) uint64 {
     return h
 }
 
-// mix64 espalha os bits de x (o finalizador do splitmix64): bom para usar um
-// inteiro como chave de tabela.
+// mix64 spreads the bits of x (splitmix64's finalizer): good for using an
+// integer as a table key.
 pub fn mix64(x uint64) uint64 {
     x = (x ^ (x >> 30)) *% 0xBF58_476D_1CE4_E5B9
     x = (x ^ (x >> 27)) *% 0x94D0_49BB_1331_11EB
     return x ^ (x >> 31)
 }
 
-// ---------- Hash: chaves de tabelas (std/map) ----------
+// ---------- Hash: table keys (std/map) ----------
 
-// Hash é o que uma chave de map.Map precisa: um hash bem espalhado e a
-// igualdade. Dois valores iguais (eq) precisam ter o mesmo hash.
+// Hash is what a map.Map key needs: a well-spread hash and
+// equality. Two equal values (eq) must have the same hash.
 pub interface Hash {
     fn hash(self &Self) uint64
     fn eq(self &Self, other &Self) bool
@@ -143,8 +143,8 @@ impl Hash for string {
     }
 }
 
-// Um slice (como []byte, o texto lido em buffers) combina o hash dos
-// elementos; dois slices são iguais se têm os mesmos elementos.
+// A slice (like []byte, text read into buffers) combines the hash of its
+// elements; two slices are equal if they have the same elements.
 impl[T Hash] Hash for []T {
     fn (s &[]T) hash() uint64 {
         var h uint64 = 0xCBF2_9CE4_8422_2325
@@ -168,13 +168,13 @@ impl[T Hash] Hash for []T {
 
 // ---------- CRC32 ----------
 
-// crc32 é o CRC-32 (IEEE, o de zip, gzip e PNG) dos bytes de s.
+// crc32 is the CRC-32 (IEEE, the one in zip, gzip and PNG) of the bytes of s.
 pub fn crc32(s &[]byte) uint32 {
     return crc32_update(0, s)
 }
 
-// crc32_update continua um CRC-32 com mais bytes, para dados em pedaços:
-// crc32_update(crc32(a), b) é o CRC de a seguido de b.
+// crc32_update continues a CRC-32 with more bytes, for data in pieces:
+// crc32_update(crc32(a), b) is the CRC of a followed by b.
 pub fn crc32_update(crc uint32, s &[]byte) uint32 {
     c := ^crc
     for i := 0; i < len(s); i++ {
@@ -192,31 +192,31 @@ pub fn crc32_update(crc uint32, s &[]byte) uint32 {
 
 // ---------- SHA-256 ----------
 
-// Sha256 calcula o SHA-256 de dados entregues em pedaços. O estado fica na
-// pilha de quem chama; nada aloca.
+// Sha256 computes the SHA-256 of data delivered in pieces. The state lives on
+// the caller's stack; nothing allocates.
 //
 //     h := hash.sha256()
-//     h.write(&buf[:n])          // quantas vezes precisar
+//     h.write(&buf[:n])          // as many times as needed
 //     var digest [32]byte
-//     h.sum(&digest)             // para texto: encoding.hex
+//     h.sum(&digest)             // for text: encoding.hex
 //
-// Serve para integridade e identificadores; não é, sozinho, criptografia
-// (assinaturas e senhas pedem uma biblioteca própria).
+// It serves integrity and identifiers; on its own it isn't cryptography
+// (signatures and passwords: std/hmac and std/password).
 pub struct Sha256 {
     h [8]uint32
     block [64]byte
-    used int  // bytes em block
-    total int // bytes recebidos
+    used int  // bytes in block
+    total int // bytes received
 }
 
-// sha256 começa um cálculo.
+// sha256 starts a computation.
 pub fn sha256() Sha256 {
     var s Sha256
     s.h = [8]uint32{0x6A09_E667, 0xBB67_AE85, 0x3C6E_F372, 0xA54F_F53A, 0x510E_527F, 0x9B05_688C, 0x1F83_D9AB, 0x5BE0_CD19}
     return s
 }
 
-// write acrescenta os bytes de data.
+// write appends the bytes of data.
 pub fn (s &Sha256) write(data &[]byte) {
     for i := 0; i < len(data); i++ {
         s.block[s.used] = data[i]
@@ -229,13 +229,13 @@ pub fn (s &Sha256) write(data &[]byte) {
     s.total += len(data)
 }
 
-// sum escreve os 32 bytes do resultado no começo de dst. O cálculo pode
-// continuar depois (sum não muda o estado).
+// sum writes the 32 bytes of the result at the start of dst. The computation
+// can continue afterwards (sum doesn't change the state).
 pub fn (s &Sha256) sum(dst &[]byte) {
     if len(dst) < 32 {
         fail("hash.Sha256.sum: o destino precisa de 32 bytes")
     }
-    c := *s // o enchimento vai numa cópia
+    c := *s // the padding goes into a copy
     bits := uint64(c.total) *% 8
     var pad [72]byte
     pad[0] = 0x80
@@ -255,7 +255,7 @@ pub fn (s &Sha256) sum(dst &[]byte) {
     }
 }
 
-// sha256_sum é o SHA-256 de data de uma vez, escrito em dst (32 bytes).
+// sha256_sum is the SHA-256 of data in one go, written into dst (32 bytes).
 pub fn sha256_sum(data &[]byte, dst &[]byte) {
     s := sha256()
     s.write(data)

@@ -68,7 +68,7 @@ fn test_insert_and_select() {
             }
         }
         testing.eq_int(rows, 2)
-        // de novo, com outro parâmetro
+        // again, with another parameter
         q.reset()
         q.bind_int(1, 1000)
         rows = 0
@@ -103,7 +103,7 @@ fn test_errors() {
     var text [128]byte
     n := os.error_text(sqlite.CONSTRAINT, &text)
     testing.eq_str(&text[:n], "restrição do banco violada (UNIQUE, NOT NULL, FOREIGN KEY ou CHECK)")
-    // SQL errado
+    // wrong SQL
     bad := db.prepare_str("SELEC 1", &err)
     testing.check(bad == nil, "SQL inválido")
     testing.eq_int(err, sqlite.ERROR)
@@ -142,7 +142,7 @@ fn test_bad_index() {
     err := 0
     st := db.prepare_str("SELECT ?", &err)
     if st != nil {
-        st.bind_int(2, 1) // só há um ?
+        st.bind_int(2, 1) // there's only one ?
         st.close()
     }
     db.close()

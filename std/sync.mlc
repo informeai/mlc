@@ -1,27 +1,27 @@
-// Grupo de threads: várias threads esperadas de uma vez, em vez de um
-// thread.join para cada handle.
+// Thread group: several threads waited for at once, instead of one
+// thread.join per handle.
 //
-//     g := sync.group(8)                         // até 8 threads ao mesmo tempo (aloca)
+//     g := sync.group(8)                         // up to 8 threads at a time (allocates)
 //     for i := 0; i < 100; i++ {
 //         g.add(thread.spawn(worker, ctx(i), thread.STACK_64KB))
 //     }
-//     g.wait()                                   // espera todas e libera o grupo
+//     g.wait()                                   // waits for all and frees the group
 //
-// A capacidade é o limite de threads vivas no grupo: com ele cheio, add
-// primeiro recolhe as que já terminaram (reap) e, se nenhuma terminou,
-// espera a mais antiga. Num servidor, sync.group(64) é "no máximo 64
-// conexões ao mesmo tempo", e o laço do accept espera uma vaga.
+// The capacity is the limit of live threads in the group: when it's full,
+// add first collects the ones already finished (reap) and, if none has
+// finished, waits for the oldest. In a server, sync.group(64) is "at most 64
+// connections at a time", and the accept loop waits for a slot.
 //
-// O grupo é dono das threads que recebe, e o verificador cobra o wait,
-// como cobra o join de cada thread. Só entram threads sem resultado
-// (*thread.Thread): os resultados voltam por um canal, um mutex ou um
-// atomic, ou use thread.join, que devolve o resultado de cada uma.
+// The group owns the threads it receives, and the checker requires the
+// wait, as it requires each thread's join. Only threads without a result
+// (*thread.Thread) go in: results come back through a channel, a mutex or
+// an atomic, or use thread.join, which returns each one's result.
 import "std/thread"
 
-// Group guarda as threads até o wait.
+// Group keeps the threads until the wait.
 pub extern "C" type Group
 
-// group cria um grupo com espaço para cap threads.
+// group creates a group with room for cap threads.
 pub extern fn group(cap int) *Group
 
 extern fn add_raw(g &Group, t *thread.Thread)
@@ -29,25 +29,25 @@ extern fn len_raw(g &Group) int
 extern fn reap_raw(g &Group) int
 extern fn wait_raw(g *Group)
 
-// add põe a thread no grupo (o handle é movido). Com o grupo cheio,
-// recolhe as que terminaram ou espera a mais antiga, para abrir uma vaga.
+// add puts the thread in the group (the handle is moved). With the group
+// full, it collects the finished ones or waits for the oldest, to open a slot.
 pub fn (g &Group) add(t *thread.Thread) {
     add_raw(g, t)
 }
 
-// reap espera as threads do grupo que já terminaram (sem bloquear nas que
-// ainda rodam), libera as vagas delas e devolve quantas foram.
+// reap waits for the group's threads that already finished (without blocking
+// on the ones still running), frees their slots and returns how many.
 pub fn (g &Group) reap() int {
     return reap_raw(g)
 }
 
-// len diz quantas threads estão no grupo (as que terminaram contam até um
-// reap, um add com o grupo cheio ou o wait).
+// len says how many threads are in the group (finished ones count until a
+// reap, an add with the group full, or the wait).
 pub fn (g &Group) len() int {
     return len_raw(g)
 }
 
-// wait espera todas as threads, na ordem em que entraram, e libera o grupo.
+// wait waits for all the threads, in the order they joined, and frees the group.
 pub fn (g *Group) wait() {
     wait_raw(g)
 }

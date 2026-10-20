@@ -4,7 +4,7 @@ import "std/result"
 import "std/str"
 import "std/testing"
 
-// Text é uma fonte falsa: entrega o texto em pedaços de step bytes.
+// Text is a fake source: it delivers the text in pieces of step bytes.
 struct Text {
     data [2048]byte
     n int
@@ -57,13 +57,13 @@ fn test_simple_and_quoted() {
     testing.eq_int(preco, 1250)
     n = r.field(2, &f)
     testing.eq_str(&f[:n], "com, vírgula")
-    want_record(&r, &src, 3) // a linha vazia foi pulada
+    want_record(&r, &src, 3) // the empty line was skipped
     n = r.field(0, &f)
     testing.eq_str(&f[:n], "aspas \"dentro\"")
     n = r.field(2, &f)
     testing.eq_str(&f[:n], "duas\nlinhas")
     want_record(&r, &src, 3)
-    testing.eq_int(r.line, 6) // o registro de duas linhas ocupa a 4 e a 5
+    testing.eq_int(r.line, 6) // the two-line record takes lines 4 and 5
     testing.eq_int(r.field(1, &f), 0)
     testing.eq_int(r.field(2, &f), 0)
     testing.eq_int(r.field(3, &f), -1)
@@ -120,7 +120,7 @@ fn test_writer() {
     w.add_str("x")
     w.end()
     testing.eq_str(&w.buf[:w.n], "nome,\"descrição, com vírgula\",\"diz \"\"oi\"\"\",\" espaço\",-12,2.5\n,x\n")
-    // e de volta pelo leitor
+    // and back through the reader
     src := Text{}
     src.n = str.copy_bytes(&src.data, &w.buf[:w.n])
     src.step = 5

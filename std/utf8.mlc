@@ -1,31 +1,31 @@
-// UTF-8: caracteres (code points) dentro de bytes. Nada aloca.
+// UTF-8: characters (code points) inside bytes. Nothing allocates.
 //
 //     i := 0
 //     for i < len(s) {
-//         r := utf8.decode(s, i)     // r.code: o caractere; r.size: quantos bytes
+//         r := utf8.decode(s, i)     // r.code: the character; r.size: how many bytes
 //         ...
 //         i += r.size
 //     }
 
-// Rune é um caractere decodificado e quantos bytes ele ocupa.
+// Rune is a decoded character and how many bytes it takes.
 pub struct Rune {
     code int
     size int
 }
 
-// INVALID é o caractere devolvido para bytes que não são UTF-8 válido.
+// INVALID is the character returned for bytes that aren't valid UTF-8.
 pub const INVALID = 0xFFFD
 
-// decode lê o caractere que começa em s[i]. Bytes inválidos dão INVALID com
-// tamanho 1, para que o laço sempre avance.
+// decode reads the character that starts at s[i]. Invalid bytes give INVALID
+// with size 1, so the loop always advances.
 pub fn decode(s &[]byte, i int) Rune {
     b0 := int(s[i])
     if b0 < 0x80 {
         return Rune{code: b0, size: 1}
     }
-    n := 0 // bytes de continuação
+    n := 0 // continuation bytes
     code := 0
-    least := 0 // o menor caractere que precisa desse tamanho
+    least := 0 // the smallest character that needs this size
     if (b0 & 0xE0) == 0xC0 {
         n = 1
         code = b0 & 0x1F
@@ -42,7 +42,7 @@ pub fn decode(s &[]byte, i int) Rune {
         return Rune{code: INVALID, size: 1}
     }
     if i + n >= len(s) {
-        return Rune{code: INVALID, size: 1} // cortado no fim
+        return Rune{code: INVALID, size: 1} // cut at the end
     }
     for k := 1; k <= n; k++ {
         b := int(s[i + k])
@@ -52,12 +52,12 @@ pub fn decode(s &[]byte, i int) Rune {
         code = (code << 6) | (b & 0x3F)
     }
     if code < least || code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF) {
-        return Rune{code: INVALID, size: 1} // forma longa demais ou fora do Unicode
+        return Rune{code: INVALID, size: 1} // overlong form or outside Unicode
     }
     return Rune{code: code, size: n + 1}
 }
 
-// count diz quantos caracteres há em s (cada byte inválido conta como um).
+// count says how many characters there are in s (each invalid byte counts as one).
 pub fn count(s &[]byte) int {
     n := 0
     i := 0
@@ -68,21 +68,21 @@ pub fn count(s &[]byte) int {
     return n
 }
 
-// valid diz se s é UTF-8 válido.
+// valid says whether s is valid UTF-8.
 pub fn valid(s &[]byte) bool {
     i := 0
     for i < len(s) {
         r := decode(s, i)
         if r.code == INVALID && r.size == 1 {
-            return false // o U+FFFD de verdade ocupa 3 bytes
+            return false // the real U+FFFD takes 3 bytes
         }
         i += r.size
     }
     return true
 }
 
-// encode escreve o caractere code em UTF-8 no começo de dst e devolve
-// quantos bytes usou (1 a 4). Um code inválido vira INVALID.
+// encode writes the character code in UTF-8 at the start of dst and returns
+// how many bytes it used (1 to 4). An invalid code becomes INVALID.
 pub fn encode(dst &[]byte, code int) int {
     if code < 0 || code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF) {
         code = INVALID

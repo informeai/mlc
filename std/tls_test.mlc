@@ -8,10 +8,10 @@ import "std/testing"
 import "std/thread"
 import "std/tls"
 
-// make_cert gera um certificado autoassinado para localhost (e a chave)
-// numa pasta temporária, com o openssl da linha de comando. Devolve o
-// tamanho do caminho da pasta em dir, ou -1 se este sistema não tem o
-// OpenSSL (a biblioteca ou o comando): aí os testes não rodam.
+// make_cert generates a self-signed certificate for localhost (and the key)
+// in a temporary folder, with the openssl command line. Returns the
+// length of the folder's path in dir, or -1 if this system doesn't have
+// OpenSSL (the library or the command): then the tests don't run.
 fn make_cert(dir &[]byte) int {
     if !tls.available() {
         return -1
@@ -62,9 +62,9 @@ struct Echo {
     srv *tls.Server
 }
 
-// serve_echo aceita uma conexão TLS, lê uma mensagem e devolve "eco: ...".
-// Devolve quantos bytes leu (-1 se o aperto de mão falhou, o que é
-// esperado quando o cliente recusa o certificado).
+// serve_echo accepts a TLS connection, reads a message and sends back "eco: ...".
+// Returns how many bytes it read (-1 if the handshake failed, which is
+// expected when the client refuses the certificate).
 fn serve_echo(e *Echo) int {
     l := e.l
     srv := e.srv
@@ -94,7 +94,7 @@ fn serve_echo(e *Echo) int {
     return got
 }
 
-// start sobe o servidor numa thread e devolve a porta.
+// start brings up the server in a thread and returns the port.
 fn start(dir &[]byte, port &int) ?*thread.Thread[int] {
     var cert [300]byte
     var key [300]byte
@@ -119,20 +119,20 @@ fn start(dir &[]byte, port &int) ?*thread.Thread[int] {
     return thread.spawn(serve_echo, alloc(Echo{l: l, srv: srv}), thread.STACK_256KB)
 }
 
-// available só diz se a libssl existe: num sistema sem ela, os testes que
-// precisam dela não rodam (make_cert devolve -1)
+// available only says whether libssl exists: on a system without it, the tests
+// that need it don't run (make_cert returns -1)
 fn test_available() {
     if tls.available() {
         testing.check(true, "a libssl foi achada")
     }
 }
 
-// com a autoridade certa (MLC_TLS_CA), o certificado vale e a conversa passa
+// with the right authority (MLC_TLS_CA), the certificate is valid and the exchange goes through
 fn test_round_trip() {
     var dir [256]byte
     dn := make_cert(&dir)
     if dn < 0 {
-        return // sem OpenSSL neste sistema
+        return // no OpenSSL on this system
     }
     var cert [300]byte
     cn := path_in(&dir[:dn], "cert.pem", &cert)
@@ -165,12 +165,12 @@ fn test_round_trip() {
     fs.remove_all(&dir[:dn])
 }
 
-// sem a autoridade, o certificado autoassinado é recusado
+// without the authority, the self-signed certificate is refused
 fn test_untrusted_rejected() {
     var dir [256]byte
     dn := make_cert(&dir)
     if dn < 0 {
-        return // sem OpenSSL neste sistema
+        return // no OpenSSL on this system
     }
     port := 0
     t := start(&dir[:dn], &port)
@@ -193,13 +193,13 @@ fn test_untrusted_rejected() {
     fs.remove_all(&dir[:dn])
 }
 
-// com a autoridade certa mas outro nome (o certificado é de localhost), é
-// recusado
+// with the right authority but another name (the certificate is for localhost), it's
+// refused
 fn test_wrong_name_rejected() {
     var dir [256]byte
     dn := make_cert(&dir)
     if dn < 0 {
-        return // sem OpenSSL neste sistema
+        return // no OpenSSL on this system
     }
     var cert [300]byte
     cn := path_in(&dir[:dn], "cert.pem", &cert)
@@ -235,7 +235,7 @@ fn test_server_files_missing() {
     }
 }
 
-// ---------- HTTPS de ponta a ponta ----------
+// ---------- end-to-end HTTPS ----------
 
 struct App {
     hits int
@@ -254,7 +254,7 @@ struct Site {
     srv *tls.Server
 }
 
-// serve_https atende uma conexão HTTPS com o Router e devolve os acessos.
+// serve_https serves one HTTPS connection with the Router and returns the hits.
 fn serve_https(s *Site) int {
     l := s.l
     srv := s.srv
@@ -281,7 +281,7 @@ fn test_https_router_and_client() {
     var dir [256]byte
     dn := make_cert(&dir)
     if dn < 0 {
-        return // sem OpenSSL neste sistema
+        return // no OpenSSL on this system
     }
     var cert [300]byte
     var key [300]byte

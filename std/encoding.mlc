@@ -1,23 +1,23 @@
-// Hex e base64: bytes em texto e de volta, em buffers de quem chama.
+// Hex and base64: bytes to text and back, in the caller's buffers.
 //
 //     var digest [32]byte
-//     hash.sha256_sum(&dados, &digest)
+//     hash.sha256_sum(&data, &digest)
 //     var txt [64]byte
 //     n := encoding.hex(&txt, &digest)          // "ba7816bf..."
 //
-//     m := encoding.base64_len(len(dados))      // para alocar o tamanho exato
+//     m := encoding.base64_len(len(data))       // to allocate the exact size
 //     b := alloc([]byte, m)
-//     encoding.base64(&b, &dados)
+//     encoding.base64(&b, &data)
 //
-// As funções que escrevem dão panic se dst for pequeno demais; as que leem
-// devolvem -1 para texto inválido.
+// The functions that write panic if dst is too small; the ones that read
+// return -1 for invalid text.
 
 const HEX = "0123456789abcdef"
 const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 const B64URL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 
-// hex escreve src em hexadecimal minúsculo (2 bytes de texto por byte) e
-// devolve quantos bytes usou.
+// hex writes src in lowercase hexadecimal (2 bytes of text per byte) and
+// returns how many bytes it used.
 pub fn hex(dst &[]byte, src &[]byte) int {
     need(dst, 2 * len(src))
     for i := 0; i < len(src); i++ {
@@ -27,8 +27,8 @@ pub fn hex(dst &[]byte, src &[]byte) int {
     return 2 * len(src)
 }
 
-// unhex lê hexadecimal (maiúsculo ou minúsculo) e devolve quantos bytes
-// escreveu, ou -1 se o texto não for hex (ou tiver tamanho ímpar).
+// unhex reads hexadecimal (upper- or lowercase) and returns how many bytes
+// it wrote, or -1 if the text isn't hex (or has an odd length).
 pub fn unhex(dst &[]byte, src &[]byte) int {
     if len(src) % 2 != 0 {
         return -1
@@ -58,19 +58,19 @@ fn hex_digit(c byte) int {
     return -1
 }
 
-// base64_len diz quantos bytes o base64 (com =) de n bytes ocupa.
+// base64_len says how many bytes the base64 (with =) of n bytes takes.
 pub fn base64_len(n int) int {
     return (n + 2) / 3 * 4
 }
 
-// base64 escreve src em base64 padrão (com + / e o enchimento =) e devolve
-// quantos bytes usou.
+// base64 writes src in standard base64 (with + / and the = padding) and
+// returns how many bytes it used.
 pub fn base64(dst &[]byte, src &[]byte) int {
     return encode64(dst, src, B64, true)
 }
 
-// base64_url escreve em base64 para URLs e nomes de arquivo (- e _ no lugar
-// de + e /, sem enchimento) e devolve quantos bytes usou.
+// base64_url writes base64 for URLs and file names (- and _ instead of
+// + and /, without padding) and returns how many bytes it used.
 pub fn base64_url(dst &[]byte, src &[]byte) int {
     return encode64(dst, src, B64URL, false)
 }
@@ -111,9 +111,9 @@ fn encode64(dst &[]byte, src &[]byte, alphabet string, pad bool) int {
     return n
 }
 
-// unbase64 lê base64, padrão ou para URLs, com ou sem enchimento, e devolve
-// quantos bytes escreveu, ou -1 se o texto for inválido. Um dst de
-// len(src) * 3 / 4 bytes sempre basta.
+// unbase64 reads base64, standard or for URLs, with or without padding, and
+// returns how many bytes it wrote, or -1 if the text is invalid. A dst of
+// len(src) * 3 / 4 bytes is always enough.
 pub fn unbase64(dst &[]byte, src &[]byte) int {
     end := len(src)
     for end > 0 && src[end - 1] == '=' {

@@ -92,11 +92,11 @@ func TestNavigation(t *testing.T) {
 		{"main", "geo.«soma(p)", "geo", 9, []string{"pub fn soma(p Ponto) int", "soma devolve x + y."}},
 		{"main", "geo.soma(«p)", "main", 33, []string{"var p geo.Ponto"}},
 		{"main", "p := «geo.Ponto", "geo", 1, []string{`import "geo"`, "Geometria plana."}},
-		{"main", `import «"std/io"`, "std/io.mlc", 1, []string{`import "std/io"`, "Entrada e saída padrão"}},
+		{"main", `import «"std/io"`, "std/io.mlc", 1, []string{`import "std/io"`, "Standard input and output"}},
 		{"main", "«io.print(area", "std/io.mlc", 1, []string{`import "std/io"`}},
-		{"main", "io.«print(area", "std/io.mlc", 1, []string{"io.print(a, b, ...)", "O compilador só reescreve a chamada"}},
+		{"main", "io.«print(area", "std/io.mlc", 1, []string{"io.print(a, b, ...)", "The compiler only rewrites the call"}},
 		{"main", "v.len(), «len(\"ab\")", "", 0, []string{"len(s) int"}},
-		{"main", "vec.new[«int](2)", "", 0, []string{"Inteiro com sinal de 64 bits"}},
+		{"main", "vec.new[«int](2)", "", 0, []string{"64-bit signed integer"}},
 		{"main", "fn «area(f Forma)", "main", 18, []string{"fn area(f Forma) float64"}},
 		{"main", "fn area(«f Forma)", "main", 18, []string{"f Forma", "parâmetro"}},
 		{"geo", "return p.«x + p.y", "geo", 4, []string{"x int", "campo de `geo.Ponto`"}},
@@ -249,8 +249,8 @@ func TestNavigationInterfaces(t *testing.T) {
 		{"return a.«tamanho()", path, 5, "fn tamanho(self &Self) int"},
 		{"impl auto io.«Display for", "std/io.mlc", 0, "pub interface Display {"},
 		{"impl «auto io", "", 0, "impl auto io.Display for T"},
-		{"fn tamanho(self &«Self)", "", 0, "o tipo que a implementa"},
-		{"io.«printf(", "std/io.mlc", 1, "trocando cada `{}` por um valor"},
+		{"fn tamanho(self &«Self)", "", 0, "the type that implements it"},
+		{"io.«printf(", "std/io.mlc", 1, "replacing each `{}` with a value"},
 	}
 	for _, tc := range cases {
 		mark := strings.Index(tc.at, "«")
@@ -284,8 +284,8 @@ func TestNavigationFormat(t *testing.T) {
 	os.WriteFile(path, []byte(src), 0o644)
 	read := driver.Overlay(nil)
 	for _, tc := range []struct{ at, file, hover string }{
-		{"str.«format(&b", "std/str.mlc", "devolve quantos bytes usou"},
-		{"str.«format_len(", "std/str.mlc", "sem escrever nada"},
+		{"str.«format(&b", "std/str.mlc", "returns how many bytes it used"},
+		{"str.«format_len(", "std/str.mlc", "without writing anything"},
 		{"io.«printf(", "std/io.mlc", "`{:x}`"},
 	} {
 		mark := strings.Index(tc.at, "«")
@@ -315,10 +315,10 @@ func TestNavigationThreads(t *testing.T) {
 	os.WriteFile(path, []byte(src), 0o644)
 	read := driver.Overlay(nil)
 	for _, tc := range []struct{ at, hover string }{
-		{"thread.«spawn(sq", "O contexto é **movido**"},
-		{"thread.«join(t)", "Espera a thread terminar"},
+		{"thread.«spawn(sq", "The context is **moved**"},
+		{"thread.«join(t)", "Waits for the thread to finish"},
 		{"thread.«STACK_64KB", "STACK_64KB"},
-		{"?*thread.«Thread[int]", "Handle de uma thread"},
+		{"?*thread.«Thread[int]", "Handle of a thread"},
 	} {
 		mark := strings.Index(tc.at, "«")
 		off := strings.Index(src, strings.Replace(tc.at, "«", "", 1)) + mark
@@ -344,12 +344,12 @@ func TestNavigationChannels(t *testing.T) {
 	os.WriteFile(path, []byte(src), 0o644)
 	read := driver.Overlay(nil)
 	for _, tc := range []struct{ at, hover string }{
-		{"chan.«new[int]", "Aloca um canal"},
-		{"rx.«sender()", "Cria uma ponta que envia"},
-		{"tx.«send(1)", "Move `v` para o canal"},
+		{"chan.«new[int]", "Allocates a channel"},
+		{"rx.«sender()", "Creates an end that sends"},
+		{"tx.«send(1)", "Moves `v` into the channel"},
 		{"rx.«recv()", "Got(v)"},
-		{"tx.«close()", "Fecha a ponta"},
-		{"?*chan.«Sender[int]", "Ponta de canal que envia"},
+		{"tx.«close()", "Closes the end"},
+		{"?*chan.«Sender[int]", "Channel end that sends"},
 	} {
 		mark := strings.Index(tc.at, "«")
 		off := strings.Index(src, strings.Replace(tc.at, "«", "", 1)) + mark
@@ -375,11 +375,11 @@ func TestNavigationMutex(t *testing.T) {
 	os.WriteFile(path, []byte(src), 0o644)
 	read := driver.Overlay(nil)
 	for _, tc := range []struct{ at, hover string }{
-		{"mutex.«new(1)", "Aloca um mutex"},
-		{"m.«lock()", "Espera a trava"},
-		{"g.«get()", "Empresta o valor"},
-		{"g.«unlock()", "Destrava o mutex"},
-		{"?*mutex.«Guard[int]", "A trava de um mutex"},
+		{"mutex.«new(1)", "Allocates a mutex"},
+		{"m.«lock()", "Waits for the lock"},
+		{"g.«get()", "Borrows the value"},
+		{"g.«unlock()", "Unlocks the mutex"},
+		{"?*mutex.«Guard[int]", "A mutex's lock"},
 	} {
 		mark := strings.Index(tc.at, "«")
 		off := strings.Index(src, strings.Replace(tc.at, "«", "", 1)) + mark
@@ -410,7 +410,7 @@ func TestNavigationWriterPrintf(t *testing.T) {
 	}
 	off := strings.Index(src, "printf(")
 	sym, _ := newNavigator(prog, read, []byte(src)).resolve(off)
-	if sym == nil || !strings.Contains(sym.doc, "sem criar outro e sem `flush`") {
+	if sym == nil || !strings.Contains(sym.doc, "without creating another and without a `flush`") {
 		t.Errorf("hover de w.printf: %+v", sym)
 	}
 }

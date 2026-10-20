@@ -1,33 +1,33 @@
-// Mutex: um valor compartilhado entre threads, que só é tocado com a trava.
+// Mutex: a value shared between threads, only touched under the lock.
 //
-//     m := mutex.new(alloc(Conta{saldo: 0}))   // o valor vai para dentro do mutex
-//     t := thread.spawn(deposita, m.clone(), thread.STACK_64KB)
-//     g := m.lock()                             // espera a trava
-//     c := g.get()                              // &Conta, emprestado do guard
-//     c.saldo += 10
-//     g.unlock()                                // obrigatório; usar c depois é erro
+//     m := mutex.new(alloc(Account{balance: 0}))  // the value goes inside the mutex
+//     t := thread.spawn(deposit, m.clone(), thread.STACK_64KB)
+//     g := m.lock()                             // waits for the lock
+//     c := g.get()                              // &Account, borrowed from the guard
+//     c.balance += 10
+//     g.unlock()                                // required; using c afterwards is an error
 //     thread.join(t)
 //     m.close()
 //
-// mutex.new e os métodos são embutidos no compilador; o mutex fica no
-// runtime.
+// mutex.new and the methods are built into the compiler; the mutex lives in
+// the runtime.
 //
-// mutex.new(v) *Mutex[T]    aloca o mutex com o valor v dentro (v é movido);
-//                           mutex.new[T](v) escolhe o tipo
+// mutex.new(v) *Mutex[T]    allocates the mutex with the value v inside (v is moved);
+//                           mutex.new[T](v) picks the type
 //
 // Mutex[T]:
-//   lock() *Guard[T]        espera a trava; travar de novo na mesma thread,
-//                           sem destravar, dá panic
-//   clone() *Mutex[T]       outro handle para o mesmo mutex (para outra thread)
-//   notify(), notify_all()  acordam quem espera em wait
-//   close()                 o último handle (e guard) a sair libera o valor
+//   lock() *Guard[T]        waits for the lock; locking again on the same thread,
+//                           without unlocking, panics
+//   clone() *Mutex[T]       another handle to the same mutex (for another thread)
+//   notify(), notify_all()  wake whoever waits in wait
+//   close()                 the last handle (and guard) to leave frees the value
 //
 // Guard[T]:
-//   get() &T                empresta o valor; enquanto o empréstimo é usado, o
-//                           guard fica congelado
-//   wait()                  solta a trava, espera um notify e trava de novo
+//   get() &T                borrows the value; while the borrow is used, the
+//                           guard stays frozen
+//   wait()                  releases the lock, waits for a notify and locks again
 //   notify(), notify_all()
-//   unlock()                destrava (consome o guard)
+//   unlock()                unlocks (consumes the guard)
 //
-// O verificador cobra close em cada handle e unlock em cada guard. Um guard
-// é da thread que travou: não vai para outra thread, campos ou slices.
+// The checker requires close on each handle and unlock on each guard. A guard
+// belongs to the thread that locked: it doesn't go to another thread, fields or slices.

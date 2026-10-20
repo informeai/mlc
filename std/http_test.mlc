@@ -7,8 +7,8 @@ import "std/testing"
 import "std/thread"
 import "std/url"
 
-// Pipe é uma conexão falsa: read entrega input[:n] em pedaços de no máximo
-// step bytes, e write junta tudo em out.
+// Pipe is a fake connection: read delivers input[:n] in pieces of at most
+// step bytes, and write gathers everything in out.
 struct Pipe {
     input [10000]byte
     n int
@@ -79,7 +79,7 @@ fn test_request_line_and_headers() {
     testing.eq_str(&buf[:n], "3")
     testing.eq_int(m.query_param("flag", &buf), 0)
     testing.eq_int(m.query_param("falta", &buf), -1)
-    n = m.header("host", &buf) // nome sem diferenciar maiúsculas
+    n = m.header("host", &buf) // case-insensitive name
     testing.eq_str(&buf[:n], "exemplo.com")
     n = m.header("X-Coisa", &buf)
     testing.eq_str(&buf[:n], "com espaços")
@@ -92,13 +92,13 @@ fn test_request_line_and_headers() {
     testing.eq_int(m.content_length(), -1)
     r = m.read_body(&c, &buf)
     match r {
-        Ok(k) => testing.eq_int(k, 0) // pedido sem corpo
+        Ok(k) => testing.eq_int(k, 0) // request without a body
         Err(code) => testing.eq_int(code, 0)
     }
 }
 
 fn test_body_with_length_and_keep_alive() {
-    // dois pedidos na mesma conexão; o corpo do primeiro não é lido inteiro
+    // two requests on the same connection; the first one's body isn't read in full
     c := pipe("POST /a HTTP/1.1\r\nContent-Length: 11\r\n\r\nhello worldPOST /b HTTP/1.1\r\nContent-Length: 3\r\nConnection: close\r\n\r\nabc", 5)
     var m http.Message
     ok(m.read_request(&c))
@@ -108,7 +108,7 @@ fn test_body_with_length_and_keep_alive() {
         Ok(k) => testing.eq_str(&part[:k], "hell")
         Err(code) => testing.eq_int(code, 0)
     }
-    ok(m.read_request(&c)) // descarta "o world"
+    ok(m.read_request(&c)) // discards "o world"
     testing.check(m.path_is("/b"), "segundo pedido")
     testing.check(!m.keep_alive(), "Connection: close")
     var body [16]byte
@@ -117,7 +117,7 @@ fn test_body_with_length_and_keep_alive() {
         Err(code) => testing.eq_int(code, 0)
     }
     r := m.read_request(&c)
-    err_is(r, io.EOF) // a conexão acabou entre pedidos
+    err_is(r, io.EOF) // the connection ended between requests
 }
 
 fn test_chunked() {
@@ -156,7 +156,7 @@ fn test_bad_messages() {
     r3 := m3.read_request(&c3)
     err_is(r3, http.BAD_MESSAGE)
     var m4 http.Message
-    c4 := pipe("GET / HTTP/1.1\r\nHost: x", 64) // a conexão fecha no meio
+    c4 := pipe("GET / HTTP/1.1\r\nHost: x", 64) // the connection closes in the middle
     r4 := m4.read_request(&c4)
     err_is(r4, http.BAD_MESSAGE)
     var m5 http.Message
@@ -175,7 +175,7 @@ fn test_too_many_fields() {
     c.n += str.copy(&c.input[c.n:], "\r\n")
     var m http.Message
     r := m.read_request(&c)
-    err_is(r, http.HEAD_TOO_BIG) // mais de 64 campos
+    err_is(r, http.HEAD_TOO_BIG) // more than 64 fields
 }
 
 fn test_head_too_big() {
@@ -188,7 +188,7 @@ fn test_head_too_big() {
     }
     var m http.Message
     r := m.read_request(&c)
-    err_is(r, http.HEAD_TOO_BIG) // não cabe nos 8 KB
+    err_is(r, http.HEAD_TOO_BIG) // doesn't fit in the 8 KB
 }
 
 fn test_response() {
@@ -225,7 +225,7 @@ fn test_client_side() {
     }
 }
 
-// resposta sem tamanho: o corpo vai até a conexão fechar
+// response without a size: the body goes until the connection closes
 fn test_response_until_close() {
     c := pipe("HTTP/1.0 200 OK\r\n\r\ntudo até o fim", 3)
     var m http.Message
@@ -253,7 +253,7 @@ fn test_escape() {
     testing.eq_int(http.unescape(&back, &src[:n]), -1)
 }
 
-// servidor de verdade, numa thread, com um cliente pela rede
+// a real server, in a thread, with a client over the network
 fn serve_one(l *net.Listener) int {
     err := 0
     served := 0
@@ -323,10 +323,10 @@ fn test_over_tcp() {
         }
     }
     c.close()
-    testing.eq_int(thread.join(t), 3) // três pedidos na mesma conexão
+    testing.eq_int(thread.join(t), 3) // three requests on the same connection
 }
 
-// ---------- roteador e cliente ----------
+// ---------- router and client ----------
 
 fn path_of(s string) [128]byte {
     var b [128]byte
@@ -356,7 +356,7 @@ fn test_match_path() {
     testing.check(!matches("/itens/{id}", "/itens/7/x", &p), "pedaço a mais")
     testing.check(matches("/users/{uid}/posts/{post}", "/users/3/posts/caf%C3%A9", &p), "dois parâmetros")
     n = p.get("post", &v)
-    testing.eq_str(&v[:n], "café") // decodificado
+    testing.eq_str(&v[:n], "café") // decoded
     testing.check(p.is("uid", "3"), "o primeiro")
     testing.check(matches("/arquivos/{caminho...}", "/arquivos/a/b/c.txt", &p), "resto")
     n = p.get("caminho", &v)
@@ -394,8 +394,8 @@ fn h_health(c &net.Conn, m &http.Message, p &http.Params, app &App) {
     http.respond_str(c, 200, "text/plain", "ok")
 }
 
-// serve_router atende 4 conexões (uma por pedido do cliente) e devolve
-// quantos itens foram criados.
+// serve_router serves 4 connections (one per client request) and returns
+// how many items were created.
 fn serve_router(l *net.Listener) int {
     var r http.Router[net.Conn, App]
     r.handle("GET", "/health", h_health)

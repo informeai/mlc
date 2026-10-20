@@ -1,13 +1,13 @@
-// TCP. Servidores e clientes com handles que o verificador obriga a fechar;
-// os dados passam por buffers de quem chama, sem alocar.
+// TCP. Servers and clients with handles the checker forces you to close;
+// data passes through the caller's buffers, without allocating.
 //
 //     var host [16]byte
 //     err := 0
-//     l := net.listen(&host[:0], 8080, &err)       // host vazio: todas as interfaces
+//     l := net.listen(&host[:0], 8080, &err)       // empty host: all interfaces
 //     for {
 //         c := l.accept(&err)
 //         if c == nil { break }
-//         t := thread.spawn(handle, c, thread.STACK_64KB)   // uma thread por conexão
+//         t := thread.spawn(handle, c, thread.STACK_64KB)   // one thread per connection
 //         thread.join(t)
 //     }
 //     l.close()
@@ -15,38 +15,38 @@
 //     fn handle(c *net.Conn) {
 //         var buf [4096]byte
 //         match c.read(&buf) {
-//             Ok(n) => c.write(&buf[:n])       // n == 0: o outro lado fechou
+//             Ok(n) => c.write(&buf[:n])       // n == 0: the other side closed
 //             Err(code) => {}
 //         }
 //         c.close()
 //     }
 //
-// O host é um nome ou endereço (localhost, 127.0.0.1, ::1, exemplo.com).
-// Escrever numa conexão que o outro lado fechou devolve RESET, em vez de
-// encerrar o programa.
+// The host is a name or address (localhost, 127.0.0.1, ::1, example.com).
+// Writing to a connection the other side closed returns RESET, instead of
+// ending the program.
 import "std/io"
 import "std/result"
 
-// códigos de erro (os outros são o errno do sistema)
-pub const REFUSED = 2001 // ninguém escuta nessa porta
-pub const NO_HOST = 2002 // o nome não foi encontrado
-pub const IN_USE = 2003  // a porta já está em uso
-pub const TIMEOUT = 2004 // passou do tempo de set_timeout
-pub const RESET = 2005   // o outro lado fechou ou derrubou a conexão
+// error codes (the others are the system's errno)
+pub const REFUSED = 2001 // nobody listens on that port
+pub const NO_HOST = 2002 // the name wasn't found
+pub const IN_USE = 2003  // the port is already in use
+pub const TIMEOUT = 2004 // set_timeout's time ran out
+pub const RESET = 2005   // the other side closed or dropped the connection
 
-// Listener espera conexões numa porta (um handle): precisa de close().
+// Listener waits for connections on a port (a handle): it needs a close().
 pub extern "C" type Listener
 
-// Conn é uma conexão TCP (um handle): precisa de close().
+// Conn is a TCP connection (a handle): it needs a close().
 pub extern "C" type Conn
 
-// listen escuta em host:port (host vazio: todas as interfaces; porta 0: o
-// sistema escolhe, veja Listener.port). Se não conseguir, devolve nil e põe
-// o código em err.
+// listen listens on host:port (empty host: all interfaces; port 0: the
+// system picks, see Listener.port). If it can't, returns nil and puts
+// the code in err.
 pub extern fn listen(host &[]byte, port int, err &int) ?*Listener
 
-// connect abre uma conexão com host:port. Se não conseguir, devolve nil e
-// põe o código em err (REFUSED, NO_HOST, ...).
+// connect opens a connection to host:port. If it can't, returns nil and
+// puts the code in err (REFUSED, NO_HOST, ...).
 pub extern fn connect(host &[]byte, port int, err &int) ?*Conn
 
 extern fn accept_raw(l &Listener, err &int) ?*Conn
@@ -59,62 +59,62 @@ extern fn timeout_raw(c &Conn, ms int) int
 extern fn shutdown_raw(c &Conn) int
 extern fn close_raw(c *Conn)
 
-// accept espera a próxima conexão. Se falhar, devolve nil e põe o código em
+// accept waits for the next connection. If it fails, returns nil and puts the code in
 // err.
 pub fn (l &Listener) accept(err &int) ?*Conn {
     return accept_raw(l, err)
 }
 
-// port diz em que porta o listener está (útil com porta 0).
-// set_timeout limita a espera de accept a ms milissegundos (-1: sem
-// limite). Passado o tempo, accept devolve nil com err TIMEOUT, e o laço
-// pode conferir outra coisa (um signal.received, por exemplo) antes de
-// voltar a esperar. Um sinal que chega durante a espera também devolve
+// port says which port the listener is on (useful with port 0).
+// set_timeout limits accept's wait to ms milliseconds (-1: no
+// limit). After that, accept returns nil with err TIMEOUT, and the loop
+// can check something else (a signal.received, for example) before
+// waiting again. A signal that arrives during the wait also returns
 // TIMEOUT.
 pub fn (l &Listener) set_timeout(ms int) {
     listener_timeout_raw(l, ms)
 }
 
-// port devolve a porta em que o listener escuta (útil com a porta 0, que o
-// sistema escolhe).
+// port returns the port the listener listens on (useful with port 0, which the
+// system picks).
 pub fn (l &Listener) port() int {
     return port_raw(l)
 }
 
-// close para de escutar e libera o listener.
+// close stops listening and frees the listener.
 pub fn (l *Listener) close() {
     close_listener(l)
 }
 
-// read lê o que chegar, até len(dst) bytes; Ok(0) quer dizer que o outro
-// lado fechou.
+// read reads what arrives, up to len(dst) bytes; Ok(0) means the other
+// side closed.
 pub fn (c &Conn) read(dst &[]byte) result.Result[int, int] {
     return wrap(read_raw(c, dst))
 }
 
-// write manda todos os bytes de data.
+// write sends all the bytes of data.
 pub fn (c &Conn) write(data &[]byte) result.Result[int, int] {
     return wrap(write_raw(c, data))
 }
 
-// set_timeout limita, em milissegundos, quanto read e write esperam (0: sem
-// limite). Passado o tempo, o erro é TIMEOUT.
+// set_timeout limits, in milliseconds, how long read and write wait (0: no
+// limit). After that, the error is TIMEOUT.
 pub fn (c &Conn) set_timeout(ms int) result.Result[int, int] {
     return wrap(timeout_raw(c, ms))
 }
 
-// shutdown avisa o outro lado que não vai mandar mais nada (o read dele
-// recebe Ok(0)); ainda dá para ler.
+// shutdown tells the other side it won't send anything else (its read
+// gets Ok(0)); reading still works.
 pub fn (c &Conn) shutdown() result.Result[int, int] {
     return wrap(shutdown_raw(c))
 }
 
-// close fecha a conexão e libera o handle.
+// close closes the connection and frees the handle.
 pub fn (c *Conn) close() {
     close_raw(c)
 }
 
-// uma conexão é um io.Reader: std/bufio lê linhas dela
+// a connection is an io.Reader: std/bufio reads lines from it
 impl io.Reader for Conn
 
 fn wrap(n int) result.Result[int, int] {

@@ -1,12 +1,12 @@
-// Ordenação de slices (e arrays, via &a), no lugar, sem alocar.
+// Sorting of slices (and arrays, via &a), in place, without allocating.
 //
-// sort usa a ordem de cmp.Ord: números, bool, string, slices (como
-// [][]byte, linhas de texto) e structs com impl cmp.Ord (ou impl auto
-// cmp.Ord). Os elementos são trocados de lugar por posse, sem cópias, então
-// donos ([]byte, ?*No) também são ordenados.
+// sort uses cmp.Ord's order: numbers, bool, string, slices (like
+// [][]byte, lines of text) and structs with impl cmp.Ord (or impl auto
+// cmp.Ord). Elements swap places by ownership, without copies, so
+// owners ([]byte, ?*Node) are sorted too.
 import "std/cmp"
 
-// sort ordena s em ordem crescente (quicksort, com inserção nas partes pequenas).
+// sort sorts s in ascending order (quicksort, with insertion sort on the small parts).
 pub fn sort[T owned + cmp.Ord](s &[]T) {
     n := len(s)
     if n <= 16 {
@@ -18,19 +18,19 @@ pub fn sort[T owned + cmp.Ord](s &[]T) {
     sort(&s[p + 1:])
 }
 
-// insertion tira o elemento i e desloca os maiores uma posição para a
-// direita (por posse, com take e replace), até achar o lugar dele.
+// insertion takes element i out and shifts the larger ones one position to
+// the right (by ownership, with take and replace), until it finds its place.
 fn insertion[T owned + cmp.Ord](s &[]T) {
     for i := 1; i < len(s); i++ {
         if s[i].cmp(&s[i - 1]) >= 0 {
-            continue // já está no lugar
+            continue // already in place
         }
         x := take(&s[i])
         j := i - 1
         for j >= 0 && x.cmp(&s[j]) < 0 {
             moved := take(&s[j])
             gap := replace(&s[j + 1], moved)
-            drop(gap) // o zero deixado pelo take anterior
+            drop(gap) // the zero left by the previous take
             j--
         }
         gap := replace(&s[j + 1], x)
@@ -40,7 +40,7 @@ fn insertion[T owned + cmp.Ord](s &[]T) {
 
 fn partition[T owned + cmp.Ord](s &[]T) int {
     last := len(s) - 1
-    swap(s, last / 2, last) // pivô do meio, contra entradas já ordenadas
+    swap(s, last / 2, last) // middle pivot, against already sorted input
     i := 0
     for j := 0; j < last; j++ {
         if s[j].cmp(&s[last]) < 0 {
@@ -52,7 +52,7 @@ fn partition[T owned + cmp.Ord](s &[]T) int {
     return i
 }
 
-// swap troca os elementos i e j (por posse: serve para donos também).
+// swap swaps elements i and j (by ownership: works for owners too).
 pub fn swap[T owned](s &[]T, i int, j int) {
     if i == j {
         return
@@ -60,10 +60,10 @@ pub fn swap[T owned](s &[]T, i int, j int) {
     a := take(&s[i])
     b := replace(&s[j], a)
     old := replace(&s[i], b)
-    drop(old) // o zero deixado pelo take
+    drop(old) // the zero left by the take
 }
 
-// is_sorted diz se s está em ordem crescente.
+// is_sorted says whether s is in ascending order.
 pub fn is_sorted[T owned + cmp.Ord](s &[]T) bool {
     for i := 1; i < len(s); i++ {
         if s[i].cmp(&s[i - 1]) < 0 {
@@ -73,7 +73,7 @@ pub fn is_sorted[T owned + cmp.Ord](s &[]T) bool {
     return true
 }
 
-// reverse inverte a ordem de s.
+// reverse reverses the order of s.
 pub fn reverse[T owned](s &[]T) {
     i := 0
     j := len(s) - 1
@@ -84,13 +84,13 @@ pub fn reverse[T owned](s &[]T) {
     }
 }
 
-// sort_by ordena s pela ordem de less (less(a, b): a vem antes de b), para
-// uma ordem diferente da de cmp.Ord (decrescente, por outro campo):
+// sort_by sorts s by the order of less (less(a, b): a comes before b), for
+// an order other than cmp.Ord's (descending, by another field):
 //
-//     fn por_idade(a &Pessoa, b &Pessoa) bool {
-//         return a.idade < b.idade
+//     fn by_age(a &Person, b &Person) bool {
+//         return a.age < b.age
 //     }
-//     sort.sort_by(&pessoas, por_idade)
+//     sort.sort_by(&people, by_age)
 pub fn sort_by[T any](s &[]T, less fn(&T, &T) bool) {
     n := len(s)
     if n <= 16 {
@@ -129,9 +129,9 @@ fn partition_by[T any](s &[]T, less fn(&T, &T) bool) int {
     return i
 }
 
-// sort_by_with ordena s pela ordem de less, que recebe junto o contexto ctx:
-// para comparar consultando outra estrutura (os ids pela prioridade guardada
-// num map, por exemplo).
+// sort_by_with sorts s by the order of less, which also receives the context
+// ctx: to compare by looking up another structure (ids by the priority kept
+// in a map, for example).
 pub fn sort_by_with[T owned, C ref](s &[]T, ctx &C, less fn(&C, &T, &T) bool) {
     n := len(s)
     if n <= 16 {
@@ -175,7 +175,7 @@ fn partition_with[T owned, C ref](s &[]T, ctx &C, less fn(&C, &T, &T) bool) int 
     return i
 }
 
-// is_sorted_by diz se s já está na ordem de less.
+// is_sorted_by says whether s is already in less's order.
 pub fn is_sorted_by[T any](s &[]T, less fn(&T, &T) bool) bool {
     for i := 1; i < len(s); i++ {
         if less(&s[i], &s[i - 1]) {

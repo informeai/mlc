@@ -13,7 +13,7 @@ fn test_deterministic() {
 }
 
 fn test_splitmix_reference() {
-    // primeiro valor do splitmix64 com semente 0
+    // first value of splitmix64 with seed 0
     r := rand.new(0)
     testing.eq_uint(r.next(), 0xE220_A839_7B1D_CDAF)
 }
@@ -46,7 +46,7 @@ fn test_secure() {
     }
     testing.check(!same, "duas chamadas dão bytes diferentes")
     testing.check(!zero, "não ficou zerado")
-    var big [1000]byte // mais que os 256 bytes de uma chamada ao sistema
+    var big [1000]byte // more than the 256 bytes of one system call
     rand.secure(&big)
     zeros := 0
     for i := 0; i < len(big); i++ {

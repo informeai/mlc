@@ -1,33 +1,33 @@
-// Relógio, espera e datas.
+// Clock, waiting and dates.
 import "std/str"
 
-// now_ms devolve o horário atual em milissegundos desde 1970 (UTC).
+// now_ms returns the current time in milliseconds since 1970 (UTC).
 pub extern fn now_ms() int
 
-// mono_ns devolve um relógio que só anda para frente, em nanossegundos: para
-// medir quanto tempo algo levou (a diferença entre duas leituras).
+// mono_ns returns a clock that only moves forward, in nanoseconds: to
+// measure how long something took (the difference between two readings).
 pub extern fn mono_ns() int
 
-// sleep_ms espera ms milissegundos.
+// sleep_ms waits ms milliseconds.
 pub extern fn sleep_ms(ms int)
 
-// ---------- datas ----------
+// ---------- dates ----------
 //
-//     d := time.utc(time.now_ms())        // ou time.local(...), no fuso do sistema
+//     d := time.utc(time.now_ms())        // or time.local(...), in the system's time zone
 //     io.print(d.year, d.month, d.day)
 //     var buf [32]byte
 //     n := time.iso(&buf, &d)              // 2026-10-17T14:05:09Z
 //     ms := 0
-//     ok := time.parse_iso(&buf[:n], &ms)  // e de volta
+//     ok := time.parse_iso(&buf[:n], &ms)  // and back
 //
-// As contas são no calendário gregoriano, para qualquer ano, sem alocar.
+// The calculations are in the Gregorian calendar, for any year, without allocating.
 
-// Date é um instante decomposto. offset_min é o fuso (minutos a leste de
-// UTC: -180 em Brasília); weekday vai de 0 (domingo) a 6.
+// Date is an instant broken down. offset_min is the time zone (minutes east
+// of UTC: -180 in Brasília); weekday goes from 0 (Sunday) to 6.
 pub struct Date {
     year int
-    month int // 1 a 12
-    day int   // 1 a 31
+    month int // 1 to 12
+    day int   // 1 to 31
     hour int
     minute int
     second int
@@ -38,12 +38,12 @@ pub struct Date {
 
 extern fn local_offset(ms int) int
 
-// utc decompõe ms (milissegundos desde 1970, como now_ms) em UTC.
+// utc breaks ms (milliseconds since 1970, like now_ms) down in UTC.
 pub fn utc(ms int) Date {
     return split(ms, 0)
 }
 
-// local decompõe ms no fuso do sistema (com horário de verão, se houver).
+// local breaks ms down in the system's time zone (with daylight saving, if any).
 pub fn local(ms int) Date {
     return split(ms, local_offset(ms) / 60)
 }
@@ -58,21 +58,21 @@ fn split(ms int, offset_min int) Date {
     d.minute = rest / 60000 % 60
     d.second = rest / 1000 % 60
     d.ms = rest % 1000
-    d.weekday = int(floor_mod(days + 4, 7)) // 1970-01-01 foi quinta
+    d.weekday = int(floor_mod(days + 4, 7)) // 1970-01-01 was a Thursday
     d.offset_min = offset_min
     return d
 }
 
-// to_ms converte a data (no fuso offset_min dela) em milissegundos desde
-// 1970.
+// to_ms converts the date (in its offset_min time zone) into milliseconds
+// since 1970.
 pub fn to_ms(d &Date) int {
     days := days_from_civil(d.year, d.month, d.day)
     return days * 86400000 + d.hour * 3600000 + d.minute * 60000 + d.second * 1000 + d.ms - d.offset_min * 60000
 }
 
-// iso escreve a data no formato ISO 8601 (2026-10-17T14:05:09Z, com .123 se
-// houver milissegundos e com o fuso, como -03:00, se não for UTC) e devolve
-// quantos bytes usou (até 29: um [32]byte basta).
+// iso writes the date in ISO 8601 format (2026-10-17T14:05:09Z, with .123 if
+// there are milliseconds and with the zone, like -03:00, if it isn't UTC) and
+// returns how many bytes it used (up to 29: a [32]byte is enough).
 pub fn iso(dst &[]byte, d &Date) int {
     n := str.format(dst, "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}", d.year, d.month, d.day, d.hour, d.minute, d.second)
     if d.ms != 0 {
@@ -92,9 +92,9 @@ pub fn iso(dst &[]byte, d &Date) int {
     return n
 }
 
-// parse_iso lê uma data ISO 8601 (YYYY-MM-DDTHH:MM:SS, com .mmm opcional e
-// Z ou ±HH:MM; só a data, YYYY-MM-DD, vale meia-noite UTC) e põe o instante
-// em ms. Devolve false se o texto não for uma data válida.
+// parse_iso reads an ISO 8601 date (YYYY-MM-DDTHH:MM:SS, with optional .mmm and
+// Z or ±HH:MM; just the date, YYYY-MM-DD, means midnight UTC) and puts the instant
+// in ms. Returns false if the text isn't a valid date.
 pub fn parse_iso(s &[]byte, ms &int) bool {
     var d Date
     if len(s) < 10 || !digits(s, 0, 4, &d.year) || s[4] != '-' || !digits(s, 5, 2, &d.month) || s[7] != '-' || !digits(s, 8, 2, &d.day) {
@@ -134,7 +134,7 @@ pub fn parse_iso(s &[]byte, ms &int) bool {
     return true
 }
 
-// days_in_month diz quantos dias o mês tem (fevereiro com os anos bissextos).
+// days_in_month says how many days the month has (February with leap years).
 pub fn days_in_month(year int, month int) int {
     if month == 2 {
         if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) {
@@ -148,7 +148,7 @@ pub fn days_in_month(year int, month int) int {
     return 31
 }
 
-// digits lê n dígitos de s a partir de at.
+// digits reads n digits from s starting at at.
 fn digits(s &[]byte, at int, n int, out &int) bool {
     if at + n > len(s) {
         return false
@@ -165,8 +165,8 @@ fn digits(s &[]byte, at int, n int, out &int) bool {
     return true
 }
 
-// civil converte dias desde 1970 em ano, mês e dia (algoritmo de Howard
-// Hinnant, válido para qualquer ano).
+// civil converts days since 1970 into year, month and day (Howard Hinnant's
+// algorithm, valid for any year).
 fn civil(days int, d &Date) {
     z := days + 719468
     era := floor_div(z, 146097)

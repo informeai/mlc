@@ -10,7 +10,7 @@ fn path(dst &[]byte, name string) int {
     return n + str.copy(&dst[n:], name)
 }
 
-// open_file abre um logger novo num arquivo vazio, sem horário.
+// open_file opens a new logger on an empty file, without the time.
 fn open_file(p &[]byte, level int) *log.Logger {
     fs.remove_file(p)
     err := 0
@@ -86,7 +86,7 @@ fn test_long_line_is_cut() {
     lg.close()
     var buf [4096]byte
     m := read_all(&p[:n], &buf)
-    testing.eq_int(m, 6 + 2048 + 1) // "INFO  " + a linha cortada + \n
+    testing.eq_int(m, 6 + 2048 + 1) // "INFO  " + the cut line + \n
     fs.remove_file(&p[:n])
 }
 
@@ -97,7 +97,7 @@ fn writer(lg *log.Logger) {
     lg.close()
 }
 
-// várias threads escrevendo: cada linha sai inteira
+// several threads writing: each line comes out whole
 fn test_threads() {
     var p [64]byte
     n := path(&p, "threads.log")
@@ -142,8 +142,8 @@ fn bump(n &int) int {
     return *n
 }
 
-// os valores são calculados sempre, da esquerda para a direita; só a
-// formatação depende do nível
+// the values are always computed, left to right; only the
+// formatting depends on the level
 fn test_values_always_evaluated() {
     lg := log.new(log.STDERR, log.ERROR)
     count := 0

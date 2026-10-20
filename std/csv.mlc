@@ -1,78 +1,78 @@
-// CSV (RFC 4180): ler e escrever planilhas em texto. O leitor lê em fluxo,
-// de qualquer io.Reader (um arquivo de gigabytes passa com memória fixa): um
-// registro por vez, com os campos num buffer de 16 KB dentro dele. O
-// escritor monta as linhas num buffer de 16 KB, com as aspas onde precisa.
+// CSV (RFC 4180): reading and writing spreadsheets as text. The reader streams,
+// from any io.Reader (a gigabyte file goes through with fixed memory): one
+// record at a time, with the fields in a 16 KB buffer inside it. The
+// writer builds lines in a 16 KB buffer, with quotes where needed.
 //
 //     r := csv.new[fs.File]()
-//     r.sep = ';'                        // o Excel em português usa ;
+//     r.sep = ';'                        // spreadsheets in some locales use ;
 //     for {
 //         match r.next(&f) {
 //             Ok(n) => {
-//                 var nome [128]byte
-//                 k := r.field(0, &nome)
-//                 preco := 0
-//                 r.int(2, &preco)
+//                 var name [128]byte
+//                 k := r.field(0, &name)
+//                 price := 0
+//                 r.int(2, &price)
 //                 ...
 //             }
-//             Err(code) => break             // io.EOF no fim; BAD_QUOTE, TOO_LONG
+//             Err(code) => break             // io.EOF at the end; BAD_QUOTE, TOO_LONG
 //         }
 //     }
 //
 //     var w csv.Writer
 //     w.sep = ','
-//     w.add_str("nome")
-//     w.add_str("descrição, com vírgula")    // vira "descrição, com vírgula"
+//     w.add_str("name")
+//     w.add_str("description, with a comma") // becomes "description, with a comma"
 //     w.add_int(1250)
-//     w.end()                                // fim da linha
+//     w.end()                                // end of the line
 //     f.write(&w.buf[:w.n])
 //     w.reset()
 //
-// Campos entre aspas podem ter o separador, quebras de linha e aspas
-// (escritas como ""). Linhas vazias são puladas. \r\n e \n terminam um
-// registro.
+// Quoted fields can contain the separator, line breaks and quotes
+// (written as ""). Empty lines are skipped. \r\n and \n end a
+// record.
 import "std/bufio"
 import "std/io"
 import "std/result"
 import "std/str"
 
-// BAD_QUOTE é o erro de um campo com aspas que não fecham, ou com algo
-// depois da aspa de fechamento (Reader.line diz a linha).
+// BAD_QUOTE is the error of a quoted field whose quotes don't close, or with something
+// after the closing quote (Reader.line says the line).
 pub const BAD_QUOTE = 3301
 
-// TOO_LONG é o erro de um registro que não cabe em 16 KB ou tem mais de
-// MAX_FIELDS campos.
+// TOO_LONG is the error of a record that doesn't fit in 16 KB or has more than
+// MAX_FIELDS fields.
 pub const TOO_LONG = 1002
 
-// MAX_FIELDS é quantos campos um registro pode ter.
+// MAX_FIELDS is how many fields a record can have.
 pub const MAX_FIELDS = 256
 
-// Reader lê registros de uma fonte R.
+// Reader reads records from a source R.
 pub struct Reader[R ref + io.Reader] {
     input bufio.Reader[R]
-    sep byte // o separador (',' em new)
+    sep byte // the separator (',' in new)
     buf [16384]byte
     n int
     at [256]int
     size [256]int
     count int
-    line int // a linha do registro atual (a primeira é 1)
+    line int // the current record's line (the first is 1)
 }
 
-// new cria um leitor com o separador ','.
+// new creates a reader with the separator ','.
 pub fn new[R ref + io.Reader]() Reader[R] {
     r := Reader[R]{}
     r.sep = ','
     return r
 }
 
-// next lê o próximo registro e devolve quantos campos ele tem; Err(io.EOF)
-// no fim dos dados.
+// next reads the next record and returns how many fields it has; Err(io.EOF)
+// at the end of the data.
 pub fn (r &Reader[R]) next(src &R) result.Result[int, int] {
     r.n = 0
     r.count = 0
     started := false
-    quoted := false // dentro de um campo com aspas
-    after := false  // logo depois da aspa que fecha um campo
+    quoted := false // inside a quoted field
+    after := false  // right after the quote that closes a field
     field_at := 0
     for {
         c := byte(0)
@@ -98,7 +98,7 @@ pub fn (r &Reader[R]) next(src &R) result.Result[int, int] {
         if !started {
             r.line++
             if c == '\n' || c == '\r' {
-                continue // linha vazia
+                continue // empty line
             }
             started = true
         }
@@ -118,7 +118,7 @@ pub fn (r &Reader[R]) next(src &R) result.Result[int, int] {
         }
         if c == '"' {
             if after {
-                // "" dentro do campo: uma aspa
+                // "" inside the field: one quote
                 if !r.put('"') {
                     return result.Result.Err(TOO_LONG)
                 }
@@ -127,7 +127,7 @@ pub fn (r &Reader[R]) next(src &R) result.Result[int, int] {
                 continue
             }
             if r.n != field_at {
-                return result.Result.Err(BAD_QUOTE) // aspa no meio de um campo sem aspas
+                return result.Result.Err(BAD_QUOTE) // quote in the middle of an unquoted field
             }
             quoted = true
             continue
@@ -141,13 +141,13 @@ pub fn (r &Reader[R]) next(src &R) result.Result[int, int] {
             continue
         }
         if c == '\r' {
-            continue // o \n que vem depois termina o registro
+            continue // the \n that comes next ends the record
         }
         if c == '\n' {
             return r.finish(field_at)
         }
         if after {
-            return result.Result.Err(BAD_QUOTE) // texto depois da aspa que fecha
+            return result.Result.Err(BAD_QUOTE) // text after the closing quote
         }
         if !r.put(c) {
             return result.Result.Err(TOO_LONG)
@@ -181,13 +181,13 @@ fn (r &Reader[R]) finish(field_at int) result.Result[int, int] {
     return result.Result.Ok(r.count)
 }
 
-// len devolve quantos campos o registro atual tem.
+// len returns how many fields the current record has.
 pub fn (r &Reader[R]) len() int {
     return r.count
 }
 
-// field copia o campo i (o primeiro é 0) para dst; -1 se o registro não
-// tem esse campo.
+// field copies field i (the first is 0) into dst; -1 if the record doesn't
+// have that field.
 pub fn (r &Reader[R]) field(i int, dst &[]byte) int {
     if i < 0 || i >= r.count {
         return -1
@@ -195,13 +195,13 @@ pub fn (r &Reader[R]) field(i int, dst &[]byte) int {
     return str.copy_bytes(dst, &r.buf[r.at[i]:r.at[i] + r.size[i]])
 }
 
-// is diz se o campo i é igual a s.
+// is says whether field i is equal to s.
 pub fn (r &Reader[R]) is(i int, s string) bool {
     return i >= 0 && i < r.count && str.eq(&r.buf[r.at[i]:r.at[i] + r.size[i]], s)
 }
 
-// int lê o campo i como inteiro; false (sem mexer em out) se ele não existe
-// ou não é um número.
+// int reads field i as an integer; false (leaving out alone) if it doesn't exist
+// or isn't a number.
 pub fn (r &Reader[R]) int(i int, out &int) bool {
     if i < 0 || i >= r.count {
         return false
@@ -214,7 +214,7 @@ pub fn (r &Reader[R]) int(i int, out &int) bool {
     return true
 }
 
-// float lê o campo i como real (com ponto decimal).
+// float reads field i as a real (with a decimal point).
 pub fn (r &Reader[R]) float(i int, out &float64) bool {
     if i < 0 || i >= r.count {
         return false
@@ -227,21 +227,21 @@ pub fn (r &Reader[R]) float(i int, out &float64) bool {
     return true
 }
 
-// ---------- escrita ----------
+// ---------- writing ----------
 
-// Writer monta linhas de CSV: o texto é &w.buf[:w.n]. O valor zero usa ','
-// como separador e \n no fim da linha (crlf = true usa \r\n, como pede a
-// RFC).
+// Writer builds CSV lines: the text is &w.buf[:w.n]. The zero value uses ','
+// as the separator and \n at the end of the line (crlf = true uses \r\n, as the
+// RFC asks).
 pub struct Writer {
     buf [16384]byte
     n int
     sep byte
     crlf bool
-    fields int // campos na linha atual
+    fields int // fields in the current line
 }
 
-// add acrescenta um campo, com aspas se ele tiver o separador, aspas,
-// quebra de linha ou espaço nas pontas.
+// add appends a field, with quotes if it contains the separator, quotes,
+// a line break or spaces at the ends.
 pub fn (w &Writer) add(s &[]byte) {
     sep := w.sep
     if sep == 0 {
@@ -271,7 +271,7 @@ pub fn (w &Writer) add(s &[]byte) {
     w.put('"')
 }
 
-// add_str acrescenta um campo fixo do programa.
+// add_str appends a field fixed in the program.
 pub fn (w &Writer) add_str(s string) {
     var b [1024]byte
     if len(s) > len(b) {
@@ -281,21 +281,21 @@ pub fn (w &Writer) add_str(s string) {
     w.add(&b[:n])
 }
 
-// add_int acrescenta um inteiro.
+// add_int appends an integer.
 pub fn (w &Writer) add_int(v int) {
     var b [24]byte
     n := str.put_int(&b, v)
     w.add(&b[:n])
 }
 
-// add_float acrescenta um real (o menor texto que o representa).
+// add_float appends a real (the shortest text that represents it).
 pub fn (w &Writer) add_float(v float64) {
     var b [40]byte
     n := str.put_float(&b, v)
     w.add(&b[:n])
 }
 
-// end termina a linha.
+// end ends the line.
 pub fn (w &Writer) end() {
     if w.crlf {
         w.put('\r')
@@ -304,7 +304,7 @@ pub fn (w &Writer) end() {
     w.fields = 0
 }
 
-// reset esvazia o buffer (depois de escrever o texto em algum lugar).
+// reset empties the buffer (after writing the text somewhere).
 pub fn (w &Writer) reset() {
     w.n = 0
     w.fields = 0

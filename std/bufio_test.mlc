@@ -7,8 +7,8 @@ import "std/str"
 import "std/testing"
 import "std/thread"
 
-// Chunks é uma fonte falsa: entrega data[:n] em pedaços de no máximo step
-// bytes e, se fail não for 0, termina com Err(fail) em vez do fim.
+// Chunks is a fake source: it delivers data[:n] in pieces of at most step
+// bytes and, if fail isn't 0, ends with Err(fail) instead of the end.
 struct Chunks {
     data [128]byte
     n int
@@ -48,7 +48,7 @@ fn chunks(s string, step int, fail int) Chunks {
     return c
 }
 
-// line lê uma linha e confere o texto.
+// line reads a line and checks the text.
 fn line(br &bufio.Reader[Chunks], src &Chunks, want string) {
     var buf [32]byte
     match br.read_line(src, &buf) {
@@ -75,7 +75,7 @@ fn test_read_line_in_small_chunks() {
     r1 := br.read_line(&src, &buf)
     expect_err(r1, io.EOF)
     r2 := br.read_line(&src, &buf)
-    expect_err(r2, io.EOF) // o fim continua valendo
+    expect_err(r2, io.EOF) // the end keeps holding
 }
 
 fn test_line_too_long() {
@@ -84,11 +84,11 @@ fn test_line_too_long() {
     var buf [4]byte
     r3 := br.read_line(&src, &buf)
     expect_err(r3, bufio.TOO_LONG)
-    testing.eq_str(&buf, "abcd") // dst fica cheio
+    testing.eq_str(&buf, "abcd") // dst is full
     r4 := br.read_line(&src, &buf)
     expect_err(r4, bufio.TOO_LONG)
     testing.eq_str(&buf, "efgh")
-    line(&br, &src, "ij") // o resto da linha
+    line(&br, &src, "ij") // the rest of the line
     line(&br, &src, "xy")
 }
 
@@ -105,7 +105,7 @@ fn test_read_until() {
         Err(code) => testing.eq_int(code, 0)
     }
     match br.read_until(&src, ',', &buf) {
-        Ok(n) => testing.eq_str(&buf[:n], "ccc") // acabou sem o delimitador
+        Ok(n) => testing.eq_str(&buf[:n], "ccc") // ended without the delimiter
         Err(code) => testing.eq_int(code, 0)
     }
     r5 := br.read_until(&src, ',', &buf)
@@ -125,14 +125,14 @@ fn test_read_exact_and_byte() {
         Ok(c) => testing.eq_int(int(c), int('4'))
         Err(code) => testing.eq_int(code, 0)
     }
-    testing.eq_int(br.buffered(), 1) // o 5 do pedaço "345"
+    testing.eq_int(br.buffered(), 1) // the 5 of the "345" piece
     var buf [16]byte
     match br.read(&src, &buf) {
-        Ok(n) => testing.eq_str(&buf[:n], "5") // primeiro o que está no buffer
+        Ok(n) => testing.eq_str(&buf[:n], "5") // first what's in the buffer
         Err(code) => testing.eq_int(code, 0)
     }
     r6 := br.read_exact(&src, &buf)
-    expect_err(r6, io.EOF) // só sobram 4 bytes
+    expect_err(r6, io.EOF) // only 4 bytes left
     match br.read_byte(&src) {
         Ok(_) => testing.fail("os dados acabaram")
         Err(code) => testing.eq_int(code, io.EOF)
@@ -145,7 +145,7 @@ fn test_source_error() {
     line(&br, &src, "ok")
     var buf [16]byte
     r7 := br.read_line(&src, &buf)
-    expect_err(r7, 5) // o erro da fonte chega como veio
+    expect_err(r7, 5) // the source's error arrives as it came
 }
 
 fn test_file() {
@@ -192,7 +192,7 @@ fn test_file() {
     testing.eq_int(sum, 199 * 200 / 2)
 }
 
-// servidor: manda três linhas e fecha
+// server: sends three lines and closes
 fn send_lines(l *net.Listener) int {
     err := 0
     c := l.accept(&err)

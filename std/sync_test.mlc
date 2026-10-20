@@ -19,7 +19,7 @@ fn test_group() {
     }
     testing.eq_int(g.len(), 8)
     g.wait()
-    testing.eq_int(n.load(), 80) // wait só volta depois de todas
+    testing.eq_int(n.load(), 80) // wait only returns after all of them
     n.close()
 }
 
@@ -31,7 +31,7 @@ fn test_empty_group() {
 fn nothing(n int) {
 }
 
-// mais threads que a capacidade: add espera uma vaga
+// more threads than the capacity: add waits for a slot
 fn test_more_threads_than_capacity() {
     n := atomic.new_int(0)
     g := sync.group(3)
@@ -48,7 +48,7 @@ fn test_reap() {
     g := sync.group(4)
     g.add(thread.spawn(nothing, 1, thread.STACK_64KB))
     g.add(thread.spawn(nothing, 2, thread.STACK_64KB))
-    time.sleep_ms(50) // as duas terminam
+    time.sleep_ms(50) // both finish
     testing.eq_int(g.reap(), 2)
     testing.eq_int(g.len(), 0)
     testing.eq_int(g.reap(), 0)

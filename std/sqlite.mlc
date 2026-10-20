@@ -1,78 +1,78 @@
-// SQLite: um banco de dados num arquivo, com SQL e transações. A biblioteca
-// do sistema é carregada na primeira chamada (não precisa de flags de
-// ligação); available diz se ela existe.
+// SQLite: a database in a file, with SQL and transactions. The system
+// library is loaded on the first call (no link flags
+// needed); available says whether it exists.
 //
-// O banco (DB) e a consulta preparada (Stmt) são handles: o verificador
-// cobra o close de cada um, e uma Stmt precisa ser fechada antes do banco.
-// Nada aloca do lado do MLC: o texto entra emprestado (o SQLite copia) e
-// sai copiado para buffers de quem chama.
+// The database (DB) and the prepared statement (Stmt) are handles: the checker
+// requires the close of each one, and a Stmt must be closed before the database.
+// Nothing allocates on the MLC side: text goes in borrowed (SQLite copies it) and
+// comes out copied into the caller's buffers.
 //
 //     err := 0
-//     db := sqlite.open_str("loja.db", &err)
+//     db := sqlite.open_str("shop.db", &err)
 //     if db == nil {
-//         io.printf("erro {:s}\n", ...)       // os.error_text(err, &buf)
+//         io.printf("error {:s}\n", ...)      // os.error_text(err, &buf)
 //         return
 //     }
-//     db.exec_str("CREATE TABLE IF NOT EXISTS item (id INTEGER PRIMARY KEY, nome TEXT, preco INTEGER)")
+//     db.exec_str("CREATE TABLE IF NOT EXISTS item (id INTEGER PRIMARY KEY, name TEXT, price INTEGER)")
 //
-//     st := db.prepare_str("INSERT INTO item (nome, preco) VALUES (?, ?)", &err)
+//     st := db.prepare_str("INSERT INTO item (name, price) VALUES (?, ?)", &err)
 //     if st != nil {
-//         st.bind_str(1, "café")
-//         st.bind_int(2, 1250)                // dinheiro em centavos
+//         st.bind_str(1, "coffee")
+//         st.bind_int(2, 1250)                // money in cents
 //         st.run()
 //         st.close()
 //     }
 //
-//     q := db.prepare_str("SELECT id, nome, preco FROM item WHERE preco > ?", &err)
+//     q := db.prepare_str("SELECT id, name, price FROM item WHERE price > ?", &err)
 //     if q != nil {
 //         q.bind_int(1, 1000)
-//         var nome [256]byte
-//         for q.next() {                      // uma linha por volta
-//             n := q.text(1, &nome)
-//             io.printf("{} {:s} {}\n", q.int(0), &nome[:n], q.int(2))
+//         var name [256]byte
+//         for q.next() {                      // one row per iteration
+//             n := q.text(1, &name)
+//             io.printf("{} {:s} {}\n", q.int(0), &name[:n], q.int(2))
 //         }
 //         q.close()
 //     }
 //     db.close()
 //
-// Os parâmetros (?) começam em 1, as colunas em 0, como no SQLite. Use
-// sempre parâmetros para os valores, nunca SQL montado com texto de fora
-// (injeção de SQL). Os erros são 4000 + o código do SQLite (CONSTRAINT,
-// BUSY...); os.error_text dá o texto, e db.error(&buf) a mensagem do
-// SQLite sobre o último erro.
+// Parameters (?) start at 1, columns at 0, as in SQLite. Always use
+// parameters for values, never SQL built from outside text
+// (SQL injection). The errors are 4000 + SQLite's code (CONSTRAINT,
+// BUSY...); os.error_text gives the text, and db.error(&buf) SQLite's
+// message about the last error.
 import "std/str"
 
-// códigos de erro (4000 + o código primário do SQLite)
-pub const ERROR = 4001       // erro de SQL ou de uso
-pub const BUSY = 4005        // outro processo está com o banco travado (depois de esperar 5 s)
-pub const CANTOPEN = 4014    // o arquivo não pôde ser aberto
-pub const CONSTRAINT = 4019  // UNIQUE, NOT NULL, FOREIGN KEY ou CHECK violado
-pub const MISUSE = 4021      // uso errado da API (como SQL vazio)
-pub const UNAVAILABLE = 4900 // a biblioteca do SQLite não existe neste sistema
+// error codes (4000 + SQLite's primary code)
+pub const ERROR = 4001       // SQL or usage error
+pub const BUSY = 4005        // another process has the database locked (after waiting 5 s)
+pub const CANTOPEN = 4014    // the file couldn't be opened
+pub const CONSTRAINT = 4019  // UNIQUE, NOT NULL, FOREIGN KEY or CHECK violated
+pub const MISUSE = 4021      // wrong use of the API (like empty SQL)
+pub const UNAVAILABLE = 4900 // the SQLite library doesn't exist on this system
 
-// o que step devolve além dos erros
+// what step returns besides the errors
 const ROW = 100
 const DONE = 101
 
-// os tipos de coluna
+// the column types
 pub const INTEGER = 1
 pub const FLOAT = 2
 pub const TEXT = 3
 pub const BLOB = 4
 pub const NULL = 5
 
-// modos de abertura
+// open modes
 pub const READ_ONLY = 1
 pub const READ_WRITE = 2
 pub const CREATE = 4
 
-// DB é um banco aberto.
+// DB is an open database.
 pub extern "C" type DB
 
-// Stmt é uma consulta preparada.
+// Stmt is a prepared statement.
 pub extern "C" type Stmt
 
-// available diz se a biblioteca do SQLite foi achada neste sistema.
+// available says whether the SQLite library was found on this system.
 pub extern fn available() bool
 
 extern fn version_raw(dst &[]byte) int
@@ -100,22 +100,22 @@ extern fn changes_raw(db &DB) int
 extern fn last_insert_id_raw(db &DB) int
 extern fn fail(msg string)
 
-// version copia a versão da biblioteca (3.43.2, por exemplo); -1 se ela
-// não existe.
+// version copies the library's version (3.43.2, for example); -1 if it
+// doesn't exist.
 pub fn version(dst &[]byte) int {
     return version_raw(dst)
 }
 
-// ---------- banco ----------
+// ---------- database ----------
 
-// open abre (ou cria) o banco no arquivo path, para leitura e escrita.
-// ":memory:" é um banco só na memória, que some no close. Se não conseguir,
-// devolve nil e põe o código em err (CANTOPEN, UNAVAILABLE...).
+// open opens (or creates) the database in the file path, for reading and writing.
+// ":memory:" is an in-memory database, which vanishes on close. If it can't,
+// returns nil and puts the code in err (CANTOPEN, UNAVAILABLE...).
 pub fn open(path &[]byte, err &int) ?*DB {
     return open_raw(path, READ_WRITE | CREATE, err)
 }
 
-// open_str é open com o caminho fixo no programa.
+// open_str is open with the path fixed in the program.
 pub fn open_str(path string, err &int) ?*DB {
     var b [1024]byte
     if len(path) > len(b) {
@@ -125,26 +125,26 @@ pub fn open_str(path string, err &int) ?*DB {
     return open(&b[:n], err)
 }
 
-// open_read_only abre um banco que já existe, só para leitura.
+// open_read_only opens a database that already exists, read-only.
 pub fn open_read_only(path &[]byte, err &int) ?*DB {
     return open_raw(path, READ_ONLY, err)
 }
 
-// close fecha o banco. As Stmt dele precisam ter sido fechadas antes (se
-// não foram, o SQLite só fecha o banco quando elas fecharem).
+// close closes the database. Its Stmts must have been closed before (if
+// they weren't, SQLite only closes the database when they close).
 pub fn (db *DB) close() {
     close_raw(db)
 }
 
-// exec roda um ou mais comandos SQL sem resultado (CREATE, INSERT sem
-// parâmetros, BEGIN, COMMIT...). Devolve 0 ou o código do erro.
+// exec runs one or more SQL statements without a result (CREATE, INSERT without
+// parameters, BEGIN, COMMIT...). Returns 0 or the error code.
 pub fn (db &DB) exec(sql &[]byte) int {
     var msg [1]byte
     n := 0
     return exec_raw(db, sql, &msg, &n)
 }
 
-// exec_str é exec com o SQL fixo no programa.
+// exec_str is exec with the SQL fixed in the program.
 pub fn (db &DB) exec_str(sql string) int {
     var b [8192]byte
     if len(sql) > len(b) {
@@ -154,44 +154,44 @@ pub fn (db &DB) exec_str(sql string) int {
     return db.exec(&b[:n])
 }
 
-// error copia a mensagem do SQLite sobre o último erro do banco.
+// error copies SQLite's message about the database's last error.
 pub fn (db &DB) error(dst &[]byte) int {
     return errmsg_raw(db, dst)
 }
 
-// changes devolve quantas linhas o último INSERT, UPDATE ou DELETE mudou.
+// changes returns how many rows the last INSERT, UPDATE or DELETE changed.
 pub fn (db &DB) changes() int {
     return changes_raw(db)
 }
 
-// last_insert_id devolve o rowid (a INTEGER PRIMARY KEY) do último INSERT.
+// last_insert_id returns the rowid (the INTEGER PRIMARY KEY) of the last INSERT.
 pub fn (db &DB) last_insert_id() int {
     return last_insert_id_raw(db)
 }
 
-// begin, commit e rollback controlam uma transação: entre begin e commit,
-// as mudanças valem todas ou nenhuma (e ficam bem mais rápidas em lote).
+// begin, commit and rollback control a transaction: between begin and commit,
+// the changes apply all or none (and get much faster in a batch).
 pub fn (db &DB) begin() int {
     return db.exec_str("BEGIN")
 }
 
-// commit confirma a transação.
+// commit confirms the transaction.
 pub fn (db &DB) commit() int {
     return db.exec_str("COMMIT")
 }
 
-// rollback desfaz a transação.
+// rollback undoes the transaction.
 pub fn (db &DB) rollback() int {
     return db.exec_str("ROLLBACK")
 }
 
-// prepare compila um comando SQL (com ? para os parâmetros). Se não
-// conseguir, devolve nil e põe o código em err (db.error tem a mensagem).
+// prepare compiles an SQL statement (with ? for the parameters). If it
+// can't, returns nil and puts the code in err (db.error has the message).
 pub fn (db &DB) prepare(sql &[]byte, err &int) ?*Stmt {
     return prepare_raw(db, sql, err)
 }
 
-// prepare_str é prepare com o SQL fixo no programa.
+// prepare_str is prepare with the SQL fixed in the program.
 pub fn (db &DB) prepare_str(sql string, err &int) ?*Stmt {
     var b [8192]byte
     if len(sql) > len(b) {
@@ -201,29 +201,29 @@ pub fn (db &DB) prepare_str(sql string, err &int) ?*Stmt {
     return db.prepare(&b[:n], err)
 }
 
-// ---------- consulta preparada ----------
+// ---------- prepared statement ----------
 
-// close libera a consulta.
+// close frees the statement.
 pub fn (st *Stmt) close() {
     finalize_raw(st)
 }
 
-// bind_int põe um inteiro no parâmetro i (o primeiro ? é 1).
+// bind_int puts an integer in parameter i (the first ? is 1).
 pub fn (st &Stmt) bind_int(i int, v int) int {
     return bind_int_raw(st, i, v)
 }
 
-// bind_float põe um real no parâmetro i.
+// bind_float puts a real in parameter i.
 pub fn (st &Stmt) bind_float(i int, v float64) int {
     return bind_float_raw(st, i, v)
 }
 
-// bind_text põe um texto no parâmetro i (o SQLite guarda uma cópia).
+// bind_text puts a text in parameter i (SQLite keeps a copy).
 pub fn (st &Stmt) bind_text(i int, s &[]byte) int {
     return bind_text_raw(st, i, s)
 }
 
-// bind_str põe um texto fixo do programa no parâmetro i.
+// bind_str puts a fixed text from the program in parameter i.
 pub fn (st &Stmt) bind_str(i int, s string) int {
     var b [4096]byte
     if len(s) > len(b) {
@@ -233,19 +233,19 @@ pub fn (st &Stmt) bind_str(i int, s string) int {
     return bind_text_raw(st, i, &b[:n])
 }
 
-// bind_blob põe bytes no parâmetro i.
+// bind_blob puts bytes in parameter i.
 pub fn (st &Stmt) bind_blob(i int, s &[]byte) int {
     return bind_blob_raw(st, i, s)
 }
 
-// bind_null põe NULL no parâmetro i.
+// bind_null puts NULL in parameter i.
 pub fn (st &Stmt) bind_null(i int) int {
     return bind_null_raw(st, i)
 }
 
-// next avança para a próxima linha do resultado: true se há uma linha,
-// false no fim (ou num erro: confira com last_error). Depois do fim, a
-// consulta pode ser usada de novo com outros parâmetros (reset).
+// next advances to the next row of the result: true if there's a row,
+// false at the end (or on an error: check with last_error). After the end, the
+// statement can be used again with other parameters (reset).
 pub fn (st &Stmt) next() bool {
     rc := step_raw(st)
     if rc == ROW {
@@ -254,9 +254,9 @@ pub fn (st &Stmt) next() bool {
     return false
 }
 
-// run roda um comando sem resultado (INSERT, UPDATE, DELETE) e devolve 0
-// ou o código do erro (CONSTRAINT, por exemplo). A consulta volta ao começo
-// (reset), pronta para outros parâmetros.
+// run runs a statement without a result (INSERT, UPDATE, DELETE) and returns 0
+// or the error code (CONSTRAINT, for example). The statement goes back to the start
+// (reset), ready for other parameters.
 pub fn (st &Stmt) run() int {
     rc := step_raw(st)
     if rc == ROW || rc == DONE {
@@ -269,18 +269,18 @@ pub fn (st &Stmt) run() int {
     return rc
 }
 
-// reset volta a consulta ao começo e limpa os parâmetros, para rodá-la de
-// novo. Devolve o erro do último passo, se houve.
+// reset takes the statement back to the start and clears the parameters, to run it
+// again. Returns the error of the last step, if there was one.
 pub fn (st &Stmt) reset() int {
     return reset_raw(st)
 }
 
-// columns devolve quantas colunas o resultado tem.
+// columns returns how many columns the result has.
 pub fn (st &Stmt) columns() int {
     return column_count_raw(st)
 }
 
-// column_name copia o nome da coluna i.
+// column_name copies the name of column i.
 pub fn (st &Stmt) column_name(i int, dst &[]byte) int {
     n := column_name_raw(st, i, dst)
     if n < 0 {
@@ -289,30 +289,30 @@ pub fn (st &Stmt) column_name(i int, dst &[]byte) int {
     return n
 }
 
-// kind devolve o tipo do valor na coluna i da linha atual (INTEGER,
-// FLOAT, TEXT, BLOB ou NULL).
+// kind returns the type of the value in column i of the current row (INTEGER,
+// FLOAT, TEXT, BLOB or NULL).
 pub fn (st &Stmt) kind(i int) int {
     return column_type_raw(st, i)
 }
 
-// is_null diz se a coluna i da linha atual é NULL.
+// is_null says whether column i of the current row is NULL.
 pub fn (st &Stmt) is_null(i int) bool {
     return column_type_raw(st, i) == NULL
 }
 
-// int lê a coluna i como inteiro (NULL vira 0).
+// int reads column i as an integer (NULL becomes 0).
 pub fn (st &Stmt) int(i int) int {
     return column_int_raw(st, i)
 }
 
-// float lê a coluna i como real.
+// float reads column i as a real.
 pub fn (st &Stmt) float(i int) float64 {
     return column_float_raw(st, i)
 }
 
-// text copia a coluna i, como texto, para dst e devolve o tamanho (NULL
-// vira texto vazio). Panic se não couber: use text_len antes para saber o
-// tamanho.
+// text copies column i, as text, into dst and returns the length (NULL
+// becomes empty text). Panics if it doesn't fit: use text_len first to know the
+// size.
 pub fn (st &Stmt) text(i int, dst &[]byte) int {
     n := column_text_raw(st, i, dst)
     if n < 0 {
@@ -321,7 +321,7 @@ pub fn (st &Stmt) text(i int, dst &[]byte) int {
     return n
 }
 
-// blob copia a coluna i, como bytes, para dst.
+// blob copies column i, as bytes, into dst.
 pub fn (st &Stmt) blob(i int, dst &[]byte) int {
     n := column_blob_raw(st, i, dst)
     if n < 0 {
@@ -330,7 +330,7 @@ pub fn (st &Stmt) blob(i int, dst &[]byte) int {
     return n
 }
 
-// text_len devolve o tamanho, em bytes, do texto (ou blob) da coluna i.
+// text_len returns the size, in bytes, of the text (or blob) of column i.
 pub fn (st &Stmt) text_len(i int) int {
     var none [1]byte
     n := column_text_raw(st, i, &none[:0])

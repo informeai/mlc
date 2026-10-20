@@ -3,7 +3,7 @@ import "std/encoding"
 import "std/math"
 import "std/testing"
 
-// hex_of confere os bytes de b em hexadecimal.
+// hex_of checks the bytes of b in hexadecimal.
 fn hex_of(b &[]byte, want string) {
     var txt [32]byte
     n := encoding.hex(&txt, b)
@@ -108,12 +108,12 @@ fn test_uvarint_short_and_overflow() {
     b[0] = 0x80
     b[1] = 0x80
     var v uint64 = 0
-    testing.eq_int(binary.uvarint(&b[:2], &v), 0) // faltam bytes
+    testing.eq_int(binary.uvarint(&b[:2], &v), 0) // bytes are missing
     testing.eq_int(binary.uvarint(&b[:0], &v), 0)
     for i := 0; i < 9; i++ {
         b[i] = 0xFF
     }
-    b[9] = 0x02 // passa de 64 bits
+    b[9] = 0x02 // goes past 64 bits
     testing.eq_int(binary.uvarint(&b[:10], &v), -1)
     b[9] = 0x80
     b[10] = 0x01 // 11 bytes

@@ -1,9 +1,9 @@
-// Funções matemáticas. As de ponto flutuante vêm da libm do C.
+// Math functions. The floating-point ones come from C's libm.
 
 pub const PI = 3.141592653589793
 pub const E = 2.718281828459045
 
-// abs devolve o valor absoluto de x.
+// abs returns the absolute value of x.
 pub fn abs[T number](x T) T {
     if x < T(0) {
         return -x
@@ -11,7 +11,7 @@ pub fn abs[T number](x T) T {
     return x
 }
 
-// min devolve o menor entre a e b.
+// min returns the smaller of a and b.
 pub fn min[T ordered](a T, b T) T {
     if a < b {
         return a
@@ -19,7 +19,7 @@ pub fn min[T ordered](a T, b T) T {
     return b
 }
 
-// max devolve o maior entre a e b.
+// max returns the larger of a and b.
 pub fn max[T ordered](a T, b T) T {
     if a > b {
         return a
@@ -27,7 +27,7 @@ pub fn max[T ordered](a T, b T) T {
     return b
 }
 
-// clamp limita x à faixa [lo, hi].
+// clamp limits x to the range [lo, hi].
 pub fn clamp[T ordered](x T, lo T, hi T) T {
     if x < lo {
         return lo
@@ -38,41 +38,41 @@ pub fn clamp[T ordered](x T, lo T, hi T) T {
     return x
 }
 
-// sqrt devolve raiz quadrada de x.
+// sqrt returns the square root of x.
 pub extern fn sqrt(x float64) float64
-// pow devolve x elevado a y.
+// pow returns x raised to y.
 pub extern fn pow(x float64, y float64) float64
-// floor devolve o maior inteiro (como real) que não passa de x.
+// floor returns the largest integer (as a real) not greater than x.
 pub extern fn floor(x float64) float64
-// ceil devolve o menor inteiro (como real) que não fica abaixo de x.
+// ceil returns the smallest integer (as a real) not less than x.
 pub extern fn ceil(x float64) float64
-// round devolve x arredondado para o inteiro mais perto (metade para longe do zero).
+// round returns x rounded to the nearest integer (halves away from zero).
 pub extern fn round(x float64) float64
-// sin devolve seno de x (em radianos).
+// sin returns the sine of x (in radians).
 pub extern fn sin(x float64) float64
-// cos devolve cosseno de x (em radianos).
+// cos returns the cosine of x (in radians).
 pub extern fn cos(x float64) float64
-// tan devolve tangente de x (em radianos).
+// tan returns the tangent of x (in radians).
 pub extern fn tan(x float64) float64
-// atan2 devolve ângulo, em radianos, do ponto (x, y): o arco tangente de y/x no quadrante certo.
+// atan2 returns the angle, in radians, of the point (x, y): the arc tangent of y/x in the right quadrant.
 pub extern fn atan2(y float64, x float64) float64
-// log devolve logaritmo natural de x.
+// log returns the natural logarithm of x.
 pub extern fn log(x float64) float64
-// exp devolve e elevado a x.
+// exp returns e raised to x.
 pub extern fn exp(x float64) float64
-// is_nan diz se x é NaN.
+// is_nan says whether x is NaN.
 pub extern fn is_nan(x float64) bool
-// is_inf diz se x é infinito (positivo ou negativo).
+// is_inf says whether x is infinite (positive or negative).
 pub extern fn is_inf(x float64) bool
 
-// float64_bits devolve os bits de x no formato IEEE 754 (o mesmo valor que
-// o C guarda na memória); float64_from_bits faz o caminho de volta. Servem
-// para gravar reais em binário (std/binary) e para comparar NaN bit a bit.
+// float64_bits returns the bits of x in IEEE 754 format (the same value C
+// keeps in memory); float64_from_bits goes the way back. They serve to
+// write reals in binary (std/binary) and to compare NaN bit by bit.
 pub extern fn float64_bits(x float64) uint64
-// float64_from_bits monta o float64 cujos bits IEEE 754 são u.
+// float64_from_bits builds the float64 whose IEEE 754 bits are u.
 pub extern fn float64_from_bits(u uint64) float64
 
-// float32_bits e float32_from_bits são o mesmo para float32.
+// float32_bits and float32_from_bits are the same for float32.
 pub extern fn float32_bits(x float32) uint32
-// float32_from_bits monta o float32 cujos bits IEEE 754 são u.
+// float32_from_bits builds the float32 whose IEEE 754 bits are u.
 pub extern fn float32_from_bits(u uint32) float32

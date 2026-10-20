@@ -1,13 +1,13 @@
-// Resultado de uma operação que pode falhar: o valor, ou o erro.
+// The result of an operation that can fail: the value, or the error.
 //
-//     match fs.read_file(&caminho, &buf) {
+//     match fs.read_file(&path, &buf) {
 //         Ok(n) => ...
 //         Err(code) => ...
 //     }
 //
-// O erro pode ser um código (Result[int, int], como em fs e os) ou um enum
-// com conteúdo, inclusive donos (uma mensagem alocada por quem cria o erro):
-// quem consome o Result com match recebe a posse e precisa liberá-la.
+// The error can be a code (Result[int, int], as in fs and os) or an enum
+// with content, including owners (a message allocated by whoever creates the error):
+// whoever consumes the Result with match receives ownership and must free it.
 pub enum Result[T owned, E owned] {
     Ok(value T)
     Err(err E)

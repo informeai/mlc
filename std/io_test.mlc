@@ -1,5 +1,5 @@
-// A formatação do io (Writer, Display, especificações) testada pelo
-// str.format, que escreve num buffer pelo mesmo Writer do io.printf.
+// io's formatting (Writer, Display, specs) tested through
+// str.format, which writes into a buffer through the same Writer as io.printf.
 import "std/io"
 import "std/str"
 import "std/testing"
@@ -57,7 +57,7 @@ fn test_width_and_align() {
     n = str.format(&b, "[{:5}] [{:>5}] [{:^6}] [{:*^7}]", "ab", "ab", "ab", "ab")
     testing.eq_str(&b[:n], "[ab   ] [   ab] [  ab  ] [**ab***]")
     n = str.format(&b, "[{:2}] [{:-^9}]", 12345, Point{x: 1, y: 2})
-    testing.eq_str(&b[:n], "[12345] [--{1 2}--]") // maior que a largura: não corta
+    testing.eq_str(&b[:n], "[12345] [--{1 2}--]") // wider than the width: doesn't cut
     free(b)
 }
 
@@ -102,7 +102,7 @@ fn test_braces() {
 }
 
 fn test_long_output_crosses_buffer() {
-    // mais que os 256 bytes do buffer do Writer: passa por vários flush
+    // more than the Writer buffer's 256 bytes: goes through several flushes
     b := alloc([]byte, 600)
     n := str.format(&b, "{:>250}|{:<240}|", 1, 2)
     testing.eq_int(n, 492)
@@ -132,7 +132,7 @@ struct Price {
     cents int
 }
 
-// um write escrito com w.printf
+// a write written with w.printf
 fn (p &Price) write(w &io.Writer) {
     w.printf("R$ {}.{:02}", p.cents / 100, p.cents % 100)
 }
@@ -151,10 +151,10 @@ struct Pair {
     b int
 }
 
-// especificações dentro do write, com o alinhamento de fora em volta
+// specs inside write, with the outer alignment around them
 fn (p &Pair) write(w &io.Writer) {
     w.printf("<{:x}|{:04}>", p.a, p.b)
-    w.put_int(p.a) // depois do w.printf, os números voltam ao normal
+    w.put_int(p.a) // after w.printf, numbers go back to normal
 }
 
 impl io.Display for Pair

@@ -9,7 +9,7 @@ fn test_send_recv_same_thread() {
     testing.check(tx.send(1), "send com receptor aberto")
     testing.check(tx.send(2), "send com receptor aberto")
     match rx.recv() {
-        Got(n) => testing.eq_int(n, 1) // a ordem de chegada é a de envio
+        Got(n) => testing.eq_int(n, 1) // arrival order is sending order
         Closed => testing.fail("fechado cedo demais")
     }
     match rx.recv() {
@@ -47,7 +47,7 @@ fn test_leftovers_are_dropped() {
     tx.send(alloc([]byte, 1))
     tx.send(alloc([]byte, 2))
     tx.close()
-    rx.close() // o último close libera os dois que sobraram
+    rx.close() // the last close frees the two left over
 }
 
 fn count_to(tx *chan.Sender[int]) {
@@ -58,7 +58,7 @@ fn count_to(tx *chan.Sender[int]) {
 }
 
 fn test_blocking_with_small_capacity() {
-    rx := chan.new[int](1) // o produtor espera a cada valor
+    rx := chan.new[int](1) // the producer waits on every value
     t := thread.spawn(count_to, rx.sender(), thread.STACK_64KB)
     total := 0
     for {
@@ -113,7 +113,7 @@ fn test_many_consumers() {
         tx.send(i)
     }
     tx.close()
-    testing.eq_int(thread.join(a) + thread.join(b), 500) // cada valor chega a um consumidor só
+    testing.eq_int(thread.join(a) + thread.join(b), 500) // each value reaches only one consumer
 }
 
 fn test_owned_messages() {
@@ -121,7 +121,7 @@ fn test_owned_messages() {
     tx := rx.sender()
     b := alloc([]byte, 3)
     str.copy(&b, "abc")
-    tx.send(b) // b foi movida para o canal
+    tx.send(b) // b was moved into the channel
     tx.close()
     match rx.recv() {
         Got(m) => {

@@ -1,19 +1,19 @@
-// Vetor que cresce. É a parte da biblioteca que aloca, e a alocação está
-// visível aqui: new aloca, push chama grow quando falta espaço, e grow dobra
-// a capacidade com realloc.
+// Growing vector. It's the part of the library that allocates, and the allocation is
+// visible here: new allocates, push calls grow when room runs out, and grow doubles
+// the capacity with realloc.
 //
-// Os elementos podem ser donos (T owned: ?*X ou []X): push move o valor para
-// dentro, pop e take devolvem a posse, put troca (e devolve o antigo), set
-// põe e libera o antigo, e free libera cada elemento (drop) e o vetor. get
-// copia, então só existe quando T é copiável.
+// The elements can be owners (T owned: ?*X or []X): push moves the value
+// inside, pop and take return ownership, put swaps (and returns the old one), set
+// puts and frees the old one, and free frees each element (drop) and the vector. get
+// copies, so it only exists when T is copyable.
 //
-//     nomes := vec.new[[]byte](8)
-//     nomes.push(copia)          // copia foi movida para o vetor
-//     nome := nomes.take(0)      // a posse volta
-//     nomes.set(0, nome)         // e vai de novo para o vetor
-//     nomes.free()               // libera cada nome e o vetor
+//     names := vec.new[[]byte](8)
+//     names.push(copy)           // copy was moved into the vector
+//     name := names.take(0)      // ownership comes back
+//     names.set(0, name)         // and goes into the vector again
+//     names.free()               // frees each name and the vector
 
-// Vec é o vetor: os elementos em items[:count], e a capacidade é len(items).
+// Vec is the vector: the elements in items[:count], and the capacity is len(items).
 pub struct Vec[T owned] {
     items []T
     count int
@@ -21,27 +21,27 @@ pub struct Vec[T owned] {
 
 extern fn fail(msg string)
 
-// new aloca um vetor vazio com espaço para cap elementos.
+// new allocates an empty vector with room for cap elements.
 pub fn new[T owned](cap int) *Vec[T] {
     return alloc(Vec[T]{items: alloc([]T, cap), count: 0})
 }
 
-// push acrescenta x no fim (x é movido para o vetor).
+// push appends x at the end (x is moved into the vector).
 pub fn (v &Vec[T]) push(x T) {
     if v.count == len(v.items) {
         v.grow()
     }
     old := replace(&v.items[v.count], x)
-    drop(old) // a posição depois do fim estava vazia
+    drop(old) // the position after the end was empty
     v.count++
 }
 
-// grow dobra a capacidade (realloc).
+// grow doubles the capacity (realloc).
 pub fn (v &Vec[T]) grow() {
     v.items = realloc(v.items, len(v.items) * 2 + 1)
 }
 
-// pop tira o último elemento e devolve a posse dele.
+// pop takes out the last element and returns its ownership.
 pub fn (v &Vec[T]) pop() T {
     if v.count == 0 {
         fail("vec.pop: vetor vazio")
@@ -50,7 +50,7 @@ pub fn (v &Vec[T]) pop() T {
     return take(&v.items[v.count])
 }
 
-// take tira o elemento i, deixando o valor zero no lugar, e devolve a posse.
+// take takes out element i, leaving the zero value in its place, and returns ownership.
 pub fn (v &Vec[T]) take(i int) T {
     if i < 0 || i >= v.count {
         fail("vec.take: índice fora do vetor")
@@ -58,7 +58,7 @@ pub fn (v &Vec[T]) take(i int) T {
     return take(&v.items[i])
 }
 
-// put põe x na posição i e devolve o elemento que estava lá.
+// put puts x at position i and returns the element that was there.
 pub fn (v &Vec[T]) put(i int, x T) T {
     if i < 0 || i >= v.count {
         fail("vec.put: índice fora do vetor")
@@ -66,7 +66,7 @@ pub fn (v &Vec[T]) put(i int, x T) T {
     return replace(&v.items[i], x)
 }
 
-// swap troca os elementos i e j.
+// swap swaps elements i and j.
 pub fn (v &Vec[T]) swap(i int, j int) {
     if i < 0 || i >= v.count || j < 0 || j >= v.count {
         fail("vec.swap: índice fora do vetor")
@@ -74,14 +74,14 @@ pub fn (v &Vec[T]) swap(i int, j int) {
     a := take(&v.items[i])
     b := replace(&v.items[j], a)
     old := replace(&v.items[i], b)
-    drop(old) // o zero deixado pelo take
+    drop(old) // the zero left by the take
 }
 
-// at empresta o elemento i, sem tirá-lo do vetor. Enquanto o empréstimo é
-// usado, o vetor fica congelado (não cresce, não é liberado).
+// at borrows element i, without taking it out of the vector. While the borrow
+// is used, the vector stays frozen (it doesn't grow, it isn't freed).
 //
 //     x := v.at(0)
-//     x.campo = 3
+//     x.field = 3
 pub fn (v &Vec[T]) at(i int) &T {
     if i < 0 || i >= v.count {
         fail("vec.at: índice fora do vetor")
@@ -89,7 +89,7 @@ pub fn (v &Vec[T]) at(i int) &T {
     return &v.items[i]
 }
 
-// last empresta o último elemento.
+// last borrows the last element.
 pub fn (v &Vec[T]) last() &T {
     if v.count == 0 {
         fail("vec.last: vetor vazio")
@@ -97,26 +97,26 @@ pub fn (v &Vec[T]) last() &T {
     return &v.items[v.count - 1]
 }
 
-// each_with chama f com cada elemento, em ordem, passando junto o contexto
-// ctx (onde f guarda o que acumula).
+// each_with calls f with each element, in order, passing along the context
+// ctx (where f keeps what it accumulates).
 pub fn (v &Vec[T]) each_with[C ref](ctx &C, f fn(&C, &T)) {
     for i := 0; i < v.count; i++ {
         f(ctx, &v.items[i])
     }
 }
 
-// len devolve quantos elementos há no vetor.
+// len returns how many elements there are in the vector.
 pub fn (v &Vec[T]) len() int {
     return v.count
 }
 
-// cap devolve quantos elementos cabem antes de crescer.
+// cap returns how many elements fit before growing.
 pub fn (v &Vec[T]) cap() int {
     return len(v.items)
 }
 
-// clear libera os elementos (drop) e deixa o vetor vazio, com a mesma
-// capacidade.
+// clear frees the elements (drop) and leaves the vector empty, with the same
+// capacity.
 pub fn (v &Vec[T]) clear() {
     for i := 0; i < v.count; i++ {
         x := take(&v.items[i])
@@ -125,7 +125,7 @@ pub fn (v &Vec[T]) clear() {
     v.count = 0
 }
 
-// free libera cada elemento (drop) e o vetor.
+// free frees each element (drop) and the vector.
 pub fn (v *Vec[T]) free() {
     for x in drain(v.items) {
         drop(x)
@@ -134,7 +134,7 @@ pub fn (v *Vec[T]) free() {
     free(v)
 }
 
-// get devolve uma cópia do elemento i (só para T copiável).
+// get returns a copy of element i (only for copyable T).
 pub fn (v &Vec[T any]) get(i int) T {
     if i < 0 || i >= v.count {
         fail("vec.get: índice fora do vetor")
@@ -142,8 +142,8 @@ pub fn (v &Vec[T any]) get(i int) T {
     return v.items[i]
 }
 
-// set põe x na posição i (x é movido) e libera o elemento antigo (drop).
-// Depois de um take(i), devolve o elemento ao lugar.
+// set puts x at position i (x is moved) and frees the old element (drop).
+// After a take(i), it puts the element back in place.
 pub fn (v &Vec[T]) set(i int, x T) {
     if i < 0 || i >= v.count {
         fail("vec.set: índice fora do vetor")

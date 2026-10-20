@@ -3,8 +3,8 @@ import "std/process"
 import "std/str"
 import "std/testing"
 
-// cada teste roda num processo separado, um depois do outro: o mesmo
-// arquivo temporário serve para todos
+// each test runs in a separate process, one after the other: the same
+// temporary file serves them all
 fn path(dst &[]byte) int {
     return str.copy(dst, "/tmp/mlc-std-fs-test.txt")
 }
@@ -89,7 +89,7 @@ fn test_open_write_read_in_chunks() {
         testing.fail("open para ler falhou")
         return
     }
-    var buf [7]byte // pedaços que não coincidem com as linhas
+    var buf [7]byte // pieces that don't line up with the lines
     total := 0
     lines := 0
     for {
@@ -136,7 +136,7 @@ fn test_append_and_seek() {
         return
     }
     match rw.seek(-1) {
-        Ok(end) => testing.eq_int(end, 6) // seek negativo vai para o fim
+        Ok(end) => testing.eq_int(end, 6) // a negative seek goes to the end
         Err(code) => testing.eq_int(code, 0)
     }
     rw.seek(2)
@@ -227,7 +227,7 @@ fn test_dirs() {
     }
 }
 
-// ---------- árvores ----------
+// ---------- trees ----------
 
 fn write(base &[]byte, rel string, text string) {
     var p [512]byte
@@ -251,7 +251,7 @@ fn make_tree(base &[]byte) {
         Err(code) => testing.eq_int(code, 0)
     }
     match fs.mkdir_all(&p[:n]) {
-        Ok(_) => {} // de novo: já existe, não é erro
+        Ok(_) => {} // again: it already exists, not an error
         Err(code) => testing.eq_int(code, 0)
     }
     write(base, "a.json", "{}")
@@ -309,7 +309,7 @@ fn test_walk_and_glob() {
         Err(code) => testing.eq_int(code, 0)
     }
     testing.eq_int(c.files, 6)
-    testing.eq_int(c.dirs, 4) // a raiz, src, pkg, sub
+    testing.eq_int(c.dirs, 4) // the root, src, pkg, sub
     testing.eq_int(c.bytes, 2 + 5 + 12 + 1 + 1 + 1)
 
     var g Count
@@ -317,7 +317,7 @@ fn test_walk_and_glob() {
     testing.eq_int(g.mlc, 3)
     var g2 Count
     fs.glob(&base[:n], "*.json", &g2, count_mlc)
-    testing.eq_int(g2.mlc, 1) // * não desce em diretórios
+    testing.eq_int(g2.mlc, 1) // * doesn't descend into directories
     var g3 Count
     fs.glob(&base[:n], "src/*/sub/*", &g3, count_mlc)
     testing.eq_int(g3.mlc, 2)
@@ -336,12 +336,12 @@ fn test_walk_and_glob() {
     }
     testing.check(!fs.exists(&base[:n]), "apagou tudo")
     match fs.remove_all(&base[:n]) {
-        Ok(_) => {} // o que não existe não é erro
+        Ok(_) => {} // what doesn't exist isn't an error
         Err(code) => testing.eq_int(code, 0)
     }
 }
 
-// remove_all e walk não seguem links: o que o link aponta fica
+// remove_all and walk don't follow links: what the link points to stays
 fn test_links_not_followed() {
     var keep [256]byte
     kn := fs.temp_path("mlc-alvo-", &keep)
@@ -364,7 +364,7 @@ fn test_links_not_followed() {
 
     var cnt Count
     fs.walk(&base[:n], &cnt, count_all)
-    testing.eq_int(cnt.files + cnt.dirs, 2) // a raiz e o link, sem entrar nele
+    testing.eq_int(cnt.files + cnt.dirs, 2) // the root and the link, without entering it
 
     fs.remove_all(&base[:n])
     testing.check(!fs.exists(&base[:n]), "apagou o diretório com o link")

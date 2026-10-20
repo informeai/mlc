@@ -1,45 +1,45 @@
-// Canais com capacidade fixa, para passar valores de uma thread para outra
-// por posse.
+// Fixed-capacity channels, to pass values from one thread to another
+// by ownership.
 //
-//     rx := chan.new[[]byte](16)    // aloca o canal (16 posições)
-//     tx := rx.sender()             // uma ponta que envia, ligada ao canal
-//     t := thread.spawn(produz, tx, thread.STACK_64KB)
+//     rx := chan.new[[]byte](16)    // allocates the channel (16 slots)
+//     tx := rx.sender()             // an end that sends, tied to the channel
+//     t := thread.spawn(produce, tx, thread.STACK_64KB)
 //     for {
 //         match rx.recv() {
 //             Got(msg) => {
 //                 io.write_line(&msg)
-//                 free(msg)         // a mensagem agora é deste lado
+//                 free(msg)         // the message now belongs to this side
 //             }
-//             Closed => break       // todos os Sender fecharam
+//             Closed => break       // every Sender closed
 //         }
 //     }
 //     rx.close()
 //     thread.join(t)
 //
-// chan.new e os métodos abaixo são embutidos no compilador; o canal fica no
-// runtime. Cada ponta é um dono: precisa de close(), e o verificador cobra
-// isso. O canal é liberado no último close (com drop no que sobrou nele).
+// chan.new and the methods below are built into the compiler; the channel lives in
+// the runtime. Each end is an owner: it needs a close(), and the checker requires
+// it. The channel is freed on the last close (with drop on whatever was left in it).
 //
-// chan.new[T](cap) *Receiver[T]  aloca o canal com cap posições (cap >= 1)
+// chan.new[T](cap) *Receiver[T]  allocates the channel with cap slots (cap >= 1)
 //
 // Receiver[T]:
-//   recv() Recv[T]       espera um valor: Got(v), com a posse de v, ou
-//                        Closed, quando todos os Sender fecharam e o canal
-//                        esvaziou
-//   sender() *Sender[T]  cria uma ponta que envia
-//   clone() *Receiver[T] outra ponta que recebe (vários consumidores)
+//   recv() Recv[T]       waits for a value: Got(v), with ownership of v, or
+//                        Closed, when every Sender closed and the channel
+//                        is empty
+//   sender() *Sender[T]  creates an end that sends
+//   clone() *Receiver[T] another end that receives (several consumers)
 //   close()
 //
 // Sender[T]:
-//   send(v T) bool       move v para o canal; espera se estiver cheio.
-//                        Sem nenhum Receiver aberto, libera v (drop) e
-//                        devolve false
-//   clone() *Sender[T]   outra ponta que envia (vários produtores)
+//   send(v T) bool       moves v into the channel; waits if it's full.
+//                        With no Receiver open, frees v (drop) and
+//                        returns false
+//   clone() *Sender[T]   another end that sends (several producers)
 //   close()
 //
-// Não há canal sem limite: crescer sozinho seria alocação escondida.
+// There's no unbounded channel: growing on its own would be hidden allocation.
 
-// Recv é o resultado de recv.
+// Recv is the result of recv.
 pub enum Recv[T owned] {
     Got(value T)
     Closed

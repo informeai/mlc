@@ -1,6 +1,6 @@
-// Rodar outros programas. Os argumentos ficam num buffer fixo dentro do
-// Cmd (na pilha de quem chama), e a saída capturada vai para um buffer de
-// quem chama: nada aloca.
+// Running other programs. The arguments stay in a fixed buffer inside the
+// Cmd (on the caller's stack), and the captured output goes into a buffer
+// of the caller's: nothing allocates.
 //
 //     c := process.cmd("ls")
 //     c.arg("-l")
@@ -8,19 +8,19 @@
 //     var out [4096]byte
 //     status := 0
 //     match c.run(&out, &status) {
-//         Ok(n) => io.write(&out[:n])       // status tem o código de saída
+//         Ok(n) => io.write(&out[:n])       // status has the exit code
 //         Err(code) => ...                  // NOT_FOUND, TOO_BIG, ...
 //     }
 //
-// O programa é procurado no PATH. Os argumentos vão direto para ele, sem
-// shell: nada de * nem $VAR, e nenhum risco de injeção.
+// The program is looked up in the PATH. The arguments go straight to it,
+// without a shell: no * or $VAR, and no risk of injection.
 import "std/result"
 
-pub const NOT_FOUND = 2   // o programa não existe (ENOENT)
-pub const TOO_BIG = 1000  // a saída não coube no buffer (o resto foi descartado)
-pub const TOO_LONG = 1002 // os argumentos não cabem no Cmd
+pub const NOT_FOUND = 2   // the program doesn't exist (ENOENT)
+pub const TOO_BIG = 1000  // the output didn't fit in the buffer (the rest was discarded)
+pub const TOO_LONG = 1002 // the arguments don't fit in the Cmd
 
-// Cmd é a linha de comando: o programa e os argumentos, separados por zero.
+// Cmd is the command line: the program and the arguments, separated by zero.
 pub struct Cmd {
     buf [8192]byte
     n int
@@ -29,15 +29,15 @@ pub struct Cmd {
 
 extern fn run_raw(args &[]byte, count int, out &[]byte, capture bool, status &int) int
 
-// cmd começa uma linha de comando com o programa name.
+// cmd starts a command line with the program name.
 pub fn cmd(name string) Cmd {
     var c Cmd
     c.arg(name)
     return c
 }
 
-// arg acrescenta um argumento. Se não couber (8 KB no total, 255
-// argumentos), dá panic.
+// arg appends an argument. If it doesn't fit (8 KB in total, 255
+// arguments), it panics.
 pub fn (c &Cmd) arg(s string) {
     if c.n + len(s) + 1 > len(c.buf) || c.count == 255 {
         fail("process: os argumentos não cabem no Cmd (8 KB, 255 argumentos)")
@@ -51,7 +51,7 @@ pub fn (c &Cmd) arg(s string) {
     c.count++
 }
 
-// arg_bytes acrescenta um argumento que está num buffer.
+// arg_bytes appends an argument that's in a buffer.
 pub fn (c &Cmd) arg_bytes(b &[]byte) {
     if c.n + len(b) + 1 > len(c.buf) || c.count == 255 {
         fail("process: os argumentos não cabem no Cmd (8 KB, 255 argumentos)")
@@ -65,14 +65,14 @@ pub fn (c &Cmd) arg_bytes(b &[]byte) {
     c.count++
 }
 
-// run roda o programa, espera ele terminar e põe o código de saída em
-// status. A saída padrão vai para out (Ok tem quantos bytes); o erro padrão
-// continua indo para o terminal.
+// run runs the program, waits for it to finish and puts the exit code in
+// status. Standard output goes into out (Ok has how many bytes); standard
+// error keeps going to the terminal.
 pub fn (c &Cmd) run(out &[]byte, status &int) result.Result[int, int] {
     return wrap(run_raw(&c.buf[:c.n], c.count, out, true, status))
 }
 
-// run_inherit roda o programa com a saída indo direto para o terminal.
+// run_inherit runs the program with the output going straight to the terminal.
 pub fn (c &Cmd) run_inherit(status &int) result.Result[int, int] {
     var none [1]byte
     return wrap(run_raw(&c.buf[:c.n], c.count, &none[:0], false, status))

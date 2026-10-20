@@ -9,7 +9,7 @@ fn text(s string) []byte {
 }
 
 fn test_push_get() {
-    v := vec.new[int](0) // cresce a partir de zero
+    v := vec.new[int](0) // grows from zero
     for i := 0; i < 100; i++ {
         v.push(i * i)
     }
@@ -79,10 +79,10 @@ fn test_owned_elements() {
     v.push(text("dois"))
     v.push(text("três"))
     testing.eq_str(v.at(1), "dois")
-    t := v.take(1) // a posse volta; fica o valor zero no lugar
+    t := v.take(1) // ownership comes back; the zero value stays in place
     testing.eq_str(&t, "dois")
     testing.eq_int(len(*v.at(1)), 0)
-    v.set(1, t) // volta ao vetor
+    v.set(1, t) // back into the vector
     old := v.put(0, text("zero"))
     testing.eq_str(&old, "um")
     free(old)
@@ -90,7 +90,7 @@ fn test_owned_elements() {
     testing.eq_str(&last, "três")
     free(last)
     testing.eq_str(v.at(0), "zero")
-    v.free() // libera os elementos que sobraram
+    v.free() // frees the remaining elements
 }
 
 fn test_nested() {
@@ -104,7 +104,7 @@ fn test_nested() {
     }
     testing.eq_int(outer.at(2).len(), 3)
     testing.eq_int(outer.at(2).get(2), 2)
-    outer.free() // libera os vetores de dentro (drop)
+    outer.free() // frees the inner vectors (drop)
 }
 
 fn longest(best &int, s &[]byte) {
@@ -120,6 +120,6 @@ fn test_each_with() {
     v.push(text("dois"))
     best := 0
     v.each_with(&best, longest)
-    testing.eq_int(best, 5) // "três" tem 5 bytes
+    testing.eq_int(best, 5) // "três" has 5 bytes
     v.free()
 }

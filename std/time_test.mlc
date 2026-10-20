@@ -15,7 +15,7 @@ fn test_utc_known_dates() {
     testing.eq_int(d.year, 1970)
     testing.eq_int(d.month, 1)
     testing.eq_int(d.day, 1)
-    testing.eq_int(d.weekday, 4) // quinta
+    testing.eq_int(d.weekday, 4) // Thursday
     d = time.utc(1_700_000_000_123)
     testing.eq_int(d.year, 2023)
     testing.eq_int(d.month, 11)
@@ -24,7 +24,7 @@ fn test_utc_known_dates() {
     testing.eq_int(d.minute, 13)
     testing.eq_int(d.second, 20)
     testing.eq_int(d.ms, 123)
-    testing.eq_int(d.weekday, 2) // terça
+    testing.eq_int(d.weekday, 2) // Tuesday
     d = time.utc(-1)             // 1969-12-31T23:59:59.999
     testing.eq_int(d.year, 1969)
     testing.eq_int(d.day, 31)
@@ -57,7 +57,7 @@ fn test_iso_round_trip() {
     n = time.iso(&buf, &d)
     testing.eq_str(&buf[:n], "2023-11-14T22:13:20-03:00")
     testing.check(time.parse_iso(&buf[:n], &ms), "com fuso")
-    testing.eq_int(ms, 1_700_000_000_000 + 3 * 3600000) // 22:13 em -03:00 é 01:13 UTC
+    testing.eq_int(ms, 1_700_000_000_000 + 3 * 3600000) // 22:13 at -03:00 is 01:13 UTC
 }
 
 fn test_parse_iso_forms() {
@@ -80,7 +80,7 @@ fn test_parse_iso_forms() {
 fn test_to_ms_and_local() {
     now := time.now_ms()
     d := time.local(now)
-    testing.eq_int(time.to_ms(&d), now) // o fuso volta certo
+    testing.eq_int(time.to_ms(&d), now) // the time zone comes back right
     u := time.utc(now)
     testing.eq_int(time.to_ms(&u), now)
 }

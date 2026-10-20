@@ -1,8 +1,8 @@
-// Leitura com buffer de qualquer io.Reader (fs.File, net.Conn, io.stdin()
-// ou um tipo seu). O Reader guarda um buffer fixo de 4096 bytes dentro dele
-// mesmo (na pilha, se ele for uma variável local): nada aqui aloca. A fonte
-// não fica guardada: cada chamada a recebe emprestada, então quem abriu o
-// arquivo continua dono dele e o fecha quando quiser.
+// Buffered reading from any io.Reader (fs.File, net.Conn, io.stdin()
+// or a type of yours). The Reader keeps a fixed 4096-byte buffer inside
+// itself (on the stack, if it's a local variable): nothing here allocates. The source
+// isn't stored: each call borrows it, so whoever opened the
+// file stays its owner and closes it when they want.
 //
 //     br := bufio.new[fs.File]()
 //     var line [1024]byte
@@ -11,44 +11,44 @@
 //             Ok(n) => io.printf("{:s}\n", &line[:n])
 //             Err(code) => {
 //                 if code != io.EOF {
-//                     io.eprintf("erro {}\n", code)
+//                     io.eprintf("error {}\n", code)
 //                 }
 //                 break
 //             }
 //         }
 //     }
 //
-// O fim dos dados é Err(io.EOF), e os erros da fonte chegam como vieram.
+// The end of the data is Err(io.EOF), and the source's errors arrive as they came.
 import "std/io"
 import "std/result"
 
-// TOO_LONG é o erro de read_line e read_until quando o pedaço não cabe em
-// dst (o mesmo código de os.TOO_LONG). O que coube fica em dst e o resto,
-// para a próxima chamada.
+// TOO_LONG is the error of read_line and read_until when the piece doesn't fit in
+// dst (the same code as os.TOO_LONG). What fit stays in dst and the rest
+// goes to the next call.
 pub const TOO_LONG = 1002
 
-// Reader é o buffer da leitura: buf[start:end] são os bytes já lidos da
-// fonte e ainda não entregues.
+// Reader is the reading buffer: buf[start:end] are the bytes already read from the
+// source and not yet delivered.
 pub struct Reader[R ref + io.Reader] {
     buf [4096]byte
     start int
     end int
-    err int // erro da fonte guardado para a próxima chamada (0: nenhum)
+    err int // source error kept for the next call (0: none)
 }
 
-// new cria um Reader vazio para fontes do tipo R.
+// new creates an empty Reader for sources of type R.
 pub fn new[R ref + io.Reader]() Reader[R] {
     return Reader[R]{}
 }
 
-// buffered diz quantos bytes já estão no buffer, esperando para ser lidos.
+// buffered says how many bytes are already in the buffer, waiting to be read.
 pub fn (b &Reader[R]) buffered() int {
     return b.end - b.start
 }
 
-// fill lê mais da fonte para o buffer (que precisa ter espaço, depois de
-// mover o que sobrou para o começo). Devolve false no fim ou num erro, que
-// fica em b.err.
+// fill reads more from the source into the buffer (which must have room, after
+// moving the leftovers to the start). Returns false at the end or on an error, which
+// stays in b.err.
 fn (b &Reader[R]) fill(src &R) bool {
     if b.err != 0 {
         return false
@@ -77,8 +77,8 @@ fn (b &Reader[R]) fill(src &R) bool {
     }
 }
 
-// take entrega o erro guardado e o esquece (menos o EOF, que continua
-// valendo nas próximas chamadas).
+// take delivers the kept error and forgets it (except EOF, which keeps
+// holding on the next calls).
 fn (b &Reader[R]) take() int {
     code := b.err
     if code != io.EOF {
@@ -87,10 +87,10 @@ fn (b &Reader[R]) take() int {
     return code
 }
 
-// read_until lê até o byte delim (inclusive, se ele vier) e escreve em dst.
-// Se o delim não aparecer antes do fim dos dados, entrega o que houver;
-// Err(io.EOF) só quando não houver mais nada. Se o pedaço não couber em
-// dst, enche dst e devolve Err(TOO_LONG).
+// read_until reads up to the byte delim (inclusive, if it comes) and writes into dst.
+// If delim doesn't appear before the end of the data, delivers whatever there is;
+// Err(io.EOF) only when there's nothing more. If the piece doesn't fit in
+// dst, fills dst and returns Err(TOO_LONG).
 pub fn (b &Reader[R]) read_until(src &R, delim byte, dst &[]byte) result.Result[int, int] {
     n := 0
     for {
@@ -115,10 +115,10 @@ pub fn (b &Reader[R]) read_until(src &R, delim byte, dst &[]byte) result.Result[
     }
 }
 
-// read_line lê uma linha sem o \n (e sem o \r de um \r\n) e devolve o
-// tamanho dela. A última linha pode não ter \n. Se a linha não couber em
-// dst, enche dst e devolve Err(TOO_LONG); o resto da linha vem na próxima
-// chamada.
+// read_line reads a line without the \n (and without the \r of a \r\n) and returns its
+// length. The last line may have no \n. If the line doesn't fit in
+// dst, fills dst and returns Err(TOO_LONG); the rest of the line comes on the next
+// call.
 pub fn (b &Reader[R]) read_line(src &R, dst &[]byte) result.Result[int, int] {
     match b.read_until(src, '\n', dst) {
         Ok(n) => {
@@ -136,8 +136,8 @@ pub fn (b &Reader[R]) read_line(src &R, dst &[]byte) result.Result[int, int] {
     }
 }
 
-// read lê até len(dst) bytes: primeiro o que estiver no buffer; se ele
-// estiver vazio, faz uma leitura da fonte. Pode ler menos que len(dst).
+// read reads up to len(dst) bytes: first what's in the buffer; if it's
+// empty, does one read from the source. May read less than len(dst).
 pub fn (b &Reader[R]) read(src &R, dst &[]byte) result.Result[int, int] {
     if len(dst) == 0 {
         return result.Result.Ok(0)
@@ -156,9 +156,9 @@ pub fn (b &Reader[R]) read(src &R, dst &[]byte) result.Result[int, int] {
     return result.Result.Ok(n)
 }
 
-// read_exact enche dst inteiro. Se os dados acabarem antes, devolve
-// Err(io.EOF) (o que chegou fica em dst, mas a quantidade se perde: use read
-// quando um pedaço menor servir).
+// read_exact fills all of dst. If the data ends first, returns
+// Err(io.EOF) (what arrived stays in dst, but the amount is lost: use read
+// when a smaller piece will do).
 pub fn (b &Reader[R]) read_exact(src &R, dst &[]byte) result.Result[int, int] {
     n := 0
     for n < len(dst) {
@@ -172,7 +172,7 @@ pub fn (b &Reader[R]) read_exact(src &R, dst &[]byte) result.Result[int, int] {
     return result.Result.Ok(n)
 }
 
-// read_byte lê um byte.
+// read_byte reads one byte.
 pub fn (b &Reader[R]) read_byte(src &R) result.Result[byte, int] {
     if b.start == b.end && !b.fill(src) {
         return result.Result.Err(b.take())

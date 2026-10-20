@@ -119,7 +119,7 @@ struct Person {
     age int
 }
 
-// ordem escrita à mão: pela idade
+// order written by hand: by age
 fn (p &Person) cmp(o &Person) int {
     return p.age.cmp(&o.age)
 }

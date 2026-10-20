@@ -15,7 +15,7 @@ fn parse(s string) result.Result[int, ParseError] {
     n := str.copy(&b, s)
     v := 0
     if !str.parse_int(&b[:n], &v) {
-        return result.Result.Err(ParseError.Bad(b)) // a mensagem vai com o erro
+        return result.Result.Err(ParseError.Bad(b)) // the message goes with the error
     }
     free(b)
     return result.Result.Ok(v)

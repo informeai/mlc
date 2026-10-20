@@ -1,54 +1,54 @@
-// Entrada e saída padrão. Nada aqui aloca: read_line lê num buffer de quem
-// chama, e a escrita formatada passa por um Writer com buffer fixo na pilha.
+// Standard input and output. Nothing here allocates: read_line reads into a buffer of the
+// caller's, and formatted writing goes through a Writer with a fixed buffer on the stack.
 //
-// io.print(a, b, ...) e io.printf("x = {}\n", x) são reescritos pelo
-// compilador em chamadas aos métodos write (da interface Display) de cada
-// valor, sobre um Writer. Toda a formatação está aqui, em MLC; só a dos
-// números reais e a escrita no arquivo ficam no runtime C.
+// io.print(a, b, ...) and io.printf("x = {}\n", x) are rewritten by the
+// compiler into calls to each value's write methods (from the Display interface),
+// over a Writer. All the formatting is here, in MLC; only the formatting of
+// real numbers and the writing to the file stay in the C runtime.
 import "std/result"
 
-// write escreve os bytes de s, sem quebra de linha.
+// write writes the bytes of s, without a line break.
 pub extern fn write(s &[]byte)
 
-// write_line escreve os bytes de s e uma quebra de linha.
+// write_line writes the bytes of s and a line break.
 pub extern fn write_line(s &[]byte)
 
-// read_line lê uma linha (sem o \n) para o começo de dst e devolve quantos
-// bytes leu. Se a linha não couber, o resto fica para a próxima chamada.
-// No fim da entrada devolve -1.
+// read_line reads a line (without the \n) into the start of dst and returns how many
+// bytes it read. If the line doesn't fit, the rest is left for the next call.
+// At the end of the input returns -1.
 pub extern fn read_line(dst &[]byte) int
 
-// ---------- leitura genérica ----------
+// ---------- generic reading ----------
 
-// EOF é o erro que os leitores com buffer (std/bufio) devolvem no fim dos
-// dados.
+// EOF is the error the buffered readers (std/bufio) return at the end of the
+// data.
 pub const EOF = 1003
 
-// Reader é qualquer fonte de bytes: fs.File, net.Conn, io.stdin() ou um
-// tipo seu. read lê até len(dst) bytes no começo de dst e devolve quantos
-// leu; Ok(0) (com dst não vazio) é o fim dos dados. Pode ler menos que
-// len(dst) mesmo antes do fim. std/bufio lê linhas e blocos de qualquer
+// Reader is any source of bytes: fs.File, net.Conn, io.stdin() or a
+// type of yours. read reads up to len(dst) bytes at the start of dst and returns how many
+// it read; Ok(0) (with a non-empty dst) is the end of the data. It may read less than
+// len(dst) even before the end. std/bufio reads lines and blocks from any
 // Reader.
 pub interface Reader {
     fn read(self &Self, dst &[]byte) result.Result[int, int]
 }
 
-// Stdin é a entrada padrão como Reader. Ele lê pelo mesmo buffer de
-// io.read_line, então os dois podem ser misturados.
+// Stdin is standard input as a Reader. It reads through the same buffer as
+// io.read_line, so the two can be mixed.
 pub struct Stdin {
     fd int
 }
 
 extern fn read_stdin(dst &[]byte) int
 
-// stdin devolve a entrada padrão como Reader (um valor na pilha, sem nada
-// para liberar).
+// stdin returns standard input as a Reader (a value on the stack, with nothing
+// to free).
 pub fn stdin() Stdin {
     return Stdin{fd: 0}
 }
 
-// read lê o que estiver disponível, até len(dst) bytes, parando depois de
-// um \n (no terminal, uma linha por vez).
+// read reads whatever is available, up to len(dst) bytes, stopping after
+// a \n (on the terminal, one line at a time).
 pub fn (s &Stdin) read(dst &[]byte) result.Result[int, int] {
     n := read_stdin(dst)
     if n < 0 {
@@ -59,38 +59,38 @@ pub fn (s &Stdin) read(dst &[]byte) result.Result[int, int] {
 
 impl Reader for Stdin
 
-// ---------- escrita formatada ----------
+// ---------- formatted writing ----------
 
-// Display é o que io.print e io.printf sabem escrever. Para structs e
-// enums, impl auto io.Display for T gera o write no formato {1 2} /
-// Circulo(2); ou escreva o método à mão.
+// Display is what io.print and io.printf know how to write. For structs and
+// enums, impl auto io.Display for T generates write in the format {1 2} /
+// Circle(2); or write the method by hand.
 pub interface Display {
     fn write(self &Self, w &Writer)
 }
 
-// Writer junta a saída num buffer fixo e a entrega quando enche ou no
-// flush: num arquivo (fd 1: saída padrão, 2: erro padrão), num destino do
-// str.format (SINK) ou em lugar nenhum, só contando (COUNT, para o
+// Writer gathers the output in a fixed buffer and delivers it when full or on
+// flush: to a file (fd 1: standard output, 2: standard error), to a str.format
+// destination (SINK) or nowhere, only counting (COUNT, for
 // str.format_len).
 //
-// Durante o write de um valor de io.printf ou str.format com especificação
-// ({:x}, {:08.2}), os campos width, zero, prec, base, upper e alt dizem
-// como escrever números; o compilador os põe antes do write e os limpa
-// depois. O alinhamento ({:>8}) é feito em volta do write, por pad_before e
+// During the write of a value from io.printf or str.format with a spec
+// ({:x}, {:08.2}), the fields width, zero, prec, base, upper and alt say
+// how to write numbers; the compiler sets them before the write and clears them
+// after. Alignment ({:>8}) is done around the write, by pad_before and
 // pad_after.
 pub struct Writer {
     buf [256]byte
     n int
-    fd int    // 1 ou 2: arquivo; SINK ou COUNT
-    sink int  // com fd == SINK: o destino do str.format (conferido no runtime)
-    total int // bytes escritos desde a criação
-    chars int // caracteres escritos (UTF-8: os bytes que não são de continuação)
-    width int // largura mínima de um número com zero (o 0 de {:08})
+    fd int    // 1 or 2: file; SINK or COUNT
+    sink int  // with fd == SINK: the str.format destination (checked at run time)
+    total int // bytes written since creation
+    chars int // characters written (UTF-8: the bytes that aren't continuation bytes)
+    width int // minimum width of a zero-padded number (the 0 of {:08})
     zero bool
-    prec int   // casas decimais de um real, mais 1 (0: o menor número de dígitos)
-    base int   // 16, 2 ou 8 ({:x}, {:b}, {:o}); 0: decimal
+    prec int   // decimal places of a real, plus 1 (0: the fewest digits)
+    base int   // 16, 2 or 8 ({:x}, {:b}, {:o}); 0: decimal
     upper bool // {:X}
-    alt bool   // {:#x}: prefixo 0x, 0b ou 0o
+    alt bool   // {:#x}: prefix 0x, 0b or 0o
 }
 
 const SINK = -1
@@ -102,21 +102,21 @@ extern fn format_f64(dst &[]byte, x float64) int
 extern fn format_f32(dst &[]byte, x float32) int
 extern fn format_fixed(dst &[]byte, x float64, prec int) int
 
-// stdout cria um Writer para a saída padrão.
+// stdout creates a Writer for standard output.
 pub fn stdout() Writer {
     var w Writer
     w.fd = 1
     return w
 }
 
-// stderr cria um Writer para o erro padrão.
+// stderr creates a Writer for standard error.
 pub fn stderr() Writer {
     var w Writer
     w.fd = 2
     return w
 }
 
-// flush entrega o que está no buffer.
+// flush delivers what's in the buffer.
 pub fn (w &Writer) flush() {
     if w.n > 0 {
         if w.fd == SINK {
@@ -128,7 +128,7 @@ pub fn (w &Writer) flush() {
     }
 }
 
-// put_byte escreve um byte.
+// put_byte writes a byte.
 pub fn (w &Writer) put_byte(b byte) {
     if w.n == len(w.buf) {
         w.flush()
@@ -141,31 +141,31 @@ pub fn (w &Writer) put_byte(b byte) {
     }
 }
 
-// put_bytes escreve os bytes de b.
+// put_bytes writes the bytes of b.
 pub fn (w &Writer) put_bytes(b &[]byte) {
     for i := 0; i < len(b); i++ {
         w.put_byte(b[i])
     }
 }
 
-// put_str escreve o texto de s.
+// put_str writes the text of s.
 pub fn (w &Writer) put_str(s string) {
     for i := 0; i < len(s); i++ {
         w.put_byte(s[i])
     }
 }
 
-// PAIRS tem os pares de dígitos de 00 a 99: o put_int rápido escreve dois
-// dígitos por divisão.
+// PAIRS has the digit pairs from 00 to 99: the fast put_int writes two
+// digits per division.
 const PAIRS = "00010203040506070809101112131415161718192021222324252627282930313233343536373839404142434445464748495051525354555657585960616263646566676869707172737475767778798081828384858687888990919293949596979899"
 
-// put_int escreve n em decimal (ou na base da especificação).
+// put_int writes n in decimal (or in the spec's base).
 pub fn (w &Writer) put_int(n int) {
     if w.base != 0 || w.zero || w.alt {
         w.put_int_spec(n)
         return
     }
-    // a magnitude sem sinal, sem estourar no menor int (que não tem positivo)
+    // the unsigned magnitude, without overflowing on the smallest int (which has no positive)
     var u uint64 = 0
     if n < 0 {
         u = uint64(-(n + 1)) + 1
@@ -181,7 +181,7 @@ pub fn (w &Writer) put_int(n int) {
     w.put_ascii(&d[k:])
 }
 
-// put_uint escreve n, sem sinal, com o formato pedido ({:x}, {:08}...).
+// put_uint writes n, unsigned, with the requested format ({:x}, {:08}...).
 pub fn (w &Writer) put_uint(n uint64) {
     if w.base != 0 || w.zero || w.alt {
         w.put_uint_spec(n)
@@ -192,10 +192,10 @@ pub fn (w &Writer) put_uint(n uint64) {
     w.put_ascii(&d[k:])
 }
 
-// decimal escreve u em decimal no fim de d (20 posições bastam para
-// qualquer uint64) e devolve onde os dígitos começam. Divide por 100, uma
-// constante (que o compilador C troca por uma multiplicação), e escreve dois
-// dígitos por vez.
+// decimal writes u in decimal at the end of d (20 positions are enough for
+// any uint64) and returns where the digits start. It divides by 100, a
+// constant (which the C compiler turns into a multiplication), and writes two
+// digits at a time.
 fn decimal(d &[]byte, u uint64) int {
     k := len(d)
     for u >= 100 {
@@ -218,9 +218,9 @@ fn decimal(d &[]byte, u uint64) int {
     return k
 }
 
-// put_ascii escreve bytes ASCII (os dígitos e o sinal de um número): sem
-// bytes de continuação de UTF-8, cada byte é um caractere, e a cópia vai
-// direto para o buffer quando cabe.
+// put_ascii writes ASCII bytes (the digits and the sign of a number): with no
+// UTF-8 continuation bytes, each byte is a character, and the copy goes
+// straight into the buffer when it fits.
 fn (w &Writer) put_ascii(b &[]byte) {
     if w.n + len(b) > len(w.buf) {
         w.flush()
@@ -237,8 +237,8 @@ fn (w &Writer) put_ascii(b &[]byte) {
     w.chars += len(b)
 }
 
-// put_int_spec escreve n com a especificação ({:x}, {:08}, {:#b}). Os
-// dígitos são tirados com n negativo, para o menor int funcionar também.
+// put_int_spec writes n with the spec ({:x}, {:08}, {:#b}). The
+// digits are taken with n negative, so the smallest int works too.
 fn (w &Writer) put_int_spec(n int) {
     neg := n < 0
     if !neg {
@@ -290,8 +290,8 @@ fn (w &Writer) digit(d int) byte {
     return byte(int('a') + d - 10)
 }
 
-// put_number escreve o sinal, o prefixo ({:#x}), os zeros à esquerda ({:08})
-// e os dígitos.
+// put_number writes the sign, the prefix ({:#x}), the leading zeros ({:08})
+// and the digits.
 fn (w &Writer) put_number(neg bool, digits &[]byte) {
     k := len(digits)
     if neg {
@@ -317,8 +317,8 @@ fn (w &Writer) put_number(neg bool, digits &[]byte) {
     w.put_bytes(digits)
 }
 
-// put_float escreve x com o menor número de dígitos que o representa
-// exatamente (0.1, 1000, 1e+21), como o Go; com {:.2}, com duas casas.
+// put_float writes x with the fewest digits that represent it
+// exactly (0.1, 1000, 1e+21), like Go; with {:.2}, with two decimal places.
 pub fn (w &Writer) put_float(x float64) {
     var d [352]byte
     k := 0
@@ -330,7 +330,7 @@ pub fn (w &Writer) put_float(x float64) {
     w.put_real(&d[:k])
 }
 
-// put_f32 escreve x, com o formato pedido ({:.2}...).
+// put_f32 writes x, with the requested format ({:.2}...).
 pub fn (w &Writer) put_f32(x float32) {
     var d [352]byte
     k := 0
@@ -350,7 +350,7 @@ fn (w &Writer) put_real(d &[]byte) {
     }
 }
 
-// put_bool escreve true ou false.
+// put_bool writes true or false.
 pub fn (w &Writer) put_bool(b bool) {
     if b {
         w.put_str("true")
@@ -359,22 +359,22 @@ pub fn (w &Writer) put_bool(b bool) {
     }
 }
 
-// ---------- especificação de formato ({:...}) ----------
+// ---------- format spec ({:...}) ----------
 //
-// io.printf("{:>8.2}", x) vira, em essência:
+// io.printf("{:>8.2}", x) becomes, in essence:
 //
 //     w.spec_begin(8, false, 3, 0, false, false)
-//     m := w.measure()              // um Writer que só conta
+//     m := w.measure()              // a Writer that only counts
 //     x.write(&m)
 //     w.pad_before(' ', '>', 8, m.chars)
-//     antes := w.chars
+//     before := w.chars
 //     x.write(&w)
-//     w.pad_after(' ', '>', 8, w.chars - antes)
+//     w.pad_after(' ', '>', 8, w.chars - before)
 //     w.spec_end()
 //
-// A largura conta caracteres, não bytes: "café" ocupa 4.
+// The width counts characters, not bytes: "café" takes 4.
 
-// spec_begin guarda a especificação para os números do próximo write.
+// spec_begin keeps the spec for the numbers of the next write.
 pub fn (w &Writer) spec_begin(width int, zero bool, prec int, base int, upper bool, alt bool) {
     w.width = width
     w.zero = zero
@@ -384,14 +384,14 @@ pub fn (w &Writer) spec_begin(width int, zero bool, prec int, base int, upper bo
     w.alt = alt
 }
 
-// spec_end volta ao formato comum.
+// spec_end goes back to the plain format.
 pub fn (w &Writer) spec_end() {
     w.spec_begin(0, false, 0, 0, false, false)
 }
 
-// measure devolve um Writer com a mesma especificação que só conta os
-// bytes: escrever o valor nele dá o tamanho, para alinhar à direita ou no
-// centro.
+// measure returns a Writer with the same spec that only counts the
+// bytes: writing the value into it gives the size, to align right or
+// center.
 pub fn (w &Writer) measure() Writer {
     m := *w
     m.fd = COUNT
@@ -401,8 +401,8 @@ pub fn (w &Writer) measure() Writer {
     return m
 }
 
-// pad_before completa a largura antes do valor (alinhado à direita ou no
-// centro); size é o tamanho do valor, em caracteres.
+// pad_before fills the width before the value (right-aligned or
+// centered); size is the value's size, in characters.
 pub fn (w &Writer) pad_before(fill byte, align byte, width int, size int) {
     if align == '>' {
         w.pad(fill, width - size)
@@ -411,8 +411,8 @@ pub fn (w &Writer) pad_before(fill byte, align byte, width int, size int) {
     }
 }
 
-// pad_after completa a largura depois do valor (alinhado à esquerda ou no
-// centro); size é o tamanho do valor, em caracteres.
+// pad_after fills the width after the value (left-aligned or
+// centered); size is the value's size, in characters.
 pub fn (w &Writer) pad_after(fill byte, align byte, width int, size int) {
     if align == '<' {
         w.pad(fill, width - size)
@@ -427,7 +427,7 @@ fn (w &Writer) pad(fill byte, n int) {
     }
 }
 
-// ---------- Display dos tipos embutidos ----------
+// ---------- Display of the built-in types ----------
 
 impl Display for int {
     fn (x &int) write(w &Writer) {
@@ -501,7 +501,7 @@ impl Display for string {
     }
 }
 
-// Um slice (ou array) é escrito como [a b c].
+// A slice (or array) is written as [a b c].
 impl[T Display] Display for []T {
     fn (s &[]T) write(w &Writer) {
         w.put_byte('[')

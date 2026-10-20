@@ -40,7 +40,7 @@ fn test_defaults() {
     var b [64]byte
     testing.eq_int(u.path(&b), 0)
     n := u.target(&b)
-    testing.eq_str(&b[:n], "/") // o alvo de um pedido nunca é vazio
+    testing.eq_str(&b[:n], "/") // a request's target is never empty
     testing.eq_int(u.query(&b), -1)
     testing.eq_int(u.fragment(&b), -1)
     testing.eq_int(u.user(&b), -1)
@@ -59,7 +59,7 @@ fn test_ipv6_and_reference() {
     n = u.dial_host(&b)
     testing.eq_str(&b[:n], "::1")
     testing.eq_int(u.port(), 8080)
-    // só o alvo, como no pedido HTTP
+    // only the target, as in the HTTP request
     testing.check(url.parse_str("/itens/7?x=1", &u), "referência")
     testing.eq_int(u.scheme(&b), 0)
     testing.eq_int(u.host(&b), 0)
@@ -89,7 +89,7 @@ fn test_query_builder() {
     k := str.copy(&v, "a&b=c")
     q.add("filtro", &v[:k])
     testing.eq_str(&q.buf[:q.n], "busca=caf%C3%A9%20com%20leite&pagina=2&filtro=a%26b%3Dc")
-    // e de volta
+    // and back
     var out [64]byte
     n := url.query_value(&q.buf[:q.n], "filtro", &out)
     testing.eq_str(&out[:n], "a&b=c")

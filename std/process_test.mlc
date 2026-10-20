@@ -27,7 +27,7 @@ fn test_exit_status() {
 
 fn test_arguments_are_not_shell() {
     c := process.cmd("echo")
-    c.arg("$HOME *") // sem shell: chega como está
+    c.arg("$HOME *") // no shell: arrives as is
     var out [32]byte
     status := 0
     match c.run(&out, &status) {
@@ -68,5 +68,5 @@ fn test_output_too_big() {
         Ok(_) => testing.fail("a saída não cabe")
         Err(code) => testing.eq_int(code, process.TOO_BIG)
     }
-    testing.eq_int(status, 0) // o programa rodou até o fim
+    testing.eq_int(status, 0) // the program ran to the end
 }

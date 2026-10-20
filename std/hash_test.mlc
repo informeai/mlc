@@ -55,7 +55,7 @@ fn test_sha256_vectors() {
     k := str.copy(&b, "abc")
     n = sha_hex(&b[:k], &out)
     testing.eq_str(&out[:n], "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
-    k = str.copy(&b, "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq") // 56 bytes: o enchimento vira outro bloco
+    k = str.copy(&b, "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq") // 56 bytes: the padding becomes another block
     n = sha_hex(&b[:k], &out)
     testing.eq_str(&out[:n], "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1")
 }
@@ -91,7 +91,7 @@ fn test_sha256_pieces_equal_whole() {
     var parts [32]byte
     h.sum(&parts)
     testing.eq_bytes(&parts, &whole)
-    h.sum(&parts) // sum não muda o estado
+    h.sum(&parts) // sum doesn't change the state
     testing.eq_bytes(&parts, &whole)
 }
 

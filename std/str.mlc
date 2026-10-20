@@ -1,41 +1,41 @@
-// Texto em buffers []byte. Nenhuma função aloca: as que escrevem recebem o
-// buffer de quem chama (dst), devolvem quantos bytes usaram e dão panic se o
-// texto não couber. Veja docs/text.md.
+// Text in []byte buffers. No function allocates: the ones that write receive the
+// caller's buffer (dst), return how many bytes they used and panic if the
+// text doesn't fit. See docs/text.md.
 //
-// As que podem dar panic são extern (no runtime C), para o panic apontar a
-// linha de quem chamou; as outras são MLC comum.
+// The ones that may panic are extern (in the C runtime), so the panic points at the
+// caller's line; the others are ordinary MLC.
 //
-// str.format(&dst, "x = {}", x) escreve um formato em dst e devolve quantos
-// bytes usou (panic se não couber); str.format_len("x = {}", x) diz quantos
-// bytes o texto tem, para alocar o tamanho certo. Como o io.printf, são
-// reescritas pelo compilador em chamadas aos write (io.Display) de cada
-// valor, sobre um io.Writer que escreve em dst ou só conta.
+// str.format(&dst, "x = {}", x) writes a format into dst and returns how many
+// bytes it used (panic if it doesn't fit); str.format_len("x = {}", x) says how many
+// bytes the text has, to allocate the right size. Like io.printf, they're
+// rewritten by the compiler into calls to each value's write (io.Display),
+// over an io.Writer that writes into dst or only counts.
 import "std/io"
 
-// copy copia s para o começo de dst e devolve quantos bytes copiou.
+// copy copies s to the start of dst and returns how many bytes it copied.
 pub extern fn copy(dst &[]byte, s string) int
 
-// copy_bytes copia src para o começo de dst (podem se sobrepor).
+// copy_bytes copies src to the start of dst (they may overlap).
 pub extern fn copy_bytes(dst &[]byte, src &[]byte) int
 
-// put_int escreve n em decimal no começo de dst.
+// put_int writes n in decimal at the start of dst.
 pub extern fn put_int(dst &[]byte, n int) int
 
-// put_float escreve x com o menor número de dígitos que o representa
-// exatamente, no mesmo formato do io.print.
+// put_float writes x with the fewest digits that represent it
+// exactly, in the same format as io.print.
 pub extern fn put_float(dst &[]byte, x float64) int
 
-// parse_float lê um decimal (2.5, -1e9) de s inteiro; em caso de sucesso
-// grava em out e devolve true.
+// parse_float reads a decimal (2.5, -1e9) from all of s; on success
+// stores it in out and returns true.
 pub extern fn parse_float(s &[]byte, out &float64) bool
 
-// int_len diz quantos bytes n ocupa em decimal (para saber quanto alocar).
+// int_len says how many bytes n takes in decimal (to know how much to allocate).
 pub fn int_len(n int) int {
     k := 1
     if n < 0 {
         k = 2
     }
-    // n / 10 não estoura nem no menor int; os dígitos são contados no negativo
+    // n / 10 doesn't overflow even on the smallest int; digits are counted in the negative
     if n > 0 {
         n = -n
     }
@@ -46,7 +46,7 @@ pub fn int_len(n int) int {
     return k
 }
 
-// eq diz se a tem o mesmo texto que s.
+// eq says whether a has the same text as s.
 pub fn eq(a &[]byte, s string) bool {
     if len(a) != len(s) {
         return false
@@ -59,7 +59,7 @@ pub fn eq(a &[]byte, s string) bool {
     return true
 }
 
-// eq_bytes diz se a e b têm o mesmo texto.
+// eq_bytes says whether a and b have the same text.
 pub fn eq_bytes(a &[]byte, b &[]byte) bool {
     if len(a) != len(b) {
         return false
@@ -75,9 +75,9 @@ pub fn eq_bytes(a &[]byte, b &[]byte) bool {
 const MIN_INT = -9223372036854775807 - 1
 const MIN_DIV_10 = -922337203685477580 // MIN_INT / 10
 
-// parse_int lê um inteiro decimal, com sinal opcional, de s inteiro. Em caso
-// de sucesso grava em out e devolve true; texto inválido ou que não cabe em
-// int devolve false.
+// parse_int reads a decimal integer, with an optional sign, from all of s. On
+// success stores it in out and returns true; invalid text or text that doesn't fit in
+// int returns false.
 pub fn parse_int(s &[]byte, out &int) bool {
     i := 0
     neg := false
@@ -88,7 +88,7 @@ pub fn parse_int(s &[]byte, out &int) bool {
     if i == len(s) {
         return false
     }
-    // acumula no negativo, para alcançar o menor int sem estourar
+    // accumulates in the negative, to reach the smallest int without overflowing
     v := 0
     for i < len(s) {
         c := s[i]
@@ -114,9 +114,9 @@ pub fn parse_int(s &[]byte, out &int) bool {
 
 const MAX_UINT = 18446744073709551615
 
-// parse_uint lê um inteiro sem sinal em decimal de s inteiro (para valores
-// acima do maior int, como hashes e contadores grandes). Em caso de sucesso
-// grava em out e devolve true; texto inválido, sinal ou estouro devolvem
+// parse_uint reads an unsigned decimal integer from all of s (for values
+// above the largest int, like hashes and large counters). On success
+// stores it in out and returns true; invalid text, a sign or overflow return
 // false.
 pub fn parse_uint(s &[]byte, out &uint64) bool {
     if len(s) == 0 {
@@ -130,7 +130,7 @@ pub fn parse_uint(s &[]byte, out &uint64) bool {
         }
         d := uint64(c - '0')
         if v > (MAX_UINT - d) / 10 {
-            return false // v * 10 + d passaria do maior uint64
+            return false // v * 10 + d would go past the largest uint64
         }
         v = v * 10 + d
     }
@@ -138,12 +138,12 @@ pub fn parse_uint(s &[]byte, out &uint64) bool {
     return true
 }
 
-// parse_int_base lê um inteiro na base dada (de 2 a 36; letras de a a z,
-// maiúsculas ou minúsculas, depois do 9), com sinal opcional, de s inteiro.
-// Com base 16, 2 ou 8, o prefixo 0x, 0b ou 0o é aceito. Com base 0, o
-// prefixo escolhe a base (0x1F, 0b1010, 0o17) e, sem prefixo, é decimal. Em
-// caso de sucesso grava em out e devolve true; texto inválido, base fora de
-// 0 e 2 a 36, ou estouro devolvem false.
+// parse_int_base reads an integer in the given base (2 to 36; letters a to z,
+// upper- or lowercase, after 9), with an optional sign, from all of s.
+// With base 16, 2 or 8, the prefix 0x, 0b or 0o is accepted. With base 0, the
+// prefix picks the base (0x1F, 0b1010, 0o17) and, without a prefix, it's decimal. On
+// success stores it in out and returns true; invalid text, a base other than
+// 0 and 2 to 36, or overflow return false.
 pub fn parse_int_base(s &[]byte, base int, out &int) bool {
     if base != 0 && (base < 2 || base > 36) {
         return false
@@ -175,7 +175,7 @@ pub fn parse_int_base(s &[]byte, base int, out &int) bool {
     if i == len(s) {
         return false
     }
-    // acumula no negativo, para alcançar o menor int sem estourar
+    // accumulates in the negative, to reach the smallest int without overflowing
     limit := MIN_INT / base
     v := 0
     for i < len(s) {
@@ -184,7 +184,7 @@ pub fn parse_int_base(s &[]byte, base int, out &int) bool {
             return false
         }
         if v < limit {
-            return false // v * base passaria do menor int
+            return false // v * base would go past the smallest int
         }
         v = v * base
         if v < MIN_INT + d {
@@ -203,7 +203,7 @@ pub fn parse_int_base(s &[]byte, base int, out &int) bool {
     return true
 }
 
-// digit_value é o valor de um dígito em qualquer base até 36, ou -1.
+// digit_value is the value of a digit in any base up to 36, or -1.
 fn digit_value(c byte) int {
     if c >= '0' && c <= '9' {
         return int(c) - int('0')
@@ -217,8 +217,8 @@ fn digit_value(c byte) int {
     return -1
 }
 
-// parse_bool lê "true" ou "false" (exatamente) de s. Em caso de sucesso
-// grava em out e devolve true; qualquer outro texto devolve false.
+// parse_bool reads "true" or "false" (exactly) from s. On success
+// stores it in out and returns true; any other text returns false.
 pub fn parse_bool(s &[]byte, out &bool) bool {
     if eq(s, "true") {
         *out = true

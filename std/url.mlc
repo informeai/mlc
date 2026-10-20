@@ -1,58 +1,58 @@
-// URLs (RFC 3986): ler as partes de um endereço e montar consultas. Nada
-// aloca: a URL guarda uma cópia do texto num buffer fixo de 2 KB dentro
-// dela, e as partes são copiadas para buffers de quem chama (ou comparadas
-// sem cópia, com scheme_is e host_is).
+// URLs (RFC 3986): reading the parts of an address and building queries. Nothing
+// allocates: the URL keeps a copy of the text in a fixed 2 KB buffer inside
+// itself, and the parts are copied into the caller's buffers (or compared
+// without copying, with scheme_is and host_is).
 //
 //     var u url.URL
-//     if !url.parse_str("https://api.exemplo.com:8443/v1/itens?id=7&q=caf%C3%A9#topo", &u) {
+//     if !url.parse_str("https://api.example.com:8443/v1/items?id=7&q=caf%C3%A9#top", &u) {
 //         return
 //     }
 //     var host [256]byte
-//     n := u.host(&host)                 // api.exemplo.com
-//     porta := u.port()                  // 8443 (443 se não viesse no texto)
-//     var alvo [512]byte
-//     k := u.target(&alvo)               // /v1/itens?id=7&q=caf%C3%A9 (para o HTTP)
+//     n := u.host(&host)                 // api.example.com
+//     port := u.port()                   // 8443 (443 if it weren't in the text)
+//     var target [512]byte
+//     k := u.target(&target)             // /v1/items?id=7&q=caf%C3%A9 (for HTTP)
 //     var q [64]byte
-//     m := u.query_param("q", &q)        // café (decodificado)
+//     m := u.query_param("q", &q)        // café (decoded)
 //
-// Para montar uma consulta, Query escreve os pares já codificados:
+// To build a query, Query writes the pairs already encoded:
 //
 //     var q url.Query
-//     q.add_str("busca", "café com leite")
-//     q.add_int("pagina", 2)
-//     // &q.buf[:q.n] é busca=caf%C3%A9+com+leite&pagina=2
+//     q.add_str("search", "café au lait")
+//     q.add_int("page", 2)
+//     // &q.buf[:q.n] is search=caf%C3%A9+au+lait&page=2
 //
-// Também lê uma referência sem esquema nem host, como /caminho?a=1 (o alvo
-// de um pedido HTTP).
+// It also reads a reference without a scheme or host, like /path?a=1 (the target
+// of an HTTP request).
 import "std/str"
 
-// BAD_URL é o código de erro de uma URL que não pôde ser lida.
+// BAD_URL is the error code of a URL that couldn't be read.
 pub const BAD_URL = 3101
 
-// MAX_LEN é o maior texto de URL que cabe numa URL.
+// MAX_LEN is the longest URL text that fits in a URL.
 pub const MAX_LEN = 2048
 
-// URL é uma URL lida por parse: o texto e onde fica cada parte.
+// URL is a URL read by parse: the text and where each part is.
 pub struct URL {
     buf [2048]byte
     n int
     scheme_at int
     scheme_n int
     user_at int
-    user_n int // -1: sem userinfo
+    user_n int // -1: no userinfo
     host_at int
     host_n int
-    port_n int // a porta escrita no texto, -1 se não veio
+    port_n int // the port written in the text, -1 if absent
     path_at int
     path_n int
     query_at int
-    query_n int // -1: sem ?
+    query_n int // -1: no ?
     frag_at int
-    frag_n int // -1: sem #
+    frag_n int // -1: no #
 }
 
-// parse lê s em u. Devolve false se s não for uma URL (esquema sem //,
-// porta que não é número, texto maior que MAX_LEN).
+// parse reads s into u. Returns false if s isn't a URL (scheme without //,
+// a port that isn't a number, text longer than MAX_LEN).
 pub fn parse(s &[]byte, u &URL) bool {
     if len(s) > MAX_LEN {
         return false
@@ -70,7 +70,7 @@ pub fn parse(s &[]byte, u &URL) bool {
     u.frag_at = 0
     u.frag_n = -1
     i := 0
-    // esquema: letras, dígitos, + - . e depois "://"
+    // scheme: letters, digits, + - . and then "://"
     sc := scheme_end(&u.buf, u.n)
     if sc > 0 {
         if sc + 3 > u.n || u.buf[sc + 1] != '/' || u.buf[sc + 2] != '/' {
@@ -78,7 +78,7 @@ pub fn parse(s &[]byte, u &URL) bool {
         }
         u.scheme_n = sc
         i = sc + 3
-        // autoridade: até o primeiro / ? ou #
+        // authority: up to the first / ? or #
         end := i
         for end < u.n && u.buf[end] != '/' && u.buf[end] != '?' && u.buf[end] != '#' {
             end++
@@ -108,7 +108,7 @@ pub fn parse(s &[]byte, u &URL) bool {
     return true
 }
 
-// parse_str é parse de um texto fixo do programa.
+// parse_str is parse of a fixed text in the program.
 pub fn parse_str(s string, u &URL) bool {
     var b [2048]byte
     if len(s) > len(b) {
@@ -118,8 +118,8 @@ pub fn parse_str(s string, u &URL) bool {
     return parse(&b[:n], u)
 }
 
-// scheme_end devolve onde termina o esquema (o índice do ':'), ou 0 se o
-// texto não começa com um.
+// scheme_end returns where the scheme ends (the index of ':'), or 0 if the
+// text doesn't start with one.
 fn scheme_end(b &[]byte, n int) int {
     for i := 0; i < n; i++ {
         c := b[i]
@@ -135,7 +135,7 @@ fn scheme_end(b &[]byte, n int) int {
     return 0
 }
 
-// authority lê [userinfo@]host[:porta] em buf[from:to].
+// authority reads [userinfo@]host[:port] in buf[from:to].
 fn (u &URL) authority(from int, to int) bool {
     at := from
     for k := from; k < to; k++ {
@@ -179,28 +179,28 @@ fn (u &URL) authority(from int, to int) bool {
     return true
 }
 
-// scheme copia o esquema (http, https...) para dst; 0 se não há.
+// scheme copies the scheme (http, https...) into dst; 0 if there's none.
 pub fn (u &URL) scheme(dst &[]byte) int {
     return str.copy_bytes(dst, &u.buf[u.scheme_at:u.scheme_at + u.scheme_n])
 }
 
-// scheme_is compara o esquema, sem diferenciar maiúsculas.
+// scheme_is compares the scheme, case-insensitively.
 pub fn (u &URL) scheme_is(s string) bool {
     return eq_fold(&u.buf[u.scheme_at:u.scheme_at + u.scheme_n], s)
 }
 
-// host copia o host para dst (um IPv6 vem com os colchetes: [::1]).
+// host copies the host into dst (an IPv6 comes with the brackets: [::1]).
 pub fn (u &URL) host(dst &[]byte) int {
     return str.copy_bytes(dst, &u.buf[u.host_at:u.host_at + u.host_n])
 }
 
-// host_is compara o host, sem diferenciar maiúsculas.
+// host_is compares the host, case-insensitively.
 pub fn (u &URL) host_is(s string) bool {
     return eq_fold(&u.buf[u.host_at:u.host_at + u.host_n], s)
 }
 
-// dial_host copia o host como net.connect espera (um IPv6 sem os
-// colchetes).
+// dial_host copies the host as net.connect expects it (an IPv6 without the
+// brackets).
 pub fn (u &URL) dial_host(dst &[]byte) int {
     if u.host_n >= 2 && u.buf[u.host_at] == '[' {
         return str.copy_bytes(dst, &u.buf[u.host_at + 1:u.host_at + u.host_n - 1])
@@ -208,13 +208,13 @@ pub fn (u &URL) dial_host(dst &[]byte) int {
     return u.host(dst)
 }
 
-// has_port diz se a porta veio escrita no texto.
+// has_port says whether the port was written in the text.
 pub fn (u &URL) has_port() bool {
     return u.port_n >= 0
 }
 
-// port devolve a porta: a do texto, ou a do esquema (80 para http e ws, 443
-// para https e wss, 21 para ftp); -1 se não há como saber.
+// port returns the port: the text's, or the scheme's (80 for http and ws, 443
+// for https and wss, 21 for ftp); -1 if there's no way to know.
 pub fn (u &URL) port() int {
     if u.port_n >= 0 {
         return u.port_n
@@ -231,8 +231,8 @@ pub fn (u &URL) port() int {
     return -1
 }
 
-// user copia o userinfo (usuario:senha, antes do @), sem decodificar; -1
-// se não há.
+// user copies the userinfo (user:password, before the @), not decoded; -1
+// if there's none.
 pub fn (u &URL) user(dst &[]byte) int {
     if u.user_n < 0 {
         return -1
@@ -240,12 +240,12 @@ pub fn (u &URL) user(dst &[]byte) int {
     return str.copy_bytes(dst, &u.buf[u.user_at:u.user_at + u.user_n])
 }
 
-// path copia o caminho, sem decodificar (pode ser vazio).
+// path copies the path, not decoded (it can be empty).
 pub fn (u &URL) path(dst &[]byte) int {
     return str.copy_bytes(dst, &u.buf[u.path_at:u.path_at + u.path_n])
 }
 
-// query copia a consulta (depois do ?), sem decodificar; -1 se não há ?.
+// query copies the query (after the ?), not decoded; -1 if there's no ?.
 pub fn (u &URL) query(dst &[]byte) int {
     if u.query_n < 0 {
         return -1
@@ -253,8 +253,8 @@ pub fn (u &URL) query(dst &[]byte) int {
     return str.copy_bytes(dst, &u.buf[u.query_at:u.query_at + u.query_n])
 }
 
-// query_param copia o valor de name na consulta, decodificado; -1 se ele
-// não existe (ou se a codificação é inválida).
+// query_param copies the value of name in the query, decoded; -1 if it
+// doesn't exist (or if the encoding is invalid).
 pub fn (u &URL) query_param(name string, dst &[]byte) int {
     if u.query_n < 0 {
         return -1
@@ -262,7 +262,7 @@ pub fn (u &URL) query_param(name string, dst &[]byte) int {
     return query_value(&u.buf[u.query_at:u.query_at + u.query_n], name, dst)
 }
 
-// fragment copia o fragmento (depois do #); -1 se não há.
+// fragment copies the fragment (after the #); -1 if there's none.
 pub fn (u &URL) fragment(dst &[]byte) int {
     if u.frag_n < 0 {
         return -1
@@ -270,8 +270,8 @@ pub fn (u &URL) fragment(dst &[]byte) int {
     return str.copy_bytes(dst, &u.buf[u.frag_at:u.frag_at + u.frag_n])
 }
 
-// target copia o alvo de um pedido HTTP: o caminho (/ se vazio) e a
-// consulta, sem o fragmento.
+// target copies the target of an HTTP request: the path (/ if empty) and the
+// query, without the fragment.
 pub fn (u &URL) target(dst &[]byte) int {
     n := 0
     if u.path_n == 0 {
@@ -286,11 +286,11 @@ pub fn (u &URL) target(dst &[]byte) int {
     return n
 }
 
-// ---------- consultas ----------
+// ---------- queries ----------
 
-// query_value procura name numa consulta já separada (a=1&b=2&flag) e
-// copia o valor, decodificado; 0 para um nome sem valor (flag), -1 se ele
-// não existe ou se a codificação é inválida.
+// query_value looks for name in an already separated query (a=1&b=2&flag) and
+// copies the value, decoded; 0 for a name without a value (flag), -1 if it
+// doesn't exist or if the encoding is invalid.
 pub fn query_value(query &[]byte, name string, dst &[]byte) int {
     at := 0
     for at <= len(query) {
@@ -320,14 +320,14 @@ pub fn query_value(query &[]byte, name string, dst &[]byte) int {
     return -1
 }
 
-// Query monta uma consulta, já codificada, no buffer de 2 KB dentro dela:
-// o texto é &q.buf[:q.n].
+// Query builds a query, already encoded, in the 2 KB buffer inside it:
+// the text is &q.buf[:q.n].
 pub struct Query {
     buf [2048]byte
     n int
 }
 
-// add acrescenta name=value (os dois codificados).
+// add appends name=value (both encoded).
 pub fn (q &Query) add(name string, value &[]byte) {
     var nb [256]byte
     k := str.copy(&nb, name)
@@ -339,21 +339,21 @@ pub fn (q &Query) add(name string, value &[]byte) {
     q.n += escape(&q.buf[q.n:], value)
 }
 
-// add_str acrescenta name=value, com value um texto fixo do programa.
+// add_str appends name=value, with value a fixed text in the program.
 pub fn (q &Query) add_str(name string, value string) {
     var vb [1024]byte
     k := str.copy(&vb, value)
     q.add(name, &vb[:k])
 }
 
-// add_int acrescenta name=value, com value um inteiro.
+// add_int appends name=value, with value an integer.
 pub fn (q &Query) add_int(name string, value int) {
     var vb [24]byte
     k := str.put_int(&vb, value)
     q.add(name, &vb[:k])
 }
 
-// text copia a consulta para dst.
+// text copies the query into dst.
 pub fn (q &Query) text(dst &[]byte) int {
     return str.copy_bytes(dst, &q.buf[:q.n])
 }
@@ -365,10 +365,10 @@ fn (q &Query) put(s string) {
     q.n += str.copy(&q.buf[q.n:], s)
 }
 
-// ---------- codificação ----------
+// ---------- encoding ----------
 
-// unescape decodifica %XX e + (espaço) de src para dst e devolve o tamanho,
-// ou -1 se um % não for seguido de dois dígitos hex.
+// unescape decodes %XX and + (space) from src into dst and returns the length,
+// or -1 if a % isn't followed by two hex digits.
 pub fn unescape(dst &[]byte, src &[]byte) int {
     n := 0
     i := 0
@@ -398,8 +398,8 @@ pub fn unescape(dst &[]byte, src &[]byte) int {
     return n
 }
 
-// escape codifica src para usar num caminho ou numa consulta: letras,
-// dígitos e - _ . ~ ficam, o resto vira %XX.
+// escape encodes src for use in a path or a query: letters,
+// digits and - _ . ~ stay, the rest becomes %XX.
 pub fn escape(dst &[]byte, src &[]byte) int {
     n := 0
     for i := 0; i < len(src); i++ {
@@ -438,7 +438,7 @@ fn hex_value(c byte) int {
     return -1
 }
 
-// eq_fold compara b com s sem diferenciar maiúsculas (ASCII).
+// eq_fold compares b with s case-insensitively (ASCII).
 fn eq_fold(b &[]byte, s string) bool {
     if len(b) != len(s) {
         return false

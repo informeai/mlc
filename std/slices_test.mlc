@@ -28,9 +28,9 @@ fn test_equal() {
 fn test_search() {
     a := [6]int{1, 3, 3, 5, 9, 12}
     x := 3
-    testing.eq_int(slices.search(&a, &x), 1) // a primeira posição do 3
+    testing.eq_int(slices.search(&a, &x), 1) // the first position of 3
     x = 4
-    testing.eq_int(slices.search(&a, &x), 3) // onde entraria
+    testing.eq_int(slices.search(&a, &x), 3) // where it would go
     x = 100
     testing.eq_int(slices.search(&a, &x), 6)
     x = 0
@@ -50,14 +50,14 @@ fn test_search_large() {
         x := i * 2
         testing.eq_int(slices.binary_search(&s, &x), i)
         x++
-        testing.eq_int(slices.binary_search(&s, &x), -1) // os ímpares não estão
+        testing.eq_int(slices.binary_search(&s, &x), -1) // the odd ones aren't there
     }
     free(s)
 }
 
 fn test_min_max() {
     a := [5]float64{2.5, -1.0, 7.0, -1.0, 7.0}
-    testing.eq_int(slices.min_index(&a), 1) // o primeiro, no empate
+    testing.eq_int(slices.min_index(&a), 1) // the first one, on a tie
     testing.eq_int(slices.max_index(&a), 2)
     testing.eq_int(slices.min_index(&a[:0]), -1)
 }
@@ -96,7 +96,7 @@ fn test_owned_elements() {
     w := text("uva")
     testing.eq_int(slices.count(&words, &w), 2)
     sort.sort(&words)
-    n := slices.dedup(&words) // os únicos em words[:n]
+    n := slices.dedup(&words) // the unique ones in words[:n]
     testing.eq_int(n, 3)
     testing.eq_str(&words[0], "abacaxi")
     testing.eq_str(&words[1], "pera")
@@ -104,7 +104,7 @@ fn test_owned_elements() {
     testing.eq_int(slices.binary_search(&words[:n], &w), 2)
     free(w)
     for x in drain(words) {
-        free(x) // as repetições também estão no slice
+        free(x) // the repeats are also in the slice
     }
     free(words)
 }

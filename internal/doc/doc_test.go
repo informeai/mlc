@@ -34,7 +34,7 @@ func TestStdModule(t *testing.T) {
 	out := render(t, nil, false, "http")
 	contains(t, out,
 		`import "std/http"`,
-		"    HTTP/1.1 sobre qualquer Stream",
+		"    HTTP/1.1 over any Stream",
 		"\nConstantes\n", "const TOO_BIG = 1000",
 		"\nTipos\n", "  struct Message\n", "      fn (m &Message) read_body[S ref + Stream](c &S, dst &[]byte) result.Result[int, int]",
 		"\nFunções\n", "  fn respond_str[S ref + Stream](c &S, status int, content_type string, body string) result.Result[int, int]",
@@ -49,22 +49,22 @@ func TestStdModule(t *testing.T) {
 
 func TestSymbols(t *testing.T) {
 	contains(t, render(t, nil, false, "http.Message"),
-		"struct Message {\n    buf [8192]byte", "    Message é um pedido", "\nMétodos\n",
+		"struct Message {\n    buf [8192]byte", "    Message is a received request", "\nMétodos\n",
 		"  fn (m &Message) keep_alive() bool\n      keep_alive")
 	contains(t, render(t, nil, false, "http.Message.read_body"),
-		"fn (m &Message) read_body", "    read_body lê até len(dst) bytes")
+		"fn (m &Message) read_body", "    read_body reads up to len(dst) bytes")
 	contains(t, render(t, nil, false, "http", "message.READ_BODY"), "fn (m &Message) read_body")
-	contains(t, render(t, nil, false, "http.respond"), "fn respond[S ref + Stream]", "    respond manda")
+	contains(t, render(t, nil, false, "http.respond"), "fn respond[S ref + Stream]", "    respond sends")
 	contains(t, render(t, nil, false, "http.Stream"), "interface Stream {", "fn write(self &Self")
 	contains(t, render(t, nil, false, "result.Result"), "enum Result[T owned, E owned] {", "Ok(value T)")
 	contains(t, render(t, nil, false, "io.write"), "fn write(s &[]byte)") // extern fn: sem o extern
 }
 
 func TestBuiltins(t *testing.T) {
-	contains(t, render(t, nil, false, "alloc"), "alloc(T) *T", "    Aloca no heap.")
+	contains(t, render(t, nil, false, "alloc"), "alloc(T) *T", "    Allocates on the heap.")
 	contains(t, render(t, nil, false, "io.printf"), `io.printf("x = {}\n", x)`)
 	out := render(t, nil, false, "thread.spawn")
-	contains(t, out, "thread.spawn(f fn(C) R", "é movido para a thread")
+	contains(t, out, "thread.spawn(f fn(C) R", "is moved to the thread")
 	if strings.Contains(out, "**") {
 		t.Errorf("o negrito do markdown devia sair:\n%s", out)
 	}
@@ -166,7 +166,7 @@ func TestStdDocumented(t *testing.T) {
 func TestIndex(t *testing.T) {
 	var b strings.Builder
 	WriteIndex(&b)
-	contains(t, b.String(), "  http       HTTP/1.1", "  vec        Vetor que cresce.", "mlc doc builtin")
+	contains(t, b.String(), "  http       HTTP/1.1", "  vec        Growing vector.", "mlc doc builtin")
 	for _, l := range strings.Split(b.String(), "\n") {
 		if n := len([]rune(l)); n > 80 {
 			t.Errorf("linha com %d colunas: %s", n, l)

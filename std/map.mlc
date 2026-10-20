@@ -1,38 +1,38 @@
-// Tabela de espalhamento (hash map), escrita em MLC: endereçamento aberto com
-// sondagem linear, capacidade em potência de 2 e crescimento (realloc das três
-// partes) quando passa de 3/4 de ocupação.
+// Hash table (hash map), written in MLC: open addressing with
+// linear probing, power-of-2 capacity and growth (realloc of the three
+// parts) when it passes 3/4 occupancy.
 //
-// As chaves e os valores podem ser donos (K owned + hash.Hash, V owned): put
-// move os dois para dentro, take_or tira um valor (a chave é liberada),
-// remove libera a entrada e free libera tudo. get_or copia, então só existe
-// quando V é copiável. Toda alocação está aqui, à vista: new aloca as partes e
-// grow troca por partes maiores.
+// Keys and values can be owners (K owned + hash.Hash, V owned): put
+// moves both inside, take_or takes a value out (the key is freed),
+// remove frees the entry and free frees everything. get_or copies, so it only exists
+// when V is copyable. Every allocation is here, in plain sight: new allocates the parts and
+// grow swaps them for larger parts.
 //
-//     conta := map.new[[]byte, int](16)
-//     n := conta.get_or(&palavra, 0)
-//     if !conta.set(&palavra, n + 1) {
-//         conta.put(copia, 1)   // a chave nova (alocada por quem chama) é movida
+//     count := map.new[[]byte, int](16)
+//     n := count.get_or(&word, 0)
+//     if !count.set(&word, n + 1) {
+//         count.put(key, 1)     // the new key (allocated by the caller) is moved
 //     }
-//     conta.free()
+//     count.free()
 import "std/hash"
 
-// Map é a tabela: chaves e valores em slices paralelos, e o estado de cada
-// posição.
+// Map is the table: keys and values in parallel slices, and the state of each
+// slot.
 pub struct Map[K owned + hash.Hash, V owned] {
     keys []K
     vals []V
-    state []byte // EMPTY, FULL ou DELETED, por posição
-    count int    // entradas
-    used int     // posições FULL ou DELETED (decidem quando crescer)
+    state []byte // EMPTY, FULL or DELETED, per slot
+    count int    // entries
+    used int     // FULL or DELETED slots (they decide when to grow)
 }
 
 extern fn fail(msg string)
 
 const EMPTY = 0
 const FULL = 1
-const DELETED = 2 // apagada: a sondagem continua por ela
+const DELETED = 2 // deleted: probing continues through it
 
-// new aloca um mapa com espaço para cerca de cap entradas antes de crescer.
+// new allocates a map with room for about cap entries before growing.
 pub fn new[K owned + hash.Hash, V owned](cap int) *Map[K, V] {
     n := 8
     for n * 3 < cap * 4 {
@@ -41,7 +41,7 @@ pub fn new[K owned + hash.Hash, V owned](cap int) *Map[K, V] {
     return alloc(Map[K, V]{keys: alloc([]K, n), vals: alloc([]V, n), state: alloc([]byte, n), count: 0, used: 0})
 }
 
-// find devolve a posição da chave k, ou -1.
+// find returns the slot of key k, or -1.
 fn (m &Map[K, V]) find(k &K) int {
     mask := len(m.state) - 1
     i := int(k.hash() & uint64(mask))
@@ -57,8 +57,8 @@ fn (m &Map[K, V]) find(k &K) int {
     }
 }
 
-// slot devolve a posição de k, se já existe, ou a primeira livre (apagada
-// ou vazia) do caminho de sondagem.
+// slot returns the slot of k, if it already exists, or the first free one (deleted
+// or empty) on the probe path.
 fn (m &Map[K, V]) slot(k &K) int {
     mask := len(m.state) - 1
     i := int(k.hash() & uint64(mask))
@@ -81,8 +81,8 @@ fn (m &Map[K, V]) slot(k &K) int {
     }
 }
 
-// put guarda v na chave k (os dois são movidos para o mapa). Se a chave já
-// existia, a chave antiga fica, e a nova chave e o valor antigo são liberados
+// put stores v at key k (both are moved into the map). If the key already
+// existed, the old key stays, and the new key and the old value are freed
 // (drop).
 pub fn (m &Map[K, V]) put(k K, v V) {
     if (m.used + 1) * 4 > len(m.state) * 3 {
@@ -101,13 +101,13 @@ pub fn (m &Map[K, V]) put(k K, v V) {
     m.state[i] = FULL
     m.count++
     oldk := replace(&m.keys[i], k)
-    drop(oldk) // posição livre: o valor zero
+    drop(oldk) // free slot: the zero value
     oldv := replace(&m.vals[i], v)
     drop(oldv)
 }
 
-// set troca o valor de uma chave que já existe (o antigo é liberado) e
-// devolve true. Se a chave não existe, v é liberado e devolve false.
+// set replaces the value of a key that already exists (the old one is freed) and
+// returns true. If the key doesn't exist, v is freed and it returns false.
 pub fn (m &Map[K, V]) set(k &K, v V) bool {
     i := m.find(k)
     if i < 0 {
@@ -119,16 +119,16 @@ pub fn (m &Map[K, V]) set(k &K, v V) bool {
     return true
 }
 
-// has diz se a chave k está na tabela.
+// has says whether key k is in the table.
 pub fn (m &Map[K, V]) has(k &K) bool {
     return m.find(k) >= 0
 }
 
-// get empresta o valor de k, sem tirá-lo do mapa (panic se a chave não
-// existe: confira antes com has, ou use index). Enquanto o empréstimo é
-// usado, o mapa fica congelado.
+// get borrows the value of k, without taking it out of the map (panics if the key doesn't
+// exist: check first with has, or use index). While the borrow is
+// used, the map stays frozen.
 //
-//     n := conta.get(&palavra)
+//     n := count.get(&word)
 //     *n += 1
 pub fn (m &Map[K, V]) get(k &K) &V {
     i := m.find(k)
@@ -138,12 +138,12 @@ pub fn (m &Map[K, V]) get(k &K) &V {
     return &m.vals[i]
 }
 
-// index devolve a posição de k (para value_ref e key_ref), ou -1.
+// index returns the slot of k (for value_ref and key_ref), or -1.
 pub fn (m &Map[K, V]) index(k &K) int {
     return m.find(k)
 }
 
-// value_ref empresta o valor na posição i (de index ou next).
+// value_ref borrows the value at slot i (from index or next).
 pub fn (m &Map[K, V]) value_ref(i int) &V {
     if i < 0 || i >= len(m.state) || m.state[i] != FULL {
         fail("map.value_ref: posição vazia")
@@ -151,7 +151,7 @@ pub fn (m &Map[K, V]) value_ref(i int) &V {
     return &m.vals[i]
 }
 
-// key_ref empresta a chave na posição i (de index ou next).
+// key_ref borrows the key at slot i (from index or next).
 pub fn (m &Map[K, V]) key_ref(i int) &K {
     if i < 0 || i >= len(m.state) || m.state[i] != FULL {
         fail("map.key_ref: posição vazia")
@@ -159,8 +159,8 @@ pub fn (m &Map[K, V]) key_ref(i int) &K {
     return &m.keys[i]
 }
 
-// get_or devolve uma cópia do valor de k, ou def se não existe (só para V
-// copiável).
+// get_or returns a copy of k's value, or def if it doesn't exist (only for copyable
+// V).
 pub fn (m &Map[K, V any]) get_or(k &K, def V) V {
     i := m.find(k)
     if i < 0 {
@@ -169,8 +169,8 @@ pub fn (m &Map[K, V any]) get_or(k &K, def V) V {
     return m.vals[i]
 }
 
-// take_or tira a entrada de k e devolve a posse do valor (a chave é
-// liberada). Se k não existe, devolve def.
+// take_or takes out k's entry and returns ownership of the value (the key is
+// freed). If k doesn't exist, returns def.
 pub fn (m &Map[K, V]) take_or(k &K, def V) V {
     i := m.find(k)
     if i < 0 {
@@ -184,8 +184,8 @@ pub fn (m &Map[K, V]) take_or(k &K, def V) V {
     return take(&m.vals[i])
 }
 
-// remove apaga a entrada de k (chave e valor são liberados) e diz se ela
-// existia.
+// remove deletes k's entry (key and value are freed) and says whether it
+// existed.
 pub fn (m &Map[K, V]) remove(k &K) bool {
     i := m.find(k)
     if i < 0 {
@@ -200,13 +200,13 @@ pub fn (m &Map[K, V]) remove(k &K) bool {
     return true
 }
 
-// len devolve quantas entradas há na tabela.
+// len returns how many entries there are in the table.
 pub fn (m &Map[K, V]) len() int {
     return m.count
 }
 
-// each chama f com cada entrada (em ordem qualquer). f recebe a chave e o
-// valor emprestados.
+// each calls f with each entry (in any order). f receives the key and the
+// value borrowed.
 pub fn (m &Map[K, V]) each(f fn(&K, &V)) {
     for i := 0; i < len(m.state); i++ {
         if m.state[i] == FULL {
@@ -215,15 +215,15 @@ pub fn (m &Map[K, V]) each(f fn(&K, &V)) {
     }
 }
 
-// each_with chama f com cada entrada (em ordem qualquer), passando junto o
-// contexto ctx: é onde f guarda o que acumula, já que funções não capturam
-// variáveis.
+// each_with calls f with each entry (in any order), passing along the
+// context ctx: it's where f keeps what it accumulates, since functions don't capture
+// variables.
 //
-//     struct Soma { total int }
-//     fn soma(s &Soma, k &[]byte, v &int) { s.total += *v }
+//     struct Sum { total int }
+//     fn add(s &Sum, k &[]byte, v &int) { s.total += *v }
 //
-//     var s Soma
-//     m.each_with(&s, soma)
+//     var s Sum
+//     m.each_with(&s, add)
 pub fn (m &Map[K, V]) each_with[C ref](ctx &C, f fn(&C, &K, &V)) {
     for i := 0; i < len(m.state); i++ {
         if m.state[i] == FULL {
@@ -232,8 +232,8 @@ pub fn (m &Map[K, V]) each_with[C ref](ctx &C, f fn(&C, &K, &V)) {
     }
 }
 
-// next devolve a próxima posição ocupada a partir de i, ou -1. Com key_at e
-// value_at, percorre o mapa quando as chaves e os valores são copiáveis:
+// next returns the next occupied slot starting at i, or -1. With key_at and
+// value_at, it walks the map when keys and values are copyable:
 //
 //     for i := m.next(0); i >= 0; i = m.next(i + 1) { ... m.key_at(i) ... }
 pub fn (m &Map[K, V]) next(i int) int {
@@ -245,17 +245,17 @@ pub fn (m &Map[K, V]) next(i int) int {
     return -1
 }
 
-// key_at devolve uma cópia da chave na posição i (só para K copiável).
+// key_at returns a copy of the key at slot i (only for copyable K).
 pub fn (m &Map[K any, V]) key_at(i int) K {
     return m.keys[i]
 }
 
-// value_at devolve uma cópia do valor na posição i (só para V copiável).
+// value_at returns a copy of the value at slot i (only for copyable V).
 pub fn (m &Map[K, V any]) value_at(i int) V {
     return m.vals[i]
 }
 
-// clear libera todas as entradas e deixa o mapa vazio (mesma capacidade).
+// clear frees every entry and leaves the map empty (same capacity).
 pub fn (m &Map[K, V]) clear() {
     for i := 0; i < len(m.state); i++ {
         if m.state[i] == FULL {
@@ -270,7 +270,7 @@ pub fn (m &Map[K, V]) clear() {
     m.used = 0
 }
 
-// free libera cada entrada e o mapa.
+// free frees each entry and the map.
 pub fn (m *Map[K, V]) free() {
     for k in drain(m.keys) {
         drop(k)
@@ -284,12 +284,12 @@ pub fn (m *Map[K, V]) free() {
     free(m)
 }
 
-// grow troca as partes por outras com o dobro do tamanho (ou do mesmo, se a
-// maioria das posições ocupadas estiver só apagada) e reinsere as entradas.
+// grow swaps the parts for others of double the size (or the same, if
+// most occupied slots are only deleted) and reinserts the entries.
 fn (m &Map[K, V]) grow() {
     n := len(m.state) * 2
     if m.count * 4 < len(m.state) {
-        n = len(m.state) // muitas apagadas: só reorganiza
+        n = len(m.state) // many deleted: only reorganizes
     }
     oldk := m.keys
     oldv := m.vals
@@ -307,7 +307,7 @@ fn (m &Map[K, V]) grow() {
         }
     }
     for k in drain(oldk) {
-        drop(k) // o que sobrou são valores zero
+        drop(k) // what's left are zero values
     }
     for v in drain(oldv) {
         drop(v)
@@ -317,7 +317,7 @@ fn (m &Map[K, V]) grow() {
     free(olds)
 }
 
-// insert_new põe uma chave que não está no mapa, numa tabela com espaço.
+// insert_new puts a key that isn't in the map, in a table with room.
 fn (m &Map[K, V]) insert_new(k K, v V) {
     mask := len(m.state) - 1
     i := int(k.hash() & uint64(mask))

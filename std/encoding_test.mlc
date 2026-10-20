@@ -55,7 +55,7 @@ fn test_base64_url() {
     var back [3]byte
     testing.eq_int(encoding.unbase64(&back, &t[:n]), 3)
     testing.eq_bytes(&back, &b)
-    n = encoding.base64_url(&t, &b[:1]) // sem enchimento
+    n = encoding.base64_url(&t, &b[:1]) // without padding
     testing.eq_str(&t[:n], "-w")
     testing.eq_int(encoding.unbase64(&back, &t[:n]), 1)
 }
@@ -66,7 +66,7 @@ fn test_unbase64_invalid() {
     n := str.copy(&t, "Zm9v!")
     testing.eq_int(encoding.unbase64(&out, &t[:n]), -1)
     n = str.copy(&t, "Z")
-    testing.eq_int(encoding.unbase64(&out, &t[:n]), -1) // um caractere sozinho não forma byte
+    testing.eq_int(encoding.unbase64(&out, &t[:n]), -1) // a lone character doesn't make a byte
     n = str.copy(&t, "Zg===")
     testing.eq_int(encoding.unbase64(&out, &t[:n]), -1)
 }
@@ -86,7 +86,7 @@ fn test_hex() {
     testing.eq_int(encoding.unhex(&back, &up[:k]), 4)
     testing.eq_bytes(&back, &b)
     k = str.copy(&up, "abc")
-    testing.eq_int(encoding.unhex(&back, &up[:k]), -1) // tamanho ímpar
+    testing.eq_int(encoding.unhex(&back, &up[:k]), -1) // odd length
     k = str.copy(&up, "zz")
     testing.eq_int(encoding.unhex(&back, &up[:k]), -1)
 }

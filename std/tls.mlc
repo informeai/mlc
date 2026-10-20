@@ -1,33 +1,33 @@
-// TLS (HTTPS): conexões cifradas, de cliente e de servidor, com o OpenSSL do
-// sistema. A biblioteca é carregada na primeira chamada (não precisa de
-// flags de ligação); available diz se ela existe. No macOS, instale com
-// brew install openssl@3; no Linux, ela costuma vir com o sistema.
+// TLS (HTTPS): encrypted connections, client and server, with the system's
+// OpenSSL. The library is loaded on the first call (no link flags
+// needed); available says whether it exists. On macOS, install it with
+// brew install openssl@3; on Linux, it usually comes with the system.
 //
-// Cliente: connect abre o TCP e faz o aperto de mão, conferindo o
-// certificado do servidor (a cadeia até uma autoridade do sistema, a
-// validade e o nome do host). Um certificado que não vale é recusado:
-// não há como desligar a conferência. Para uma autoridade própria (um
-// servidor interno, os testes), aponte MLC_TLS_CA para o arquivo dela.
+// Client: connect opens the TCP connection and does the handshake, checking the
+// server's certificate (the chain up to a system authority, the
+// validity and the host name). A certificate that isn't valid is refused:
+// there's no way to turn the check off. For your own authority (an
+// internal server, the tests), point MLC_TLS_CA to its file.
 //
 //     err := 0
-//     c := tls.connect_str("api.exemplo.com", 443, &err)
+//     c := tls.connect_str("api.example.com", 443, &err)
 //     if c == nil {
 //         var msg [256]byte
-//         n := tls.last_error(&msg)       // por que falhou, em detalhe
+//         n := tls.last_error(&msg)       // why it failed, in detail
 //         return
 //     }
-//     c.write(&pedido)
-//     c.read(&resposta)
+//     c.write(&request)
+//     c.read(&response)
 //     c.close()
 //
-// Servidor: new_server carrega o certificado (a cadeia, em PEM) e a chave;
-// accept faz o aperto de mão numa conexão aceita por um net.Listener:
+// Server: new_server loads the certificate (the chain, in PEM) and the key;
+// accept does the handshake on a connection accepted by a net.Listener:
 //
-//     srv := tls.new_server_str("cert.pem", "chave.pem", &err)
+//     srv := tls.new_server_str("cert.pem", "key.pem", &err)
 //     ...
 //     c := l.accept(&err)                 // net.Conn
 //     if c != nil {
-//         t := srv.accept(c, &err)        // a net.Conn passa a ser do TLS
+//         t := srv.accept(c, &err)        // the net.Conn now belongs to TLS
 //         if t != nil {
 //             http.serve_conn(&t, &router, &app)
 //             t.close()
@@ -35,37 +35,37 @@
 //     }
 //     srv.close()
 //
-// Conn implementa io.Reader e http.Stream (pelo impl no módulo http):
-// bufio, http.Message, Builder e Router funcionam sobre ela como sobre uma
-// net.Conn. TLS 1.2 no mínimo.
+// Conn implements io.Reader and http.Stream (through the impl in the http module):
+// bufio, http.Message, Builder and Router work over it as over a
+// net.Conn. TLS 1.2 at least.
 import "std/io"
 import "std/net"
 import "std/result"
 import "std/str"
 
-// códigos de erro
-pub const HANDSHAKE = 5001    // o aperto de mão falhou
-pub const BAD_CERT = 5002     // o certificado do servidor não vale
-pub const UNAVAILABLE = 5003  // a libssl não foi encontrada
-pub const BROKEN = 5004       // erro na conexão TLS
-pub const SERVER_FILES = 5005 // o certificado ou a chave do servidor não carregaram
+// error codes
+pub const HANDSHAKE = 5001    // the handshake failed
+pub const BAD_CERT = 5002     // the server's certificate isn't valid
+pub const UNAVAILABLE = 5003  // libssl wasn't found
+pub const BROKEN = 5004       // error in the TLS connection
+pub const SERVER_FILES = 5005 // the server's certificate or key didn't load
 
-// Conn é uma conexão TLS.
+// Conn is a TLS connection.
 pub extern "C" type Conn
 
-// Server é a configuração de um servidor TLS (o certificado e a chave).
+// Server is a TLS server's configuration (the certificate and the key).
 pub extern "C" type Server
 
-// available diz se a biblioteca de TLS foi achada.
+// available says whether the TLS library was found.
 pub extern fn available() bool
 
-// connect abre uma conexão TLS com host:port e confere o certificado. Se
-// não conseguir, devolve nil e põe o código em err (BAD_CERT, HANDSHAKE,
-// UNAVAILABLE, ou os de net.connect); last_error explica.
+// connect opens a TLS connection to host:port and checks the certificate. If
+// it can't, returns nil and puts the code in err (BAD_CERT, HANDSHAKE,
+// UNAVAILABLE, or those of net.connect); last_error explains.
 pub extern fn connect(host &[]byte, port int, err &int) ?*Conn
 
-// last_error copia a explicação do último erro de TLS desta thread (o
-// motivo de um certificado recusado, por exemplo).
+// last_error copies the explanation of this thread's last TLS error (the
+// reason a certificate was refused, for example).
 pub extern fn last_error(dst &[]byte) int
 
 extern fn server_raw(cert &[]byte, key &[]byte, err &int) ?*Server
@@ -76,45 +76,45 @@ extern fn write_raw(c &Conn, data &[]byte) int
 extern fn timeout_raw(c &Conn, ms int) int
 extern fn close_raw(c *Conn)
 
-// connect_str é connect com o host fixo no programa.
+// connect_str is connect with the host fixed in the program.
 pub fn connect_str(host string, port int, err &int) ?*Conn {
     var b [256]byte
     n := str.copy(&b, host)
     return connect(&b[:n], port, err)
 }
 
-// read lê o que chegar, até len(dst) bytes; Ok(0) quer dizer que o outro
-// lado fechou.
+// read reads what arrives, up to len(dst) bytes; Ok(0) means the other
+// side closed.
 pub fn (c &Conn) read(dst &[]byte) result.Result[int, int] {
     return wrap(read_raw(c, dst))
 }
 
-// write manda todos os bytes de data.
+// write sends all the bytes of data.
 pub fn (c &Conn) write(data &[]byte) result.Result[int, int] {
     return wrap(write_raw(c, data))
 }
 
-// set_timeout limita, em milissegundos, quanto read e write esperam (0: sem
-// limite). Passado o tempo, o erro é net.TIMEOUT.
+// set_timeout limits, in milliseconds, how long read and write wait (0: no
+// limit). After that, the error is net.TIMEOUT.
 pub fn (c &Conn) set_timeout(ms int) result.Result[int, int] {
     return wrap(timeout_raw(c, ms))
 }
 
-// close avisa o outro lado, fecha a conexão e libera o handle.
+// close notifies the other side, closes the connection and frees the handle.
 pub fn (c *Conn) close() {
     close_raw(c)
 }
 
 impl io.Reader for Conn
 
-// new_server carrega o certificado (a cadeia, em PEM) e a chave privada.
-// Se não conseguir, devolve nil e põe o código em err (SERVER_FILES,
+// new_server loads the certificate (the chain, in PEM) and the private key.
+// If it can't, returns nil and puts the code in err (SERVER_FILES,
 // UNAVAILABLE).
 pub fn new_server(cert &[]byte, key &[]byte, err &int) ?*Server {
     return server_raw(cert, key, err)
 }
 
-// new_server_str é new_server com os caminhos fixos no programa.
+// new_server_str is new_server with the paths fixed in the program.
 pub fn new_server_str(cert string, key string, err &int) ?*Server {
     var c [1024]byte
     var k [1024]byte
@@ -123,14 +123,14 @@ pub fn new_server_str(cert string, key string, err &int) ?*Server {
     return server_raw(&c[:cn], &k[:kn], err)
 }
 
-// accept faz o aperto de mão do servidor na conexão c, aceita por um
-// net.Listener. A conexão passa a ser do TLS: se o aperto de mão falhar,
-// ela é fechada aqui, e accept devolve nil com o código em err.
+// accept does the server handshake on connection c, accepted by a
+// net.Listener. The connection now belongs to TLS: if the handshake fails,
+// it's closed here, and accept returns nil with the code in err.
 pub fn (s &Server) accept(c *net.Conn, err &int) ?*Conn {
     return accept_raw(c, s, err)
 }
 
-// close libera a configuração do servidor.
+// close frees the server's configuration.
 pub fn (s *Server) close() {
     server_close(s)
 }

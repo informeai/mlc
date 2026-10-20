@@ -1,56 +1,56 @@
-// Sinais do sistema: Ctrl+C (INT), o pedido de parada do Docker, do
-// systemd e do Kubernetes (TERM) e os outros que um serviço costuma tratar.
-// Sem listen, o sinal faz o que sempre fez (INT e TERM encerram o programa
-// na hora). Com listen, o sinal só é anotado: o programa confere
-// (received) ou espera (wait) e decide o que fazer, no ponto que escolher,
-// fechando conexões e gravando o que falta.
+// System signals: Ctrl+C (INT), the stop request from Docker,
+// systemd and Kubernetes (TERM) and the others a service usually handles.
+// Without listen, a signal does what it always did (INT and TERM end the program
+// on the spot). With listen, the signal is only recorded: the program checks
+// (received) or waits (wait) and decides what to do, at the point it chooses,
+// closing connections and saving what's left.
 //
-//     signal.listen_shutdown()                  // INT e TERM
+//     signal.listen_shutdown()                  // INT and TERM
 //     for !signal.received(signal.INT) && !signal.received(signal.TERM) {
-//         ... trabalho em pedaços (accept com timeout, por exemplo) ...
+//         ... work in pieces (accept with a timeout, for example) ...
 //     }
-//     ... encerra com calma ...
+//     ... shut down calmly ...
 //
-//     // ou, com o trabalho em outras threads:
-//     sig := signal.wait(-1)                    // dorme até chegar um sinal
+//     // or, with the work in other threads:
+//     sig := signal.wait(-1)                    // sleeps until a signal arrives
 //
-// O tratador de verdade (no C) só marca o sinal e acorda quem está em
-// wait: nada de alocar, travar ou escrever dentro dele. A marca vale para
-// todas as threads e fica até clear.
+// The real handler (in C) only marks the signal and wakes whoever is in
+// wait: no allocating, locking or writing inside it. The mark applies to
+// every thread and stays until clear.
 
-// códigos dos sinais (iguais em todos os sistemas; o runtime traduz)
-pub const HUP = 1   // o terminal fechou; costuma pedir para recarregar a configuração
+// signal codes (the same on every system; the runtime translates)
+pub const HUP = 1   // the terminal closed; usually asks to reload the configuration
 pub const INT = 2   // Ctrl+C
 pub const QUIT = 3  // Ctrl+\
-pub const USR1 = 10 // livres para o programa
+pub const USR1 = 10 // free for the program
 pub const USR2 = 12
-pub const TERM = 15 // pedido de parada (kill, docker stop, systemctl stop)
+pub const TERM = 15 // stop request (kill, docker stop, systemctl stop)
 
-// listen passa a anotar o sinal em vez de fazer o que ele faz normalmente.
+// listen starts recording the signal instead of doing what it normally does.
 pub extern fn listen(sig int)
 
-// listen_shutdown anota INT e TERM: os dois pedidos de parada.
+// listen_shutdown records INT and TERM: the two stop requests.
 pub fn listen_shutdown() {
     listen(INT)
     listen(TERM)
 }
 
-// ignore faz o programa não ver o sinal (nem anotar).
+// ignore makes the program not see the signal (nor record it).
 pub extern fn ignore(sig int)
 
-// restore volta ao comportamento normal do sinal.
+// restore goes back to the signal's normal behavior.
 pub extern fn restore(sig int)
 
-// received diz se o sinal chegou (desde o começo, ou desde o último clear).
+// received says whether the signal arrived (since the start, or since the last clear).
 pub extern fn received(sig int) bool
 
-// clear esquece que o sinal chegou.
+// clear forgets that the signal arrived.
 pub extern fn clear(sig int)
 
-// wait espera até chegar um dos sinais anotados com listen (ou até passar
-// ms milissegundos; -1: sem limite) e devolve o código dele, ou 0 se o tempo
-// acabou. Se algum já tiver chegado (e não tiver sido limpo), volta na hora.
+// wait waits until one of the signals recorded with listen arrives (or until
+// ms milliseconds pass; -1: no limit) and returns its code, or 0 if time
+// ran out. If one already arrived (and wasn't cleared), it returns at once.
 pub extern fn wait(ms int) int
 
-// raise manda o sinal para o próprio programa (útil em testes).
+// raise sends the signal to the program itself (useful in tests).
 pub extern fn raise(sig int)

@@ -13,7 +13,7 @@ fn text(s string) []byte {
 fn test_put_get() {
     m := map.new[int, int](4)
     for i := 0; i < 1000; i++ {
-        m.put(i, i * 2) // cresce várias vezes
+        m.put(i, i * 2) // grows several times
     }
     testing.eq_int(m.len(), 1000)
     k := 777
@@ -66,7 +66,7 @@ fn test_remove_and_reinsert() {
         k = i
         testing.eq_bool(m.has(&k), i % 2 == 1)
     }
-    m.put(0, 7) // reaproveita uma posição apagada
+    m.put(0, 7) // reuses a deleted slot
     testing.eq_int(m.len(), 51)
     k = 0
     testing.eq_int(m.get_or(&k, 0), 7)
@@ -99,7 +99,7 @@ fn test_owned_keys_and_values() {
     m := map.new[[]byte, []byte](2)
     m.put(text("um"), text("one"))
     m.put(text("dois"), text("two"))
-    m.put(text("um"), text("uno")) // substitui: a chave e o valor antigos são liberados
+    m.put(text("um"), text("uno")) // replaces: the old key and value are freed
     testing.eq_int(m.len(), 2)
     k := text("um")
     testing.eq_str(m.get(&k), "uno")
@@ -118,7 +118,7 @@ fn test_owned_keys_and_values() {
 
 fn sum(k &int, v &int) {
     if *k < 0 || *v < 0 {
-        // nunca acontece: só confere que each passa a chave e o valor
+        // never happens: only checks that each passes the key and the value
         testing.fail("negativo")
     }
 }
@@ -165,7 +165,7 @@ fn test_struct_keys() {
     testing.eq_int(m.len(), 400)
     k := Point{x: 7, y: 13}
     testing.eq_int(m.get_or(&k, -1), 713)
-    m.put(Point{x: 7, y: 13}, 0) // a mesma chave: substitui
+    m.put(Point{x: 7, y: 13}, 0) // the same key: replaces
     testing.eq_int(m.len(), 400)
     testing.eq_int(m.get_or(&k, -1), 0)
     k = Point{x: 20, y: 0}
@@ -215,7 +215,7 @@ fn test_each_with() {
     m.free()
 }
 
-// um contexto com donos: as chaves vão para um vec
+// a context with owners: the keys go into a vec
 fn collect_keys(out &vec.Vec[int], k &int, v &int) {
     if *v > 50 {
         out.push(*k)
@@ -229,7 +229,7 @@ fn test_each_with_owner_context() {
     }
     keys := vec.new[int](2)
     m.each_with(&keys, collect_keys)
-    testing.eq_int(keys.len(), 3) // 8, 9 e 10 têm quadrado maior que 50
+    testing.eq_int(keys.len(), 3) // 8, 9 and 10 have a square larger than 50
     keys.free()
     m.free()
 }

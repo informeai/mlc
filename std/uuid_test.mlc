@@ -28,7 +28,7 @@ fn test_v7_time_order() {
     a.text(&ta)
     b.text(&tb)
     testing.check(str.eq_bytes(&ta[:13], &ta[:13]), "prefixo")
-    // o texto de um v7 mais novo vem depois na ordem
+    // the text of a newer v7 sorts later
     testing.check(ta[11] < tb[11] || ta[12] < tb[12], "ordem pelo tempo")
     testing.eq_str(&ta[:13], "018bcfe5-6800")
 }

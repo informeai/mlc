@@ -28,12 +28,12 @@ fn test_count_and_valid() {
     testing.check(!utf8.valid(&b[:n - 1]), "cortado no meio de um caractere")
     b[0] = 0xFF
     testing.check(!utf8.valid(&b[:n]), "byte inválido")
-    testing.eq_int(utf8.count(&b[:n]), 4) // o inválido conta como um
+    testing.eq_int(utf8.count(&b[:n]), 4) // the invalid one counts as one
 }
 
 fn test_invalid_forms() {
     var b [4]byte
-    b[0] = 0xC0 // forma longa demais de '/'
+    b[0] = 0xC0 // overlong form of '/'
     b[1] = 0xAF
     r := utf8.decode(&b[:2], 0)
     testing.eq_int(r.code, utf8.INVALID)
@@ -53,6 +53,6 @@ fn test_encode_round_trip() {
         testing.eq_int(r.code, c)
         testing.eq_int(r.size, n)
     }
-    testing.eq_int(utf8.encode(&b, 0xD800), 3) // inválido vira U+FFFD
+    testing.eq_int(utf8.encode(&b, 0xD800), 3) // invalid becomes U+FFFD
     testing.eq_int(utf8.decode(&b[:3], 0).code, utf8.INVALID)
 }

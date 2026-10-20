@@ -1,51 +1,51 @@
-// Arena: memória de rascunho para uma tarefa (um pedido HTTP, um arquivo,
-// um lote). Um alloc no começo; os pedaços saem dela em sequência, sem um
-// alloc cada; reset devolve tudo de uma vez para a próxima tarefa; free no
-// fim. O custo de alocação fica constante, e esquecer de liberar um pedaço
-// não existe: o reset leva todos.
+// Arena: scratch memory for a task (an HTTP request, a file,
+// a batch). One alloc at the start; the pieces come out of it in sequence, without an
+// alloc each; reset gives everything back at once for the next task; free at the
+// end. The cost of allocation stays constant, and forgetting to free a piece
+// doesn't exist: reset takes them all.
 //
-//     a := arena.new(64 * 1024)                 // o único alloc
-//     for ... cada pedido ... {
-//         nome := a.copy(&campo)                // pedaços da arena
+//     a := arena.new(64 * 1024)                 // the only alloc
+//     for ... each request ... {
+//         name := a.copy(&field)                // pieces of the arena
 //         var tmp [64]byte
 //         k := str.format(&tmp, "{}-{}", id, 7)
-//         chave := a.copy(&tmp[:k])
+//         key := a.copy(&tmp[:k])
 //         ...
-//         a.reset()                             // tudo de volta; o buffer fica
+//         a.reset()                             // everything back; the buffer stays
 //     }
 //     a.free()
 //
-// Um pedaço é uma Span: a posição, o tamanho e a geração da arena quando
-// ele foi feito. Não é um empréstimo, então a arena pode crescer (realloc)
-// sem invalidar nada. Cada reset muda a geração: usar uma Span de antes do
-// reset dá panic (é o uso depois de liberar, pego na execução, em vez de
-// ler os dados de outra tarefa).
+// A piece is a Span: the position, the size and the arena's generation when
+// it was made. It isn't a borrow, so the arena can grow (realloc)
+// without invalidating anything. Each reset changes the generation: using a Span from before the
+// reset panics (it's a use after free, caught at run time, instead of
+// reading another task's data).
 //
-// Para ler ou escrever direto, confira a Span e use o buffer:
+// To read or write directly, check the Span and use the buffer:
 //
 //     a.check(s)
 //     io.printf("{:s}\n", &a.buf[s.at:s.at + s.n])
 //
-// A arena cresce dobrando (realloc, à vista em grow) quando falta espaço;
-// com limit > 0, passar do limite dá panic em vez de crescer.
+// The arena grows by doubling (realloc, visible in grow) when room runs out;
+// with limit > 0, going past the limit panics instead of growing.
 
-// Arena é a memória de rascunho.
+// Arena is the scratch memory.
 pub struct Arena {
     buf []byte
     used int
-    peak int  // o máximo de used desde o new (para dimensionar)
-    gen int   // muda a cada reset
-    limit int // 0: cresce à vontade; > 0: o tamanho máximo do buffer
+    peak int  // the most used since new (for sizing)
+    gen int   // changes on each reset
+    limit int // 0: grows freely; > 0: the buffer's maximum size
 }
 
-// Span é um pedaço da arena.
+// Span is a piece of the arena.
 pub struct Span {
     at int
     n int
     gen int
 }
 
-// new aloca uma arena com cap bytes (ela cresce se precisar).
+// new allocates an arena with cap bytes (it grows if needed).
 pub fn new(cap int) *Arena {
     if cap < 1 {
         cap = 1
@@ -53,33 +53,33 @@ pub fn new(cap int) *Arena {
     return alloc(Arena{buf: alloc([]byte, cap), used: 0, peak: 0, gen: 1, limit: 0})
 }
 
-// new_fixed aloca uma arena de cap bytes que nunca cresce: passar disso dá
-// panic (para quem quer um teto rígido de memória).
+// new_fixed allocates an arena of cap bytes that never grows: going past it
+// panics (for those who want a hard memory ceiling).
 pub fn new_fixed(cap int) *Arena {
     a := new(cap)
     a.limit = cap
     return a
 }
 
-// free libera a arena.
+// free frees the arena.
 pub fn (a *Arena) free() {
     free(a.buf)
     free(a)
 }
 
-// alloc separa n bytes zerados e devolve o pedaço.
+// alloc sets aside n zeroed bytes and returns the piece.
 pub fn (a &Arena) alloc(n int) Span {
     if n < 0 {
         fail("arena.alloc: tamanho negativo")
     }
     a.reserve(n)
     for i := 0; i < n; i++ {
-        a.buf[a.used + i] = 0 // depois de um reset, o buffer tem dados velhos
+        a.buf[a.used + i] = 0 // after a reset, the buffer has old data
     }
     return a.commit(n)
 }
 
-// copy copia src para a arena e devolve o pedaço.
+// copy copies src into the arena and returns the piece.
 pub fn (a &Arena) copy(src &[]byte) Span {
     a.reserve(len(src))
     for i := 0; i < len(src); i++ {
@@ -88,7 +88,7 @@ pub fn (a &Arena) copy(src &[]byte) Span {
     return a.commit(len(src))
 }
 
-// copy_str copia um texto fixo do programa para a arena.
+// copy_str copies a fixed text from the program into the arena.
 pub fn (a &Arena) copy_str(s string) Span {
     a.reserve(len(s))
     for i := 0; i < len(s); i++ {
@@ -97,8 +97,8 @@ pub fn (a &Arena) copy_str(s string) Span {
     return a.commit(len(s))
 }
 
-// reserve garante n bytes livres depois de used, crescendo se preciso.
-// Junto com commit, serve para escrever direto na arena:
+// reserve guarantees n free bytes after used, growing if needed.
+// Together with commit, it serves to write directly into the arena:
 //
 //     a.reserve(64)
 //     k := str.format(&a.buf[a.used:a.used + 64], "id={}", id)
@@ -109,7 +109,7 @@ pub fn (a &Arena) reserve(n int) {
     }
 }
 
-// commit transforma os n bytes depois de used (já escritos) num pedaço.
+// commit turns the n bytes after used (already written) into a piece.
 pub fn (a &Arena) commit(n int) Span {
     if n < 0 || a.used + n > len(a.buf) {
         fail("arena.commit: o pedaço passa do que foi reservado")
@@ -122,7 +122,7 @@ pub fn (a &Arena) commit(n int) Span {
     return s
 }
 
-// grow dobra o buffer até caber need bytes (realloc).
+// grow doubles the buffer until need bytes fit (realloc).
 pub fn (a &Arena) grow(need int) {
     size := len(a.buf) * 2
     if size < need {
@@ -137,15 +137,15 @@ pub fn (a &Arena) grow(need int) {
     a.buf = realloc(a.buf, size)
 }
 
-// reset devolve tudo: os pedaços de antes deixam de valer (usar um dá
-// panic), e o buffer fica para a próxima tarefa.
+// reset gives everything back: the earlier pieces stop being valid (using one
+// panics), and the buffer stays for the next task.
 pub fn (a &Arena) reset() {
     a.used = 0
     a.gen++
 }
 
-// check dá panic se o pedaço é de antes de um reset (ou de outra arena,
-// maior que ela). Use antes de ler o buffer direto.
+// check panics if the piece is from before a reset (or from another arena,
+// larger than this one). Use it before reading the buffer directly.
 pub fn (a &Arena) check(s Span) {
     if s.gen != a.gen {
         fail("arena: pedaço usado depois de um reset (ele não vale mais)")
@@ -155,13 +155,13 @@ pub fn (a &Arena) check(s Span) {
     }
 }
 
-// len devolve o tamanho do pedaço.
+// len returns the piece's size.
 pub fn (a &Arena) len(s Span) int {
     a.check(s)
     return s.n
 }
 
-// text copia o pedaço para dst e devolve o tamanho.
+// text copies the piece into dst and returns the size.
 pub fn (a &Arena) text(s Span, dst &[]byte) int {
     a.check(s)
     if s.n > len(dst) {
@@ -173,7 +173,7 @@ pub fn (a &Arena) text(s Span, dst &[]byte) int {
     return s.n
 }
 
-// eq diz se o pedaço é igual ao texto s.
+// eq says whether the piece is equal to the text s.
 pub fn (a &Arena) eq(sp Span, s string) bool {
     a.check(sp)
     if sp.n != len(s) {
@@ -187,7 +187,7 @@ pub fn (a &Arena) eq(sp Span, s string) bool {
     return true
 }
 
-// get lê o byte i do pedaço.
+// get reads byte i of the piece.
 pub fn (a &Arena) get(s Span, i int) byte {
     a.check(s)
     if i < 0 || i >= s.n {
@@ -196,7 +196,7 @@ pub fn (a &Arena) get(s Span, i int) byte {
     return a.buf[s.at + i]
 }
 
-// set escreve o byte i do pedaço.
+// set writes byte i of the piece.
 pub fn (a &Arena) set(s Span, i int, b byte) {
     a.check(s)
     if i < 0 || i >= s.n {
@@ -205,18 +205,18 @@ pub fn (a &Arena) set(s Span, i int, b byte) {
     a.buf[s.at + i] = b
 }
 
-// in_use devolve quantos bytes estão em uso desde o último reset.
+// in_use returns how many bytes are in use since the last reset.
 pub fn (a &Arena) in_use() int {
     return a.used
 }
 
-// capacity devolve o tamanho do buffer.
+// capacity returns the buffer's size.
 pub fn (a &Arena) capacity() int {
     return len(a.buf)
 }
 
-// high_water devolve o máximo em uso desde o new: o tamanho certo para o
-// new de uma próxima vez (e não crescer).
+// high_water returns the most in use since new: the right size for the
+// next new (so it doesn't grow).
 pub fn (a &Arena) high_water() int {
     return a.peak
 }

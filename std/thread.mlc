@@ -1,30 +1,30 @@
-// Threads do sistema operacional, com a posse garantindo que duas threads
-// nunca mexem na mesma memória.
+// Operating-system threads, with ownership guaranteeing that two threads
+// never touch the same memory.
 //
-//     fn soma(parte []int) int {
+//     fn sum(part []int) int {
 //         t := 0
-//         for x in parte { t += x }
-//         free(parte)
+//         for x in part { t += x }
+//         free(part)
 //         return t
 //     }
 //
-//     t := thread.spawn(soma, metade, thread.STACK_64KB)   // metade é movida
-//     r := thread.join(t)                                  // o resultado volta
+//     t := thread.spawn(sum, half, thread.STACK_64KB)      // half is moved
+//     r := thread.join(t)                                  // the result comes back
 //
-// thread.spawn(f, ctx, stack) e thread.join(t) são embutidas no compilador:
+// thread.spawn(f, ctx, stack) and thread.join(t) are built into the compiler:
 //
-// - f é uma função fn(C) ou fn(C) R (sem closure). Ela recebe o contexto
-//   por posse e não pode receber empréstimos: tudo que a thread usa entra
-//   no contexto (junte várias coisas numa struct).
-// - ctx é movido para a thread; depois do spawn, quem chamou não o tem mais.
-// - stack é o tamanho da pilha da thread, em bytes (pelo menos 16 KB): a
-//   memória da pilha é escolhida por quem cria a thread, como todo o resto.
-// - spawn devolve um *thread.Thread[R] (*thread.Thread se f não devolve
-//   nada). O handle não aceita free: o verificador cobra que ele vá para
-//   thread.join, que espera a thread, devolve o resultado (a posse volta) e
-//   libera o registro da thread.
+// - f is a function fn(C) or fn(C) R (no closure). It receives the context
+//   by ownership and can't receive borrows: everything the thread uses goes
+//   in the context (gather several things in a struct).
+// - ctx is moved to the thread; after the spawn, the caller no longer has it.
+// - stack is the size of the thread's stack, in bytes (at least 16 KB): the
+//   stack memory is chosen by whoever creates the thread, like everything else.
+// - spawn returns a *thread.Thread[R] (*thread.Thread if f returns
+//   nothing). The handle doesn't accept free: the checker requires it to go to
+//   thread.join, which waits for the thread, returns the result (ownership
+//   comes back) and frees the thread's record.
 //
-// Um panic em qualquer thread encerra o programa inteiro.
+// A panic in any thread ends the whole program.
 
 pub const STACK_16KB = 16384
 pub const STACK_64KB = 65536
@@ -32,5 +32,5 @@ pub const STACK_256KB = 262144
 pub const STACK_1MB = 1048576
 pub const STACK_8MB = 8388608
 
-// cpu_count diz quantos processadores o sistema tem disponíveis.
+// cpu_count says how many processors the system has available.
 pub extern fn cpu_count() int

@@ -1,31 +1,31 @@
-// Números aleatórios. Dois tipos, para usos diferentes:
+// Random numbers. Two kinds, for different uses:
 //
-//   - Rand (splitmix64): rápido e previsível. A mesma semente dá a mesma
-//     sequência, o que serve para simulações, jogos e testes. Não serve
-//     para segurança: quem vê alguns números adivinha os próximos.
+//   - Rand (splitmix64): fast and predictable. The same seed gives the same
+//     sequence, which suits simulations, games and tests. It doesn't suit
+//     security: whoever sees a few numbers can guess the next ones.
 //
 //         r := rand.new(uint64(time.now_ms()))
-//         dado := r.range(1, 7)
+//         die := r.range(1, 7)
 //
-//   - secure: os bytes vêm do sistema operacional (a fonte criptográfica do
-//     kernel). É o que se usa para tokens, chaves, senhas temporárias e
-//     identificadores que não podem ser adivinhados (std/uuid).
+//   - secure: the bytes come from the operating system (the kernel's
+//     cryptographic source). It's what you use for tokens, keys, temporary
+//     passwords and identifiers that must not be guessable (std/uuid).
 //
 //         var token [32]byte
-//         rand.secure(&token)            // depois: encoding.hex ou base64_url
+//         rand.secure(&token)            // then: encoding.hex or base64_url
 
-// Rand é um gerador: um estado de 64 bits, sem alocação.
+// Rand is a generator: 64 bits of state, without allocation.
 pub struct Rand {
     state uint64
 }
 
-// new cria um gerador a partir da semente (a mesma semente dá a mesma sequência).
+// new creates a generator from the seed (the same seed gives the same sequence).
 pub fn new(seed uint64) Rand {
     return Rand{state: seed}
 }
 
-// next devolve um uint64 qualquer (splitmix64: as contas dão a volta de
-// propósito, com +% e *%).
+// next returns any uint64 (splitmix64: the arithmetic wraps around on
+// purpose, with +% and *%).
 pub fn (r &Rand) next() uint64 {
     r.state +%= 0x9E37_79B9_7F4A_7C15
     z := r.state
@@ -34,29 +34,29 @@ pub fn (r &Rand) next() uint64 {
     return z ^ (z >> 31)
 }
 
-// int_n devolve um inteiro em [0, n). n precisa ser maior que zero.
+// int_n returns an integer in [0, n). n must be greater than zero.
 pub fn (r &Rand) int_n(n int) int {
     return int(r.next() % uint64(n))
 }
 
-// range devolve um inteiro em [lo, hi).
+// range returns an integer in [lo, hi).
 pub fn (r &Rand) range(lo int, hi int) int {
     return lo + r.int_n(hi - lo)
 }
 
-// float devolve um float64 em [0, 1).
+// float returns a float64 in [0, 1).
 pub fn (r &Rand) float() float64 {
     return float64(r.next() >> 11) / 9007199254740992.0 // 53 bits / 2^53
 }
 
-// ---------- aleatório seguro ----------
+// ---------- secure randomness ----------
 
-// secure preenche dst com bytes aleatórios do sistema operacional, próprios
-// para criptografia. Se o sistema não entregar (não acontece nos sistemas
-// suportados), é panic: não existe alternativa segura.
+// secure fills dst with random bytes from the operating system, fit for
+// cryptography. If the system doesn't deliver (it doesn't happen on the
+// supported systems), it panics: there's no safe alternative.
 pub extern fn secure(dst &[]byte)
 
-// secure_u64 devolve um uint64 aleatório seguro.
+// secure_u64 returns a secure random uint64.
 pub fn secure_u64() uint64 {
     var b [8]byte
     secure(&b)
@@ -67,9 +67,9 @@ pub fn secure_u64() uint64 {
     return v
 }
 
-// secure_int_n devolve um inteiro seguro em [0, n), sem viés: os valores do
-// fim do intervalo de uint64 que fariam alguns restos saírem mais vezes são
-// sorteados de novo. n precisa ser maior que zero.
+// secure_int_n returns a secure integer in [0, n), without bias: the values
+// at the end of the uint64 range that would make some remainders come out more
+// often are drawn again. n must be greater than zero.
 pub fn secure_int_n(n int) int {
     if n <= 0 {
         fail("rand.secure_int_n: n precisa ser maior que zero")
@@ -84,8 +84,8 @@ pub fn secure_int_n(n int) int {
     }
 }
 
-// seeded cria um Rand com semente segura: rápido como o Rand, mas com uma
-// sequência diferente a cada execução.
+// seeded creates a Rand with a secure seed: fast like Rand, but with a
+// different sequence on each run.
 pub fn seeded() Rand {
     return new(secure_u64())
 }

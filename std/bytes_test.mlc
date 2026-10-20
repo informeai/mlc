@@ -3,7 +3,7 @@ import "std/str"
 import "std/testing"
 
 fn test_push_and_grow() {
-    b := bytes.new(0) // cresce a partir de zero
+    b := bytes.new(0) // grows from zero
     b.push_str("total: ")
     b.push_int(-42)
     b.push_byte('!')

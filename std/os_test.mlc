@@ -3,7 +3,7 @@ import "std/str"
 import "std/testing"
 
 fn test_args() {
-    testing.eq_int(os.arg_count(), 1) // só o nome do programa
+    testing.eq_int(os.arg_count(), 1) // only the program's name
     buf := alloc([]byte, 4096)
     match os.arg(0, &buf) {
         Ok(n) => testing.check(n > 0, "arg(0) é o caminho do programa")
@@ -56,7 +56,7 @@ fn test_cwd_chdir() {
     }
     var out [4096]byte
     match os.cwd(&out) {
-        Ok(k) => testing.check(k >= 4, "cwd tem o caminho") // no macOS, /tmp é /private/tmp
+        Ok(k) => testing.check(k >= 4, "cwd tem o caminho") // on macOS, /tmp is /private/tmp
         Err(code) => testing.eq_int(code, 0)
     }
 }

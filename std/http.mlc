@@ -1,45 +1,45 @@
-// HTTP/1.1 sobre qualquer Stream (net.Conn, ou um tipo seu nos testes):
-// o servidor lê pedidos e escreve respostas, o cliente escreve pedidos e lê
-// respostas. Nada aloca: a mensagem recebida (Message) guarda um buffer
-// fixo de 8 KB dentro dela, onde ficam o cabeçalho e o começo do corpo, e
-// a que sai (Builder) monta o cabeçalho num buffer de 4 KB. O corpo vai e
-// vem por buffers de quem chama.
+// HTTP/1.1 over any Stream (net.Conn, tls.Conn, or a type of yours in tests):
+// the server reads requests and writes responses, the client writes requests and reads
+// responses. Nothing allocates: the received message (Message) keeps a fixed
+// 8 KB buffer inside itself, holding the header and the start of the body, and
+// the outgoing one (Builder) assembles the header in a 4 KB buffer. The body comes
+// and goes through the caller's buffers.
 //
-// Servidor (uma conexão; o laço do accept e as threads ficam com quem
-// chama, veja tests/run/http_servico.mlc):
+// Server (one connection; the accept loop and the threads are up to the
+// caller, see tests/run/http_servico.mlc):
 //
 //     var m http.Message
 //     for {
 //         match m.read_request(&c) {
 //             Ok(_) => {}
-//             Err(_) => break            // io.EOF: o cliente fechou
+//             Err(_) => break            // io.EOF: the client closed
 //         }
 //         if m.method_is("GET") && m.path_is("/health") {
 //             http.respond_str(&c, 200, "text/plain", "ok\n")
 //         } else {
-//             http.respond_str(&c, 404, "text/plain", "não encontrado\n")
+//             http.respond_str(&c, 404, "text/plain", "not found\n")
 //         }
 //         if !m.keep_alive() {
 //             break
 //         }
 //     }
 //
-// Cliente:
+// Client:
 //
 //     var b http.Builder
-//     b.request("GET", "/api/itens")
-//     b.header("Host", "exemplo.com")
+//     b.request("GET", "/api/items")
+//     b.header("Host", "example.com")
 //     b.send_str(&c, "")
 //     var m http.Message
-//     m.read_response(&c)                // m.status() é o código
+//     m.read_response(&c)                // m.status() is the code
 //     match m.read_all(&c, &body) {
 //         Ok(n) => ... &body[:n] ...
 //         Err(code) => ...
 //     }
 //
-// Sem TLS: para HTTPS, ponha o serviço atrás de um proxy (nginx, Caddy, o
-// balanceador da nuvem). Os textos (método, caminho, cabeçalhos) são
-// copiados para buffers de quem chama, ou comparados sem cópia (method_is,
+// HTTPS comes from std/tls (tls.Conn, dial_tls), or from a proxy in front (nginx,
+// Caddy, the cloud load balancer). Texts (method, path, headers) are
+// copied into the caller's buffers, or compared without copying (method_is,
 // path_is, header_is).
 import "std/io"
 import "std/net"
@@ -48,14 +48,14 @@ import "std/str"
 import "std/tls"
 import "std/url"
 
-// códigos de erro (os da fonte, como net.TIMEOUT, chegam como vieram)
-pub const BAD_MESSAGE = 3001  // a mensagem não é HTTP/1.x válido
-pub const HEAD_TOO_BIG = 3002 // o cabeçalho não cabe nos 8 KB (ou tem mais de 64 campos)
-pub const TOO_BIG = 1000      // read_all: o corpo não cabe em dst
+// error codes (the source's, like net.TIMEOUT, arrive as they came)
+pub const BAD_MESSAGE = 3001  // the message isn't valid HTTP/1.x
+pub const HEAD_TOO_BIG = 3002 // the header doesn't fit in the 8 KB (or has more than 64 fields)
+pub const TOO_BIG = 1000      // read_all: the body doesn't fit in dst
 
 pub const MAX_HEADERS = 64
 
-// Stream é por onde a mensagem passa: uma conexão.
+// Stream is what the message goes through: a connection.
 pub interface Stream {
     fn read(self &Self, dst &[]byte) result.Result[int, int]
     fn write(self &Self, data &[]byte) result.Result[int, int]
@@ -65,7 +65,7 @@ impl Stream for net.Conn
 
 impl Stream for tls.Conn
 
-// ---------- mensagem recebida ----------
+// ---------- received message ----------
 
 struct Field {
     name_at int
@@ -74,26 +74,26 @@ struct Field {
     value_n int
 }
 
-// como o corpo termina
+// how the body ends
 const BODY_NONE = 0
 const BODY_LENGTH = 1
 const BODY_CHUNKED = 2
 const BODY_UNTIL_CLOSE = 3
 
-// no corpo chunked: o que vem a seguir
-const CHUNK_SIZE = 0 // a linha com o tamanho do pedaço
-const CHUNK_DATA = 1 // os bytes do pedaço (left)
-const CHUNK_END = 2  // o \r\n depois dos bytes
+// in a chunked body: what comes next
+const CHUNK_SIZE = 0 // the line with the chunk's size
+const CHUNK_DATA = 1 // the chunk's bytes (left)
+const CHUNK_END = 2  // the \r\n after the bytes
 
-// Message é um pedido (no servidor) ou uma resposta (no cliente) recebida.
-// O valor zero está pronto para usar; numa conexão com keep-alive, a mesma
-// Message lê um pedido depois do outro (o corpo que não foi lido é
-// descartado).
+// Message is a received request (on the server) or response (on the client).
+// The zero value is ready to use; on a keep-alive connection, the same
+// Message reads one request after another (the body that wasn't read is
+// discarded).
 pub struct Message {
     buf [8192]byte
-    n int    // bytes válidos em buf
-    head int // fim do cabeçalho (depois da linha vazia); 0: nada lido
-    pos int  // próximo byte do corpo em buf
+    n int    // valid bytes in buf
+    head int // end of the header (after the blank line); 0: nothing read
+    pos int  // next body byte in buf
     request bool
     method_at int
     method_n int
@@ -104,27 +104,27 @@ pub struct Message {
     fields [64]Field
     nfields int
     mode int
-    left int // LENGTH: bytes que faltam; CHUNKED: bytes que faltam no pedaço
+    left int // LENGTH: bytes left; CHUNKED: bytes left in the chunk
     chunk int
     done bool
     keep bool
-    length int // Content-Length, ou -1
+    length int // Content-Length, or -1
 }
 
-// read_request lê o cabeçalho de um pedido. Err(io.EOF) quando a conexão
-// fechou antes de começar um pedido (o fim normal de um keep-alive).
+// read_request reads a request's header. Err(io.EOF) when the connection
+// closed before a request started (the normal end of a keep-alive).
 pub fn (m &Message) read_request[S ref + Stream](c &S) result.Result[int, int] {
     return m.read_head(c, true)
 }
 
-// read_response lê o cabeçalho de uma resposta.
+// read_response reads a response's header.
 pub fn (m &Message) read_response[S ref + Stream](c &S) result.Result[int, int] {
     return m.read_head(c, false)
 }
 
 fn (m &Message) read_head[S ref + Stream](c &S, request bool) result.Result[int, int] {
     if m.head > 0 {
-        // a mensagem anterior: descarta o resto do corpo e o que foi usado
+        // the previous message: discards the rest of the body and what was used
         if !m.done {
             match m.skip_body(c) {
                 Ok(_) => {}
@@ -178,15 +178,15 @@ fn (m &Message) read_head[S ref + Stream](c &S, request bool) result.Result[int,
     }
     code := m.parse()
     if code != 0 {
-        m.head = 0 // não reaproveita uma conexão com lixo
+        m.head = 0 // doesn't reuse a connection with garbage
         m.n = 0
         return result.Result.Err(code)
     }
     return result.Result.Ok(m.head)
 }
 
-// find_blank_line procura \r\n\r\n em b[from:n] e devolve a posição depois
-// dele, ou 0.
+// find_blank_line looks for \r\n\r\n in b[from:n] and returns the position after
+// it, or 0.
 fn find_blank_line(b &[]byte, from int, n int) int {
     for i := from; i + 3 < n; i++ {
         if b[i] == '\r' && b[i + 1] == '\n' && b[i + 2] == '\r' && b[i + 3] == '\n' {
@@ -196,11 +196,11 @@ fn find_blank_line(b &[]byte, from int, n int) int {
     return 0
 }
 
-// parse lê a primeira linha e os campos de buf[:head]; devolve 0 ou o erro.
+// parse reads the first line and the fields of buf[:head]; returns 0 or the error.
 fn (m &Message) parse() int {
     i := line_end(&m.buf, 0, m.head)
     if m.request {
-        // GET /caminho?x=1 HTTP/1.1
+        // GET /path?x=1 HTTP/1.1
         sp1 := index_byte(&m.buf, ' ', 0, i)
         if sp1 <= 0 {
             return BAD_MESSAGE
@@ -231,7 +231,7 @@ fn (m &Message) parse() int {
             m.code = m.code * 10 + int(d) - int('0')
         }
     }
-    // os campos: nome: valor
+    // the fields: name: value
     at := i + 2
     for at < m.head - 2 {
         e := line_end(&m.buf, at, m.head)
@@ -257,7 +257,7 @@ fn (m &Message) parse() int {
     return m.body_kind()
 }
 
-// version confere HTTP/1.x em buf[a:b].
+// version checks HTTP/1.x in buf[a:b].
 fn (m &Message) version(a int, b int) bool {
     if b - a != 8 || !prefix_at(&m.buf, a, "HTTP/1.") {
         return false
@@ -270,7 +270,7 @@ fn (m &Message) version(a int, b int) bool {
     return true
 }
 
-// body_kind decide como o corpo termina e se a conexão continua.
+// body_kind decides how the body ends and whether the connection continues.
 fn (m &Message) body_kind() int {
     m.keep = m.minor == 1
     i := m.field("Connection")
@@ -285,7 +285,7 @@ fn (m &Message) body_kind() int {
     cl := m.field("Content-Length")
     if te >= 0 {
         if !m.value_eq(te, "chunked") {
-            return BAD_MESSAGE // só chunked é aceito
+            return BAD_MESSAGE // only chunked is accepted
         }
         m.mode = BODY_CHUNKED
         return 0
@@ -307,40 +307,40 @@ fn (m &Message) body_kind() int {
         m.done = true
         return 0
     }
-    m.mode = BODY_UNTIL_CLOSE // resposta sem tamanho: até a conexão fechar
+    m.mode = BODY_UNTIL_CLOSE // response without a size: until the connection closes
     m.keep = false
     return 0
 }
 
-// ---------- o que veio ----------
+// ---------- what came ----------
 
-// method_is compara o método (GET, POST...).
+// method_is compares the method (GET, POST...).
 pub fn (m &Message) method_is(s string) bool {
     return str.eq(&m.buf[m.method_at:m.method_at + m.method_n], s)
 }
 
-// method copia o método para dst.
+// method copies the method into dst.
 pub fn (m &Message) method(dst &[]byte) int {
     return str.copy_bytes(dst, &m.buf[m.method_at:m.method_at + m.method_n])
 }
 
-// target copia o alvo do pedido como veio (caminho e consulta: /a/b?x=1).
+// target copies the request's target as it came (path and query: /a/b?x=1).
 pub fn (m &Message) target(dst &[]byte) int {
     return str.copy_bytes(dst, &m.buf[m.target_at:m.target_at + m.target_n])
 }
 
-// path copia o caminho, sem a consulta e sem decodificar (/a%20b fica
-// assim; use http.unescape).
+// path copies the path, without the query and not decoded (/a%20b stays
+// that way; use http.unescape).
 pub fn (m &Message) path(dst &[]byte) int {
     return str.copy_bytes(dst, &m.buf[m.target_at:m.path_end()])
 }
 
-// path_is compara o caminho (sem a consulta).
+// path_is compares the path (without the query).
 pub fn (m &Message) path_is(s string) bool {
     return str.eq(&m.buf[m.target_at:m.path_end()], s)
 }
 
-// path_has_prefix diz se o caminho começa com s (para rotas como /api/).
+// path_has_prefix says whether the path starts with s (for routes like /api/).
 pub fn (m &Message) path_has_prefix(s string) bool {
     e := m.path_end()
     return e - m.target_at >= len(s) && prefix_at(&m.buf, m.target_at, s)
@@ -354,7 +354,7 @@ fn (m &Message) path_end() int {
     return q
 }
 
-// query copia a consulta (o que vem depois do ?), sem decodificar.
+// query copies the query (what comes after the ?), not decoded.
 pub fn (m &Message) query(dst &[]byte) int {
     e := m.path_end()
     end := m.target_at + m.target_n
@@ -364,9 +364,9 @@ pub fn (m &Message) query(dst &[]byte) int {
     return str.copy_bytes(dst, &m.buf[e + 1:end])
 }
 
-// query_param copia o valor do parâmetro name da consulta, decodificado
-// (%41 e +), e devolve o tamanho; -1 se ele não existe (ou se a codificação
-// é inválida).
+// query_param copies the value of the query parameter name, decoded
+// (%41 and +), and returns the length; -1 if it doesn't exist (or if the encoding
+// is invalid).
 pub fn (m &Message) query_param(name string, dst &[]byte) int {
     e := m.path_end()
     end := m.target_at + m.target_n
@@ -376,23 +376,23 @@ pub fn (m &Message) query_param(name string, dst &[]byte) int {
     return url.query_value(&m.buf[e + 1:end], name, dst)
 }
 
-// status é o código da resposta (200, 404...).
+// status is the response's code (200, 404...).
 pub fn (m &Message) status() int {
     return m.code
 }
 
-// keep_alive diz se a conexão pode ser usada para outra mensagem.
+// keep_alive says whether the connection can be used for another message.
 pub fn (m &Message) keep_alive() bool {
     return m.keep
 }
 
-// content_length é o Content-Length, ou -1 se não veio.
+// content_length is the Content-Length, or -1 if absent.
 pub fn (m &Message) content_length() int {
     return m.length
 }
 
-// header copia o valor do campo name (sem diferenciar maiúsculas no nome)
-// e devolve o tamanho; -1 se ele não veio.
+// header copies the value of the field name (case-insensitive name)
+// and returns the length; -1 if absent.
 pub fn (m &Message) header(name string, dst &[]byte) int {
     i := m.field(name)
     if i < 0 {
@@ -402,30 +402,30 @@ pub fn (m &Message) header(name string, dst &[]byte) int {
     return str.copy_bytes(dst, &m.buf[f.value_at:f.value_at + f.value_n])
 }
 
-// has_header diz se o campo veio.
+// has_header says whether the field came.
 pub fn (m &Message) has_header(name string) bool {
     return m.field(name) >= 0
 }
 
-// header_is compara o valor do campo, sem diferenciar maiúsculas
+// header_is compares the field's value, case-insensitively
 // (Connection: Close, application/JSON).
 pub fn (m &Message) header_is(name string, value string) bool {
     i := m.field(name)
     return i >= 0 && m.value_eq(i, value)
 }
 
-// header_count, header_name e header_value percorrem todos os campos.
+// header_count, header_name and header_value walk all the fields.
 pub fn (m &Message) header_count() int {
     return m.nfields
 }
 
-// header_name copia o nome do campo i (de 0 a header_count() - 1) para dst.
+// header_name copies the name of field i (from 0 to header_count() - 1) into dst.
 pub fn (m &Message) header_name(i int, dst &[]byte) int {
     f := m.fields[i]
     return str.copy_bytes(dst, &m.buf[f.name_at:f.name_at + f.name_n])
 }
 
-// header_value copia o valor do campo i (de 0 a header_count() - 1) para dst.
+// header_value copies the value of field i (from 0 to header_count() - 1) into dst.
 pub fn (m &Message) header_value(i int, dst &[]byte) int {
     f := m.fields[i]
     return str.copy_bytes(dst, &m.buf[f.value_at:f.value_at + f.value_n])
@@ -446,10 +446,10 @@ fn (m &Message) value_eq(i int, s string) bool {
     return f.value_n == len(s) && fold_eq(&m.buf, f.value_at, s)
 }
 
-// ---------- o corpo ----------
+// ---------- the body ----------
 
-// read_body lê até len(dst) bytes do corpo (já sem o chunked) e devolve
-// quantos leu; Ok(0) é o fim do corpo. Pode ler menos que len(dst).
+// read_body reads up to len(dst) bytes of the body (already de-chunked) and returns
+// how many it read; Ok(0) is the end of the body. May read less than len(dst).
 pub fn (m &Message) read_body[S ref + Stream](c &S, dst &[]byte) result.Result[int, int] {
     if m.done || len(dst) == 0 {
         return result.Result.Ok(0)
@@ -481,7 +481,7 @@ pub fn (m &Message) read_body[S ref + Stream](c &S, dst &[]byte) result.Result[i
             }
         }
     }
-    // chunked: tamanho em hex, \r\n, os bytes, \r\n; um pedaço 0 termina
+    // chunked: size in hex, \r\n, the bytes, \r\n; a 0 chunk ends it
     for {
         if m.chunk == CHUNK_DATA {
             k := m.left
@@ -505,7 +505,7 @@ pub fn (m &Message) read_body[S ref + Stream](c &S, dst &[]byte) result.Result[i
             Ok(e) => {
                 if m.chunk == CHUNK_END {
                     if e != m.pos {
-                        return result.Result.Err(BAD_MESSAGE) // esperava só \r\n
+                        return result.Result.Err(BAD_MESSAGE) // expected only \r\n
                     }
                     m.pos = e + 2
                     m.chunk = CHUNK_SIZE
@@ -516,7 +516,7 @@ pub fn (m &Message) read_body[S ref + Stream](c &S, dst &[]byte) result.Result[i
                         return result.Result.Err(BAD_MESSAGE)
                     }
                     if size == 0 {
-                        // fim: pula os campos finais (trailers) até a linha vazia
+                        // end: skips the final fields (trailers) up to the blank line
                         for {
                             match m.line(c) {
                                 Ok(t) => {
@@ -544,8 +544,8 @@ pub fn (m &Message) read_body[S ref + Stream](c &S, dst &[]byte) result.Result[i
     }
 }
 
-// read_all lê o corpo inteiro para dst e devolve o tamanho; Err(TOO_BIG)
-// se não couber (o que coube fica em dst).
+// read_all reads the whole body into dst and returns the length; Err(TOO_BIG)
+// if it doesn't fit (what fit stays in dst).
 pub fn (m &Message) read_all[S ref + Stream](c &S, dst &[]byte) result.Result[int, int] {
     n := 0
     for {
@@ -577,7 +577,7 @@ pub fn (m &Message) read_all[S ref + Stream](c &S, dst &[]byte) result.Result[in
     }
 }
 
-// skip_body lê e descarta o resto do corpo.
+// skip_body reads and discards the rest of the body.
 pub fn (m &Message) skip_body[S ref + Stream](c &S) result.Result[int, int] {
     var trash [1024]byte
     total := 0
@@ -596,9 +596,9 @@ pub fn (m &Message) skip_body[S ref + Stream](c &S) result.Result[int, int] {
     }
 }
 
-// take entrega até len(dst) bytes: primeiro os que estão em buf, senão uma
-// leitura da conexão direto para dst. Ok(0) só com eof_ok (corpo até
-// fechar); senão a conexão fechar no meio é BAD_MESSAGE.
+// take delivers up to len(dst) bytes: first the ones in buf, otherwise a
+// read from the connection straight into dst. Ok(0) only with eof_ok (body until
+// close); otherwise the connection closing in the middle is BAD_MESSAGE.
 fn (m &Message) take[S ref + Stream](c &S, dst &[]byte, eof_ok bool) result.Result[int, int] {
     if m.pos < m.n {
         k := m.n - m.pos
@@ -624,9 +624,9 @@ fn (m &Message) take[S ref + Stream](c &S, dst &[]byte, eof_ok bool) result.Resu
     }
 }
 
-// line garante uma linha inteira (até \r\n) em buf a partir de pos e
-// devolve a posição do \r. Para ler mais, move o que sobrou para logo
-// depois do cabeçalho.
+// line guarantees a whole line (up to \r\n) in buf starting at pos and
+// returns the position of the \r. To read more, moves the leftovers to right
+// after the header.
 fn (m &Message) line[S ref + Stream](c &S) result.Result[int, int] {
     for {
         for i := m.pos; i + 1 < m.n; i++ {
@@ -657,20 +657,20 @@ fn (m &Message) line[S ref + Stream](c &S) result.Result[int, int] {
     }
 }
 
-// ---------- mensagem que sai ----------
+// ---------- outgoing message ----------
 
-// Builder monta o cabeçalho de uma resposta (response) ou de um pedido
-// (request) e o manda com o corpo (send). O Content-Length é posto por
-// send. O valor zero está pronto para usar, e o mesmo Builder serve para
-// várias mensagens (response e request recomeçam).
+// Builder assembles the header of a response (response) or a request
+// (request) and sends it with the body (send). The Content-Length is set by
+// send. The zero value is ready to use, and the same Builder serves
+// several messages (response and request start over).
 pub struct Builder {
     buf [4096]byte
     n int
     has_length bool
-    no_body bool // 1xx, 204, 304: sem corpo nem Content-Length
+    no_body bool // 1xx, 204, 304: no body and no Content-Length
 }
 
-// response começa uma resposta: HTTP/1.1 200 OK.
+// response starts a response: HTTP/1.1 200 OK.
 pub fn (b &Builder) response(status int) {
     b.n = str.copy(&b.buf, "HTTP/1.1 ")
     b.n += str.put_int(&b.buf[b.n:], status)
@@ -681,7 +681,7 @@ pub fn (b &Builder) response(status int) {
     b.no_body = status < 200 || status == 204 || status == 304
 }
 
-// request começa um pedido: GET /caminho HTTP/1.1. Lembre do campo Host.
+// request starts a request: GET /path HTTP/1.1. Remember the Host field.
 pub fn (b &Builder) request(method string, target string) {
     b.n = str.copy(&b.buf, method)
     b.n += str.copy(&b.buf[b.n:], " ")
@@ -691,7 +691,7 @@ pub fn (b &Builder) request(method string, target string) {
     b.no_body = false
 }
 
-// request_bytes é request com o alvo montado em tempo de execução.
+// request_bytes is request with the target built at run time.
 pub fn (b &Builder) request_bytes(method string, target &[]byte) {
     b.n = str.copy(&b.buf, method)
     b.n += str.copy(&b.buf[b.n:], " ")
@@ -701,22 +701,22 @@ pub fn (b &Builder) request_bytes(method string, target &[]byte) {
     b.no_body = false
 }
 
-// header acrescenta um campo. Um Content-Length escrito aqui substitui o
-// automático (para mandar o corpo depois, com start).
+// header appends a field. A Content-Length written here replaces the
+// automatic one (to send the body afterwards, with start).
 pub fn (b &Builder) header(name string, value string) {
     b.name(name)
     b.n += str.copy(&b.buf[b.n:], value)
     b.n += str.copy(&b.buf[b.n:], "\r\n")
 }
 
-// header_bytes acrescenta um campo com o valor montado em tempo de execução.
+// header_bytes appends a field with the value built at run time.
 pub fn (b &Builder) header_bytes(name string, value &[]byte) {
     b.name(name)
     b.n += str.copy_bytes(&b.buf[b.n:], value)
     b.n += str.copy(&b.buf[b.n:], "\r\n")
 }
 
-// header_int acrescenta um campo com valor inteiro.
+// header_int appends a field with an integer value.
 pub fn (b &Builder) header_int(name string, value int) {
     b.name(name)
     b.n += str.put_int(&b.buf[b.n:], value)
@@ -734,8 +734,8 @@ fn (b &Builder) name(name string) {
     b.n += str.copy(&b.buf[b.n:], ": ")
 }
 
-// send termina o cabeçalho (com o Content-Length do corpo) e manda o
-// cabeçalho e o corpo. Um corpo pequeno vai junto, numa escrita só.
+// send ends the header (with the body's Content-Length) and sends the
+// header and the body. A small body goes along, in a single write.
 pub fn (b &Builder) send[S ref + Stream](c &S, body &[]byte) result.Result[int, int] {
     if !b.has_length && !b.no_body {
         b.header_int("Content-Length", len(body))
@@ -754,7 +754,7 @@ pub fn (b &Builder) send[S ref + Stream](c &S, body &[]byte) result.Result[int, 
     return write_all(c, body)
 }
 
-// send_str é send com o corpo escrito no programa.
+// send_str is send with the body written in the program.
 pub fn (b &Builder) send_str[S ref + Stream](c &S, body string) result.Result[int, int] {
     if !b.has_length && !b.no_body {
         b.header_int("Content-Length", len(body))
@@ -774,8 +774,8 @@ pub fn (b &Builder) send_str[S ref + Stream](c &S, body string) result.Result[in
     return write_all(c, &b.buf[:b.n])
 }
 
-// start manda só o cabeçalho, com o Content-Length length: o corpo vai
-// depois, em pedaços, com c.write (para arquivos grandes).
+// start sends only the header, with the Content-Length length: the body goes
+// afterwards, in pieces, with c.write (for large files).
 pub fn (b &Builder) start[S ref + Stream](c &S, length int) result.Result[int, int] {
     if !b.has_length && !b.no_body {
         b.header_int("Content-Length", length)
@@ -795,7 +795,7 @@ fn write_all[S ref + Stream](c &S, data &[]byte) result.Result[int, int] {
     return c.write(data)
 }
 
-// respond manda uma resposta completa: o código, o Content-Type e o corpo.
+// respond sends a complete response: the code, the Content-Type and the body.
 pub fn respond[S ref + Stream](c &S, status int, content_type string, body &[]byte) result.Result[int, int] {
     var b Builder
     b.response(status)
@@ -803,7 +803,7 @@ pub fn respond[S ref + Stream](c &S, status int, content_type string, body &[]by
     return b.send(c, body)
 }
 
-// respond_str é respond com o corpo escrito no programa.
+// respond_str is respond with the body written in the program.
 pub fn respond_str[S ref + Stream](c &S, status int, content_type string, body string) result.Result[int, int] {
     var b Builder
     b.response(status)
@@ -811,7 +811,7 @@ pub fn respond_str[S ref + Stream](c &S, status int, content_type string, body s
     return b.send_str(c, body)
 }
 
-// status_text é a frase de um código (200: OK, 404: Not Found).
+// status_text is a code's phrase (200: OK, 404: Not Found).
 pub fn status_text(code int) string {
     match code {
         100 => return "Continue"
@@ -850,28 +850,28 @@ pub fn status_text(code int) string {
     }
 }
 
-// ---------- codificação de URL ----------
+// ---------- URL encoding ----------
 
-// unescape decodifica %XX e + (espaço) de src para dst e devolve o tamanho,
-// ou -1 se um % não for seguido de dois dígitos hex (o mesmo que
+// unescape decodes %XX and + (space) from src into dst and returns the length,
+// or -1 if a % isn't followed by two hex digits (the same as
 // url.unescape).
 pub fn unescape(dst &[]byte, src &[]byte) int {
     return url.unescape(dst, src)
 }
 
-// escape codifica src para usar num caminho ou numa consulta: letras,
-// dígitos e - _ . ~ ficam, o resto vira %XX (o mesmo que url.escape).
+// escape encodes src for use in a path or a query: letters,
+// digits and - _ . ~ stay, the rest becomes %XX (the same as url.escape).
 pub fn escape(dst &[]byte, src &[]byte) int {
     return url.escape(dst, src)
 }
 
-// ---------- cliente ----------
+// ---------- client ----------
 
-// UNSUPPORTED_SCHEME: a URL não é http:// nem https://.
+// UNSUPPORTED_SCHEME: the URL is neither http:// nor https://.
 pub const UNSUPPORTED_SCHEME = 3003
 
-// dial abre uma conexão com o host e a porta de u (só http://; para
-// https://, dial_tls). Se não conseguir, devolve nil e põe o código em err.
+// dial opens a connection to u's host and port (http:// only; for
+// https://, dial_tls). If it can't, returns nil and puts the code in err.
 pub fn dial(u &url.URL, err &int) ?*net.Conn {
     if !u.scheme_is("http") {
         *err = UNSUPPORTED_SCHEME
@@ -882,9 +882,9 @@ pub fn dial(u &url.URL, err &int) ?*net.Conn {
     return net.connect(&h[:n], u.port(), err)
 }
 
-// dial_tls abre uma conexão TLS com o host e a porta de u (https://),
-// conferindo o certificado. Se não conseguir, devolve nil e põe o código
-// em err (tls.BAD_CERT...; tls.last_error explica).
+// dial_tls opens a TLS connection to u's host and port (https://),
+// checking the certificate. If it can't, returns nil and puts the code
+// in err (tls.BAD_CERT...; tls.last_error explains).
 pub fn dial_tls(u &url.URL, err &int) ?*tls.Conn {
     if !u.scheme_is("https") {
         *err = UNSUPPORTED_SCHEME
@@ -895,11 +895,11 @@ pub fn dial_tls(u &url.URL, err &int) ?*tls.Conn {
     return tls.connect(&h[:n], u.port(), err)
 }
 
-// request_to começa um pedido para u: a linha do pedido com o alvo de u e
-// o cabeçalho Host. Depois vêm os outros cabeçalhos e o send.
+// request_to starts a request to u: the request line with u's target and
+// the Host header. Then come the other headers and the send.
 //
 //     var u url.URL
-//     url.parse_str("http://api.local:8080/v1/itens", &u)
+//     url.parse_str("http://api.local:8080/v1/items", &u)
 //     err := 0
 //     c := http.dial(&u, &err)
 //     ...
@@ -920,11 +920,11 @@ pub fn (b &Builder) request_to(method string, u &url.URL) {
     b.header_bytes("Host", &h[:n])
 }
 
-// get faz um GET em rawurl e lê a resposta inteira: m guarda o código e os
-// cabeçalhos (m.status(), m.header(...)), e o corpo vai para body. Devolve o
-// tamanho do corpo, ou Err com o código: url.BAD_URL, UNSUPPORTED_SCHEME, os
-// de net.connect (NO_HOST, REFUSED...), TOO_BIG se o corpo não cabe em body.
-// A conexão é aberta e fechada aqui (Connection: close).
+// get does a GET on rawurl and reads the whole response: m keeps the code and the
+// headers (m.status(), m.header(...)), and the body goes into body. Returns the
+// body's size, or Err with the code: url.BAD_URL, UNSUPPORTED_SCHEME, those
+// of net.connect (NO_HOST, REFUSED...), TOO_BIG if the body doesn't fit in body.
+// The connection is opened and closed here (Connection: close).
 pub fn get(rawurl string, m &Message, body &[]byte) result.Result[int, int] {
     var u [2048]byte
     if len(rawurl) > len(u) {
@@ -934,8 +934,8 @@ pub fn get(rawurl string, m &Message, body &[]byte) result.Result[int, int] {
     return request("GET", &u[:n], "", &u[:0], m, body)
 }
 
-// post faz um POST em rawurl com data e o Content-Type, e lê a resposta
-// como get.
+// post does a POST on rawurl with data and the Content-Type, and reads the response
+// like get.
 pub fn post(rawurl string, content_type string, data &[]byte, m &Message, body &[]byte) result.Result[int, int] {
     var u [2048]byte
     if len(rawurl) > len(u) {
@@ -945,9 +945,9 @@ pub fn post(rawurl string, content_type string, data &[]byte, m &Message, body &
     return request("POST", &u[:n], content_type, data, m, body)
 }
 
-// request faz um pedido com qualquer método e a URL montada em tempo de
-// execução, por http:// ou https://. content_type vazio não manda o
-// cabeçalho. Para cabeçalhos próprios, use dial (ou dial_tls) e
+// request makes a request with any method and the URL built at run
+// time, over http:// or https://. An empty content_type doesn't send the
+// header. For custom headers, use dial (or dial_tls) and
 // Builder.request_to.
 pub fn request(method string, rawurl &[]byte, content_type string, data &[]byte, m &Message, body &[]byte) result.Result[int, int] {
     var u url.URL
@@ -973,7 +973,7 @@ pub fn request(method string, rawurl &[]byte, content_type string, data &[]byte,
     return r
 }
 
-// exchange manda o pedido e lê a resposta inteira, por qualquer Stream.
+// exchange sends the request and reads the whole response, over any Stream.
 fn exchange[S ref + Stream](c &S, method string, u &url.URL, content_type string, data &[]byte, m &Message, body &[]byte) result.Result[int, int] {
     var b Builder
     b.request_to(method, u)
@@ -993,20 +993,20 @@ fn exchange[S ref + Stream](c &S, method string, u &url.URL, content_type string
     return r
 }
 
-// ---------- roteador ----------
+// ---------- router ----------
 
-// MAX_PARAMS é quantos {nome} uma rota pode ter.
+// MAX_PARAMS is how many {name} a route can have.
 pub const MAX_PARAMS = 8
 
-// MAX_ROUTES é quantas rotas cabem num Router.
+// MAX_ROUTES is how many routes fit in a Router.
 pub const MAX_ROUTES = 64
 
-// Params são os pedaços do caminho que casaram com os {nome} da rota, já
-// decodificados (%20 e +), num buffer de 1 KB dentro dele.
+// Params are the pieces of the path that matched the route's {name}, already
+// decoded (%20 and +), in a 1 KB buffer inside it.
 pub struct Params {
     buf [1024]byte
     n int
-    pattern string // o padrão da rota (os nomes ficam nele)
+    pattern string // the route's pattern (the names stay in it)
     name_at [8]int
     name_n [8]int
     at [8]int
@@ -1014,7 +1014,7 @@ pub struct Params {
     count int
 }
 
-// find devolve o índice do parâmetro name, ou -1.
+// find returns the index of parameter name, or -1.
 fn (p &Params) find(name string) int {
     for i := 0; i < p.count; i++ {
         if p.name_n[i] != len(name) {
@@ -1034,7 +1034,7 @@ fn (p &Params) find(name string) int {
     return -1
 }
 
-// get copia o valor do parâmetro name para dst; -1 se a rota não o tem.
+// get copies the value of parameter name into dst; -1 if the route doesn't have it.
 pub fn (p &Params) get(name string, dst &[]byte) int {
     i := p.find(name)
     if i < 0 {
@@ -1043,34 +1043,34 @@ pub fn (p &Params) get(name string, dst &[]byte) int {
     return str.copy_bytes(dst, &p.buf[p.at[i]:p.at[i] + p.size[i]])
 }
 
-// is diz se o parâmetro name é igual a s.
+// is says whether parameter name is equal to s.
 pub fn (p &Params) is(name string, s string) bool {
     i := p.find(name)
     return i >= 0 && str.eq(&p.buf[p.at[i]:p.at[i] + p.size[i]], s)
 }
 
-// int lê o parâmetro name como inteiro; false se ele não existe ou não é
-// um número.
+// int reads parameter name as an integer; false if it doesn't exist or isn't
+// a number.
 pub fn (p &Params) int(name string, out &int) bool {
     i := p.find(name)
     return i >= 0 && str.parse_int(&p.buf[p.at[i]:p.at[i] + p.size[i]], out)
 }
 
-// match_path diz se path (o caminho de um pedido, sem a consulta) casa com
-// pattern, e guarda os parâmetros em p. No padrão, {nome} casa com um
-// pedaço não vazio entre barras, e {nome...} no fim casa com todo o resto
-// (inclusive barras):
+// match_path says whether path (a request's path, without the query) matches
+// pattern, and keeps the parameters in p. In the pattern, {name} matches a
+// non-empty piece between slashes, and {name...} at the end matches everything else
+// (including slashes):
 //
-//     /itens                    só /itens
-//     /itens/{id}               /itens/7, não /itens nem /itens/7/x
+//     /items                    only /items
+//     /items/{id}               /items/7, not /items nor /items/7/x
 //     /users/{id}/posts/{post}  /users/3/posts/9
-//     /arquivos/{caminho...}    /arquivos/a/b/c.txt
+//     /files/{path...}          /files/a/b/c.txt
 pub fn match_path(pattern string, path &[]byte, p &Params) bool {
     p.count = 0
     p.n = 0
     p.pattern = pattern
-    i := 0 // no padrão
-    j := 0 // no caminho
+    i := 0 // in the pattern
+    j := 0 // in the path
     for i < len(pattern) {
         if pattern[i] != '{' {
             if j >= len(path) || path[j] != pattern[i] {
@@ -1097,7 +1097,7 @@ pub fn match_path(pattern string, path &[]byte, p &Params) bool {
             end++
         }
         if end == j {
-            return false // pedaço vazio
+            return false // empty piece
         }
         k := unescape(&p.buf[p.n:], &path[j:end])
         if k < 0 {
@@ -1115,17 +1115,17 @@ pub fn match_path(pattern string, path &[]byte, p &Params) bool {
     return j == len(path)
 }
 
-// Route é uma rota: o método ("" para qualquer um), o padrão e a função.
+// Route is a route: the method ("" for any), the pattern and the function.
 pub struct Route[S ref + Stream, C any] {
     method string
     pattern string
     h fn(&S, &Message, &Params, &C)
 }
 
-// Router escolhe a função de cada pedido pelo método e pelo caminho. A
-// tabela é um array fixo (MAX_ROUTES rotas), sem alocação. S é a conexão
-// (net.Conn, ou tls.Conn para HTTPS) e C é o estado que cada função recebe
-// (um logger, uma conexão de banco, contadores).
+// Router picks the function for each request by method and path. The
+// table is a fixed array (MAX_ROUTES routes), without allocation. S is the connection
+// (net.Conn, or tls.Conn for HTTPS) and C is the state each function receives
+// (a logger, a database connection, counters).
 //
 //     fn get_item(c &net.Conn, m &http.Message, p &http.Params, app &App) {
 //         id := 0
@@ -1134,17 +1134,17 @@ pub struct Route[S ref + Stream, C any] {
 //     }
 //
 //     var r http.Router[net.Conn, App]
-//     r.handle("GET", "/itens/{id}", get_item)
-//     r.handle("POST", "/itens", create_item)
+//     r.handle("GET", "/items/{id}", get_item)
+//     r.handle("POST", "/items", create_item)
 //     ...
-//     http.serve_conn(&c, &r, &app)     // numa thread por conexão
+//     http.serve_conn(&c, &r, &app)     // in one thread per connection
 pub struct Router[S ref + Stream, C any] {
     routes [64]Route[S, C]
     n int
 }
 
-// handle acrescenta uma rota. As rotas são tentadas na ordem em que foram
-// acrescentadas.
+// handle adds a route. Routes are tried in the order they were
+// added.
 pub fn (r &Router[S, C]) handle(method string, pattern string, h fn(&S, &Message, &Params, &C)) {
     if r.n == MAX_ROUTES {
         fail("http.Router: rotas demais (o máximo é 64)")
@@ -1153,8 +1153,8 @@ pub fn (r &Router[S, C]) handle(method string, pattern string, h fn(&S, &Message
     r.n++
 }
 
-// dispatch chama a função da rota do pedido m. Sem rota para o caminho,
-// responde 404; com rota para o caminho mas não para o método, 405.
+// dispatch calls the function of request m's route. With no route for the path,
+// responds 404; with a route for the path but not for the method, 405.
 pub fn (r &Router[S, C]) dispatch(c &S, m &Message, ctx &C) {
     var path [2048]byte
     n := m.path(&path)
@@ -1182,11 +1182,11 @@ pub fn (r &Router[S, C]) dispatch(c &S, m &Message, ctx &C) {
     respond_str(c, 404, "text/plain", "não encontrado\n")
 }
 
-// serve_conn atende uma conexão até ela fechar: lê cada pedido, chama o
-// Router e descarta o corpo que a função não leu (para o próximo pedido da
-// conexão chegar inteiro). Responde 431 a um cabeçalho grande demais e 400
-// a um pedido inválido. O timeout fica com quem chama (c.set_timeout), e a
-// conexão continua aberta: quem chama a fecha.
+// serve_conn serves a connection until it closes: reads each request, calls the
+// Router and discards the body the function didn't read (so the connection's next
+// request arrives whole). Responds 431 to a header that's too large and 400
+// to an invalid request. The timeout is up to the caller (c.set_timeout), and the
+// connection stays open: the caller closes it.
 pub fn serve_conn[S ref + Stream, C any](c &S, r &Router[S, C], ctx &C) {
     var m Message
     for {
@@ -1212,7 +1212,7 @@ pub fn serve_conn[S ref + Stream, C any](c &S, r &Router[S, C], ctx &C) {
     }
 }
 
-// ---------- auxiliares ----------
+// ---------- helpers ----------
 
 extern fn fail(msg string)
 
@@ -1253,7 +1253,7 @@ fn lower(c byte) byte {
     return c
 }
 
-// fold_eq compara b[at:at+len(s)] com s sem diferenciar maiúsculas.
+// fold_eq compares b[at:at+len(s)] with s case-insensitively.
 fn fold_eq(b &[]byte, at int, s string) bool {
     for i := 0; i < len(s); i++ {
         if lower(b[at + i]) != lower(s[i]) {
@@ -1285,8 +1285,8 @@ fn hex_value(c byte) int {
     return -1
 }
 
-// parse_hex lê o tamanho de um pedaço chunked em b[a:e] (ignorando as
-// extensões depois de ;); -1 se for inválido.
+// parse_hex reads the size of a chunk in b[a:e] (ignoring the
+// extensions after ;); -1 if it's invalid.
 fn parse_hex(b &[]byte, a int, e int) int {
     n := 0
     digits := 0

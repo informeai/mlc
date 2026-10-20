@@ -1,31 +1,31 @@
-// HMAC-SHA256 (RFC 2104): a assinatura de uma mensagem com uma chave
-// secreta. É o que confere um webhook (Stripe, GitHub), assina um token
-// (JWT com HS256) ou um cookie de sessão. Nada aloca: o estado são dois
-// SHA-256 na pilha de quem chama.
+// HMAC-SHA256 (RFC 2104): the signature of a message with a secret
+// key. It's what checks a webhook (Stripe, GitHub), signs a token
+// (JWT with HS256) or a session cookie. Nothing allocates: the state is two
+// SHA-256s on the caller's stack.
 //
 //     var mac [32]byte
-//     hmac.sha256(&chave, &corpo, &mac)
+//     hmac.sha256(&key, &body, &mac)
 //     ...
-//     if !hmac.verify(&chave, &corpo, &recebido) {
-//         // assinatura errada: recusa
+//     if !hmac.verify(&key, &body, &received) {
+//         // wrong signature: refuse
 //     }
 //
-// Para conferir uma assinatura, use verify (ou equal): uma comparação
-// comum para no primeiro byte diferente, e o tempo que ela leva diz a quem
-// ataca quantos bytes ele já acertou.
+// To check a signature, use verify (or equal): an ordinary comparison
+// stops at the first different byte, and the time it takes tells an
+// attacker how many bytes they already got right.
 import "std/hash"
 
-// SIZE é o tamanho de um HMAC-SHA256, em bytes.
+// SIZE is the size of an HMAC-SHA256, in bytes.
 pub const SIZE = 32
 
-// Hmac calcula um HMAC-SHA256 com dados entregues em pedaços.
+// Hmac computes an HMAC-SHA256 with data delivered in pieces.
 pub struct Hmac {
     inner hash.Sha256
     outer hash.Sha256
 }
 
-// new começa um HMAC com a chave (de qualquer tamanho; uma chave maior que
-// 64 bytes é trocada pelo SHA-256 dela, como manda a RFC).
+// new starts an HMAC with the key (of any size; a key longer than
+// 64 bytes is replaced by its SHA-256, as the RFC says).
 pub fn new(key &[]byte) Hmac {
     var k [64]byte
     if len(key) > 64 {
@@ -47,13 +47,13 @@ pub fn new(key &[]byte) Hmac {
     return h
 }
 
-// write acrescenta os bytes de data à mensagem.
+// write appends the bytes of data to the message.
 pub fn (h &Hmac) write(data &[]byte) {
     h.inner.write(data)
 }
 
-// sum escreve o HMAC (SIZE bytes) em dst. Depois de sum, o Hmac não serve
-// mais: comece outro com new.
+// sum writes the HMAC (SIZE bytes) into dst. After sum, the Hmac is no longer
+// usable: start another one with new.
 pub fn (h &Hmac) sum(dst &[]byte) {
     var d [32]byte
     h.inner.sum(&d)
@@ -61,7 +61,7 @@ pub fn (h &Hmac) sum(dst &[]byte) {
     h.outer.sum(dst)
 }
 
-// sha256 calcula o HMAC-SHA256 de data com a chave, de uma vez, em dst
+// sha256 computes the HMAC-SHA256 of data with the key, in one go, into dst
 // (SIZE bytes).
 pub fn sha256(key &[]byte, data &[]byte, dst &[]byte) {
     h := new(key)
@@ -69,17 +69,17 @@ pub fn sha256(key &[]byte, data &[]byte, dst &[]byte) {
     h.sum(dst)
 }
 
-// verify diz se mac é o HMAC-SHA256 de data com a chave, comparando em
-// tempo constante.
+// verify says whether mac is the HMAC-SHA256 of data with the key, comparing in
+// constant time.
 pub fn verify(key &[]byte, data &[]byte, mac &[]byte) bool {
     var want [32]byte
     sha256(key, data, &want)
     return equal(&want, mac)
 }
 
-// equal compara a e b em tempo constante: o tempo depende só do tamanho,
-// não de onde está a primeira diferença. Use para comparar assinaturas,
-// tokens e hashes de senha.
+// equal compares a and b in constant time: the time depends only on the length,
+// not on where the first difference is. Use it to compare signatures,
+// tokens and password hashes.
 pub fn equal(a &[]byte, b &[]byte) bool {
     if len(a) != len(b) {
         return false
@@ -93,20 +93,20 @@ pub fn equal(a &[]byte, b &[]byte) bool {
 
 // ---------- PBKDF2 ----------
 
-// pbkdf2 deriva uma chave de uma senha (PBKDF2-HMAC-SHA256, RFC 8018): o
-// HMAC repetido iterations vezes sobre a senha e o sal, para que testar
-// cada palpite de senha custe caro. dst recebe len(dst) bytes de chave.
-// Para guardar senhas de usuários, use std/password, que escolhe o sal e o
-// número de iterações e confere em tempo constante.
+// pbkdf2 derives a key from a password (PBKDF2-HMAC-SHA256, RFC 8018): the
+// HMAC repeated iterations times over the password and the salt, so that testing
+// each password guess is expensive. dst receives len(dst) bytes of key.
+// To store user passwords, use std/password, which picks the salt and the
+// number of iterations and checks in constant time.
 pub fn pbkdf2(password &[]byte, salt &[]byte, iterations int, dst &[]byte) {
     if iterations < 1 {
         fail("hmac.pbkdf2: iterations precisa ser pelo menos 1")
     }
-    keyed := new(password) // o HMAC já com a chave: copiado a cada passo
+    keyed := new(password) // the HMAC already keyed: copied at each step
     block := 1
     done := 0
     for done < len(dst) {
-        // U1 = HMAC(senha, sal || número do bloco, em big-endian)
+        // U1 = HMAC(password, salt || block number, big-endian)
         h := keyed
         h.write(salt)
         var idx [4]byte
@@ -121,7 +121,7 @@ pub fn pbkdf2(password &[]byte, salt &[]byte, iterations int, dst &[]byte) {
         for i := 0; i < 32; i++ {
             t[i] = u[i]
         }
-        // U2..Uc, cada um o HMAC do anterior, somados (xor) em t
+        // U2..Uc, each the HMAC of the previous one, combined (xor) into t
         for k := 1; k < iterations; k++ {
             h2 := keyed
             h2.write(&u)

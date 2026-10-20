@@ -20,8 +20,8 @@ fn fill(b []byte) []byte {
 
 fn test_ownership_round_trip() {
     b := alloc([]byte, 4)
-    t := thread.spawn(fill, b, thread.STACK_64KB) // b vai para a thread
-    back := thread.join(t)                        // e volta preenchido
+    t := thread.spawn(fill, b, thread.STACK_64KB) // b goes to the thread
+    back := thread.join(t)                        // and comes back filled
     testing.eq_str(&back, "xxxx")
     free(back)
 }
@@ -38,7 +38,7 @@ fn test_no_result() {
 }
 
 fn checks_in_thread(n int) {
-    testing.eq_int(n, 5) // as verificações valem dentro de threads
+    testing.eq_int(n, 5) // checks work inside threads
 }
 
 fn test_check_inside_thread() {
@@ -82,7 +82,7 @@ fn test_format_in_threads() {
 
 fn boom(n int) int {
     b := alloc([]int, 2)
-    x := b[n] // índice fora: panic dentro da thread
+    x := b[n] // index out of range: panic inside the thread
     free(b)
     return x
 }

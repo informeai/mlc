@@ -21,7 +21,7 @@ fn test_env_file() {
     testing.eq_str(&v[:n], "Loja do Zé")
     porta := 0
     testing.check(c.int("PORT", &porta), "int")
-    testing.eq_int(porta, 9090) // a última vez vale
+    testing.eq_int(porta, 9090) // the last one wins
     debug := false
     testing.check(c.bool("DEBUG", &debug), "bool")
     testing.check(debug, "true")
@@ -35,7 +35,7 @@ fn test_env_file() {
     testing.eq_int(c.get("FALTA", &v), -1)
     padrao := 42
     testing.check(!c.int("FALTA", &padrao), "não existe")
-    testing.eq_int(padrao, 42) // o padrão fica
+    testing.eq_int(padrao, 42) // the default stays
     testing.check(!c.int("NOME", &padrao), "não é número")
     testing.check(c.is("DEBUG", "true"), "is")
 }
@@ -53,7 +53,7 @@ fn test_ini_sections() {
     testing.eq_int(t, 5)
     testing.check(c.int("http.port", &t), "seção com espaços")
     testing.eq_int(t, 80)
-    testing.eq_int(c.get("path", &v), -1) // sem a seção não acha
+    testing.eq_int(c.get("path", &v), -1) // without the section it isn't found
     testing.eq_int(c.len(), 4)
     n = c.key(1, &v)
     testing.eq_str(&v[:n], "db.path")
@@ -95,7 +95,7 @@ fn test_load_and_env() {
     k := str.copy(&v, "ambiente")
     os.setenv("APP_NOME", &v[:k])
     n := c.env("APP_NOME", &v)
-    testing.eq_str(&v[:n], "ambiente") // o ambiente ganha
+    testing.eq_str(&v[:n], "ambiente") // the environment wins
     n = c.env("APP_MODO", &v)
     testing.eq_str(&v[:n], "dev")
     fs.remove_file(&path[:pn])

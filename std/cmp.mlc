@@ -1,36 +1,36 @@
-// Igualdade e ordem como interfaces, para código genérico (sort.sort,
-// slices) aceitar structs pela igualdade e pela ordem que elas definem.
+// Equality and order as interfaces, so generic code (sort.sort,
+// slices) accepts structs by the equality and order they define.
 //
 //     struct Version {
 //         major int
 //         minor int
 //     }
 //
-//     impl auto cmp.Eq for Version     // campo a campo
-//     impl auto cmp.Ord for Version    // pela ordem dos campos: major, depois minor
+//     impl auto cmp.Eq for Version     // field by field
+//     impl auto cmp.Ord for Version    // by the order of the fields: major, then minor
 //
 //     sort.sort(&versions)
 //
-// Ou com os métodos escritos à mão:
+// Or with the methods written by hand:
 //
 //     fn (p &Person) cmp(o &Person) int { return p.age.cmp(&o.age) }
 //     impl cmp.Ord for Person
 //
-// Os números, bool, string e os slices (em ordem lexicográfica) já
-// implementam as duas.
+// Numbers, bool, string and slices (in lexicographic order) already
+// implement both.
 
-// Eq é a igualdade: eq diz se os dois valores são iguais.
+// Eq is equality: eq says whether the two values are equal.
 pub interface Eq {
     fn eq(self &Self, other &Self) bool
 }
 
-// Ord é a ordem: cmp devolve um número negativo se self vem antes de other,
-// zero se são equivalentes e positivo se vem depois.
+// Ord is order: cmp returns a negative number if self comes before other,
+// zero if they're equivalent and positive if it comes after.
 pub interface Ord {
     fn cmp(self &Self, other &Self) int
 }
 
-// ---------- Ord dos tipos embutidos ----------
+// ---------- Ord of the built-in types ----------
 
 impl Ord for int {
     fn (x &int) cmp(o &int) int {
@@ -92,7 +92,7 @@ impl Ord for uint64 {
     }
 }
 
-// NaN não é menor nem maior que nada: cmp com NaN dá 0.
+// NaN is neither less nor greater than anything: cmp with NaN gives 0.
 impl Ord for float64 {
     fn (x &float64) cmp(o &float64) int {
         if *x < *o {
@@ -117,7 +117,7 @@ impl Ord for float32 {
     }
 }
 
-// false vem antes de true.
+// false comes before true.
 impl Ord for bool {
     fn (x &bool) cmp(o &bool) int {
         if *x == *o {
@@ -130,8 +130,8 @@ impl Ord for bool {
     }
 }
 
-// Textos em ordem de bytes (para ASCII, a ordem alfabética, com as
-// maiúsculas antes).
+// Texts in byte order (for ASCII, alphabetical order, with
+// uppercase first).
 impl Ord for string {
     fn (x &string) cmp(o &string) int {
         a := *x
@@ -149,8 +149,8 @@ impl Ord for string {
     }
 }
 
-// Slices (e []byte) em ordem lexicográfica: o primeiro elemento diferente
-// decide; se um acaba antes, ele vem primeiro.
+// Slices (and []byte) in lexicographic order: the first different element
+// decides; if one ends first, it comes first.
 impl[T Ord] Ord for []T {
     fn (s &[]T) cmp(o &[]T) int {
         n := len(s)
@@ -167,7 +167,7 @@ impl[T Ord] Ord for []T {
     }
 }
 
-// ---------- Eq dos tipos embutidos ----------
+// ---------- Eq of the built-in types ----------
 
 impl Eq for int {
     fn (x &int) eq(o &int) bool {

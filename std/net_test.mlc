@@ -7,7 +7,7 @@ fn localhost(dst &[]byte) int {
     return str.copy(dst, "127.0.0.1")
 }
 
-// eco: devolve tudo que chegar até o outro lado fechar
+// echo: sends back everything that arrives until the other side closes
 fn echo_once(l *net.Listener) int {
     err := 0
     total := 0
@@ -56,7 +56,7 @@ fn test_echo() {
         Ok(w) => testing.eq_int(w, k)
         Err(code) => testing.eq_int(code, 0)
     }
-    c.shutdown() // o servidor recebe Ok(0) e devolve o resto
+    c.shutdown() // the server gets Ok(0) and sends back the rest
     var back [64]byte
     got := 0
     for {
@@ -85,7 +85,7 @@ fn test_refused() {
         return
     }
     port := l.port()
-    l.close() // ninguém mais escuta nessa porta
+    l.close() // nobody listens on that port anymore
     c := net.connect(&h[:hn], port, &err)
     testing.check(c == nil, "sem servidor, connect falha")
     testing.eq_int(err, net.REFUSED)
@@ -124,13 +124,13 @@ fn test_no_host() {
     }
 }
 
-// aceita e fica parado, sem responder
+// accepts and stays idle, without answering
 fn silent(l *net.Listener) {
     err := 0
     c := l.accept(&err)
     if c != nil {
         var buf [8]byte
-        c.read(&buf) // espera o cliente fechar
+        c.read(&buf) // waits for the client to close
         c.close()
     }
     l.close()
@@ -160,7 +160,7 @@ fn test_timeout() {
     thread.join(t)
 }
 
-// fecha a conexão sem ler nada
+// closes the connection without reading anything
 fn close_at_once(l *net.Listener) {
     err := 0
     c := l.accept(&err)
@@ -190,7 +190,7 @@ fn test_write_after_peer_closed() {
             match c.write(&data) {
                 Ok(_) => {}
                 Err(code) => {
-                    testing.eq_int(code, net.RESET) // e não morre por SIGPIPE
+                    testing.eq_int(code, net.RESET) // and doesn't die from SIGPIPE
                     failed = true
                 }
             }

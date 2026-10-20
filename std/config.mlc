@@ -1,59 +1,59 @@
-// Configuração em arquivo: .env e INI. Nada aloca: o texto fica num buffer
-// de 16 KB dentro da Config, com até 256 entradas, e os valores são
-// copiados para buffers de quem chama.
+// Configuration files: dotenv and INI. Nothing allocates: the text stays in a 16 KB
+// buffer inside the Config, with up to 256 entries, and the values are
+// copied into the caller's buffers.
 //
 //     # .env                          ; app.ini
 //     PORT=8080                       [db]
 //     DATABASE_URL="sqlite:loja.db"   path = loja.db
-//     export DEBUG=true               timeout = 5    ; segundos
+//     export DEBUG=true               timeout = 5    ; seconds
 //
 //     var cfg config.Config
 //     match config.load_str(".env", &cfg) {
 //         Ok(_) => {}
-//         Err(code) => ...                  // cfg.bad_line diz a linha ruim
+//         Err(code) => ...                  // cfg.bad_line says the bad line
 //     }
-//     porta := 8080
-//     cfg.int("PORT", &porta)               // fica o padrão se não existe
+//     port := 8080
+//     cfg.int("PORT", &port)                // the default stays if it doesn't exist
 //     var path [256]byte
-//     n := cfg.get("db.path", &path)        // numa seção: "seção.chave"
-//     n = cfg.env("DATABASE_URL", &path)    // a variável de ambiente, se existir, ganha
+//     n := cfg.get("db.path", &path)        // in a section: "section.key"
+//     n = cfg.env("DATABASE_URL", &path)    // the environment variable, if set, wins
 //
-// O formato: uma chave=valor por linha, com espaços em volta ignorados;
-// linhas vazias e as que começam com # ou ; são comentários; "export " antes
-// da chave é aceito (.env de shell); [seção] começa uma seção (INI). Um
-// valor entre aspas duplas aceita \n \t \\ \" e pode ter # dentro; entre
-// aspas simples, fica como está; sem aspas, " #" ou " ;" começa um
-// comentário. Uma
-// chave repetida vale pela última vez.
+// The format: one key=value per line, with surrounding spaces ignored;
+// empty lines and those starting with # or ; are comments; "export " before
+// the key is accepted (shell dotenv files); [section] starts a section (INI). A
+// value between double quotes accepts \n \t \\ \" and can contain #; between
+// single quotes, it stays as is; without quotes, " #" or " ;" starts a
+// comment. A
+// repeated key counts by its last occurrence.
 import "std/fs"
 import "std/os"
 import "std/result"
 import "std/str"
 
-// BAD_LINE é o erro de uma linha que não é chave=valor (Config.bad_line diz
-// qual).
+// BAD_LINE is the error of a line that isn't key=value (Config.bad_line says
+// which).
 pub const BAD_LINE = 3201
 
-// MAX_ENTRIES é quantas chaves cabem numa Config.
+// MAX_ENTRIES is how many keys fit in a Config.
 pub const MAX_ENTRIES = 256
 
-// Config é um arquivo de configuração lido.
+// Config is a configuration file that was read.
 pub struct Config {
     buf [16384]byte
     n int
-    sec_at [256]int // a seção de cada entrada (n = 0: sem seção)
+    sec_at [256]int // each entry's section (n = 0: no section)
     sec_n [256]int
     key_at [256]int
     key_n [256]int
     val_at [256]int
     val_n [256]int
     count int
-    bad_line int // a primeira linha inválida (0: nenhuma)
+    bad_line int // the first invalid line (0: none)
 }
 
-// load lê e interpreta o arquivo path. Devolve quantas chaves leu, ou Err
-// com o código do fs (fs.NOT_FOUND...), TOO_BIG (o arquivo passa de 16 KB)
-// ou BAD_LINE.
+// load reads and interprets the file path. Returns how many keys it read, or Err
+// with the fs code (fs.NOT_FOUND...), TOO_BIG (the file is over 16 KB)
+// or BAD_LINE.
 pub fn load(path &[]byte, c &Config) result.Result[int, int] {
     c.count = 0
     c.bad_line = 0
@@ -64,14 +64,14 @@ pub fn load(path &[]byte, c &Config) result.Result[int, int] {
     return c.scan()
 }
 
-// load_str é load com o caminho fixo no programa.
+// load_str is load with the path fixed in the program.
 pub fn load_str(path string, c &Config) result.Result[int, int] {
     var b [1024]byte
     n := str.copy(&b, path)
     return load(&b[:n], c)
 }
 
-// parse interpreta o texto de uma configuração que já está na memória.
+// parse interprets the text of a configuration that's already in memory.
 pub fn (c &Config) parse(text &[]byte) result.Result[int, int] {
     if len(text) > len(c.buf) {
         return result.Result.Err(fs.TOO_BIG)
@@ -82,7 +82,7 @@ pub fn (c &Config) parse(text &[]byte) result.Result[int, int] {
     return c.scan()
 }
 
-// scan lê as linhas de buf[:n].
+// scan reads the lines of buf[:n].
 fn (c &Config) scan() result.Result[int, int] {
     sec_at := 0
     sec_n := 0
@@ -141,8 +141,8 @@ fn (c &Config) scan() result.Result[int, int] {
     return result.Result.Ok(c.count)
 }
 
-// value lê o valor em buf[v:b] para a entrada k, tirando as aspas e
-// trocando os escapes no lugar.
+// value reads the value in buf[v:b] for entry k, removing the quotes and
+// replacing the escapes in place.
 fn (c &Config) value(k int, v int, b int) bool {
     c.val_at[k] = v
     if v < b && c.buf[v] == '\'' {
@@ -158,7 +158,7 @@ fn (c &Config) value(k int, v int, b int) bool {
         return true
     }
     if v < b && c.buf[v] == '"' {
-        w := v // escreve por cima, a partir da aspa (o valor encolhe ou fica igual)
+        w := v // writes over it, from the quote on (the value shrinks or stays the same)
         i := v + 1
         for i < b && c.buf[i] != '"' {
             ch := c.buf[i]
@@ -183,7 +183,7 @@ fn (c &Config) value(k int, v int, b int) bool {
         c.val_n[k] = w - v
         return true
     }
-    // sem aspas: " #" ou " ;" começa um comentário
+    // without quotes: " #" or " ;" starts a comment
     e := v
     for e < b {
         if (c.buf[e] == '#' || c.buf[e] == ';') && e > v && (c.buf[e - 1] == ' ' || c.buf[e - 1] == '\t') {
@@ -200,8 +200,8 @@ fn (c &Config) bad(line int) result.Result[int, int] {
     return result.Result.Err(BAD_LINE)
 }
 
-// find devolve a entrada de key ("chave", ou "seção.chave"), a última se
-// ela se repete; -1 se não existe.
+// find returns the entry of key ("key", or "section.key"), the last one if
+// it repeats; -1 if it doesn't exist.
 fn (c &Config) find(key string) int {
     for k := c.count - 1; k >= 0; k-- {
         sn := c.sec_n[k]
@@ -219,12 +219,12 @@ fn (c &Config) find(key string) int {
     return -1
 }
 
-// has diz se a chave existe.
+// has says whether the key exists.
 pub fn (c &Config) has(key string) bool {
     return c.find(key) >= 0
 }
 
-// get copia o valor da chave para dst; -1 se ela não existe.
+// get copies the key's value into dst; -1 if it doesn't exist.
 pub fn (c &Config) get(key string, dst &[]byte) int {
     k := c.find(key)
     if k < 0 {
@@ -233,14 +233,14 @@ pub fn (c &Config) get(key string, dst &[]byte) int {
     return str.copy_bytes(dst, &c.buf[c.val_at[k]:c.val_at[k] + c.val_n[k]])
 }
 
-// is diz se o valor da chave é s.
+// is says whether the key's value is s.
 pub fn (c &Config) is(key string, s string) bool {
     k := c.find(key)
     return k >= 0 && str.eq(&c.buf[c.val_at[k]:c.val_at[k] + c.val_n[k]], s)
 }
 
-// int lê a chave como inteiro em out. Devolve false (e não mexe em out) se
-// ela não existe ou não é um número: out pode trazer o valor padrão.
+// int reads the key as an integer into out. Returns false (and leaves out alone) if
+// it doesn't exist or isn't a number: out can carry the default value.
 pub fn (c &Config) int(key string, out &int) bool {
     k := c.find(key)
     if k < 0 {
@@ -254,8 +254,8 @@ pub fn (c &Config) int(key string, out &int) bool {
     return true
 }
 
-// bool lê a chave como true/false (também 1/0, yes/no, on/off, sem
-// diferenciar maiúsculas). Como int, só mexe em out se der certo.
+// bool reads the key as true/false (also 1/0, yes/no, on/off,
+// case-insensitive). Like int, it only touches out if it succeeds.
 pub fn (c &Config) bool(key string, out &bool) bool {
     k := c.find(key)
     if k < 0 {
@@ -264,9 +264,9 @@ pub fn (c &Config) bool(key string, out &bool) bool {
     return parse_flag(&c.buf[c.val_at[k]:c.val_at[k] + c.val_n[k]], out)
 }
 
-// env copia a variável de ambiente key, se existir; senão, o valor da
-// chave no arquivo; -1 se nenhum dos dois. É a ordem de costume: o
-// ambiente (do servidor, do contêiner) ganha do arquivo.
+// env copies the environment variable key, if set; otherwise, the key's
+// value in the file; -1 if neither. It's the usual order: the
+// environment (the server's, the container's) wins over the file.
 pub fn (c &Config) env(key string, dst &[]byte) int {
     match os.getenv(key, dst) {
         Ok(n) => return n
@@ -275,13 +275,13 @@ pub fn (c &Config) env(key string, dst &[]byte) int {
     return c.get(key, dst)
 }
 
-// len devolve quantas entradas foram lidas (repetidas contam de novo).
+// len returns how many entries were read (repeated ones count again).
 pub fn (c &Config) len() int {
     return c.count
 }
 
-// key copia a chave da entrada i (de 0 a len() - 1), com a seção na frente
-// ("seção.chave"), para listar tudo.
+// key copies the key of entry i (from 0 to len() - 1), with the section in front
+// ("section.key"), to list everything.
 pub fn (c &Config) key(i int, dst &[]byte) int {
     n := 0
     if c.sec_n[i] > 0 {
@@ -291,12 +291,12 @@ pub fn (c &Config) key(i int, dst &[]byte) int {
     return n + str.copy_bytes(&dst[n:], &c.buf[c.key_at[i]:c.key_at[i] + c.key_n[i]])
 }
 
-// value_at copia o valor da entrada i.
+// value_at copies the value of entry i.
 pub fn (c &Config) value_at(i int, dst &[]byte) int {
     return str.copy_bytes(dst, &c.buf[c.val_at[i]:c.val_at[i] + c.val_n[i]])
 }
 
-// parse_flag lê true/false, 1/0, yes/no, on/off.
+// parse_flag reads true/false, 1/0, yes/no, on/off.
 pub fn parse_flag(s &[]byte, out &bool) bool {
     var low [8]byte
     if len(s) > len(low) {

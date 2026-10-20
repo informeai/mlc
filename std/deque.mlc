@@ -1,18 +1,18 @@
-// Fila com as duas pontas rápidas: push e pop no começo e no fim em O(1).
-// Por baixo é um buffer circular, e a alocação está visível aqui como no
-// vec: new aloca, os push chamam grow quando falta espaço, e grow dobra a
-// capacidade com realloc.
+// A queue with both ends fast: push and pop at the front and the back in O(1).
+// Underneath it's a ring buffer, and the allocation is visible here as in
+// vec: new allocates, the pushes call grow when room runs out, and grow doubles the
+// capacity with realloc.
 //
-// Os elementos podem ser donos (T owned: ?*X ou []X): push move o valor para
-// dentro, pop devolve a posse, e free libera cada elemento (drop) e a fila.
+// The elements can be owners (T owned: ?*X or []X): push moves the value
+// inside, pop returns ownership, and free frees each element (drop) and the queue.
 //
 //     q := deque.new[int](16)
-//     q.push_back(1)              // fila: tira do começo, põe no fim
+//     q.push_back(1)              // queue: take from the front, put at the back
 //     q.push_back(2)
 //     x := q.pop_front()          // 1
 //     q.free()
 //
-// Para guardar só os últimos N, tire o mais antigo antes de pôr:
+// To keep only the last N, take out the oldest before putting:
 //
 //     if hist.len() == N {
 //         old := hist.pop_front()
@@ -20,31 +20,31 @@
 //     }
 //     hist.push_back(line)
 
-// Deque é a fila de duas pontas, sobre um buffer circular.
+// Deque is the double-ended queue, over a ring buffer.
 pub struct Deque[T owned] {
-    items []T // buffer circular: os elementos vão de head, count posições
+    items []T // ring buffer: the elements go from head, count positions
     head int
     count int
 }
 
 extern fn fail(msg string)
 
-// new aloca uma fila vazia com espaço para cap elementos.
+// new allocates an empty queue with room for cap elements.
 pub fn new[T owned](cap int) *Deque[T] {
     return alloc(Deque[T]{items: alloc([]T, cap), head: 0, count: 0})
 }
 
-// push_back põe x no fim (x é movido para a fila).
+// push_back puts x at the back (x is moved into the queue).
 pub fn (q &Deque[T]) push_back(x T) {
     if q.count == len(q.items) {
         q.grow()
     }
     old := replace(&q.items[q.slot(q.count)], x)
-    drop(old) // a posição depois do fim estava vazia
+    drop(old) // the position after the end was empty
     q.count++
 }
 
-// push_front põe x no começo.
+// push_front puts x at the front.
 pub fn (q &Deque[T]) push_front(x T) {
     if q.count == len(q.items) {
         q.grow()
@@ -55,7 +55,7 @@ pub fn (q &Deque[T]) push_front(x T) {
     q.count++
 }
 
-// pop_front tira o primeiro elemento e devolve a posse dele.
+// pop_front takes out the first element and returns its ownership.
 pub fn (q &Deque[T]) pop_front() T {
     if q.count == 0 {
         fail("deque.pop_front: fila vazia")
@@ -66,7 +66,7 @@ pub fn (q &Deque[T]) pop_front() T {
     return x
 }
 
-// pop_back tira o último elemento e devolve a posse dele.
+// pop_back takes out the last element and returns its ownership.
 pub fn (q &Deque[T]) pop_back() T {
     if q.count == 0 {
         fail("deque.pop_back: fila vazia")
@@ -75,8 +75,8 @@ pub fn (q &Deque[T]) pop_back() T {
     return take(&q.items[q.slot(q.count)])
 }
 
-// front empresta o primeiro elemento, sem tirá-lo. Enquanto o empréstimo é
-// usado, a fila fica congelada.
+// front borrows the first element, without taking it out. While the borrow is
+// used, the queue stays frozen.
 pub fn (q &Deque[T]) front() &T {
     if q.count == 0 {
         fail("deque.front: fila vazia")
@@ -84,7 +84,7 @@ pub fn (q &Deque[T]) front() &T {
     return &q.items[q.head]
 }
 
-// back empresta o último elemento.
+// back borrows the last element.
 pub fn (q &Deque[T]) back() &T {
     if q.count == 0 {
         fail("deque.back: fila vazia")
@@ -92,7 +92,7 @@ pub fn (q &Deque[T]) back() &T {
     return &q.items[q.slot(q.count - 1)]
 }
 
-// at empresta o elemento i (0 é o primeiro).
+// at borrows element i (0 is the first).
 pub fn (q &Deque[T]) at(i int) &T {
     if i < 0 || i >= q.count {
         fail("deque.at: índice fora da fila")
@@ -100,7 +100,7 @@ pub fn (q &Deque[T]) at(i int) &T {
     return &q.items[q.slot(i)]
 }
 
-// get devolve uma cópia do elemento i (só para T copiável).
+// get returns a copy of element i (only for copyable T).
 pub fn (q &Deque[T any]) get(i int) T {
     if i < 0 || i >= q.count {
         fail("deque.get: índice fora da fila")
@@ -108,18 +108,18 @@ pub fn (q &Deque[T any]) get(i int) T {
     return q.items[q.slot(i)]
 }
 
-// len devolve quantos elementos há na fila.
+// len returns how many elements there are in the queue.
 pub fn (q &Deque[T]) len() int {
     return q.count
 }
 
-// cap devolve quantos elementos cabem antes de crescer.
+// cap returns how many elements fit before growing.
 pub fn (q &Deque[T]) cap() int {
     return len(q.items)
 }
 
-// grow dobra a capacidade (realloc). Se os elementos davam a volta no fim
-// do buffer, a parte do começo vai para depois do fim antigo, por posse.
+// grow doubles the capacity (realloc). If the elements wrapped around the end
+// of the buffer, the front part goes after the old end, by ownership.
 pub fn (q &Deque[T]) grow() {
     c := len(q.items)
     q.items = realloc(q.items, c * 2 + 1)
@@ -127,12 +127,12 @@ pub fn (q &Deque[T]) grow() {
     for i := 0; i < wrapped; i++ {
         x := take(&q.items[i])
         old := replace(&q.items[c + i], x)
-        drop(old) // as posições novas estavam vazias
+        drop(old) // the new positions were empty
     }
 }
 
-// clear libera os elementos (drop) e deixa a fila vazia, com a mesma
-// capacidade.
+// clear frees the elements (drop) and leaves the queue empty, with the same
+// capacity.
 pub fn (q &Deque[T]) clear() {
     for i := 0; i < q.count; i++ {
         x := take(&q.items[q.slot(i)])
@@ -142,7 +142,7 @@ pub fn (q &Deque[T]) clear() {
     q.count = 0
 }
 
-// free libera cada elemento (drop) e a fila.
+// free frees each element (drop) and the queue.
 pub fn (q *Deque[T]) free() {
     for x in drain(q.items) {
         drop(x)
@@ -151,7 +151,7 @@ pub fn (q *Deque[T]) free() {
     free(q)
 }
 
-// slot é a posição no buffer do elemento i.
+// slot is the position in the buffer of element i.
 fn (q &Deque[T]) slot(i int) int {
     return (q.head + i) % len(q.items)
 }

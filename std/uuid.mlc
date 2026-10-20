@@ -1,61 +1,61 @@
-// UUIDs (RFC 9562): identificadores de 128 bits que não se repetem, sem
-// precisar de um servidor central para distribuir números. O UUID é um
-// valor de 16 bytes; o texto (36 caracteres) é escrito num buffer de quem
-// chama. Os bits aleatórios vêm de rand.secure.
+// UUIDs (RFC 9562): 128-bit identifiers that don't repeat, without
+// needing a central server to hand out numbers. A UUID is a
+// 16-byte value; the text (36 characters) is written into a buffer of the
+// caller's. The random bits come from rand.secure.
 //
-//     id := uuid.v7()               // ordenado pelo tempo: bom como chave de banco
+//     id := uuid.v7()               // ordered by time: good as a database key
 //     var buf [36]byte
 //     n := id.text(&buf)            // 0192a3c4-5d6e-7f80-9a1b-2c3d4e5f6a7b
-//     var lido uuid.UUID
-//     ok := uuid.parse(&buf[:n], &lido)
+//     var read uuid.UUID
+//     ok := uuid.parse(&buf[:n], &read)
 //
-// v4 é inteiro aleatório. v7 começa com o horário em milissegundos, então
-// UUIDs criados depois ficam depois na ordem: índices de banco crescem no
-// fim, em vez de espalhados (o que deixa as inserções bem mais rápidas).
+// v4 is fully random. v7 starts with the time in milliseconds, so
+// UUIDs created later sort later: database indexes grow at the
+// end, instead of scattered (which makes inserts much faster).
 import "std/rand"
 import "std/time"
 
-// TEXT_LEN é o tamanho do texto de um UUID (8-4-4-4-12 dígitos hex).
+// TEXT_LEN is the length of a UUID's text (8-4-4-4-12 hex digits).
 pub const TEXT_LEN = 36
 
-// UUID são os 16 bytes, na ordem do texto.
+// UUID is the 16 bytes, in the text's order.
 pub struct UUID {
     b [16]byte
 }
 
-// v4 cria um UUID aleatório (122 bits aleatórios).
+// v4 creates a random UUID (122 random bits).
 pub fn v4() UUID {
     var u UUID
     rand.secure(&u.b)
-    u.b[6] = (u.b[6] & 0x0F) | 0x40 // versão 4
-    u.b[8] = (u.b[8] & 0x3F) | 0x80 // variante RFC
+    u.b[6] = (u.b[6] & 0x0F) | 0x40 // version 4
+    u.b[8] = (u.b[8] & 0x3F) | 0x80 // RFC variant
     return u
 }
 
-// v7 cria um UUID ordenado pelo tempo: os 48 bits de cima são os
-// milissegundos desde 1970 (time.now_ms), e o resto é aleatório.
+// v7 creates a time-ordered UUID: the top 48 bits are the
+// milliseconds since 1970 (time.now_ms), and the rest is random.
 pub fn v7() UUID {
     return v7_at(time.now_ms())
 }
 
-// v7_at é v7 com o horário dado (em milissegundos desde 1970).
+// v7_at is v7 with the given time (in milliseconds since 1970).
 pub fn v7_at(ms int) UUID {
     var u UUID
     rand.secure(&u.b)
     for i := 0; i < 6; i++ {
         u.b[i] = byte((ms >> (8 * (5 - i))) & 0xFF)
     }
-    u.b[6] = (u.b[6] & 0x0F) | 0x70 // versão 7
-    u.b[8] = (u.b[8] & 0x3F) | 0x80 // variante RFC
+    u.b[6] = (u.b[6] & 0x0F) | 0x70 // version 7
+    u.b[8] = (u.b[8] & 0x3F) | 0x80 // RFC variant
     return u
 }
 
-// version devolve a versão do UUID (4 ou 7 para os criados aqui).
+// version returns the UUID's version (4 or 7 for the ones created here).
 pub fn (u &UUID) version() int {
     return int(u.b[6] >> 4)
 }
 
-// ms devolve o horário de um UUID v7, em milissegundos desde 1970.
+// ms returns the time of a v7 UUID, in milliseconds since 1970.
 pub fn (u &UUID) ms() int {
     v := 0
     for i := 0; i < 6; i++ {
@@ -64,8 +64,8 @@ pub fn (u &UUID) ms() int {
     return v
 }
 
-// text escreve o UUID em dst (TEXT_LEN bytes, hex minúsculo com hífens) e
-// devolve quantos bytes escreveu.
+// text writes the UUID into dst (TEXT_LEN bytes, lowercase hex with hyphens) and
+// returns how many bytes it wrote.
 pub fn (u &UUID) text(dst &[]byte) int {
     if len(dst) < TEXT_LEN {
         fail("uuid.text: o destino precisa de 36 bytes")
@@ -84,8 +84,8 @@ pub fn (u &UUID) text(dst &[]byte) int {
     return k
 }
 
-// parse lê um UUID no formato de text (hex maiúsculo ou minúsculo). Devolve
-// false se o texto não for um UUID.
+// parse reads a UUID in text's format (upper- or lowercase hex). Returns
+// false if the text isn't a UUID.
 pub fn parse(s &[]byte, out &UUID) bool {
     if len(s) != TEXT_LEN {
         return false
@@ -122,7 +122,7 @@ fn hex_digit(c byte) int {
     return -1
 }
 
-// equal diz se dois UUIDs são o mesmo.
+// equal says whether two UUIDs are the same.
 pub fn (u &UUID) equal(o &UUID) bool {
     for i := 0; i < 16; i++ {
         if u.b[i] != o.b[i] {

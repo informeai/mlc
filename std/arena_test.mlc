@@ -19,7 +19,7 @@ fn test_pieces() {
     n := a.text(nome, &out)
     testing.eq_str(&out[:n], "café")
     a.check(outro)
-    testing.eq_str(&a.buf[outro.at:outro.at + outro.n], "xyz") // acesso direto
+    testing.eq_str(&a.buf[outro.at:outro.at + outro.n], "xyz") // direct access
     testing.eq_int(a.in_use(), 5 + 3 + 4)
     a.free()
 }
@@ -51,7 +51,7 @@ fn test_reset_reuses() {
     a.reset()
     testing.eq_int(a.in_use(), 0)
     z := a.alloc(8)
-    testing.eq_int(int(a.get(z, 0)), 0) // zerado, sem os dados velhos
+    testing.eq_int(int(a.get(z, 0)), 0) // zeroed, without the old data
     testing.eq_int(a.capacity(), 64)
     a.free()
 }
@@ -62,7 +62,7 @@ fn test_stale_span_panics() {
     s := a.copy_str("velho")
     a.reset()
     a.copy_str("novo!")
-    a.eq(s, "novo!") // o pedaço é de antes do reset: panic
+    a.eq(s, "novo!") // the piece is from before the reset: panic
     a.free()
 }
 
@@ -70,7 +70,7 @@ fn test_fixed_limit_panics() {
     testing.expect_panic()
     a := arena.new_fixed(8)
     a.copy_str("12345678")
-    a.copy_str("9") // passa do limite
+    a.copy_str("9") // goes past the limit
     a.free()
 }
 

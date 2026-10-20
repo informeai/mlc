@@ -65,7 +65,7 @@ fn test_case() {
     b := alloc([]byte, 16)
     n := str.copy(&b, "Olá, MLC 1")
     text.to_upper(&b[:n])
-    testing.eq_str(&b[:n], "OLá, MLC 1") // só ASCII muda
+    testing.eq_str(&b[:n], "OLá, MLC 1") // only ASCII changes
     text.to_lower(&b[:n])
     testing.eq_str(&b[:n], "olá, mlc 1")
     free(b)
@@ -75,7 +75,7 @@ fn test_split_next() {
     b := alloc([]byte, 16)
     n := str.copy(&b, "a,bc,,d")
     pos := 0
-    var got [4]int // o tamanho de cada campo
+    var got [4]int // the size of each field
     k := 0
     for pos <= n {
         f := text.split_next(&b[:n], ',', &pos)

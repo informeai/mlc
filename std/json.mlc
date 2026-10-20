@@ -1,34 +1,34 @@
-// JSON sem alocação: um leitor que percorre o texto e devolve um token por
-// vez, e funções para tirar e pôr escapes. Não há árvore: quem lê decide o
-// que guardar e onde alocar.
+// JSON without allocation: a reader that walks the text and returns one token at a
+// time, and functions to remove and add escapes. There's no tree: the reader decides
+// what to keep and where to allocate.
 //
 //     r := json.reader()
 //     for {
 //         match r.next(&doc) {
 //             Key(a, b) => {
-//                 if str.eq(&doc[a:b], "name") { ... o próximo token é o valor ... }
-//                 else { r.skip(&doc) }              // ignora o valor desta chave
+//                 if str.eq(&doc[a:b], "name") { ... the next token is the value ... }
+//                 else { r.skip(&doc) }              // ignores this key's value
 //             }
 //             String(a, b) => {
-//                 n := json.unescape(&buf, &doc[a:b]) // tira os escapes (\n, é)
+//                 n := json.unescape(&buf, &doc[a:b]) // removes the escapes (\n, \u00e9)
 //             }
 //             Number(a, b) => str.parse_int(&doc[a:b], &v)
 //             End => break
-//             Error(pos) => { ... texto inválido em pos ... }
+//             Error(pos) => { ... invalid text at pos ... }
 //             _ => {}
 //         }
 //     }
 //
-// O leitor confere a estrutura (chaves e valores alternados, vírgulas,
-// fechamentos) e a gramática dos números, strings e literais. A profundidade
-// vai até 64 níveis.
+// The reader checks the structure (alternating keys and values, commas,
+// closings) and the grammar of numbers, strings and literals. The depth
+// goes up to 64 levels.
 import "std/io"
 import "std/str"
 import "std/utf8"
 
-// Token é o que o leitor encontra. Os pares (a, b) são posições no texto:
-// &doc[a:b] é o conteúdo de uma string (sem as aspas e com os escapes como
-// estão) ou o texto de um número.
+// Token is what the reader finds. The (a, b) pairs are positions in the text:
+// &doc[a:b] is the content of a string (without the quotes and with the escapes as
+// they are) or the text of a number.
 pub enum Token {
     ObjectStart
     ObjectEnd
@@ -40,36 +40,36 @@ pub enum Token {
     True
     False
     Null
-    End           // o documento acabou
-    Error(at int) // texto inválido na posição at
+    End           // the document ended
+    Error(at int) // invalid text at position at
 }
 
 impl auto io.Display for Token
 
-const VALUE = 0       // espera um valor
-const ARRAY_FIRST = 1 // depois de [: um valor ou ]
-const KEY_FIRST = 2   // depois de {: uma chave ou }
-const KEY = 3         // depois de uma vírgula num objeto: uma chave
-const AFTER = 4       // depois de um valor: vírgula ou fechamento
-const DONE = 5        // o valor do documento acabou
+const VALUE = 0       // expects a value
+const ARRAY_FIRST = 1 // after [: a value or ]
+const KEY_FIRST = 2   // after {: a key or }
+const KEY = 3         // after a comma in an object: a key
+const AFTER = 4       // after a value: a comma or a closing
+const DONE = 5        // the document's value ended
 const FAILED = 6
 
-// Reader é o estado da leitura (na pilha de quem chama).
+// Reader is the reading state (on the caller's stack).
 pub struct Reader {
     pos int
-    stack [64]byte // { ou [ de cada nível aberto
+    stack [64]byte // { or [ of each open level
     depth int
     state int
 }
 
-// reader começa a ler um documento.
+// reader starts reading a document.
 pub fn reader() Reader {
     var r Reader
     return r
 }
 
-// next devolve o próximo token de s (sempre o mesmo texto, do começo ao
-// fim). Depois de End ou Error, continua devolvendo o mesmo.
+// next returns the next token of s (always the same text, from start to
+// end). After End or Error, it keeps returning the same.
 pub fn (r &Reader) next(s &[]byte) Token {
     for {
         r.skip_space(s)
@@ -120,9 +120,9 @@ pub fn (r &Reader) next(s &[]byte) Token {
     }
 }
 
-// skip pula o próximo valor inteiro (com tudo que houver dentro, se for um
-// objeto ou array). Serve depois de uma chave que não interessa. Devolve
-// false se o texto for inválido.
+// skip skips the whole next value (with everything inside, if it's an
+// object or array). Useful after a key you don't care about. Returns
+// false if the text is invalid.
 pub fn (r &Reader) skip(s &[]byte) bool {
     depth := r.depth
     first := true
@@ -148,7 +148,7 @@ fn (r &Reader) skip_space(s &[]byte) {
     }
 }
 
-// close trata } e ] contra o nível aberto (top).
+// close handles } and ] against the open level (top).
 fn (r &Reader) close(c byte, top byte) Token {
     if c == '}' && top == '{' {
         r.pos++
@@ -251,8 +251,8 @@ fn (r &Reader) literal(s &[]byte, word string) bool {
     return true
 }
 
-// scan_string acha as aspas que fecham a string que começa em a (depois das
-// aspas de abertura), conferindo os escapes; -1 se for inválida.
+// scan_string finds the quote that closes the string starting at a (after the
+// opening quote), checking the escapes; -1 if it's invalid.
 fn scan_string(s &[]byte, a int) int {
     i := a
     for i < len(s) {
@@ -261,7 +261,7 @@ fn scan_string(s &[]byte, a int) int {
             return i
         }
         if c < 0x20 {
-            return -1 // caractere de controle sem escape
+            return -1 // control character without an escape
         }
         if c == '\\' {
             i++
@@ -288,8 +288,8 @@ fn scan_string(s &[]byte, a int) int {
     return -1
 }
 
-// scan_number confere a gramática de um número que começa em a e devolve
-// onde ele termina; -1 se for inválido.
+// scan_number checks the grammar of a number starting at a and returns
+// where it ends; -1 if it's invalid.
 fn scan_number(s &[]byte, a int) int {
     i := a
     if s[i] == '-' {
@@ -299,7 +299,7 @@ fn scan_number(s &[]byte, a int) int {
         return -1
     }
     if s[i] == '0' {
-        i++ // sem zeros à esquerda
+        i++ // no leading zeros
     } else {
         i = skip_digits(s, i)
     }
@@ -347,10 +347,10 @@ fn hex4(s &[]byte, i int) int {
     return (hex(s[i]) << 12) | (hex(s[i + 1]) << 8) | (hex(s[i + 2]) << 4) | hex(s[i + 3])
 }
 
-// unescape copia o conteúdo de uma string (de um token String ou Key) para
-// dst, trocando os escapes pelos caracteres (é vira é, com os pares de
-// surrogates juntados). Devolve quantos bytes usou. O texto nunca cresce,
-// então um dst do tamanho de raw sempre basta. Um surrogate sozinho vira
+// unescape copies the content of a string (from a String or Key token) into
+// dst, replacing the escapes with the characters (\u00e9 becomes é, with the
+// surrogate pairs joined). Returns how many bytes it used. The text never grows,
+// so a dst the size of raw is always enough. A lone surrogate becomes
 // U+FFFD.
 pub fn unescape(dst &[]byte, raw &[]byte) int {
     n := 0
@@ -396,7 +396,7 @@ pub fn unescape(dst &[]byte, raw &[]byte) int {
     return n
 }
 
-// escape_len diz quantos bytes escape vai usar para s.
+// escape_len says how many bytes escape will use for s.
 pub fn escape_len(s &[]byte) int {
     n := 0
     for c in s {
@@ -411,8 +411,8 @@ pub fn escape_len(s &[]byte) int {
     return n
 }
 
-// escape escreve s em dst com os escapes de JSON (sem as aspas em volta) e
-// devolve quantos bytes usou. Para montar um documento, junte com
+// escape writes s into dst with JSON's escapes (without the surrounding quotes) and
+// returns how many bytes it used. To build a document, combine it with
 // str.format: str.format(&out, "{{\"name\": \"{:s}\"}}", &esc[:n]).
 pub fn escape(dst &[]byte, s &[]byte) int {
     n := 0
@@ -441,47 +441,47 @@ pub fn escape(dst &[]byte, s &[]byte) int {
     return n
 }
 
-// ---------- escrita ----------
+// ---------- writing ----------
 
-// MAX_DEPTH é quantos objetos e arrays um Writer aninha.
+// MAX_DEPTH is how many objects and arrays a Writer nests.
 pub const MAX_DEPTH = 32
 
-// Writer monta um documento JSON com as vírgulas, as aspas e os escapes
-// certos. O texto fica em &w.buf[:w.n]. O buffer é um dono que cresce
-// (realloc, à vista em grow): crie o Writer uma vez, use reset entre um
-// documento e outro, e free no fim.
+// Writer builds a JSON document with the right commas, quotes and escapes.
+// The text is in &w.buf[:w.n]. The buffer is an owner that grows
+// (realloc, visible in grow): create the Writer once, use reset between one
+// document and the next, and free at the end.
 //
 //     w := json.writer(4096)
 //     w.object()
 //     w.field_int("id", 7)
-//     w.field_str("nome", "café")
+//     w.field_str("name", "café")
 //     w.key("tags")
 //     w.array()
-//     w.str("quente")
-//     w.str("forte")
+//     w.str("hot")
+//     w.str("strong")
 //     w.end()
-//     w.field_bool("ativo", true)
+//     w.field_bool("active", true)
 //     w.end()
-//     // &w.buf[:w.n] é {"id":7,"nome":"café","tags":["quente","forte"],"ativo":true}
+//     // &w.buf[:w.n] is {"id":7,"name":"café","tags":["hot","strong"],"active":true}
 //     http.respond(&c, 200, "application/json", &w.buf[:w.n])
 //     w.reset()
 //     ...
 //     w.free()
 //
-// Um uso errado (um valor sem key dentro de um objeto, key num array, end
-// sem nada aberto, dois valores na raiz) é um erro do programa e dá panic.
-// NaN e infinito, que o JSON não tem, viram null.
+// Wrong use (a value without a key inside an object, a key in an array, end
+// with nothing open, two values at the root) is a program error and panics.
+// NaN and infinity, which JSON doesn't have, become null.
 pub struct Writer {
     buf []byte
     n int
-    kind [32]byte // 'o' (objeto) ou 'a' (array), por nível
-    count [32]int // itens já escritos em cada nível
+    kind [32]byte // 'o' (object) or 'a' (array), per level
+    count [32]int // items already written at each level
     depth int
-    after_key bool // num objeto, a key foi escrita e falta o valor
-    roots int      // valores escritos na raiz (um documento tem um)
+    after_key bool // in an object, the key was written and the value is missing
+    roots int      // values written at the root (a document has one)
 }
 
-// writer aloca um Writer com cap bytes (ele cresce se precisar).
+// writer allocates a Writer with cap bytes (it grows if needed).
 pub fn writer(cap int) *Writer {
     if cap < 16 {
         cap = 16
@@ -489,13 +489,13 @@ pub fn writer(cap int) *Writer {
     return alloc(Writer{buf: alloc([]byte, cap), n: 0, kind: [32]byte{}, count: [32]int{}, depth: 0, after_key: false, roots: 0})
 }
 
-// free libera o Writer.
+// free frees the Writer.
 pub fn (w *Writer) free() {
     free(w.buf)
     free(w)
 }
 
-// reset esvazia o Writer para o próximo documento (o buffer fica).
+// reset empties the Writer for the next document (the buffer stays).
 pub fn (w &Writer) reset() {
     w.n = 0
     w.depth = 0
@@ -503,22 +503,22 @@ pub fn (w &Writer) reset() {
     w.roots = 0
 }
 
-// done diz se o documento está completo: um valor na raiz e tudo fechado.
+// done says whether the document is complete: one value at the root and everything closed.
 pub fn (w &Writer) done() bool {
     return w.roots == 1 && w.depth == 0
 }
 
-// object abre um objeto ({).
+// object opens an object ({).
 pub fn (w &Writer) object() {
     w.open('o', '{')
 }
 
-// array abre um array ([).
+// array opens an array ([).
 pub fn (w &Writer) array() {
     w.open('a', '[')
 }
 
-// end fecha o objeto ou o array aberto por último.
+// end closes the object or array opened last.
 pub fn (w &Writer) end() {
     if w.depth == 0 {
         fail("json.Writer.end: não há objeto nem array aberto")
@@ -534,7 +534,7 @@ pub fn (w &Writer) end() {
     }
 }
 
-// key escreve a chave do próximo valor, num objeto.
+// key writes the key of the next value, in an object.
 pub fn (w &Writer) key(name string) {
     var b [256]byte
     if len(name) > len(b) {
@@ -544,7 +544,7 @@ pub fn (w &Writer) key(name string) {
     w.key_bytes(&b[:n])
 }
 
-// key_bytes é key com a chave montada em tempo de execução.
+// key_bytes is key with the key built at run time.
 pub fn (w &Writer) key_bytes(name &[]byte) {
     if w.depth == 0 || w.kind[w.depth - 1] != 'o' {
         fail("json.Writer.key: key só existe dentro de um objeto")
@@ -561,7 +561,7 @@ pub fn (w &Writer) key_bytes(name &[]byte) {
     w.after_key = true
 }
 
-// str escreve um texto fixo do programa (com aspas e escapes).
+// str writes a fixed text from the program (with quotes and escapes).
 pub fn (w &Writer) str(s string) {
     var b [1024]byte
     if len(s) > len(b) {
@@ -571,21 +571,21 @@ pub fn (w &Writer) str(s string) {
     w.text(&b[:n])
 }
 
-// text escreve um texto (com aspas e escapes).
+// text writes a text (with quotes and escapes).
 pub fn (w &Writer) text(s &[]byte) {
     w.before()
     w.quoted(s)
 }
 
-// int escreve um inteiro.
+// int writes an integer.
 pub fn (w &Writer) int(v int) {
     w.before()
     w.reserve(24)
     w.n += str.put_int(&w.buf[w.n:w.n + 24], v)
 }
 
-// float escreve um real (o menor texto que o representa; NaN e infinito
-// viram null).
+// float writes a real (the shortest text that represents it; NaN and infinity
+// become null).
 pub fn (w &Writer) float(v float64) {
     w.before()
     if v != v || v - v != 0.0 {
@@ -596,7 +596,7 @@ pub fn (w &Writer) float(v float64) {
     w.n += str.put_float(&w.buf[w.n:w.n + 40], v)
 }
 
-// bool escreve true ou false.
+// bool writes true or false.
 pub fn (w &Writer) bool(v bool) {
     w.before()
     if v {
@@ -606,13 +606,13 @@ pub fn (w &Writer) bool(v bool) {
     }
 }
 
-// null escreve null.
+// null writes null.
 pub fn (w &Writer) null() {
     w.before()
     w.literal("null")
 }
 
-// raw escreve um pedaço que já é JSON válido (não é conferido).
+// raw writes a piece that's already valid JSON (it isn't checked).
 pub fn (w &Writer) raw(s &[]byte) {
     w.before()
     w.reserve(len(s))
@@ -622,43 +622,43 @@ pub fn (w &Writer) raw(s &[]byte) {
     w.n += len(s)
 }
 
-// field_str escreve "key": "texto" num objeto.
+// field_str writes "key": "text" in an object.
 pub fn (w &Writer) field_str(key string, v string) {
     w.key(key)
     w.str(v)
 }
 
-// field_text escreve "key": texto num objeto.
+// field_text writes "key": text in an object.
 pub fn (w &Writer) field_text(key string, v &[]byte) {
     w.key(key)
     w.text(v)
 }
 
-// field_int escreve "key": inteiro num objeto.
+// field_int writes "key": integer in an object.
 pub fn (w &Writer) field_int(key string, v int) {
     w.key(key)
     w.int(v)
 }
 
-// field_float escreve "key": real num objeto.
+// field_float writes "key": real in an object.
 pub fn (w &Writer) field_float(key string, v float64) {
     w.key(key)
     w.float(v)
 }
 
-// field_bool escreve "key": true ou false num objeto.
+// field_bool writes "key": true or false in an object.
 pub fn (w &Writer) field_bool(key string, v bool) {
     w.key(key)
     w.bool(v)
 }
 
-// field_null escreve "key": null num objeto.
+// field_null writes "key": null in an object.
 pub fn (w &Writer) field_null(key string) {
     w.key(key)
     w.null()
 }
 
-// before confere onde um valor pode entrar e escreve a vírgula.
+// before checks where a value can go and writes the comma.
 fn (w &Writer) before() {
     if w.depth == 0 {
         if w.roots > 0 {
@@ -713,7 +713,7 @@ fn (w &Writer) put(c byte) {
     w.n++
 }
 
-// reserve garante k bytes livres, crescendo o buffer (realloc).
+// reserve guarantees k free bytes, growing the buffer (realloc).
 fn (w &Writer) reserve(k int) {
     if w.n + k <= len(w.buf) {
         return

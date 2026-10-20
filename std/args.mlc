@@ -1,7 +1,7 @@
-// Argumentos de linha de comando: opções (-v, --verbose, -o arq,
-// --out=arq) e argumentos posicionais. O argumento atual fica num buffer
-// fixo dentro do Args, na pilha de quem chama; os valores são copiados para
-// buffers de quem chama. Nada aloca.
+// Command-line arguments: options (-v, --verbose, -o file,
+// --out=file) and positional arguments. The current argument stays in a fixed
+// buffer inside Args, on the caller's stack; the values are copied into
+// the caller's buffers. Nothing allocates.
 //
 //     a := args.new()
 //     verbose := false
@@ -11,38 +11,38 @@
 //         if a.is("-v", "--verbose") {
 //             verbose = true
 //         } else if a.value("-o", "--out", &out, &out_n) {
-//             if out_n < 0 { ... faltou o valor ... }
+//             if out_n < 0 { ... the value is missing ... }
 //         } else if a.is_option() {
-//             ... opção desconhecida: a.text(&buf) ...
+//             ... unknown option: a.text(&buf) ...
 //         } else {
-//             n := a.text(&file)            // posicional
+//             n := a.text(&file)            // positional
 //         }
 //     }
 //
-// Depois de "--", tudo é posicional (para nomes que começam com -).
+// After "--", everything is positional (for names that start with -).
 import "std/os"
 import "std/result"
 import "std/str"
 
-// Args percorre os argumentos da linha de comando, um por vez, com o atual
-// copiado para um buffer fixo (até 4 KB).
+// Args walks the command-line arguments, one at a time, with the current one
+// copied into a fixed buffer (up to 4 KB).
 pub struct Args {
-    cur [4096]byte // o argumento atual
+    cur [4096]byte // the current argument
     n int
-    i int     // o índice do próximo argumento
-    rest bool // já passou do "--"
-    used bool // o atual já foi reconhecido (is, value)
+    i int     // the index of the next argument
+    rest bool // already past the "--"
+    used bool // the current one was already recognized (is, value)
 }
 
-// new começa a ler os argumentos do programa (o 0, o nome dele, fica de fora).
+// new starts reading the program's arguments (0, its name, is left out).
 pub fn new() Args {
     var a Args
     a.i = 1
     return a
 }
 
-// next avança para o próximo argumento e diz se há um. Um "--" é pulado e
-// faz o resto ser posicional.
+// next advances to the next argument and says whether there is one. A "--" is skipped and
+// makes the rest positional.
 pub fn (a &Args) next() bool {
     for {
         if !a.load(a.i) {
@@ -73,8 +73,8 @@ fn (a &Args) load(i int) bool {
     }
 }
 
-// is diz se o argumento atual é a opção short ou long ("" para não ter uma
-// das formas).
+// is says whether the current argument is the option short or long ("" to omit one
+// of the forms).
 pub fn (a &Args) is(short string, long string) bool {
     if a.rest {
         return false
@@ -86,14 +86,14 @@ pub fn (a &Args) is(short string, long string) bool {
     return false
 }
 
-// matches diz se o argumento atual é exatamente short ou long.
+// matches says whether the current argument is exactly short or long.
 fn (a &Args) matches(short string, long string) bool {
     return (len(short) > 0 && str.eq(&a.cur[:a.n], short)) || (len(long) > 0 && str.eq(&a.cur[:a.n], long))
 }
 
-// value reconhece uma opção com valor: "-o arq", "--out arq" ou
-// "--out=arq". Se for ela, copia o valor para dst, põe o tamanho em n (-1 se
-// o valor faltou) e devolve true. Um valor maior que dst dá panic.
+// value recognizes an option with a value: "-o file", "--out file" or
+// "--out=file". If it's this one, copies the value into dst, puts the length in n (-1 if
+// the value is missing) and returns true. A value larger than dst panics.
 pub fn (a &Args) value(short string, long string, dst &[]byte, n &int) bool {
     if a.rest {
         return false
@@ -120,19 +120,19 @@ pub fn (a &Args) value(short string, long string, dst &[]byte, n &int) bool {
     return true
 }
 
-// is_option diz se o argumento atual parece uma opção (começa com - e não é
-// só "-"), ainda não reconhecida por is ou value.
+// is_option says whether the current argument looks like an option (starts with - and isn't
+// just "-"), not yet recognized by is or value.
 pub fn (a &Args) is_option() bool {
     return !a.rest && !a.used && a.n > 1 && a.cur[0] == '-'
 }
 
-// text copia o argumento atual para dst e devolve o tamanho.
+// text copies the current argument into dst and returns the length.
 pub fn (a &Args) text(dst &[]byte) int {
     return str.copy_bytes(dst, &a.cur[:a.n])
 }
 
-// int_value é value para um número: põe o valor em v e devolve true se a
-// opção é esta. ok fica false se o valor faltou ou não é um inteiro.
+// int_value is value for a number: puts the value in v and returns true if the
+// option is this one. ok becomes false if the value is missing or isn't an integer.
 pub fn (a &Args) int_value(short string, long string, v &int, ok &bool) bool {
     var buf [32]byte
     n := 0

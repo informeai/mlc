@@ -1,11 +1,11 @@
-// Números em bytes: inteiros e reais de tamanho fixo, em big-endian (_be: o
-// byte mais significativo primeiro, a ordem das redes e da maioria dos
-// formatos de arquivo) ou little-endian (_le: o menos significativo
-// primeiro, a ordem do x86 e do ARM), e inteiros de tamanho variável
-// (varint, o formato do protobuf e do Go).
+// Numbers as bytes: fixed-size integers and reals, in big-endian (_be: the
+// most significant byte first, the order of networks and of most
+// file formats) or little-endian (_le: the least significant
+// first, the order of x86 and ARM), and variable-size integers
+// (varint, the protobuf and Go format).
 //
-// Nada aloca: quem lê recebe um slice emprestado e lê o começo dele; quem
-// escreve escreve no começo de dst. A posição fica com quem chama, num
+// Nothing allocates: readers take a borrowed slice and read its start; writers
+// write at the start of dst. The position stays with the caller, as a
 // sub-slice:
 //
 //     var hdr [14]byte
@@ -15,8 +15,8 @@
 //
 //     size := binary.u32_be(&buf[off:])
 //
-// Um slice curto demais para o valor dá panic (put_f64_le(&hdr[8:], x)
-// acima: só sobram 6 bytes).
+// A slice too short for the value panics (put_f64_le(&hdr[8:], x)
+// above: only 6 bytes are left).
 import "std/math"
 
 extern fn fail(msg string)
@@ -27,47 +27,47 @@ fn need(b &[]byte, n int) {
     }
 }
 
-// ---------- sem sinal ----------
+// ---------- unsigned ----------
 
-// u16_be lê um uint16 dos 2 primeiros bytes de src, em big-endian.
+// u16_be reads a uint16 from the first 2 bytes of src, in big-endian.
 pub fn u16_be(src &[]byte) uint16 {
     need(src, 2)
     return (uint16(src[0]) << 8) | uint16(src[1])
 }
 
-// u16_le lê um uint16 dos 2 primeiros bytes de src, em little-endian.
+// u16_le reads a uint16 from the first 2 bytes of src, in little-endian.
 pub fn u16_le(src &[]byte) uint16 {
     need(src, 2)
     return uint16(src[0]) | (uint16(src[1]) << 8)
 }
 
-// put_u16_be escreve v nos 2 primeiros bytes de dst, em big-endian.
+// put_u16_be writes v into the first 2 bytes of dst, in big-endian.
 pub fn put_u16_be(dst &[]byte, v uint16) {
     need(dst, 2)
     dst[0] = byte(v >> 8)
     dst[1] = byte(v & 0xFF)
 }
 
-// put_u16_le escreve v nos 2 primeiros bytes de dst, em little-endian.
+// put_u16_le writes v into the first 2 bytes of dst, in little-endian.
 pub fn put_u16_le(dst &[]byte, v uint16) {
     need(dst, 2)
     dst[0] = byte(v & 0xFF)
     dst[1] = byte(v >> 8)
 }
 
-// u32_be lê um uint32 dos 4 primeiros bytes de src, em big-endian.
+// u32_be reads a uint32 from the first 4 bytes of src, in big-endian.
 pub fn u32_be(src &[]byte) uint32 {
     need(src, 4)
     return (uint32(src[0]) << 24) | (uint32(src[1]) << 16) | (uint32(src[2]) << 8) | uint32(src[3])
 }
 
-// u32_le lê um uint32 dos 4 primeiros bytes de src, em little-endian.
+// u32_le reads a uint32 from the first 4 bytes of src, in little-endian.
 pub fn u32_le(src &[]byte) uint32 {
     need(src, 4)
     return uint32(src[0]) | (uint32(src[1]) << 8) | (uint32(src[2]) << 16) | (uint32(src[3]) << 24)
 }
 
-// put_u32_be escreve v nos 4 primeiros bytes de dst, em big-endian.
+// put_u32_be writes v into the first 4 bytes of dst, in big-endian.
 pub fn put_u32_be(dst &[]byte, v uint32) {
     need(dst, 4)
     for i := 0; i < 4; i++ {
@@ -75,7 +75,7 @@ pub fn put_u32_be(dst &[]byte, v uint32) {
     }
 }
 
-// put_u32_le escreve v nos 4 primeiros bytes de dst, em little-endian.
+// put_u32_le writes v into the first 4 bytes of dst, in little-endian.
 pub fn put_u32_le(dst &[]byte, v uint32) {
     need(dst, 4)
     for i := 0; i < 4; i++ {
@@ -83,7 +83,7 @@ pub fn put_u32_le(dst &[]byte, v uint32) {
     }
 }
 
-// u64_be lê um uint64 dos 8 primeiros bytes de src, em big-endian.
+// u64_be reads a uint64 from the first 8 bytes of src, in big-endian.
 pub fn u64_be(src &[]byte) uint64 {
     need(src, 8)
     var v uint64 = 0
@@ -93,7 +93,7 @@ pub fn u64_be(src &[]byte) uint64 {
     return v
 }
 
-// u64_le lê um uint64 dos 8 primeiros bytes de src, em little-endian.
+// u64_le reads a uint64 from the first 8 bytes of src, in little-endian.
 pub fn u64_le(src &[]byte) uint64 {
     need(src, 8)
     var v uint64 = 0
@@ -103,7 +103,7 @@ pub fn u64_le(src &[]byte) uint64 {
     return v
 }
 
-// put_u64_be escreve v nos 8 primeiros bytes de dst, em big-endian.
+// put_u64_be writes v into the first 8 bytes of dst, in big-endian.
 pub fn put_u64_be(dst &[]byte, v uint64) {
     need(dst, 8)
     for i := 0; i < 8; i++ {
@@ -111,7 +111,7 @@ pub fn put_u64_be(dst &[]byte, v uint64) {
     }
 }
 
-// put_u64_le escreve v nos 8 primeiros bytes de dst, em little-endian.
+// put_u64_le writes v into the first 8 bytes of dst, in little-endian.
 pub fn put_u64_le(dst &[]byte, v uint64) {
     need(dst, 8)
     for i := 0; i < 8; i++ {
@@ -119,71 +119,71 @@ pub fn put_u64_le(dst &[]byte, v uint64) {
     }
 }
 
-// ---------- com sinal (complemento de dois) ----------
+// ---------- signed (two's complement) ----------
 
-// i16_be lê um int16 dos 2 primeiros bytes de src, em big-endian.
+// i16_be reads an int16 from the first 2 bytes of src, in big-endian.
 pub fn i16_be(src &[]byte) int16 {
     return signed16(u16_be(src))
 }
 
-// i16_le lê um int16 dos 2 primeiros bytes de src, em little-endian.
+// i16_le reads an int16 from the first 2 bytes of src, in little-endian.
 pub fn i16_le(src &[]byte) int16 {
     return signed16(u16_le(src))
 }
 
-// put_i16_be escreve v nos 2 primeiros bytes de dst, em big-endian.
+// put_i16_be writes v into the first 2 bytes of dst, in big-endian.
 pub fn put_i16_be(dst &[]byte, v int16) {
     put_u16_be(dst, unsigned16(v))
 }
 
-// put_i16_le escreve v nos 2 primeiros bytes de dst, em little-endian.
+// put_i16_le writes v into the first 2 bytes of dst, in little-endian.
 pub fn put_i16_le(dst &[]byte, v int16) {
     put_u16_le(dst, unsigned16(v))
 }
 
-// i32_be lê um int32 dos 4 primeiros bytes de src, em big-endian.
+// i32_be reads an int32 from the first 4 bytes of src, in big-endian.
 pub fn i32_be(src &[]byte) int32 {
     return signed32(u32_be(src))
 }
 
-// i32_le lê um int32 dos 4 primeiros bytes de src, em little-endian.
+// i32_le reads an int32 from the first 4 bytes of src, in little-endian.
 pub fn i32_le(src &[]byte) int32 {
     return signed32(u32_le(src))
 }
 
-// put_i32_be escreve v nos 4 primeiros bytes de dst, em big-endian.
+// put_i32_be writes v into the first 4 bytes of dst, in big-endian.
 pub fn put_i32_be(dst &[]byte, v int32) {
     put_u32_be(dst, unsigned32(v))
 }
 
-// put_i32_le escreve v nos 4 primeiros bytes de dst, em little-endian.
+// put_i32_le writes v into the first 4 bytes of dst, in little-endian.
 pub fn put_i32_le(dst &[]byte, v int32) {
     put_u32_le(dst, unsigned32(v))
 }
 
-// i64_be lê um int (64 bits) dos 8 primeiros bytes de src, em big-endian.
+// i64_be reads an int (64 bits) from the first 8 bytes of src, in big-endian.
 pub fn i64_be(src &[]byte) int {
     return signed64(u64_be(src))
 }
 
-// i64_le lê um int (64 bits) dos 8 primeiros bytes de src, em little-endian.
+// i64_le reads an int (64 bits) from the first 8 bytes of src, in little-endian.
 pub fn i64_le(src &[]byte) int {
     return signed64(u64_le(src))
 }
 
-// put_i64_be escreve v nos 8 primeiros bytes de dst, em big-endian.
+// put_i64_be writes v into the first 8 bytes of dst, in big-endian.
 pub fn put_i64_be(dst &[]byte, v int) {
     put_u64_be(dst, unsigned64(v))
 }
 
-// put_i64_le escreve v nos 8 primeiros bytes de dst, em little-endian.
+// put_i64_le writes v into the first 8 bytes of dst, in little-endian.
 pub fn put_i64_le(dst &[]byte, v int) {
     put_u64_le(dst, unsigned64(v))
 }
 
-// Os bits de um negativo em complemento de dois: ^x é não negativo (-x-1),
-// e inverter os bits dele de volta dá o padrão de x. Assim nenhuma
-// conversão sai da faixa.
+// The bits of a negative in two's complement: ^x is non-negative (-x-1),
+// and flipping its bits back gives x's pattern. This way no
+// conversion goes out of range.
 fn unsigned16(x int16) uint16 {
     if x < 0 {
         return ^uint16(^x)
@@ -226,55 +226,55 @@ fn signed64(u uint64) int {
     return int(u)
 }
 
-// ---------- reais (IEEE 754) ----------
+// ---------- reals (IEEE 754) ----------
 
-// f32_be lê um float32 dos 4 primeiros bytes de src, em big-endian.
+// f32_be reads a float32 from the first 4 bytes of src, in big-endian.
 pub fn f32_be(src &[]byte) float32 {
     return math.float32_from_bits(u32_be(src))
 }
 
-// f32_le lê um float32 dos 4 primeiros bytes de src, em little-endian.
+// f32_le reads a float32 from the first 4 bytes of src, in little-endian.
 pub fn f32_le(src &[]byte) float32 {
     return math.float32_from_bits(u32_le(src))
 }
 
-// put_f32_be escreve v nos 4 primeiros bytes de dst, em big-endian.
+// put_f32_be writes v into the first 4 bytes of dst, in big-endian.
 pub fn put_f32_be(dst &[]byte, x float32) {
     put_u32_be(dst, math.float32_bits(x))
 }
 
-// put_f32_le escreve v nos 4 primeiros bytes de dst, em little-endian.
+// put_f32_le writes v into the first 4 bytes of dst, in little-endian.
 pub fn put_f32_le(dst &[]byte, x float32) {
     put_u32_le(dst, math.float32_bits(x))
 }
 
-// f64_be lê um float64 dos 8 primeiros bytes de src, em big-endian.
+// f64_be reads a float64 from the first 8 bytes of src, in big-endian.
 pub fn f64_be(src &[]byte) float64 {
     return math.float64_from_bits(u64_be(src))
 }
 
-// f64_le lê um float64 dos 8 primeiros bytes de src, em little-endian.
+// f64_le reads a float64 from the first 8 bytes of src, in little-endian.
 pub fn f64_le(src &[]byte) float64 {
     return math.float64_from_bits(u64_le(src))
 }
 
-// put_f64_be escreve v nos 8 primeiros bytes de dst, em big-endian.
+// put_f64_be writes v into the first 8 bytes of dst, in big-endian.
 pub fn put_f64_be(dst &[]byte, x float64) {
     put_u64_be(dst, math.float64_bits(x))
 }
 
-// put_f64_le escreve v nos 8 primeiros bytes de dst, em little-endian.
+// put_f64_le writes v into the first 8 bytes of dst, in little-endian.
 pub fn put_f64_le(dst &[]byte, x float64) {
     put_u64_le(dst, math.float64_bits(x))
 }
 
 // ---------- varint ----------
 
-// MAX_VARINT é o maior tamanho de um varint de 64 bits: um [10]byte sempre
-// basta.
+// MAX_VARINT is the largest size of a 64-bit varint: a [10]byte is always
+// enough.
 pub const MAX_VARINT = 10
 
-// uvarint_len diz quantos bytes put_uvarint usa para v (1 a 10).
+// uvarint_len says how many bytes put_uvarint uses for v (1 to 10).
 pub fn uvarint_len(v uint64) int {
     n := 1
     for v >= 0x80 {
@@ -284,8 +284,8 @@ pub fn uvarint_len(v uint64) int {
     return n
 }
 
-// put_uvarint escreve v em 7 bits por byte, o menos significativo primeiro
-// (o bit 0x80 diz que vem mais um byte), e devolve quantos bytes usou.
+// put_uvarint writes v at 7 bits per byte, least significant first
+// (the 0x80 bit says another byte follows), and returns how many bytes it used.
 pub fn put_uvarint(dst &[]byte, v uint64) int {
     need(dst, uvarint_len(v))
     i := 0
@@ -298,9 +298,9 @@ pub fn put_uvarint(dst &[]byte, v uint64) int {
     return i + 1
 }
 
-// uvarint lê um varint do começo de src para out e devolve quantos bytes
-// usou; 0 se src acabar no meio (faltam bytes: leia mais e tente de novo) e
-// -1 se o número não couber em 64 bits.
+// uvarint reads a varint from the start of src into out and returns how many bytes
+// it used; 0 if src ends in the middle (bytes are missing: read more and try again) and
+// -1 if the number doesn't fit in 64 bits.
 pub fn uvarint(src &[]byte, out &uint64) int {
     var v uint64 = 0
     shift := 0
@@ -322,20 +322,20 @@ pub fn uvarint(src &[]byte, out &uint64) int {
     return 0
 }
 
-// Os varints com sinal usam zigzag: 0, -1, 1, -2, 2... viram 0, 1, 2, 3,
-// 4..., então números pequenos, positivos ou negativos, ocupam poucos bytes.
+// Signed varints use zigzag: 0, -1, 1, -2, 2... become 0, 1, 2, 3,
+// 4..., so small numbers, positive or negative, take few bytes.
 
-// varint_len diz quantos bytes put_varint usa para v.
+// varint_len says how many bytes put_varint uses for v.
 pub fn varint_len(v int) int {
     return uvarint_len(zigzag(v))
 }
 
-// put_varint escreve v (com sinal) e devolve quantos bytes usou.
+// put_varint writes v (signed) and returns how many bytes it used.
 pub fn put_varint(dst &[]byte, v int) int {
     return put_uvarint(dst, zigzag(v))
 }
 
-// varint lê um varint com sinal; o retorno é o mesmo de uvarint.
+// varint reads a signed varint; the return is the same as uvarint's.
 pub fn varint(src &[]byte, out &int) int {
     var u uint64 = 0
     n := uvarint(src, &u)

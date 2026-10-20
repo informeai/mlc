@@ -1,60 +1,60 @@
-// Arquivos e diretórios. O conteúdo é lido e escrito em buffers de quem
-// chama: para ler um arquivo inteiro, pergunte o tamanho (file_size) e aloque
-// o buffer; para arquivos grandes, abra com open e leia em pedaços.
-// Os caminhos são []byte (por exemplo, vindos de os.arg); para um literal,
-// copie-o antes com str.copy.
+// Files and directories. Content is read and written in the caller's
+// buffers: to read a whole file, ask for its size (file_size) and allocate
+// the buffer; for large files, open with open and read in pieces.
+// Paths are []byte (for example, coming from os.arg); for a literal,
+// copy it first with str.copy.
 import "std/io"
 import "std/os"
 import "std/rand"
 import "std/result"
 import "std/str"
 
-// códigos de erro (os números são os do sistema, errno, menos os que mudam
-// entre sistemas, que ganham um número do MLC)
+// error codes (the numbers are the system's, errno, except those that change
+// between systems, which get an MLC number)
 pub const NOT_FOUND = 2    // ENOENT
 pub const DENIED = 13      // EACCES
 pub const EXISTS = 17      // EEXIST
 pub const NOT_DIR = 20     // ENOTDIR
 pub const IS_DIR = 21      // EISDIR
-pub const TOO_BIG = 1000   // o arquivo não cabe no buffer
-pub const NOT_EMPTY = 1001 // o diretório não está vazio
+pub const TOO_BIG = 1000   // the file doesn't fit in the buffer
+pub const NOT_EMPTY = 1001 // the directory isn't empty
 
-// modos de open
-pub const READ = 0       // só leitura
-pub const WRITE = 1      // cria ou esvazia, e escreve
-pub const APPEND = 2     // cria se preciso, e escreve no fim
-pub const READ_WRITE = 3 // cria se preciso, lê e escreve (sem esvaziar)
+// open modes
+pub const READ = 0       // read only
+pub const WRITE = 1      // creates or truncates, and writes
+pub const APPEND = 2     // creates if needed, and writes at the end
+pub const READ_WRITE = 3 // creates if needed, reads and writes (without truncating)
 
 extern fn size_raw(path &[]byte) int
 extern fn read_raw(path &[]byte, dst &[]byte) int
 extern fn write_raw(path &[]byte, data &[]byte, append bool) int
 extern fn remove_raw(path &[]byte) int
 
-// exists diz se há um arquivo ou diretório em path.
+// exists says whether there's a file or directory at path.
 pub extern fn exists(path &[]byte) bool
 
-// file_size devolve o tamanho do arquivo em bytes.
+// file_size returns the file's size in bytes.
 pub fn file_size(path &[]byte) result.Result[int, int] {
     return wrap(size_raw(path))
 }
 
-// read_file lê o arquivo inteiro para o começo de dst e devolve o tamanho.
-// Se o arquivo for maior que dst, nada é lido e o erro é TOO_BIG.
+// read_file reads the whole file into the start of dst and returns the size.
+// If the file is larger than dst, nothing is read and the error is TOO_BIG.
 pub fn read_file(path &[]byte, dst &[]byte) result.Result[int, int] {
     return wrap(read_raw(path, dst))
 }
 
-// write_file cria (ou substitui) o arquivo com o conteúdo de data.
+// write_file creates (or replaces) the file with the content of data.
 pub fn write_file(path &[]byte, data &[]byte) result.Result[int, int] {
     return wrap(write_raw(path, data, false))
 }
 
-// append_file acrescenta data ao fim do arquivo (criando-o, se preciso).
+// append_file appends data at the end of the file (creating it, if needed).
 pub fn append_file(path &[]byte, data &[]byte) result.Result[int, int] {
     return wrap(write_raw(path, data, true))
 }
 
-// remove_file apaga o arquivo.
+// remove_file deletes the file.
 pub fn remove_file(path &[]byte) result.Result[int, int] {
     return wrap(remove_raw(path))
 }
@@ -66,13 +66,13 @@ fn wrap(n int) result.Result[int, int] {
     return result.Result.Ok(n)
 }
 
-// ---------- arquivos abertos ----------
+// ---------- open files ----------
 
-// File é um arquivo aberto (um handle): precisa de close().
+// File is an open file (a handle): it needs a close().
 //
 //     err := 0
 //     f := fs.open(&path, fs.READ, &err)
-//     if f == nil { ... err tem o código ... }
+//     if f == nil { ... err has the code ... }
 //     var buf [4096]byte
 //     for {
 //         match f.read(&buf) {
@@ -83,8 +83,8 @@ fn wrap(n int) result.Result[int, int] {
 //     f.close()
 pub extern "C" type File
 
-// open abre o arquivo no modo dado (READ, WRITE, APPEND, READ_WRITE). Se não
-// conseguir, devolve nil e põe o código de erro em err.
+// open opens the file in the given mode (READ, WRITE, APPEND, READ_WRITE). If it
+// can't, returns nil and puts the error code in err.
 pub extern fn open(path &[]byte, mode int, err &int) ?*File
 
 extern fn file_read(f &File, dst &[]byte) int
@@ -92,33 +92,33 @@ extern fn file_write(f &File, data &[]byte) int
 extern fn file_seek(f &File, pos int) int
 extern fn file_close(f *File)
 
-// read lê até len(dst) bytes no começo de dst; Ok(0) é o fim do arquivo.
+// read reads up to len(dst) bytes into the start of dst; Ok(0) is the end of the file.
 pub fn (f &File) read(dst &[]byte) result.Result[int, int] {
     return wrap(file_read(f, dst))
 }
 
-// write escreve todos os bytes de data.
+// write writes all the bytes of data.
 pub fn (f &File) write(data &[]byte) result.Result[int, int] {
     return wrap(file_write(f, data))
 }
 
-// seek vai para a posição pos (em bytes, do começo); com pos negativo, vai
-// para o fim. Devolve a posição nova.
+// seek goes to position pos (in bytes, from the start); with a negative pos, goes
+// to the end. Returns the new position.
 pub fn (f &File) seek(pos int) result.Result[int, int] {
     return wrap(file_seek(f, pos))
 }
 
-// close fecha o arquivo.
+// close closes the file.
 pub fn (f *File) close() {
     file_close(f)
 }
 
-// um arquivo aberto é um io.Reader: std/bufio lê linhas dele
+// an open file is an io.Reader: std/bufio reads lines from it
 impl io.Reader for File
 
-// ---------- diretórios ----------
+// ---------- directories ----------
 
-// Dir é um diretório aberto (um handle): precisa de close().
+// Dir is an open directory (a handle): it needs a close().
 //
 //     d := fs.open_dir(&path, &err)
 //     var name [256]byte
@@ -130,32 +130,32 @@ impl io.Reader for File
 //     d.close()
 pub extern "C" type Dir
 
-// open_dir abre o diretório para listar. Se não conseguir, devolve nil e
-// põe o código de erro em err.
+// open_dir opens the directory for listing. If it can't, returns nil and
+// puts the error code in err.
 pub extern fn open_dir(path &[]byte, err &int) ?*Dir
 
 extern fn dir_next(d &Dir, dst &[]byte) int
 extern fn dir_close(d *Dir)
 
-// next copia o próximo nome (sem . e ..) para name e devolve o tamanho, ou
-// -1 quando acabam. A ordem é a do sistema. Um [256]byte sempre basta.
+// next copies the next name (without . and ..) into name and returns the length, or
+// -1 when they run out. The order is the system's. A [256]byte is always enough.
 pub fn (d &Dir) next(name &[]byte) int {
     return dir_next(d, name)
 }
 
-// close fecha o diretório aberto com open_dir.
+// close closes the directory opened with open_dir.
 pub fn (d *Dir) close() {
     dir_close(d)
 }
 
-// ---------- informações e operações ----------
+// ---------- information and operations ----------
 
-// Info descreve um arquivo ou diretório.
+// Info describes a file or directory.
 pub struct Info {
     size int
     is_dir bool
-    modified_ms int // data de modificação, em milissegundos desde 1970
-    is_link bool    // link simbólico (preenchido por walk e glob)
+    modified_ms int // modification date, in milliseconds since 1970
+    is_link bool    // symbolic link (filled by walk and glob)
 }
 
 extern fn stat_raw(path &[]byte, size &int, is_dir &bool, modified &int) int
@@ -163,62 +163,62 @@ extern fn mkdir_raw(path &[]byte) int
 extern fn remove_dir_raw(path &[]byte) int
 extern fn rename_raw(from &[]byte, to &[]byte) int
 
-// stat preenche info com os dados do caminho.
+// stat fills info with the path's data.
 pub fn stat(path &[]byte, info &Info) result.Result[int, int] {
     return wrap(stat_raw(path, &info.size, &info.is_dir, &info.modified_ms))
 }
 
-// mkdir cria o diretório (o pai precisa existir).
+// mkdir creates the directory (the parent must exist).
 pub fn mkdir(path &[]byte) result.Result[int, int] {
     return wrap(mkdir_raw(path))
 }
 
-// remove_dir apaga o diretório, que precisa estar vazio (senão, NOT_EMPTY).
+// remove_dir deletes the directory, which must be empty (otherwise, NOT_EMPTY).
 pub fn remove_dir(path &[]byte) result.Result[int, int] {
     return wrap(remove_dir_raw(path))
 }
 
-// rename muda o nome (ou o lugar) de um arquivo ou diretório.
+// rename changes the name (or the place) of a file or directory.
 pub fn rename(from &[]byte, to &[]byte) result.Result[int, int] {
     return wrap(rename_raw(from, to))
 }
 
-// ---------- árvores de diretórios ----------
+// ---------- directory trees ----------
 
-// TOO_DEEP: diretórios aninhados demais (mais de MAX_DEPTH níveis).
+// TOO_DEEP: directories nested too deep (more than MAX_DEPTH levels).
 pub const TOO_DEEP = 1004
 
-// MAX_DEPTH é quantos níveis walk, glob e remove_all descem.
+// MAX_DEPTH is how many levels walk, glob and remove_all descend.
 pub const MAX_DEPTH = 64
 
-// o que a função de walk devolve
-pub const CONTINUE = 0 // segue (e entra no diretório)
-pub const SKIP = 1     // não entra neste diretório
-pub const STOP = 2     // para tudo
+// what walk's function returns
+pub const CONTINUE = 0 // continues (and enters the directory)
+pub const SKIP = 1     // doesn't enter this directory
+pub const STOP = 2     // stops everything
 
-// is_link diz se path é um link simbólico.
+// is_link says whether path is a symbolic link.
 pub extern fn is_link(path &[]byte) bool
 
-// walk visita root e tudo dentro dele, em profundidade: visit recebe o
-// caminho (root/sub/arquivo) e as informações de cada um, e devolve
-// CONTINUE, SKIP (não entra num diretório) ou STOP. Links simbólicos são
-// visitados mas não seguidos (um link para um diretório não é percorrido:
-// nada de ciclos). A ordem dentro de um diretório é a do sistema. O estado
-// vai em ctx, como nos callbacks da biblioteca:
+// walk visits root and everything inside it, depth first: visit receives the
+// path (root/sub/file) and the information of each one, and returns
+// CONTINUE, SKIP (doesn't enter a directory) or STOP. Symbolic links are
+// visited but not followed (a link to a directory isn't walked:
+// no cycles). The order inside a directory is the system's. The state
+// goes in ctx, as in the library's callbacks:
 //
 //     struct Total {
 //         bytes int
 //     }
-//     fn soma(t &Total, path &[]byte, info &fs.Info) int {
+//     fn add(t &Total, path &[]byte, info &fs.Info) int {
 //         if !info.is_dir {
 //             t.bytes += info.size
 //         }
 //         return fs.CONTINUE
 //     }
 //     var t Total
-//     fs.walk(&dir, &t, soma)
+//     fs.walk(&dir, &t, add)
 //
-// Devolve Ok(0), ou Err com o código do primeiro erro (fs.NOT_FOUND,
+// Returns Ok(0), or Err with the code of the first error (fs.NOT_FOUND,
 // DENIED, TOO_DEEP...).
 pub fn walk[C any](root &[]byte, ctx &C, visit fn(&C, &[]byte, &Info) int) result.Result[int, int] {
     var p [4096]byte
@@ -244,9 +244,9 @@ pub fn walk[C any](root &[]byte, ctx &C, visit fn(&C, &[]byte, &Info) int) resul
     return result.Result.Ok(0)
 }
 
-// glob visita os arquivos e diretórios dentro de root cujo caminho, a
-// partir de root, casa com pattern (veja glob_match): "*.json",
-// "src/**/*.mlc", "dados/202?-*.csv". visit é como em walk.
+// glob visits the files and directories inside root whose path, from
+// root, matches pattern (see glob_match): "*.json",
+// "src/**/*.mlc", "data/202?-*.csv". visit is as in walk.
 pub fn glob[C any](root &[]byte, pattern string, ctx &C, visit fn(&C, &[]byte, &Info) int) result.Result[int, int] {
     var p [4096]byte
     if len(root) > len(p) {
@@ -265,9 +265,9 @@ pub fn glob[C any](root &[]byte, pattern string, ctx &C, visit fn(&C, &[]byte, &
     return result.Result.Ok(0)
 }
 
-// walk_dir visita o que está dentro de p[:n]. Com pattern, só visita quem
-// casa (o caminho relativo a p[:root]) mas entra em todos os diretórios.
-// Devolve 0, -1 (STOP) ou o código de um erro.
+// walk_dir visits what's inside p[:n]. With pattern, it only visits what
+// matches (the path relative to p[:root]) but enters every directory.
+// Returns 0, -1 (STOP) or an error code.
 fn walk_dir[C any](p &[]byte, n int, depth int, pattern &[]byte, ctx &C, visit fn(&C, &[]byte, &Info) int) int {
     return walk_rec(p, n, n, depth, pattern, ctx, visit)
 }
@@ -305,7 +305,7 @@ fn walk_rec[C any](p &[]byte, root int, n int, depth int, pattern &[]byte, ctx &
         match stat(&p[:end], &info) {
             Ok(_) => {}
             Err(_) => {
-                // um link quebrado: visitado como arquivo de tamanho zero
+                // a broken link: visited as a zero-size file
                 info = Info{}
             }
         }
@@ -334,10 +334,10 @@ fn walk_rec[C any](p &[]byte, root int, n int, depth int, pattern &[]byte, ctx &
     return outcome
 }
 
-// glob_match diz se path casa com pattern: * casa com qualquer texto sem
-// /, ? com um caractere, [abc], [a-z] e [!abc] com um caractere da classe
-// (ou fora dela), ** com qualquer texto, inclusive / (e **/ com zero ou mais
-// diretórios). O resto casa consigo mesmo.
+// glob_match says whether path matches pattern: * matches any text without
+// /, ? one character, [abc], [a-z] and [!abc] one character in the class
+// (or outside it), ** any text, including / (and **/ zero or more
+// directories). The rest matches itself.
 pub fn glob_match(pattern string, path &[]byte) bool {
     var pat [1024]byte
     if len(pattern) > len(pat) {
@@ -347,7 +347,7 @@ pub fn glob_match(pattern string, path &[]byte) bool {
     return glob_match_bytes(&pat[:k], path)
 }
 
-// glob_match_bytes é glob_match com o padrão montado em tempo de execução.
+// glob_match_bytes is glob_match with the pattern built at run time.
 pub fn glob_match_bytes(pattern &[]byte, path &[]byte) bool {
     return gmatch(pattern, 0, path, 0)
 }
@@ -357,7 +357,7 @@ fn gmatch(p &[]byte, pi int, s &[]byte, si int) bool {
         c := p[pi]
         if c == '*' {
             if pi + 1 < len(p) && p[pi + 1] == '*' {
-                // **: qualquer coisa, inclusive /; **/ também casa com nada
+                // **: anything, including /; **/ also matches nothing
                 rest := pi + 2
                 if rest < len(p) && p[rest] == '/' {
                     if gmatch(p, rest + 1, s, si) {
@@ -376,7 +376,7 @@ fn gmatch(p &[]byte, pi int, s &[]byte, si int) bool {
                     return true
                 }
                 if k < len(s) && s[k] == '/' {
-                    return false // * não passa de um diretório
+                    return false // * doesn't go past a directory
                 }
             }
             return false
@@ -398,13 +398,13 @@ fn gmatch(p &[]byte, pi int, s &[]byte, si int) bool {
                 end++
             }
             if end < len(p) && p[end] == ']' {
-                end++ // ] logo no começo é um caractere
+                end++ // ] right at the start is a character
             }
             for end < len(p) && p[end] != ']' {
                 end++
             }
             if end == len(p) {
-                // sem ]: o [ é um caractere comum
+                // no ]: the [ is an ordinary character
                 if s[si] != '[' {
                     return false
                 }
@@ -428,7 +428,7 @@ fn gmatch(p &[]byte, pi int, s &[]byte, si int) bool {
     return si == len(s)
 }
 
-// in_class diz se ch está na classe p[from:to] (sem os colchetes).
+// in_class says whether ch is in the class p[from:to] (without the brackets).
 fn in_class(p &[]byte, from int, to int, ch byte) bool {
     neg := false
     i := from
@@ -455,8 +455,8 @@ fn in_class(p &[]byte, from int, to int, ch byte) bool {
     return hit != neg
 }
 
-// mkdir_all cria o diretório e os pais que faltarem (como mkdir -p). Um
-// diretório que já existe não é erro.
+// mkdir_all creates the directory and the missing parents (like mkdir -p). A
+// directory that already exists isn't an error.
 pub fn mkdir_all(path &[]byte) result.Result[int, int] {
     var p [4096]byte
     if len(path) > len(p) {
@@ -489,9 +489,9 @@ pub fn mkdir_all(path &[]byte) result.Result[int, int] {
     return result.Result.Ok(0)
 }
 
-// remove_all apaga path e tudo dentro dele (como rm -r). Links simbólicos
-// são apagados, não seguidos: o que eles apontam fica. Um caminho que não
-// existe não é erro.
+// remove_all deletes path and everything inside it (like rm -r). Symbolic links
+// are deleted, not followed: what they point to stays. A path that doesn't
+// exist isn't an error.
 pub fn remove_all(path &[]byte) result.Result[int, int] {
     var p [4096]byte
     if len(path) > len(p) {
@@ -572,7 +572,7 @@ fn remove_rec(p &[]byte, n int, depth int) int {
     }
 }
 
-// temp_dir copia a pasta de arquivos temporários (TMPDIR, ou /tmp).
+// temp_dir copies the temporary files folder (TMPDIR, or /tmp).
 pub fn temp_dir(dst &[]byte) int {
     match os.getenv("TMPDIR", dst) {
         Ok(n) => {
@@ -588,10 +588,10 @@ pub fn temp_dir(dst &[]byte) int {
     return str.copy(dst, "/tmp")
 }
 
-// temp_path escreve em dst um caminho novo na pasta temporária: o prefixo
-// seguido de 16 dígitos hex aleatórios (rand.secure), como
-// /tmp/relatorio-3f9a0c1e5b7d2a64. Para criar o arquivo, use open com
-// WRITE; para um diretório, mkdir.
+// temp_path writes into dst a new path in the temporary folder: the prefix
+// followed by 16 random hex digits (rand.secure), like
+// /tmp/report-3f9a0c1e5b7d2a64. To create the file, use open with
+// WRITE; for a directory, mkdir.
 pub fn temp_path(prefix string, dst &[]byte) int {
     n := temp_dir(dst)
     n += str.copy(&dst[n:], "/")

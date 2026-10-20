@@ -5,7 +5,7 @@ import "std/testing"
 fn test_copy() {
     b := alloc([]byte, 8)
     n := str.copy(&b, "olá")
-    testing.eq_int(n, 4) // "á" ocupa dois bytes
+    testing.eq_int(n, 4) // "á" takes two bytes
     testing.eq_str(&b[:n], "olá")
     free(b)
 }
@@ -135,7 +135,7 @@ struct Money {
     cents int
 }
 
-// um Display que usa str.format por dentro (destinos aninhados)
+// a Display that uses str.format inside (nested destinations)
 fn (m &Money) write(w &io.Writer) {
     var buf [32]byte
     n := str.format(&buf, "{}.{:02}", m.cents / 100, m.cents % 100)
@@ -189,13 +189,13 @@ fn test_parse_int_base() {
     testing.eq_int(int_base("ff", 16, &ok), 255)
     testing.check(ok, "ff")
     testing.eq_int(int_base("FF", 16, &ok), 255)
-    testing.eq_int(int_base("0xff", 16, &ok), 255) // prefixo aceito com a base dele
+    testing.eq_int(int_base("0xff", 16, &ok), 255) // prefix accepted with its own base
     testing.check(ok, "0xff com base 16")
-    testing.eq_int(int_base("-0x1F", 0, &ok), -31) // base 0: o prefixo escolhe
+    testing.eq_int(int_base("-0x1F", 0, &ok), -31) // base 0: the prefix chooses
     testing.check(ok, "-0x1F com base 0")
     testing.eq_int(int_base("0b1010", 0, &ok), 10)
     testing.eq_int(int_base("0o17", 0, &ok), 15)
-    testing.eq_int(int_base("123", 0, &ok), 123) // base 0 sem prefixo: decimal
+    testing.eq_int(int_base("123", 0, &ok), 123) // base 0 without a prefix: decimal
     testing.eq_int(int_base("z", 36, &ok), 35)
     testing.check(ok, "base 36")
     testing.eq_int(int_base("1010", 2, &ok), 10)

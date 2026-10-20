@@ -1,19 +1,19 @@
-// Caminhos de arquivo com barras (/), como no Linux e no macOS. As funções
-// trabalham só com o texto (não olham o disco) e escrevem o resultado num
-// buffer de quem chama, devolvendo quantos bytes usaram; dão panic se não
-// couber. O resultado nunca é maior que a entrada (mais um byte, no caso de
-// "" virar "."), então um buffer do tamanho da entrada (ou da soma das duas,
-// no join) basta.
+// File paths with slashes (/), as on Linux and macOS. The functions
+// work only with the text (they don't look at the disk) and write the result
+// into a buffer of the caller's, returning how many bytes they used; they
+// panic if it doesn't fit. The result is never larger than the input (one byte
+// more, when "" becomes "."), so a buffer the size of the input (or the sum of
+// both, in join) is enough.
 //
 //     var out [4096]byte
 //     n := path.join(&out, &dir[:k], &name[:m])      // "docs" + "a.txt" → "docs/a.txt"
 //     e := path.ext(&ext, &out[:n])                  // ".txt"
 import "std/str"
 
-// clean deixa o caminho na forma mais curta equivalente, só pelo texto:
-// junta barras repetidas, tira os ".", resolve os ".." (que, no começo de um
-// caminho relativo, ficam; num absoluto, somem: "/.." é "/") e tira a barra
-// do fim. Um caminho vazio vira ".".
+// clean puts the path in the shortest equivalent form, by text only:
+// merges repeated slashes, removes the ".", resolves the ".." (which, at the
+// start of a relative path, stay; in an absolute one, vanish: "/.." is "/") and
+// removes the trailing slash. An empty path becomes ".".
 //
 //     "a//b/./c/../d/" → "a/b/d"
 pub fn clean(dst &[]byte, p &[]byte) int {
@@ -24,8 +24,8 @@ pub fn clean(dst &[]byte, p &[]byte) int {
     return clean_in_place(dst, n)
 }
 
-// join junta a e b com uma barra e limpa o resultado (clean). Se b for
-// absoluto, o resultado é b.
+// join joins a and b with a slash and cleans the result (clean). If b is
+// absolute, the result is b.
 pub fn join(dst &[]byte, a &[]byte, b &[]byte) int {
     if is_abs(b) || len(a) == 0 {
         return clean(dst, b)
@@ -36,7 +36,7 @@ pub fn join(dst &[]byte, a &[]byte, b &[]byte) int {
     return clean_in_place(dst, n)
 }
 
-// join_str é join com o segundo pedaço escrito no programa:
+// join_str is join with the second piece written in the program:
 // path.join_str(&out, &dir, "config.json").
 pub fn join_str(dst &[]byte, a &[]byte, b string) int {
     if (len(b) > 0 && b[0] == '/') || len(a) == 0 {
@@ -52,12 +52,12 @@ pub fn join_str(dst &[]byte, a &[]byte, b string) int {
     return clean_in_place(dst, n)
 }
 
-// is_abs diz se o caminho começa na raiz (/).
+// is_abs says whether the path starts at the root (/).
 pub fn is_abs(p &[]byte) bool {
     return len(p) > 0 && p[0] == '/'
 }
 
-// base escreve o último elemento do caminho: "a/b/c.txt" → "c.txt",
+// base writes the last element of the path: "a/b/c.txt" → "c.txt",
 // "a/b/" → "b", "/" → "/", "" → ".".
 pub fn base(dst &[]byte, p &[]byte) int {
     if len(p) == 0 {
@@ -77,7 +77,7 @@ pub fn base(dst &[]byte, p &[]byte) int {
     return str.copy_bytes(dst, &p[start:end])
 }
 
-// dir escreve tudo menos o último elemento, limpo: "a/b/c.txt" → "a/b",
+// dir writes everything but the last element, cleaned: "a/b/c.txt" → "a/b",
 // "c.txt" → ".", "/c" → "/".
 pub fn dir(dst &[]byte, p &[]byte) int {
     k := len(p)
@@ -90,8 +90,8 @@ pub fn dir(dst &[]byte, p &[]byte) int {
     return clean(dst, &p[:k])
 }
 
-// ext escreve a extensão do último elemento, com o ponto: "a/b.tar.gz" →
-// ".gz", "a/b" → "" (devolve 0), ".bashrc" → ".bashrc".
+// ext writes the extension of the last element, with the dot: "a/b.tar.gz" →
+// ".gz", "a/b" → "" (returns 0), ".bashrc" → ".bashrc".
 pub fn ext(dst &[]byte, p &[]byte) int {
     for i := len(p) - 1; i >= 0 && p[i] != '/'; i-- {
         if p[i] == '.' {
@@ -101,13 +101,13 @@ pub fn ext(dst &[]byte, p &[]byte) int {
     return 0
 }
 
-// clean_in_place limpa b[:n] no próprio buffer: quem escreve nunca passa de
-// quem lê, então ler e escrever no mesmo lugar é seguro.
+// clean_in_place cleans b[:n] in the buffer itself: the writer never passes
+// the reader, so reading and writing in the same place is safe.
 fn clean_in_place(b &[]byte, n int) int {
     rooted := b[0] == '/'
-    r := 0      // próximo byte a ler
-    w := 0      // próximo byte a escrever
-    dotdot := 0 // até onde um ".." pode voltar
+    r := 0      // next byte to read
+    w := 0      // next byte to write
+    dotdot := 0 // how far back a ".." can go
     if rooted {
         r = 1
         w = 1
@@ -115,18 +115,18 @@ fn clean_in_place(b &[]byte, n int) int {
     }
     for r < n {
         if b[r] == '/' {
-            r++ // barra repetida
+            r++ // repeated slash
         } else if b[r] == '.' && (r + 1 == n || b[r + 1] == '/') {
             r++ // "."
         } else if b[r] == '.' && b[r + 1] == '.' && (r + 2 == n || b[r + 2] == '/') {
-            r += 2 // "..": volta um elemento, se der
+            r += 2 // "..": go back one element, if possible
             if w > dotdot {
                 w--
                 for w > dotdot && b[w] != '/' {
                     w--
                 }
             } else if !rooted {
-                // não dá para voltar num caminho relativo: o ".." fica
+                // can't go back in a relative path: the ".." stays
                 if w > 0 {
                     b[w] = '/'
                     w++
@@ -137,7 +137,7 @@ fn clean_in_place(b &[]byte, n int) int {
                 dotdot = w
             }
         } else {
-            // um elemento: a barra antes dele (se não for o primeiro) e os bytes
+            // an element: the slash before it (if it isn't the first) and the bytes
             if (rooted && w != 1) || (!rooted && w != 0) {
                 b[w] = '/'
                 w++

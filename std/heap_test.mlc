@@ -32,7 +32,7 @@ fn test_max_order() {
     h.free()
 }
 
-// muitos valores aleatórios saem em ordem
+// many random values come out in order
 fn test_random() {
     r := rand.new(42)
     h := heap.new[int](16)
@@ -48,7 +48,7 @@ fn test_random() {
     h.free()
 }
 
-// top-K: os 3 maiores com um heap dos menores e replace_top
+// top-K: the 3 largest with a min-heap and replace_top
 fn test_top_k() {
     var values [9]int = [9]int{4, 10, 1, 7, 3, 12, 9, 2, 11}
     h := heap.new[int](3)
@@ -65,7 +65,7 @@ fn test_top_k() {
     h.free()
 }
 
-// uma struct ordenada por um campo, com cmp escrito à mão
+// a struct ordered by a field, with cmp written by hand
 struct Timer {
     due int
     id int
@@ -95,7 +95,7 @@ fn text(s string) []byte {
     return b
 }
 
-// donos: a posse entra no push e sai no pop; free libera o resto
+// owners: ownership goes in on push and out on pop; free frees the rest
 fn test_owners() {
     h := heap.new[[]byte](2)
     h.push(text("pera"))
@@ -105,11 +105,11 @@ fn test_owners() {
     a := h.pop()
     testing.eq_str(&a, "abacaxi")
     free(a)
-    old := h.replace_top(text("caqui")) // sai banana, entra caqui
+    old := h.replace_top(text("caqui")) // out goes banana, in goes caqui
     testing.eq_str(&old, "banana")
     free(old)
     testing.eq_str(h.peek(), "caqui")
-    h.free() // libera caqui, pera e uva
+    h.free() // frees caqui, pera and uva
 }
 
 fn test_clear() {
@@ -130,7 +130,7 @@ fn test_pop_empty() {
     h.free()
 }
 
-// itens com donos: o heap guarda a chave e o índice, e os donos ficam num vec
+// items with owners: the heap keeps the key and the index, and the owners stay in a vec
 fn test_keys_into_vec() {
     names := vec.new[[]byte](4)
     names.push(text("relatório"))

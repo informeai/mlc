@@ -1,30 +1,30 @@
-// Texto (ou bytes) que cresce. É uma das partes da biblioteca que aloca, e a
-// alocação está visível aqui: new aloca, e reserve dobra a capacidade com
-// realloc quando falta espaço.
+// Growing text (or bytes). It's one of the parts of the library that
+// allocates, and the allocation is visible here: new allocates, and reserve
+// doubles the capacity with realloc when room runs out.
 //
 //     b := bytes.new(64)
 //     b.push_str("total: ")
 //     b.push_int(42)
-//     b.reserve(str.format_len(" ({:.1}%)", p))          // formatar direto no Buf
+//     b.reserve(str.format_len(" ({:.1}%)", p))          // format directly into the Buf
 //     b.len += str.format(&b.data[b.len:], " ({:.1}%)", p)
-//     io.write_line(&b.data[:b.len])                     // o texto é &b.data[:b.len]
+//     io.write_line(&b.data[:b.len])                     // the text is &b.data[:b.len]
 //     b.free()
 import "std/str"
 
-// Buf é um texto que cresce: os bytes ficam em data[:len], e a capacidade
-// é len(data). Crescer (reserve, push_*) é um realloc à vista.
+// Buf is a growing text: the bytes are in data[:len], and the capacity
+// is len(data). Growing (reserve, push_*) is a visible realloc.
 pub struct Buf {
-    data []byte // a capacidade é len(data); o texto é data[:len]
+    data []byte // the capacity is len(data); the text is data[:len]
     len int
 }
 
-// new aloca um Buf vazio com espaço para cap bytes.
+// new allocates an empty Buf with room for cap bytes.
 pub fn new(cap int) *Buf {
     return alloc(Buf{data: alloc([]byte, cap), len: 0})
 }
 
-// reserve garante espaço para mais n bytes, dobrando a capacidade (realloc)
-// até caber.
+// reserve guarantees room for n more bytes, doubling the capacity (realloc)
+// until it fits.
 pub fn (b &Buf) reserve(n int) {
     need := b.len + n
     if need <= len(b.data) {
@@ -40,32 +40,32 @@ pub fn (b &Buf) reserve(n int) {
     b.data = realloc(b.data, size)
 }
 
-// push_byte acrescenta um byte (cresce se preciso).
+// push_byte appends a byte (grows if needed).
 pub fn (b &Buf) push_byte(c byte) {
     b.reserve(1)
     b.data[b.len] = c
     b.len++
 }
 
-// push_str acrescenta o texto de s (cresce se preciso).
+// push_str appends the text of s (grows if needed).
 pub fn (b &Buf) push_str(s string) {
     b.reserve(len(s))
     b.len += str.copy(&b.data[b.len:], s)
 }
 
-// push_bytes acrescenta os bytes de s (cresce se preciso).
+// push_bytes appends the bytes of s (grows if needed).
 pub fn (b &Buf) push_bytes(s &[]byte) {
     b.reserve(len(s))
     b.len += str.copy_bytes(&b.data[b.len:], s)
 }
 
-// push_int acrescenta n em decimal (cresce se preciso).
+// push_int appends n in decimal (grows if needed).
 pub fn (b &Buf) push_int(n int) {
     b.reserve(str.int_len(n))
     b.len += str.put_int(&b.data[b.len:], n)
 }
 
-// truncate encurta o texto para n bytes (n <= len).
+// truncate shortens the text to n bytes (n <= len).
 pub fn (b &Buf) truncate(n int) {
     if n < 0 || n > b.len {
         fail("bytes.Buf.truncate: tamanho fora do texto")
@@ -73,17 +73,17 @@ pub fn (b &Buf) truncate(n int) {
     b.len = n
 }
 
-// clear esvazia o texto, mantendo a capacidade.
+// clear empties the text, keeping the capacity.
 pub fn (b &Buf) clear() {
     b.len = 0
 }
 
-// eq diz se o texto é s.
+// eq says whether the text is s.
 pub fn (b &Buf) eq(s string) bool {
     return str.eq(&b.data[:b.len], s)
 }
 
-// free libera o texto e o Buf.
+// free frees the text and the Buf.
 pub fn (b *Buf) free() {
     free(b.data)
     free(b)

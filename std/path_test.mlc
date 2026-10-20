@@ -2,7 +2,7 @@ import "std/path"
 import "std/str"
 import "std/testing"
 
-// check_clean limpa o texto s e confere o resultado.
+// check_clean cleans the text s and checks the result.
 fn check_clean(s string, want string) {
     var src [64]byte
     n := str.copy(&src, s)
@@ -42,7 +42,7 @@ fn joined(a string, b string, want string) {
 
 fn test_join() {
     joined("docs", "a.txt", "docs/a.txt")
-    joined("docs/", "/etc/x", "/etc/x") // b absoluto
+    joined("docs/", "/etc/x", "/etc/x") // absolute b
     joined("a/b", "../c", "a/c")
     joined("", "x", "x")
     joined("a", "", "a")
@@ -69,7 +69,7 @@ fn test_base_dir_ext() {
     parts("/", "/", "/", "")
     parts("", ".", ".", "")
     parts("x.tar.gz", "x.tar.gz", ".", ".gz")
-    parts("dir.d/file", "file", "dir.d", "") // o ponto do diretório não conta
+    parts("dir.d/file", "file", "dir.d", "") // the directory's dot doesn't count
     parts(".bashrc", ".bashrc", ".", ".bashrc")
 }
 
