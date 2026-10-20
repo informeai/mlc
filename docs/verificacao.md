@@ -1,6 +1,6 @@
 # Como testar o verificador
 
-Plano para atacar o verificador de posse e de empréstimos (`internal/checker/ownership.go`, `borrows.go` e o que eles usam) de propósito, antes de chamar a linguagem de beta. Cada fase diz o que entregar e quando ela está pronta. **As fases 1 e 2 estão feitas** (`make sanitize` e `make mutate`); as outras continuam como plano.
+Plano para atacar o verificador de posse e de empréstimos (`internal/checker/ownership.go`, `borrows.go` e o que eles usam) de propósito, antes de chamar a linguagem de beta. Cada fase diz o que entregar e quando ela está pronta. **As fases 1, 2 e 3 estão feitas** (`make sanitize`, `make mutate` e `make fuzz`); as outras continuam como plano.
 
 ## O que procurar
 
@@ -122,6 +122,39 @@ Cada problema achado em qualquer fase vira um teste permanente: em `tests/errors
 **Pronto quando:** uma rodada longa (por exemplo, uma hora) não acha buracos novos.
 
 **Esforço:** médio.
+
+**Feito**, com uma mudança de rumo que deixou o oráculo bem mais forte: o gerador (`internal/fuzz/gen.go`) acompanha o estado de cada variável enquanto escreve (viva, liberada, `nil`, os campos de cada struct) e por isso **sabe, por construção, se o programa tem bug**. Metade dos programas é válida; a outra metade recebe um único bug, e só em código que roda (as condições são conhecidas, `one == 1` ou `one == 2`, e os laços rodam pelo menos uma vez), sempre de um jeito que a execução vê:
+
+| Bug injetado | Como a execução vê |
+|---|---|
+| uso depois de `free`, `byte` lido depois de `free`, enum lido depois de `free` | AddressSanitizer (lê a memória liberada) |
+| `free` duplo | AddressSanitizer |
+| empréstimo usado depois de liberar a origem | AddressSanitizer |
+| uso depois de mover e liberar | AddressSanitizer |
+| vazamento, struct liberada com campo vivo | o contador de alocações do runtime |
+
+Os programas usam `alloc` e `free`, moves (para variáveis, campos, `?*T` e parâmetros `*T`), empréstimos guardados em variáveis (`r := &x`), funções que consomem e devolvem donos, `realloc`, `?*T` com `if x != nil`, uma struct com um `?*T` e um `[]byte` (mover para dentro e para fora dos campos, liberar campo a campo), um enum com um `[]byte` (`match` que consome, `free`, empréstimo para uma função que lê os dados), e `if`/`else` e `for` com `break` aninhados. As variáveis de fora terminam os dois lados de um `if` (e cada volta de um laço) no mesmo estado.
+
+**Decisão de cada programa:**
+- **com bug, recusado:** certo;
+- **com bug, aceito:** buraco. Roda sob o oráculo para confirmar, e o programa é **reduzido** (`internal/fuzz/reduce.go`: tira comandos, sequências de até 4 comandos vizinhos e blocos, enquanto o verificador aceitar e o oráculo acusar) e guardado em `FUZZ_OUT` (padrão `/tmp/mlc-fuzz`);
+- **válido, recusado:** candidato a falso positivo; o relatório agrupa pela mensagem, com uma semente de exemplo;
+- **válido, aceito:** 1 em cada 10 roda sob o oráculo, à procura de bugs no gerador de C e no runtime.
+
+`make fuzz` roda por `FUZZTIME` (padrão `1m`) com uma thread por núcleo; `MLC_FUZZ_SEED=n MLC_FUZZ_COUNT=1` reproduz uma semente, e `MLC_FUZZ_DUMP=n` (com `MLC_FUZZ_BUG=1` para a versão com bug) escreve o programa. `TestGenerate` roda a cada `go test`: 300 sementes, todos os programas com bug precisam ser recusados, os válidos não podem ter erro que não seja de posse, e pelo menos 97% deles precisam ser aceitos.
+
+**O fuzzer acha buracos:** com a correção do enum da fase 2 desfeita de propósito, uma rodada de 30 segundos achou o buraco, confirmado pelo AddressSanitizer, e o reduziu de 23 comandos para os 4 que importam:
+
+```mlc
+s1 := alloc([]byte, 3)
+e2 := Bag.Full(s1)
+free(e2)
+acc += bag_peek(&e2)
+```
+
+**Resultado** (uma rodada de 1 minuto, 8 núcleos): 4.242 programas, nenhum buraco; todos os 2.121 com bug foram recusados, e 2.117 dos 2.121 válidos foram aceitos. Os 4 recusados são o mesmo falso positivo conhecido: um empréstimo vale até o último uso no **texto**, então usar a origem num lado de um `if` é recusado quando o empréstimo ainda é usado no outro lado, mesmo sendo seguro em cada caminho.
+
+**O que fica para depois:** `take` e `replace` em slices de donos, genéricos com `owned` e `ref`, funções geradas (hoje as funções auxiliares são fixas), `continue`, `match` com mais variantes, e a segunda etapa (`thread.spawn`, canais e mutex).
 
 ## Fase 4: enumeração exaustiva com um modelo de referência
 
