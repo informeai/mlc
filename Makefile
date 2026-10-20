@@ -1,6 +1,6 @@
 BIN := bin/mlc
 
-.PHONY: build test test-std check sanitize mutate fuzz fmt clean
+.PHONY: build test test-std check sanitize mutate fuzz enum fmt clean
 
 # make (ou make build): gera o compilador em bin/mlc
 build:
@@ -55,6 +55,18 @@ FUZZ_OUT ?= /tmp/mlc-fuzz
 
 fuzz:
 	@MLC_FUZZ=1 FUZZTIME=$(FUZZTIME) MLC_FUZZ_OUT=$(FUZZ_OUT) go test ./internal/fuzz -run 'TestFuzz$$' -count=1 -timeout 0 > /dev/null; status=$$?; cat $(FUZZ_OUT)/relatorio.txt; exit $$status
+
+# make enum: todos os programas até o tamanho ENUM (padrão 5, uns 30 s; 6
+# leva uns 10 min) sobre um alfabeto pequeno de comandos de posse, cada um
+# julgado pelo verificador e por um modelo de referência que segue todos os
+# caminhos. O verificador aceitar um programa que o modelo diz inseguro é
+# buraco; recusar um seguro é falso positivo, catalogado pela mensagem. Veja
+# docs/verificacao.md.
+ENUM ?= 5
+ENUM_OUT ?= /tmp/mlc-enum
+
+enum:
+	@MLC_ENUM=$(ENUM) MLC_ENUM_OUT=$(ENUM_OUT) go test ./internal/fuzz -run 'TestEnumerate$$' -count=1 -timeout 0 > /dev/null; status=$$?; cat $(ENUM_OUT)/relatorio.txt; exit $$status
 
 # make fmt: formata o Go (gofmt) e o MLC (mlc fmt)
 fmt: build

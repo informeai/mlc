@@ -53,6 +53,7 @@ bin/mlc run -sanitize address prog.mlc   # roda sob AddressSanitizer + UBSan (th
 make sanitize                            # a suíte sob os sanitizers
 make mutate                              # mutantes com bugs de posse: o verificador precisa recusar
 make fuzz FUZZTIME=10m                   # programas aleatórios, válidos e com bug, contra o verificador
+make enum ENUM=6                         # todos os programas pequenos, contra um modelo de referência
 make test                                # roda os testes
 make check                               # gofmt, mlc fmt -l, go vet e testes
 ```
@@ -235,7 +236,7 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
   - [x] fase 1: oráculo sobre a suíte atual (`-sanitize address|thread`, `make sanitize`): a suíte inteira passa sob AddressSanitizer + UBSan e ThreadSanitizer
   - [x] fase 2: mutação de programas corretos (`make mutate`): 1.944 mutantes de 116 programas, todos recusados ou sem bug; achou e corrigiu um buraco (empréstimo de um enum com donos já liberado)
   - [x] fase 3: gerador de programas focado em posse (`make fuzz`): programas válidos e com um bug injetado que a execução vê; um bug aceito é reduzido ao menor exemplo, e os válidos recusados formam o catálogo de falsos positivos
-  - [ ] fase 4: enumeração exaustiva com um modelo de referência
+  - [x] fase 4: enumeração exaustiva com um modelo de referência (`make enum`): todos os programas até o tamanho 5 (586 mil) de um alfabeto de posse, julgados também por um interpretador abstrato que segue cada caminho; nenhum buraco, e o catálogo de falsos positivos (todos do empréstimo que vale até o último uso no texto)
   - [ ] fase 5: metamórficos, cobertura, casos difíceis conhecidos e `go test -fuzz`
 - [ ] **Callbacks de C para MLC na FFI:** ponteiros de função na fronteira (`qsort`, `sqlite3_exec` com função), com o `void *ctx` das APIs de C
 - [x] **Callbacks com contexto:** métodos com parâmetros de tipo próprios (`fn (m &Map[K, V]) each_with[C ref](ctx &C, f fn(&C, &K, &V))`), deduzidos na chamada ou escritos; a restrição `ref` para o contexto, que só é emprestado; `map.each_with`, `vec.each_with`, `sort.sort_by_with`, `slices.index_by` e `count_by`. Veja [docs/tipos.md](docs/tipos.md#métodos-genéricos-e-callbacks-com-contexto)

@@ -1,6 +1,6 @@
 # Como testar o verificador
 
-Plano para atacar o verificador de posse e de empréstimos (`internal/checker/ownership.go`, `borrows.go` e o que eles usam) de propósito, antes de chamar a linguagem de beta. Cada fase diz o que entregar e quando ela está pronta. **As fases 1, 2 e 3 estão feitas** (`make sanitize`, `make mutate` e `make fuzz`); as outras continuam como plano.
+Plano para atacar o verificador de posse e de empréstimos (`internal/checker/ownership.go`, `borrows.go` e o que eles usam) de propósito, antes de chamar a linguagem de beta. Cada fase diz o que entregar e quando ela está pronta. **As fases 1 a 4 estão feitas** (`make sanitize`, `make mutate`, `make fuzz` e `make enum`); a 5 continua como plano.
 
 ## O que procurar
 
@@ -174,6 +174,56 @@ Em vez de rodar cada programa, um **modelo de referência** decide se ele é seg
 **Pronto quando:** a enumeração até o tamanho combinado não mostra buracos, e os falsos positivos estão catalogados.
 
 **Esforço:** médio a grande. É a técnica com a garantia mais forte, ainda que só para programas pequenos, que é onde os erros de lógica costumam aparecer.
+
+**Feito.** O alfabeto (`internal/fuzz/enum.go`) tem 15 comandos sobre os parâmetros `x` e `y` (`*Box`, começam vivos) e `q` (`?*Box`, que pode chegar nil ou vivo): `free` de cada um, `x = alloc(...)`, `q = alloc(...)`, usar `x` e `y`, `if q != nil { usar q }`, os moves `y = x`, `x = y` e `q = x`, `r := &x`, `r := &y`, usar `r`, e `break`; mais `if flip()` com e sem `else` e `for flip()`, com condições que o verificador não conhece. O tamanho conta cada comando e cada bloco. A enumeração não gera o que nem passaria nos tipos (`r` usada sem declaração, declarada duas vezes no mesmo escopo, ou nunca usada) e visita uma vez só os programas que só diferem pela troca de `x` com `y`. No fim de cada programa, uma variável que termina viva em todos os caminhos ganha um `free` (sem isso, quase todo programa pequeno só vazaria).
+
+O modelo (`internal/fuzz/model.go`, umas 250 linhas) é um interpretador abstrato com a semântica pretendida: o estado de cada caminho é o das três variáveis (viva, liberada, nil) mais o do empréstimo (de quem, e se a origem foi tocada depois dele), usar `r` depois de tocar a origem é violação, e no fim nada pode estar vivo. Como o estado é pequeno, caminhos iguais se fundem e o laço é calculado até o ponto fixo (qualquer número de voltas). O modelo julga cada caminho sozinho, sem ser conservador.
+
+**Resultado:**
+
+| Tamanho | Programas | Seguros e aceitos | Inseguros e recusados | Buracos | Falsos positivos |
+|---|---|---|---|---|---|
+| 1 | 8 | 4 | 4 | 0 | 0 |
+| 2 | 100 | 26 | 74 | 0 | 0 |
+| 3 | 1.573 | 216 | 1.357 | 0 | 0 |
+| 4 | 28.912 | 2.108 | 26.803 | 0 | 1 |
+| 5 | 586.940 | 23.880 | 562.978 | 0 | 82 |
+
+**Nenhum buraco** até o tamanho 5 (com `make enum ENUM=6`, uns 10 minutos, vai até o 6). Até o tamanho 5 leva uns 30 segundos com 8 núcleos (`make enum`); `TestEnumerateSmall` roda os tamanhos até 3 a cada `go test` (0,1 s).
+
+**Os falsos positivos são todos do mesmo tipo:** o empréstimo vale até o último uso **no texto**, não em cada caminho. Os dois exemplos mínimos:
+
+```mlc
+r := &x
+if flip() {
+    acc += x.v      // recusado: r ainda é usada... no outro lado do if
+} else {
+    acc += r.v
+}
+```
+
+```mlc
+r := &x
+free(x)             // recusado: r ainda é usada... depois de um break
+for flip() {
+    break
+    acc += r.v
+}
+```
+
+Os dois são seguros em todo caminho. Corrigir pediria calcular a vida do empréstimo por caminho (o último uso em cada caminho, como o NLL do Rust), em vez da última linha no texto. Fica registrado como a melhoria de ergonomia com mais evidência.
+
+**O teste acha buracos:** numa cópia do compilador com a conferência de `&x` tirada de propósito (emprestar uma variável já liberada), o tamanho 4 mostrou dois buracos. No tamanho 3 (`free(x); r := &x; acc += r.v`), outra regra do verificador ainda pegava o erro; o buraco só aparecia com o empréstimo dentro de um `if`, exatamente o tipo de combinação que o sorteio da fase 3 pode nunca fazer:
+
+```mlc
+free(x)
+if flip() {
+    r := &x
+    acc += r.v
+}
+```
+
+**O que fica para depois:** campos de struct, enums com donos, `take`/`replace` e chamadas de função no alfabeto (cada uma multiplica o tamanho da enumeração; o modelo precisa crescer junto).
 
 ## Fase 5: contínuo
 
