@@ -1,5 +1,5 @@
 // Package fuzz ataca o verificador de posse de propósito (veja
-// docs/verificacao.md). Esta é a fase 2: mutações que sabidamente criam um
+// docs/verification.md). Esta é a fase 2: mutações que sabidamente criam um
 // bug de posse num programa que o verificador aceita. O verificador precisa
 // recusar o mutante; se aceitar, o mutante roda sob os sanitizers e o
 // contador de alocações, e um erro ali é um buraco no verificador.

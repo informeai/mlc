@@ -663,7 +663,7 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		}
 		if lt == String && s.Op == token.ADD_ASSIGN {
 			c.value(s.Rhs)
-			c.errorf(s.OpPos, "concatenação de strings exige alocação explícita: monte o texto num buffer (veja docs/texto.md)")
+			c.errorf(s.OpPos, "concatenação de strings exige alocação explícita: monte o texto num buffer (veja docs/text.md)")
 			return
 		}
 		rt := c.value(s.Rhs)

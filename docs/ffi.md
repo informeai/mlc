@@ -1,81 +1,81 @@
-# Funções de C (FFI)
+# C functions (FFI)
 
-Qualquer arquivo pode chamar funções de bibliotecas de C. A fronteira é conferida pelo compilador: o que passa de um lado para o outro tem regras de posse claras.
+Any file can call functions from C libraries. The boundary is checked by the compiler: what crosses from one side to the other has clear ownership rules.
 
 ```
 import "std/io"
 
-link "m"                                            // -lm na ligação
+link "m"                                            // -lm when linking
 
-extern "C" type FILE                                // handle opaco de C
+extern "C" type FILE                                // opaque C handle
 
 extern "C" fn strlen(s string) uint64
 extern "C" fn cbrt(x float64) float64
 extern "C" fn memcmp(a &[]byte, b &[]byte, n uint64) int32
-extern "C" fn fopen(caminho string, modo string) ?*FILE
+extern "C" fn fopen(path string, mode string) ?*FILE
 extern "C" fn fputs(s string, f &FILE) int32
-extern "C" fn fclose(f *FILE) int32                 // recebe a posse do handle
+extern "C" fn fclose(f *FILE) int32                 // takes ownership of the handle
 
 fn main() {
-    io.print(strlen("olá"), cbrt(27.0))
-    f := fopen("saida.txt", "w")
+    io.print(strlen("hello"), cbrt(27.0))
+    f := fopen("out.txt", "w")
     if f != nil {
-        fputs("oi\n", &f)
-        fclose(f)                                   // o verificador cobra este fechamento
+        fputs("hi\n", &f)
+        fclose(f)                                   // the checker requires this close
     }
 }
 ```
 
-## Declarar
+## Declaring
 
-- `extern "C" fn nome(...)` chama o símbolo de C `nome`. Não tem corpo, não é genérica nem método.
-- **A assinatura precisa bater com a do C.** O compilador não lê cabeçalhos de C, e um tipo errado é comportamento indefinido do lado do C.
+- `extern "C" fn name(...)` calls the C symbol `name`. It has no body, and it isn't generic or a method.
+- **The signature must match the C one.** The compiler doesn't read C headers, and a wrong type is undefined behavior on the C side.
 
   | C | MLC |
   |---|---|
   | `int` | `int32` |
-  | `long`, `int64_t` (Linux e macOS) | `int` |
+  | `long`, `int64_t` (Linux and macOS) | `int` |
   | `size_t`, `uint64_t` | `uint64` |
   | `unsigned char`, `uint8_t` | `byte` |
   | `double`, `float` | `float64`, `float32` |
   | `_Bool` | `bool` |
-  | `const char *` (texto que o C só lê) | `string` |
-  | `T *` para dados que o C lê ou escreve | `&[]T` (o ponteiro para os dados) ou `&T` |
-  | `X **` onde o C escreve um handle novo | `&?*X` (parâmetro de saída) |
-  | qualquer um dos de cima, quando o C aceita `NULL` | `?&T`, `?&[]T`, `?&?*X` |
+  | `const char *` (text C only reads) | `string` |
+  | `T *` for data C reads or writes | `&[]T` (the pointer to the data) or `&T` |
+  | `X **` where C writes a new handle | `&?*X` (output parameter) |
+  | any of the above, when C accepts `NULL` | `?&T`, `?&[]T`, `?&?*X` |
 
-- **Funções variádicas** (`printf`, `open` com modo) **não são aceitas**: a forma de passar os argumentos muda conforme a plataforma.
-- `link "nome"` pede a biblioteca `libnome` na ligação (`-lnome`). `mlc build -L pasta` e `mlc run -L pasta` dizem onde procurá-la. Para o resto da ligação (um `-framework` do macOS, um `-Wl,-rpath,pasta`, uma biblioteca estática pelo caminho), use `-ldflags "..."` ou a variável `LDFLAGS`; veja [O compilador C](../README.md#o-compilador-c).
+- **Variadic functions** (`printf`, `open` with a mode) **are not accepted**: the way arguments are passed changes with the platform.
+- `link "name"` asks for the `libname` library when linking (`-lname`). `mlc build -L dir` and `mlc run -L dir` say where to look for it. For the rest of linking (a macOS `-framework`, a `-Wl,-rpath,dir`, a static library by path), use `-ldflags "..."` or the `LDFLAGS` variable; see [The C compiler](../README.md#the-c-compiler).
 
-## O que atravessa a fronteira
+## What crosses the boundary
 
-| Tipo | Como | Regra |
+| Type | How | Rule |
 |---|---|---|
-| números, `bool` | por valor | |
-| `string` | `const char *` | os literais do MLC terminam em zero; o C só lê |
-| `&[]T` (`T` número ou `bool`) | o ponteiro para os dados | o tamanho vai num parâmetro à parte; o C não pode guardar o ponteiro |
-| `&T` (`T` número, `bool`, struct só de campos escalares, ou handle) | ponteiro | o C não pode guardar o ponteiro |
-| `*X` (`X` um `extern "C" type`) | o handle | a função de C **recebe a posse** (fecha ou libera o handle) |
-| retorno `?*X` | o handle (ou `NULL`) | um dono novo, que o verificador obriga a fechar |
-| `&?*X` | o endereço de uma variável `?*X` (`X **`) | a função de C escreve um handle novo nela; a variável não pode ter handle antes e, depois, precisa ser fechada |
-| `?&T`, `?&[]T`, `?&?*X` | `NULL` (com `nil`) ou o mesmo que `&T`, `&[]T`, `&?*X` | as mesmas regras do empréstimo ou do handle, quando não é `nil` |
+| numbers, `bool` | by value | |
+| `string` | `const char *` | MLC literals are zero-terminated; C only reads |
+| `&[]T` (`T` a number or `bool`) | the pointer to the data | the length goes in a separate parameter; C can't keep the pointer |
+| `&T` (`T` a number, `bool`, a struct of scalar fields only, or a handle) | pointer | C can't keep the pointer |
+| `*X` (`X` an `extern "C" type`) | the handle | the C function **takes ownership** (it closes or frees the handle) |
+| `?*X` result | the handle (or `NULL`) | a new owner, which the checker requires you to close |
+| `&?*X` | the address of a `?*X` variable (`X **`) | the C function writes a new handle into it; the variable can't hold a handle before, and must be closed after |
+| `?&T`, `?&[]T`, `?&?*X` | `NULL` (with `nil`) or the same as `&T`, `&[]T`, `&?*X` | the same rules as the borrow or the handle, when it isn't `nil` |
 
-**Nada que seja dono de memória do MLC atravessa:** um slice dono (`[]byte`), um ponteiro dono (`*P`) ou uma struct com donos são recusados. O C não saberia liberar essa memória e poderia guardá-la. Para entregar dados, empreste com `&`.
+**Nothing that owns MLC memory crosses:** an owning slice (`[]byte`), an owning pointer (`*P`) or a struct with owners are refused. C wouldn't know how to free that memory and might keep it. To hand data over, borrow it with `&`.
 
-## Handles de C
+## C handles
 
-`extern "C" type Banco` declara um tipo opaco. Ele só existe atrás de ponteiro (`?*Banco`, `*Banco`, `&Banco`), e é um dono como os outros:
+`extern "C" type Db` declares an opaque type. It only exists behind a pointer (`?*Db`, `*Db`, `&Db`), and it's an owner like the others:
 
-- vem de uma função de C (`?*Banco`, que pode ser `NULL`);
-- é emprestado com `&b` às funções que só o usam;
-- precisa ser **passado a uma função de C que o recebe por posse** (`fn fecha(b *Banco)`); esquecer é vazamento, detectado na compilação;
-- não dá para usar `free` nele, ver o conteúdo, criá-lo com `alloc` ou guardá-lo num `Vec` genérico (o `drop` não saberia que função de C o fecha).
+- it comes from a C function (`?*Db`, which may be `NULL`);
+- it's borrowed with `&b` by the functions that only use it;
+- it must be **passed to a C function that takes it by ownership** (`fn close_db(b *Db)`); forgetting is a leak, detected at compile time;
+- you can't `free` it, look inside it, create it with `alloc` or keep it in a generic `Vec` (`drop` wouldn't know which C function closes it).
 
-O tipo opaco pode implementar interfaces (`impl io.Reader for Banco`, com métodos de receptor `&Banco`) e ser argumento de um genérico cuja restrição é `ref`, que só usa o tipo emprestado (`&T`): é assim que `bufio.new[fs.File]()` e `bufio.new[net.Conn]()` funcionam. Com outra restrição (`[T any]`, `[T io.Reader]`), o genérico poderia usar `T` por valor, e o tipo opaco é recusado com a sugestão de `[T ref + ...]`.
+The opaque type can implement interfaces (`impl io.Reader for Db`, with `&Db` receiver methods) and be the argument of a generic whose constraint is `ref`, which only uses the borrowed type (`&T`): that's how `bufio.new[fs.File]()` and `bufio.new[net.Conn]()` work. With another constraint (`[T any]`, `[T io.Reader]`), the generic could use `T` by value, and the opaque type is refused with a suggestion of `[T ref + ...]`.
 
-## Handles devolvidos por ponteiro (`&?*X`)
+## Handles returned through a pointer (`&?*X`)
 
-Muitas bibliotecas devolvem o handle num parâmetro e usam o retorno para o código de erro:
+Many libraries return the handle through a parameter and use the result for the error code:
 
 ```
 link "sqlite3"
@@ -86,23 +86,23 @@ extern "C" fn sqlite3_close(db *sqlite3) int32
 
 fn main() {
     var db ?*sqlite3 = nil
-    rc := sqlite3_open("dados.db", &db)
+    rc := sqlite3_open("data.db", &db)
     if db != nil {
-        // ... usa &db ...
-        sqlite3_close(db)                   // o verificador cobra este fechamento
+        // ... use &db ...
+        sqlite3_close(db)                   // the checker requires this close
     }
     io.print("rc", rc)
 }
 ```
 
-- `&?*X` só existe em parâmetros de `extern "C" fn`, e só para handles (`X` um `extern "C" type`).
-- O argumento é `&h`, com `h` uma variável ou campo `?*X`. **`h` não pode ter um handle aberto** antes da chamada (precisa ser `nil` ou já ter sido fechado), porque a função de C escreveria outro por cima e o antigo vazaria.
-- Depois da chamada, `h` pode ter um handle ou ser `nil` (a função pode falhar). Como qualquer `?*X`, ele precisa de `if h != nil` antes de ser fechado, e esquecer de fechar é vazamento detectado na compilação.
-- A mesma variável não pode receber dois handles na mesma chamada (`f(&h, &h)`).
+- `&?*X` only exists in `extern "C" fn` parameters, and only for handles (`X` an `extern "C" type`).
+- The argument is `&h`, with `h` a `?*X` variable or field. **`h` can't hold an open handle** before the call (it must be `nil` or already closed), because the C function would write another one over it and the old one would leak.
+- After the call, `h` may hold a handle or be `nil` (the function may fail). Like any `?*X`, it needs `if h != nil` before being closed, and forgetting to close is a leak detected at compile time.
+- The same variable can't receive two handles in the same call (`f(&h, &h)`).
 
-## Ponteiros que podem ser `NULL` (`?&T`)
+## Pointers that may be `NULL` (`?&T`)
 
-Em C, `NULL` num parâmetro costuma querer dizer "não me importo" ou "use o padrão". Passar outra coisa no lugar (uma struct zerada, um ponteiro para uma variável que ninguém lê) às vezes dá o mesmo resultado e às vezes não, conforme o sistema. Com `?&T`, a declaração diz que o parâmetro aceita `NULL`, e a chamada passa `nil` ou um empréstimo:
+In C, `NULL` in a parameter usually means "I don't care" or "use the default". Passing something else instead (a zeroed struct, a pointer to a variable nobody reads) sometimes gives the same result and sometimes doesn't, depending on the system. With `?&T`, the declaration says the parameter accepts `NULL`, and the call passes `nil` or a borrow:
 
 ```
 extern "C" type AddrInfo
@@ -113,27 +113,27 @@ extern "C" fn time(t ?&int) int
 extern "C" fn sqlite3_exec(db &sqlite3, sql string, callback ?&byte, arg ?&byte, errmsg ?&?*Msg) int32
 extern "C" fn sqlite3_free(m *Msg)
 
-getaddrinfo("localhost", "80", nil, &res)      // hints NULL: o padrão do sistema
+getaddrinfo("localhost", "80", nil, &res)      // hints NULL: the system default
 now := time(nil)
 
 var msg ?*Msg = nil
-rc := sqlite3_exec(&db, sql, nil, nil, &msg)   // com &msg, o SQLite aloca a mensagem de erro
+rc := sqlite3_exec(&db, sql, nil, nil, &msg)   // with &msg, SQLite allocates the error message
 if msg != nil {
-    sqlite3_free(msg)                           // e o verificador cobra este free
+    sqlite3_free(msg)                           // and the checker requires this free
 }
 ```
 
-- `?&T` só existe em parâmetros de `extern "C" fn`. Numa função MLC, use `?*T` ou duas funções.
-- `?&T` e `?&[]T` aceitam `nil` ou o mesmo empréstimo que `&T` e `&[]T`, com as mesmas regras: o C só usa o ponteiro durante a chamada.
-- `?&?*X` é o handle devolvido por ponteiro opcional. Com `nil`, o C não devolve nada. Com `&h`, valem as regras do `&?*X`: `h` não pode ter handle antes e precisa ser fechado depois.
-- Para um parâmetro de um tipo que o MLC não representa (um ponteiro de função, por exemplo) e que você sempre passa como `NULL`, qualquer `?&T` serve (`?&byte`), já que só o `NULL` atravessa.
+- `?&T` only exists in `extern "C" fn` parameters. In an MLC function, use `?*T` or two functions.
+- `?&T` and `?&[]T` accept `nil` or the same borrow as `&T` and `&[]T`, with the same rules: C only uses the pointer during the call.
+- `?&?*X` is the optional handle returned through a pointer. With `nil`, C returns nothing. With `&h`, the `&?*X` rules apply: `h` can't hold a handle before and must be closed after.
+- For a parameter of a type MLC doesn't represent (a function pointer, for example) that you always pass as `NULL`, any `?&T` works (`?&byte`), since only the `NULL` crosses.
 
-## Erros de ligação
+## Link errors
 
-Se uma biblioteca de `link "..."` ou uma função de C não existir, `mlc build` diz que não foi possível ligar o programa e mostra a mensagem do ligador. Esse é um erro do programa, não do compilador.
+If a library from `link "..."` or a C function doesn't exist, `mlc build` says the program couldn't be linked and shows the linker's message. That's an error in the program, not in the compiler.
 
-## O que fica de fora nesta versão
+## Left out of this version
 
-- Ponteiros devolvidos pelo C para memória que o MLC liberaria (`char *` de `strdup`): use um handle opaco e a função de C que libera.
-- Callbacks do C para o MLC (ponteiros de função na fronteira). Um parâmetro de callback que sempre recebe `NULL` pode ser declarado como `?&byte`.
-- Structs por valor na fronteira e funções variádicas.
+- Pointers returned by C to memory MLC would free (`char *` from `strdup`): use an opaque handle and the C function that frees it. (The standard library's `std/sqlite` and `std/tls` solve this with a small adapter in the runtime that copies the data into the caller's buffers.)
+- Callbacks from C into MLC (function pointers across the boundary). A callback parameter that always receives `NULL` can be declared as `?&byte`.
+- Structs by value across the boundary, and variadic functions.

@@ -1,5 +1,5 @@
 // Package parser implementa um parser recursive descent para a gramática
-// de docs/gramatica.md. Cobre o subconjunto dos marcos já implementados e para
+// de docs/grammar.md. Cobre o subconjunto dos marcos já implementados e para
 // no primeiro erro de sintaxe.
 package parser
 

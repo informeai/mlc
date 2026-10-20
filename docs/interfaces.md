@@ -1,101 +1,101 @@
-# Interfaces e impressão
+# Interfaces and printing
 
-## Interfaces estáticas
+## Static interfaces
 
-Uma interface lista métodos que um tipo pode implementar:
+An interface lists methods a type can implement:
 
 ```
-interface Medida {
-    fn tamanho(self &Self) int
-    fn escala(self &Self, k int) int
+interface Measure {
+    fn size(self &Self) int
+    fn scale(self &Self, k int) int
 }
 ```
 
-- `Self` é o tipo que implementa. O primeiro parâmetro é sempre `self &Self`: o método recebe o valor **emprestado**.
-- **Nesta versão, uma interface só serve como restrição de genérico**, nunca como tipo de variável:
+- `Self` is the implementing type. The first parameter is always `self &Self`: the method receives the value **borrowed**.
+- **In this version, an interface only serves as a generic constraint**, never as a variable type:
 
 ```
-fn maior[T Medida](a &T, b &T) int {     // ok
-    if a.tamanho() > b.tamanho() {
-        return a.tamanho()
+fn larger[T Measure](a &T, b &T) int {   // ok
+    if a.size() > b.size() {
+        return a.size()
     }
-    return b.tamanho()
+    return b.size()
 }
 
-var m Medida                              // erro: interfaces só servem de restrição de genérico
+var m Measure                            // error: interfaces only serve as generic constraints
 ```
 
-Cada uso concreto (`maior[Quadrado]`, `maior[int]`) vira uma instância própria, e a chamada `a.tamanho()` dentro dela é uma **chamada direta** ao método do tipo, sem tabela de métodos, ponteiro de função nem alocação. É a mesma monomorfização dos outros genéricos.
+Each concrete use (`larger[Square]`, `larger[int]`) becomes its own instance, and the `a.size()` call inside it is a **direct call** to the type's method, with no method table, function pointer or allocation. It's the same monomorphization as the other generics.
 
-## impl: a implementação é explícita
+## impl: the implementation is explicit
 
-Ter os métodos não basta: um `impl` declara a intenção, e o compilador confere as assinaturas.
+Having the methods isn't enough: an `impl` declares the intent, and the compiler checks the signatures.
 
-**Uma struct com os métodos já declarados** (receptor `&S`):
+**A struct with the methods already declared** (`&S` receiver):
 
 ```
-struct Quadrado {
-    lado int
+struct Square {
+    side int
 }
 
-fn (q &Quadrado) tamanho() int {
-    return q.lado * q.lado
+fn (q &Square) size() int {
+    return q.side * q.side
 }
 
-fn (q &Quadrado) escala(k int) int {
-    return q.tamanho() * k
+fn (q &Square) scale(k int) int {
+    return q.size() * k
 }
 
-impl Medida for Quadrado
+impl Measure for Square
 ```
 
-**Com bloco**, para tipos que não têm métodos próprios (tipos embutidos, slices) ou quando os métodos só fazem sentido pela interface:
+**With a block**, for types that have no methods of their own (built-in types, slices) or when the methods only make sense through the interface:
 
 ```
-impl Medida for int {
-    fn (x &int) tamanho() int {
+impl Measure for int {
+    fn (x &int) size() int {
         return *x
     }
-    fn (x &int) escala(k int) int {
+    fn (x &int) scale(k int) int {
         return *x * k
     }
 }
 ```
 
-**Genérico**, para todo um formato de tipo:
+**Generic**, for a whole shape of type:
 
 ```
-impl[T Medida] Medida for []T {
-    fn (s &[]T) tamanho() int {
+impl[T Measure] Measure for []T {
+    fn (s &[]T) size() int {
         total := 0
         for i := 0; i < len(s); i++ {
-            total += s[i].tamanho()
+            total += s[i].size()
         }
         return total
     }
-    fn (s &[]T) escala(k int) int {
+    fn (s &[]T) scale(k int) int {
         return len(s) * k
     }
 }
 ```
 
-Um array `[N]T` usa o impl de `[]T` (através de uma visão do array, sem cópia).
+An array `[N]T` uses the `[]T` impl (through a view of the array, without copying).
 
-Implementar uma interface torna públicos os métodos dela: um tipo de um módulo pode ser chave de um `map.Map` de outro módulo mesmo sem `pub fn` nos métodos.
+Implementing an interface makes its methods public: a type from one module can be the key of a `map.Map` from another module even without `pub fn` on the methods.
 
-Os métodos de um impl também podem ser chamados direto: `n.tamanho()` com `n int`, `s.tamanho()` com `s []Quadrado`.
+An impl's methods can also be called directly: `n.size()` with `n int`, `s.size()` with `s []Square`.
 
-### Regras
+### Rules
 
-- O impl fica **no arquivo do tipo ou no arquivo da interface**: dois módulos não podem implementar a mesma coisa de jeitos diferentes.
-- Um tipo implementa cada interface uma vez só.
-- O impl precisa ter todos os métodos da interface, com as assinaturas certas, e nenhum outro.
-- Ponteiros e empréstimos não implementam interfaces (implemente para o tipo apontado). Slices e structs com donos podem: os métodos só recebem emprestado. Tipos de C opacos também (`impl io.Reader for File`); num genérico, eles só entram com a restrição `ref` (veja [ffi.md](ffi.md#handles-de-c)).
-- Um dono (`*T`, `[]T`) não pode ser **argumento de tipo** de um genérico, como em toda a linguagem nesta versão: `maior(&s, &s)` com `s []int` é recusado, mas `s.tamanho()` funciona.
+- The impl lives **in the type's file or in the interface's file**: two modules can't implement the same thing in different ways.
+- A type implements each interface only once.
+- The impl must have all of the interface's methods, with the right signatures, and no others.
+- Pointers and borrows don't implement interfaces (implement it for the pointed-to type). Slices and structs with owners can: the methods only borrow. Opaque C types can too (`impl io.Reader for File`); in a generic, they only fit with the `ref` constraint (see [ffi.md](ffi.md#c-handles)).
+- An owner (`*T`, `[]T`) can't be a **type argument** of a generic, as everywhere in the language in this version: `larger(&s, &s)` with `s []int` is refused, but `s.size()` works.
 
-## Impressão: io.Display
+## Printing: io.Display
 
-`io.print` e `io.printf` escrevem qualquer valor que implemente `io.Display`:
+`io.print` and `io.printf` write any value that implements `io.Display`:
 
 ```
 // std/io.mlc
@@ -104,90 +104,90 @@ pub interface Display {
 }
 ```
 
-Os tipos embutidos (`int`, `float64`, `bool`, `string`, `byte`...), os slices e os arrays já implementam, em MLC, na própria biblioteca ([std/io.mlc](../std/io.mlc)).
+The built-in types (`int`, `float64`, `bool`, `string`, `byte`...), slices and arrays already implement it, in MLC, in the library itself ([std/io.mlc](../std/io.mlc)).
 
-Para structs e enums, `impl auto` gera o método no formato de sempre (também existe para `cmp.Eq`, `cmp.Ord` e `hash.Hash`, veja [Igualdade, ordem e hash](#igualdade-ordem-e-hash-cmpeq-cmpord-e-hashhash)):
-
-```
-impl auto io.Display for Ponto       // {1 2}
-impl auto io.Display for Forma       // Circulo(2), Retangulo(3, 4), Vazio
-impl auto io.Display for Par         // genérico: Par[int, string] escreve {1 um}
-```
-
-Cada campo precisa implementar `io.Display`; senão o erro aponta o campo. Também dá para escrever o método à mão:
+For structs and enums, `impl auto` generates the method in the usual format (it also exists for `cmp.Eq`, `cmp.Ord` and `hash.Hash`, see [Equality, order and hash](#equality-order-and-hash-cmpeq-cmpord-and-hashhash)):
 
 ```
-fn (f &Fracao) write(w &io.Writer) {
+impl auto io.Display for Point       // {1 2}
+impl auto io.Display for Shape       // Circle(2), Rectangle(3, 4), Empty
+impl auto io.Display for Pair        // generic: Pair[int, string] writes {1 one}
+```
+
+Every field must implement `io.Display`; otherwise the error points at the field. You can also write the method by hand:
+
+```
+fn (f &Fraction) write(w &io.Writer) {
     w.put_int(f.num)
     w.put_byte('/')
     w.put_int(f.den)
 }
 
-impl io.Display for Fracao
+impl io.Display for Fraction
 ```
 
 ### io.printf
 
 ```
-io.printf("ponto {} tem área {}\n", p, area(p))
-io.printf("chaves: {{ e }}\n")
-io.eprintf("erro: {}\n", code)          // no erro padrão
-io.print(a, b, c)                       // valores separados por espaço, e \n
+io.printf("point {} has area {}\n", p, area(p))
+io.printf("braces: {{ and }}\n")
+io.eprintf("error: {}\n", code)         // to standard error
+io.print(a, b, c)                       // values separated by spaces, and \n
 io.eprint(a, b, c)
 ```
 
-- O formato é uma **string literal**, conferida na compilação: a quantidade de `{}` precisa bater com a de valores, e `{` ou `}` sozinhos são erro (`{{` e `}}` escrevem chaves).
-- Especificações como `{:x}`, `{:.2}`, `{:>8}`, `{:08}` e `{:s}` dizem como escrever o valor. Veja [texto.md](texto.md#especificações-de-formato).
-- `str.format(&buf, "...", x)` faz a mesma escrita num `[]byte`, e `str.format_len` diz quantos bytes ela ocupa. Veja [texto.md](texto.md#formatar-num-buffer-strformat).
-- Um valor sem `io.Display` é erro de compilação, com a sugestão do `impl auto`.
-- Os valores são calculados antes de escrever, da esquerda para a direita.
-- Um empréstimo (`x` com `x &T`) é escrito sem cópia; dentro de um genérico `[T io.Display]`, `io.print(x)` também funciona.
+- The format is a **string literal**, checked at compile time: the number of `{}` must match the number of values, and a lone `{` or `}` is an error (`{{` and `}}` write braces).
+- Specifications like `{:x}`, `{:.2}`, `{:>8}`, `{:08}` and `{:s}` say how to write the value. See [text.md](text.md#format-specifications).
+- `str.format(&buf, "...", x)` does the same writing into a `[]byte`, and `str.format_len` says how many bytes it takes. See [text.md](text.md#formatting-into-a-buffer-strformat).
+- A value without `io.Display` is a compile error, with the `impl auto` suggestion.
+- The values are computed before writing, left to right.
+- A borrow (`x` with `x &T`) is written without copying; inside a generic `[T io.Display]`, `io.print(x)` works too.
 
-### O que o compilador faz
+### What the compiler does
 
-Só a reescrita da chamada. `io.printf("x = {}\n", x)` vira, em essência:
+Only the rewriting of the call. `io.printf("x = {}\n", x)` becomes, in essence:
 
 ```
-w := io.stdout()              // Writer com buffer [256]byte na pilha
+w := io.stdout()              // Writer with a [256]byte buffer on the stack
 w.put_str("x = ")
-x.write(&w)                   // chamada direta ao write do tipo de x
+x.write(&w)                   // direct call to the write of x's type
 w.put_str("\n")
 w.flush()
 ```
 
-Toda a formatação é MLC, em `std/io.mlc`: o `Writer`, a escrita de inteiros, os `write` dos tipos embutidos. Só a formatação de números reais (o menor número de dígitos que representa o valor) e a escrita no arquivo ficam no runtime C. Nada aloca no heap.
+All formatting is MLC, in `std/io.mlc`: the `Writer`, integer writing, the `write` of the built-in types. Only the formatting of real numbers (the fewest digits that represent the value) and the writing to the file stay in the C runtime. Nothing allocates on the heap.
 
 ### io.Writer
 
-| Método | O que faz |
+| Method | What it does |
 |---|---|
-| `io.stdout()`, `io.stderr()` | criam um Writer (valor na pilha) |
-| `w.put_str(s string)`, `w.put_bytes(b &[]byte)`, `w.put_byte(b byte)` | texto |
-| `w.put_int(n int)`, `w.put_uint(n uint64)` | inteiros em decimal |
-| `w.put_float(x float64)`, `w.put_f32(x float32)` | reais, no formato do Go |
+| `io.stdout()`, `io.stderr()` | create a Writer (a value on the stack) |
+| `w.put_str(s string)`, `w.put_bytes(b &[]byte)`, `w.put_byte(b byte)` | text |
+| `w.put_int(n int)`, `w.put_uint(n uint64)` | decimal integers |
+| `w.put_float(x float64)`, `w.put_f32(x float32)` | reals, in Go's format |
 | `w.put_bool(b bool)` | `true` / `false` |
-| `w.flush()` | escreve o que está no buffer (também acontece quando ele enche) |
-| `w.printf("...", a, ...)` | o formato do `io.printf` (inclusive as especificações), escrito em `w`, sem criar outro Writer e sem `flush` |
+| `w.flush()` | writes what's in the buffer (also happens when it fills up) |
+| `w.printf("...", a, ...)` | the `io.printf` format (including the specifications), written to `w`, without creating another Writer and without a `flush` |
 
-`w.printf` serve para dois casos:
+`w.printf` covers two cases:
 
-- **Laços que escrevem muito:** cada `io.printf` cria um Writer e o descarrega no fim, então a saída sai linha a linha (no terminal, uma chamada ao sistema por linha). Com um Writer reaproveitado, ela sai em blocos de 256 bytes:
+- **Loops that write a lot:** each `io.printf` creates a Writer and flushes it at the end, so the output goes out line by line (in a terminal, one system call per line). With a reused Writer, it goes out in 256-byte blocks:
 
   ```
   w := io.stdout()
   for i := 0; i < 1000000; i++ {
       w.printf("{:>7}\n", i)
   }
-  w.flush()                       // o que sobrou no buffer
+  w.flush()                       // what's left in the buffer
   ```
 
-- **Métodos `write` próprios:** o `&io.Writer` do parâmetro aceita `w.printf`, então o formato fica legível: `fn (p &Price) write(w &io.Writer) { w.printf("R$ {}.{:02}", p.cents / 100, p.cents % 100) }`.
+- **Custom `write` methods:** the `&io.Writer` parameter accepts `w.printf`, so the format stays readable: `fn (p &Price) write(w &io.Writer) { w.printf("$ {}.{:02}", p.cents / 100, p.cents % 100) }`.
 
-O Writer precisa estar numa variável ou campo (ou ser um `&io.Writer` ou `*io.Writer`): um Writer temporário (`io.stdout().printf(...)`) perderia o que foi escrito e é recusado.
+The Writer must be in a variable or field (or be a `&io.Writer` or `*io.Writer`): a temporary Writer (`io.stdout().printf(...)`) would lose what was written, and is refused.
 
-Durante o `write` de um valor com especificação, os campos do Writer (`base`, `prec`, `zero`, `width`, `upper`, `alt`) fazem `put_int`, `put_uint` e `put_float` seguirem a especificação. Um `write` escrito à mão herda isso sem fazer nada. O alinhamento é feito em volta do `write` pelos métodos `measure`, `pad_before` e `pad_after`, também em MLC.
+During the `write` of a value with a specification, the Writer's fields (`base`, `prec`, `zero`, `width`, `upper`, `alt`) make `put_int`, `put_uint` and `put_float` follow the specification. A hand-written `write` inherits this without doing anything. Alignment is done around the `write` by the `measure`, `pad_before` and `pad_after` methods, also in MLC.
 
-## Igualdade, ordem e hash: cmp.Eq, cmp.Ord e hash.Hash
+## Equality, order and hash: cmp.Eq, cmp.Ord and hash.Hash
 
 ```
 // std/cmp.mlc
@@ -196,11 +196,11 @@ pub interface Eq {
 }
 
 pub interface Ord {
-    fn cmp(self &Self, other &Self) int     // negativo: self vem antes; 0: equivalentes; positivo: depois
+    fn cmp(self &Self, other &Self) int     // negative: self comes first; 0: equivalent; positive: after
 }
 ```
 
-Os números, `bool`, `string` e os slices (em ordem lexicográfica) já implementam as duas. Para structs e enums, `impl auto` gera os métodos:
+Numbers, `bool`, `string` and slices (in lexicographic order) already implement both. For structs and enums, `impl auto` generates the methods:
 
 ```
 struct Version {
@@ -208,24 +208,24 @@ struct Version {
     minor int
 }
 
-impl auto cmp.Eq for Version         // campo a campo
-impl auto cmp.Ord for Version        // pela ordem dos campos: major, depois minor
-impl auto hash.Hash for Version      // hash e eq: Version vira chave de map
+impl auto cmp.Eq for Version         // field by field
+impl auto cmp.Ord for Version        // in field order: major, then minor
+impl auto hash.Hash for Version      // hash and eq: Version becomes a map key
 
 sort.sort(&versions)
 i := slices.binary_search(&versions, &v)
 m := map.new[Version, []byte](16)
 ```
 
-- Numa struct, os campos são comparados na ordem da declaração. Num enum, primeiro a variante (na ordem da declaração), depois os campos dela.
-- Cada campo precisa implementar a interface; senão o erro aponta o campo.
-- O `impl auto` de uma struct genérica (`impl auto cmp.Ord for Par`) exige a interface de cada parâmetro de tipo.
-- Para outra ordem, escreva o método e declare o `impl` de uma linha: `fn (p &Person) cmp(o &Person) int { return p.age.cmp(&o.age) }` e `impl cmp.Ord for Person`.
-- Structs com donos também implementam (os métodos recebem `&Self`).
+- In a struct, fields are compared in declaration order. In an enum, first the variant (in declaration order), then its fields.
+- Every field must implement the interface; otherwise the error points at the field.
+- The `impl auto` of a generic struct (`impl auto cmp.Ord for Pair`) requires the interface for each type parameter.
+- For another order, write the method and declare the one-line `impl`: `fn (p &Person) cmp(o &Person) int { return p.age.cmp(&o.age) }` and `impl cmp.Ord for Person`.
+- Structs with owners implement them too (the methods receive `&Self`).
 
-`sort.sort`, `sort.is_sorted` e o módulo `slices` usam essas interfaces. Veja [biblioteca.md](biblioteca.md).
+`sort.sort`, `sort.is_sorted` and the `slices` module use these interfaces. See [library.md](library.md).
 
-## O que fica para depois
+## Left for later
 
-- Interfaces dinâmicas (`&Medida`, `*Medida`), para guardar valores de tipos diferentes juntos.
-- Métodos de interface que recebem `Self` (cópia) ou `*Self` (posse).
+- Dynamic interfaces (`&Measure`, `*Measure`), to keep values of different types together.
+- Interface methods that receive `Self` (a copy) or `*Self` (ownership).

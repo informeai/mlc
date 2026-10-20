@@ -1,17 +1,17 @@
 # MLC — My Lang C
 
-Linguagem compilada com sintaxe simples, inspirada no Go, que gera C e usa o compilador C do sistema para produzir o binário. A memória é gerenciada à mão, como no C (`alloc`/`free` explícitos, sem coletor de lixo), mas o compilador recusa programas com os bugs clássicos do C antes de gerar o código. Veja [docs/memoria.md](docs/memoria.md).
+A compiled language with a simple syntax, inspired by Go, that generates C and uses the system's C compiler to produce the binary. Memory is managed by hand, as in C (explicit `alloc`/`free`, no garbage collector), but the compiler refuses programs with C's classic bugs before generating the code. See [docs/memory.md](docs/memory.md).
 
 ```
-arquivo.mlc  →  mlc (Go)  →  program.c  →  cc + runtime C  →  binário
+file.mlc  →  mlc (Go)  →  program.c  →  cc + C runtime  →  binary
 ```
 
-## Exemplo
+## Example
 
 ```
 import "std/io"
 
-fn primo(n int) bool {
+fn is_prime(n int) bool {
     if n < 2 {
         return false
     }
@@ -26,92 +26,92 @@ fn primo(n int) bool {
 fn main() {
     total := 0
     for n := 0; n <= 50; n++ {
-        if primo(n) {
+        if is_prime(n) {
             total++
         }
     }
-    io.print("primos até 50:", total)
+    io.print("primes up to 50:", total)
 }
 ```
 
 ```sh
-make                                     # gera o compilador em bin/mlc
-bin/mlc run exemplo.mlc                  # compila e executa
-bin/mlc build -o exemplo exemplo.mlc     # gera o executável
-bin/mlc build -emit-c exemplo.mlc        # mostra o C gerado
-bin/mlc build -L /opt/lib prog.mlc       # -L: onde procurar as bibliotecas de C de link "nome"
-bin/mlc build -I ~/mlc-libs prog.mlc     # -I: onde procurar os imports, além do projeto
-bin/mlc build -cflags "-O3 -march=native" prog.mlc               # flags a mais para o compilador C
-bin/mlc build -ldflags "-framework Cocoa" prog.mlc               # e para a ligação
-bin/mlc test -cflags "-fsanitize=address" -ldflags "-fsanitize=address" std   # testes com AddressSanitizer
-bin/mlc fmt .                            # formata os .mlc da pasta (no lugar)
-bin/mlc fmt -l .                         # só lista os que mudariam
-bin/mlc test std                         # roda os testes dos *_test.mlc (aqui, os da std)
-bin/mlc test -bench . std                # e mede os benchmarks (fn bench_*)
-bin/mlc doc http.Message                 # a documentação de um tipo, função ou módulo
-bin/mlc run -sanitize address prog.mlc   # roda sob AddressSanitizer + UBSan (thread: ThreadSanitizer)
-make sanitize                            # a suíte sob os sanitizers
-make mutate                              # mutantes com bugs de posse: o verificador precisa recusar
-make fuzz FUZZTIME=10m                   # programas aleatórios, válidos e com bug, contra o verificador
-make enum ENUM=6                         # todos os programas pequenos, contra um modelo de referência
-make robust ROBUSTTIME=5m                # fuzz do compilador e do formatador: nunca dá panic
-make cover                               # cobertura do checker e as regras sem teste
-make test                                # roda os testes
-make check                               # gofmt, mlc fmt -l, go vet e testes
+make                                     # builds the compiler into bin/mlc
+bin/mlc run example.mlc                  # compiles and runs
+bin/mlc build -o example example.mlc     # produces the executable
+bin/mlc build -emit-c example.mlc        # shows the generated C
+bin/mlc build -L /opt/lib prog.mlc       # -L: where to look for the C libraries of link "name"
+bin/mlc build -I ~/mlc-libs prog.mlc     # -I: where to look for imports, besides the project
+bin/mlc build -cflags "-O3 -march=native" prog.mlc               # extra flags for the C compiler
+bin/mlc build -ldflags "-framework Cocoa" prog.mlc               # and for linking
+bin/mlc test -cflags "-fsanitize=address" -ldflags "-fsanitize=address" std   # tests with AddressSanitizer
+bin/mlc fmt .                            # formats the folder's .mlc files (in place)
+bin/mlc fmt -l .                         # only lists the ones that would change
+bin/mlc test std                         # runs the tests in *_test.mlc (here, the std's)
+bin/mlc test -bench . std                # and measures the benchmarks (fn bench_*)
+bin/mlc doc http.Message                 # the documentation of a type, function or module
+bin/mlc run -sanitize address prog.mlc   # runs under AddressSanitizer + UBSan (thread: ThreadSanitizer)
+make sanitize                            # the suite under the sanitizers
+make mutate                              # mutants with ownership bugs: the checker must refuse them
+make fuzz FUZZTIME=10m                   # random programs, valid and buggy, against the checker
+make enum ENUM=6                         # every small program, against a reference model
+make robust ROBUSTTIME=5m                # fuzzing of the compiler and the formatter: they never panic
+make cover                               # the checker's coverage and the rules without a test
+make test                                # runs the tests
+make check                               # gofmt, mlc fmt -l, go vet and tests
 ```
 
-## O compilador C
+## The C compiler
 
-O `mlc build` gera C e chama o compilador C em duas etapas: compila o programa e o runtime (`-std=c11 -O2 -Wall -pthread`) e liga com as bibliotecas (`link "nome"`, `-L`) e a `libm`. Dá para acrescentar flags, que vêm depois das do `mlc` (e por isso ganham numa contradição, como `-O3` depois do `-O2`):
+`mlc build` generates C and calls the C compiler in two steps: it compiles the program and the runtime (`-std=c11 -O2 -Wall -pthread`) and links with the libraries (`link "name"`, `-L`) and `libm`. You can add flags, which come after `mlc`'s (and so win in a contradiction, like `-O3` after `-O2`):
 
-| Onde | Compilação | Ligação |
+| Where | Compiling | Linking |
 |---|---|---|
-| variável de ambiente | `CFLAGS` | `LDFLAGS` |
-| opção do `build`, `run` e `test` | `-cflags "..."` | `-ldflags "..."` |
+| environment variable | `CFLAGS` | `LDFLAGS` |
+| option of `build`, `run` and `test` | `-cflags "..."` | `-ldflags "..."` |
 
-`CC` escolhe o compilador (`CC=gcc mlc build ...`). As flags são separadas por espaço, sem aspas. As que o `mlc` precisa (`-std=c11`, `-pthread`, `-lm`) continuam lá. Se o compilador recusar uma flag, a mensagem diz que pode ter sido ela, em vez de acusar um erro interno do `mlc`.
+`CC` picks the compiler (`CC=gcc mlc build ...`, default: `cc`). Flags are separated by spaces, without quotes. The ones `mlc` needs (`-std=c11`, `-pthread`, `-lm`) are still there. If the compiler refuses a flag, the message says it may have been that flag, instead of reporting an internal `mlc` error.
 
-## Formatação (`mlc fmt`)
+## Formatting (`mlc fmt`)
 
-`mlc fmt` reescreve os arquivos na forma canônica, como o `gofmt`: indentação de 4 espaços, um espaço em volta dos operadores binários e depois das vírgulas, nenhum depois de operador unário (`-x`, `*p`, `&s`), comentários de fim de linha alinhados. As quebras de linha, os parênteses e os comentários de quem escreveu são mantidos; linhas em branco seguidas viram uma só. Um arquivo com erro de sintaxe não é formatado. `mlc fmt -` lê da entrada padrão e escreve na saída padrão (para editores).
+`mlc fmt` rewrites files in the canonical form, like `gofmt`: 4-space indentation, one space around binary operators and after commas, none after unary operators (`-x`, `*p`, `&s`), end-of-line comments aligned. The author's line breaks, parentheses and comments are kept; consecutive blank lines become one. A file with a syntax error isn't formatted. `mlc fmt -` reads from standard input and writes to standard output (for editors).
 
-## Documentação (`mlc doc`)
+## Documentation (`mlc doc`)
 
-`mlc doc` mostra no terminal a documentação tirada dos comentários `//` logo acima de cada declaração e do comentário do começo do arquivo (a descrição do módulo), como o `go doc`:
+`mlc doc` shows in the terminal the documentation taken from the `//` comments right above each declaration and from the comment at the top of the file (the module's description), like `go doc`:
 
 ```sh
-mlc doc                          # os módulos da biblioteca padrão, com a descrição de cada um
-mlc doc http                     # o módulo: descrição, constantes, tipos com os métodos, funções
-mlc doc http.Message             # um tipo: a declaração (com os campos), a descrição e os métodos
-mlc doc http.Message.read_body   # um método (mlc doc http Message.read_body também vale)
-mlc doc http.respond             # uma função; constantes, interfaces e variantes de enum também
-mlc doc util/texto.limpa         # uma biblioteca sua, procurada como o import (-I e MLC_PATH valem)
-mlc doc prog.mlc                 # um arquivo
-mlc doc alloc                    # um embutido (io.printf, thread.spawn, owned...); mlc doc builtin lista todos
+mlc doc                          # the standard library's modules, with each one's description
+mlc doc http                     # the module: description, constants, types with their methods, functions
+mlc doc http.Message             # a type: the declaration (with the fields), the description and the methods
+mlc doc http.Message.read_body   # a method (mlc doc http Message.read_body works too)
+mlc doc http.respond             # a function; constants, interfaces and enum variants too
+mlc doc util/text.clean          # a library of yours, looked up like the import (-I and MLC_PATH apply)
+mlc doc prog.mlc                 # a file
+mlc doc alloc                    # a built-in (io.printf, thread.spawn, owned...); mlc doc builtin lists them all
 ```
 
-Só aparece o que é `pub`, a não ser num arquivo sem nada `pub` (um programa), que mostra tudo; `-all` mostra tudo sempre. Os nomes dos símbolos não diferenciam maiúsculas. O comentário de uma declaração é o bloco de linhas `//` colado nela; uma linha em branco o separa. Linhas recuadas em 4 espaços dentro do comentário são exemplos de código. O hover do LSP usa os mesmos comentários.
+Only what's `pub` shows up, except in a file with nothing `pub` (a program), which shows everything; `-all` always shows everything. Symbol names are case-insensitive. A declaration's comment is the block of `//` lines attached to it; a blank line separates it. Lines indented by 4 spaces inside the comment are code examples. The LSP hover uses the same comments.
 
-## Testes (`mlc test`)
+## Tests (`mlc test`)
 
-Um arquivo `nome_test.mlc` declara funções `fn test_nome()` e usa as verificações de `std/testing` (`testing.eq_int(v.len(), 1)`, `testing.eq_str(&buf[:n], "oi")`, `testing.expect_panic()`). O `mlc test` roda cada teste num processo separado, então um panic ou uma falha fica no teste que o causou. Uma verificação que falha aponta a linha dela. A biblioteca padrão tem os testes dela em `std/*_test.mlc`. Veja [docs/testes.md](docs/testes.md).
+A `name_test.mlc` file declares `fn test_name()` functions and uses the checks from `std/testing` (`testing.eq_int(v.len(), 1)`, `testing.eq_str(&buf[:n], "hi")`, `testing.expect_panic()`). `mlc test` runs each test in a separate process, so a panic or a failure stays in the test that caused it. A failing check points at its line. The standard library has its tests in `std/*_test.mlc`. See [docs/testing.md](docs/testing.md).
 
-## Bibliotecas
+## Libraries
 
-Um `import "json/parse"` procura `json/parse.mlc` nesta ordem, e vale a primeira pasta que tiver o arquivo:
+An `import "json/parse"` looks for `json/parse.mlc` in this order, and the first folder that has the file wins:
 
-1. a pasta do arquivo principal;
-2. a pasta `lib/` ao lado dele (bibliotecas copiadas para dentro do projeto);
-3. as pastas de `-I` (`mlc build -I dir`, `mlc run -I dir`);
-4. as pastas da variável `MLC_PATH`, separadas por `:` (bibliotecas compartilhadas entre projetos).
+1. the main file's folder;
+2. the `lib/` folder next to it (libraries copied into the project);
+3. the `-I` folders (`mlc build -I dir`, `mlc run -I dir`);
+4. the folders in the `MLC_PATH` variable, separated by `:` (libraries shared between projects).
 
-Os imports de dentro de uma biblioteca seguem a mesma busca, então uma biblioteca em `~/mlc-libs/json/` importa as próprias partes como `import "json/lexer"`. O LSP usa `lib/` e `MLC_PATH`, então o editor acha as mesmas bibliotecas. `import "std/..."` é sempre a biblioteca padrão, embutida no `mlc`.
+Imports inside a library follow the same search, so a library in `~/mlc-libs/json/` imports its own parts as `import "json/lexer"`. The LSP uses `lib/` and `MLC_PATH`, so the editor finds the same libraries. `import "std/..."` is always the standard library, built into `mlc`.
 
-## Editores
+## Editors
 
-`mlc lsp` é um servidor Language Server Protocol (via entrada e saída padrão). Ele marca os erros na linha enquanto você digita, sem precisar salvar: sintaxe, tipos e posse de memória, os mesmos do `mlc build`. Também dá cores semânticas (palavras reservadas, tipos, funções, constantes, literais, comentários) e formata pelo `mlc fmt`. O **hover** mostra a declaração de qualquer nome (variável, parâmetro, constante, função, método, campo, tipo, variante, módulo, função embutida) com o tipo e os comentários `//` logo acima dela. **Ir para a definição** leva à declaração, inclusive em outros arquivos e na biblioteca padrão (copiada para a pasta de cache do sistema, para o editor abrir). As **sugestões ao digitar** olham o contexto: depois de `io.` ou `vec.`, o que o módulo exporta (inclusive as embutidas, como `io.printf` e `thread.spawn`); depois de `x.`, os campos e métodos do tipo de `x` (inclusive os de `impl` e os de structs genéricas, e os de canais, mutex e `io.Writer`); dentro de `import "...`, os módulos; dentro de um `match` sobre enum, as variantes; e, no resto, as variáveis visíveis naquele ponto, as declarações do arquivo, os módulos importados, as funções embutidas, os tipos e as palavras reservadas. Elas funcionam com o texto pela metade: se a linha atual ainda não compila, a análise usa um nome provisório no cursor, a linha em branco ou a última análise que deu certo. Um módulo sem `fn main` é checado pelo `main.mlc` mais próximo que o importa, para os imports resolverem como num build.
+`mlc lsp` is a Language Server Protocol server (over standard input and output). It marks errors on the line as you type, without saving: syntax, types and memory ownership, the same as `mlc build`. It also provides semantic colors (keywords, types, functions, constants, literals, comments) and formats through `mlc fmt`. **Hover** shows the declaration of any name (variable, parameter, constant, function, method, field, type, variant, module, built-in function) with its type and the `//` comments right above it. **Go to definition** takes you to the declaration, including in other files and in the standard library (copied to the system's cache folder, for the editor to open). **Completions** look at the context: after `io.` or `vec.`, what the module exports (including built-ins, like `io.printf` and `thread.spawn`); after `x.`, the fields and methods of `x`'s type (including those from `impl` and from generic structs, and those of channels, mutexes and `io.Writer`); inside `import "...`, the modules; inside a `match` on an enum, the variants; and elsewhere, the variables visible at that point, the file's declarations, the imported modules, the built-in functions, the types and the keywords. They work with half-written text: if the current line doesn't compile yet, the analysis uses a placeholder name at the cursor, a blank line, or the last analysis that succeeded. A module without `fn main` is checked through the nearest `main.mlc` that imports it, so imports resolve as in a build.
 
-**VS Code** (`editors/vscode`): extensão com gramática TextMate (cores imediatas) e cliente LSP.
+**VS Code** (`editors/vscode`): an extension with a TextMate grammar (immediate colors) and an LSP client.
 
 ```sh
 cd editors/vscode
@@ -120,9 +120,9 @@ npx @vscode/vsce package --allow-missing-repository --skip-license
 code --install-extension mlc-0.1.0.vsix
 ```
 
-O `mlc` precisa estar no `PATH`, ou configurado em `mlc.path`.
+`mlc` must be in the `PATH`, or configured in `mlc.path`.
 
-**Neovim 0.11+** (`editors/nvim`): tipo de arquivo, sintaxe, indentação de 4 espaços e o LSP via `vim.lsp.config`/`vim.lsp.enable`, sem nvim-lspconfig. Com lazy.nvim (LazyVim):
+**Neovim 0.11+** (`editors/nvim`): file type, syntax, 4-space indentation and the LSP through `vim.lsp.config`/`vim.lsp.enable`, without nvim-lspconfig. With lazy.nvim (LazyVim):
 
 ```lua
 -- ~/.config/nvim/lua/plugins/mlc.lua
@@ -131,129 +131,129 @@ return {
 }
 ```
 
-Para outro caminho do executável: `vim.lsp.config("mlc", { cmd = { "/caminho/mlc", "lsp" } })`. Os erros aparecem pelo `vim.diagnostic` e a formatação por `vim.lsp.buf.format()` (o LazyVim já formata ao salvar).
+For another path to the executable: `vim.lsp.config("mlc", { cmd = { "/path/to/mlc", "lsp" } })`. Errors show up through `vim.diagnostic` and formatting through `vim.lsp.buf.format()` (LazyVim already formats on save).
 
-O compilador C usado é o da variável `CC` (padrão: `cc`).
+## Layout
 
-## Estrutura
-
-| Pasta | Papel |
+| Folder | Role |
 |---|---|
-| `cmd/mlc` | linha de comando (`build`, `run`, `test`, `fmt`, `lsp`) |
-| `internal/token` | tokens, posições e erros de compilação |
-| `internal/lexer` | tokens, com `;` automático no fim da linha |
-| `internal/parser` | parser recursive descent → AST |
-| `internal/ast` | árvore sintática |
-| `internal/checker` | nomes e tipos |
+| `cmd/mlc` | command line (`build`, `run`, `test`, `fmt`, `doc`, `lsp`) |
+| `internal/token` | tokens, positions and compile errors |
+| `internal/lexer` | tokens, with automatic `;` at the end of the line |
+| `internal/parser` | recursive descent parser → AST |
+| `internal/ast` | syntax tree |
+| `internal/checker` | names, types, ownership and stack |
 | `internal/codegen` | AST → C11 |
-| `internal/driver` | encadeia as fases e chama o `cc` |
-| `internal/format` | `mlc fmt`: formatador sobre os tokens, com os comentários |
-| `internal/lsp` | `mlc lsp`: diagnósticos, cores semânticas e formatação para editores |
-| `editors/` | extensão do VS Code e plugin do Neovim |
-| `rt/c` | runtime em C, embutido no binário do `mlc` |
-| `std` | biblioteca padrão escrita em MLC (`import "std/io"`, `import "std/math"`), embutida no binário, com os testes em `std/*_test.mlc`. Veja [docs/biblioteca.md](docs/biblioteca.md) |
-| `tests/run` | programas e saída esperada (`.out`); entrada opcional (`.in`) |
-| `tests/panic` | programas que devem abortar (`.out` + `.err`) |
-| `tests/errors` | programas que devem ser rejeitados (`// erro: ...` na 1ª linha) |
-| `tests/testing` | arquivo de teste com resultados conhecidos, para conferir o próprio `mlc test` |
+| `internal/driver` | chains the phases and calls `cc` |
+| `internal/format` | `mlc fmt`: a formatter over the tokens, with the comments |
+| `internal/lsp` | `mlc lsp`: diagnostics, semantic colors and formatting for editors |
+| `internal/fuzz` | mutation, the program generator, enumeration and the reference model that test the checker |
+| `editors/` | VS Code extension and Neovim plugin |
+| `rt/c` | the C runtime, built into the `mlc` binary |
+| `std` | the standard library written in MLC (`import "std/io"`, `import "std/math"`), built into the binary, with its tests in `std/*_test.mlc`. See [docs/library.md](docs/library.md) |
+| `tests/run` | programs and expected output (`.out`); optional input (`.in`) |
+| `tests/panic` | programs that must abort (`.out` + `.err`) |
+| `tests/errors` | programs that must be rejected (`// erro: ...` on the 1st line) |
+| `tests/testing` | a test file with known results, to check `mlc test` itself |
 
-Um programa de vários arquivos fica numa pasta própria, com o principal em `main.mlc` (por exemplo `tests/run/projeto/main.mlc`) e os arquivos importados ao lado.
+A multi-file program lives in its own folder, with the main file in `main.mlc` (for example `tests/run/projeto/main.mlc`) and the imported files next to it.
 
 ```sh
 go test ./...
 ```
 
-## Garantias atuais
+## Current guarantees
 
-- `realloc` e `free` são as únicas formas de mudar memória no heap: não há crescimento automático.
-- Conversão entre números que não cabe vira panic (em C seria comportamento indefinido); constante que não cabe é erro de compilação.
-- Estouro de inteiro, divisão por zero e índice fora dos limites viram panic com arquivo e linha do `.mlc`, nunca comportamento indefinido do C.
-- Diretivas `#line` no C gerado: panics e erros apontam para o código MLC.
-- Impressão checada na compilação: `io.printf("x = {}\n", x)` confere o formato e se cada valor implementa `io.Display`, e vira chamadas diretas, escritas em MLC, sem `printf` do C e sem alocação.
-- Variável declarada e nunca lida é erro de compilação, como no Go.
-- `match` sem fallthrough e com cobertura obrigatória: esquecer um caso é erro de compilação.
-- Literal de struct lista todos os campos (`Ponto{}` é o valor zero explícito): campo novo esquecido é erro de compilação.
-- Estouro e divisão por zero em `const` são erros de compilação.
-- Memória explícita (`alloc`/`free`) com verificador de posse na compilação: uso depois de `free`, `free` duplo, vazamento, ponteiro nulo e ponteiro pendente são erros de compilação. Veja [docs/memoria.md](docs/memoria.md).
-- Ordem de avaliação definida: da esquerda para a direita, sempre. Os argumentos de uma chamada, inclusive de `io.print`, são todos calculados antes da chamada.
-- Toda variável começa com valor zero (`0`, `false`, `""`): não existe leitura de memória não inicializada.
+- `realloc` and `free` are the only ways to change heap memory: there's no automatic growth.
+- A conversion between numbers that doesn't fit is a panic (in C it would be undefined behavior); a constant that doesn't fit is a compile error.
+- Integer overflow, division by zero and out-of-bounds indices are panics with the `.mlc` file and line, never C undefined behavior.
+- `#line` directives in the generated C: panics and errors point to the MLC code.
+- Printing checked at compile time: `io.printf("x = {}\n", x)` checks the format and that each value implements `io.Display`, and becomes direct calls, written in MLC, with no C `printf` and no allocation.
+- A variable declared and never read is a compile error, as in Go.
+- `match` without fallthrough and with mandatory coverage: forgetting a case is a compile error.
+- A struct literal lists every field (`Point{}` is the explicit zero value): a forgotten new field is a compile error.
+- Overflow and division by zero in a `const` are compile errors.
+- Explicit memory (`alloc`/`free`) with an ownership checker at compile time: use after `free`, double `free`, leaks, null pointers and dangling pointers are compile errors. See [docs/memory.md](docs/memory.md).
+- The stack is checked: a thread or `main` whose stack doesn't fit is refused at compile time, and deep recursion panics instead of corrupting memory. See [docs/memory.md](docs/memory.md#stack).
+- Defined evaluation order: left to right, always. The arguments of a call, including `io.print`'s, are all computed before the call.
+- Every variable starts with the zero value (`0`, `false`, `""`): there's no reading of uninitialized memory.
 
-## Princípio: toda alocação é explícita
+## Principle: every allocation is explicit
 
-A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está alocando memória. Toda alocação aparece no código como uma chamada explícita (`alloc`, `realloc`), e toda liberação como `free`. Nenhuma construção da linguagem aloca escondido: não há concatenação de strings que aloca, `append` embutido nem cópias implícitas para o heap. O compilador verifica que cada alocação é liberada exatamente uma vez.
+The idea of MLC is that whoever programs understands and knows **how much and where** they're allocating memory. Every allocation appears in the code as an explicit call (`alloc`, `realloc`), and every release as `free`. No language construct allocates behind your back: there's no string concatenation that allocates, no built-in `append` and no implicit copies to the heap. The compiler checks that each allocation is freed exactly once.
 
-## Convenções
+## Conventions
 
-- Funções de biblioteca e runtime expostas na linguagem são sempre em inglês (`io.print`).
-- Mensagens do compilador são em português.
+- Library and runtime functions exposed in the language are always in English (`io.print`).
+- Compiler messages are in Portuguese, for now.
 
-## Roteiro
+## Roadmap
 
-- [x] **Marco 1:** `import`, funções com parâmetros e retorno, `int`/`bool`/`string` literal, aritmética checada, `io.print`
-- [x] **Marco 2:** `var`, `:=`, atribuição (`=`, `+=`...), `++`/`--`, `if`/`else if`/`else`, `for` (infinito, condição e três cláusulas), `break`/`continue`
-- [x] **Marco 3:** `match` com padrões literais e `_`, checagem de cobertura; vira `switch` em C sobre `int` e cadeia de `if` sobre `string`/`bool`; `==`/`!=` entre strings
-- [x] **Marco 4:** `struct` (por valor, em qualquer ordem de declaração), literais compostos com todos os campos explícitos, leitura e atribuição de campos, `==` e `io.print` de structs, `const` avaliada na compilação (também como padrão de `match`)
-- [x] **Ordem de avaliação:** argumentos, operandos e campos de literal são avaliados da esquerda para a direita, com a ordem escrita no C gerado (temporárias + operador vírgula), sem depender do compilador C
-- [x] **Marco 5a:** `alloc`/`free`, `*T`, `?*T`, `&T` e o verificador de posse para variáveis e parâmetros
-- [x] **Marco 5b:** ponteiros dentro de structs (listas, árvores), com posse rastreada por campo; checagem de `nil` pelo fluxo (`if`, `for`, `&&`, `||`); laços analisados até o ponto fixo
-- [x] **Marco 6:** slices `[]T` donos (`alloc([]T, n)`, `free`), checagem de limites, `len`, `for x in s`, `&[]T`; `len` e índice em strings
-- [x] **Slices, parte 2:** `realloc(s, n)` (consome o slice e devolve outro, novos elementos zerados) e sub-slices emprestados `&s[a:b]`
-- [x] **Slices de donos:** `[]?*T` e `[][]T`, com `take(&s[i])`, `replace(&s[i], v)` e `for x in drain(s)`; `free(s)` provado seguro na compilação
-- [x] **Marco 7:** texto em buffers explícitos: tipo `byte` e literais `'a'`, conversões `int(x)`/`byte(x)`, módulo `str` (`copy`, `put_int`, `int_len`, `eq`, `parse_int`) e `io.write`/`io.read_line`, nenhum deles aloca. Veja [docs/texto.md](docs/texto.md)
-- [x] **Vários arquivos:** `import "geometria"` (caminho relativo à pasta do arquivo principal), visibilidade explícita com `pub`, nomes qualificados (`geometria.area`, `geometria.Ponto`), importação circular recusada
-- [x] **Métodos:** `fn (p &Ponto) area() int`, chamado como `p.area()`; o receptor (`Ponto`, `&Ponto` ou `*Ponto`) diz se a chamada copia, empresta ou move
-- [x] **Genéricos:** `fn maior[T ordered](a T, b T) T`, `struct Par[A any, B any]`, métodos genéricos, inferência; restrições `any`, `comparable`, `ordered`, `number`, `integer`; monomorfização no C
-- [x] **Enums com dados:** `enum Forma { Circulo(raio float64); Vazio }`, `match` com desestruturação e cobertura obrigatória, enums genéricos (`Resultado[T]`) com inferência pelo valor ou pelo contexto
-- [x] **Números:** `int8`, `int16`, `int32`, `uint16`, `uint32`, `uint64`, `float32`, `float64`; constantes sem tipo; conversões checadas. Veja [docs/tipos.md](docs/tipos.md)
-- [x] **Arrays `[N]T`:** tamanho fixo, por valor, na pilha ou em structs, sem `alloc`; `&a` empresta como `&[]T`
-- [x] **Biblioteca padrão** em MLC, importada com `std/`: `io`, `str`, `result`, `math`, `sort`, `text`, `vec`, `rand`, `os`, `fs`, `time`, `testing`, `thread`, `chan`, `mutex`, `atomic`, `args`, `process`, `bytes`, `utf8`, `net`, `json`, `encoding`, `cmp`, `slices`, `hash`, `map`, `bufio`, `path`, `binary`, `deque`, `heap`, `signal`, `log`, `sync`, `http`. Nada aloca escondido; erros como `Result[T, E]`. Veja [docs/biblioteca.md](docs/biblioteca.md)
-- [x] **`mlc fmt`:** formatador canônico (4 espaços), preservando comentários e quebras de linha; `-l` lista, `-` usa a entrada padrão
-- [x] **Interfaces estáticas:** `interface`, `impl` (de uma linha, com bloco ou genérico) e `impl auto`; interfaces como restrição de genérico, com chamadas diretas (sem tabela de métodos). `io.print`/`io.printf`/`io.eprintf` sobre `io.Display`, com a formatação em MLC. Veja [docs/interfaces.md](docs/interfaces.md)
-- [x] **Bits e funções como valor:** `& | ^ << >>`, `^x`, aritmética que dá a volta (`+% -% *%`), literais `0xFF`, `0b1010`, `0o17`, `1_000_000`; tipos `fn(int) bool`, funções como valor e chamadas indiretas (sem closures, sem alocação). `std/rand` passou a ser MLC; novos `std/hash` e `sort.sort_by`. Veja [docs/tipos.md](docs/tipos.md)
-- [x] **Donos em genéricos:** restrição `owned` (`Vec[[]byte]`, `Vec[?*No]`), `drop(x)` em código genérico, restrição no receptor (`fn (v &Vec[T any]) get`); `std/vec` com `push`/`pop`/`take`/`put`/`set` movendo a posse e `free` liberando os elementos; erros de posse apontados na definição do genérico. Veja [docs/tipos.md](docs/tipos.md)
-- [x] **Hash map em MLC:** `std/map` (`Map[K owned + hash.Hash, V owned]`, endereçamento aberto) e a interface `hash.Hash` para inteiros, `bool`, `string` e slices; restrições combinadas com `+`. Veja [docs/biblioteca.md](docs/biblioteca.md)
-- [x] **Empréstimos devolvidos e guardados:** `fn (v &Vec[T]) at(i int) &T`, `x := m.get(&k)`, `x := &a[i]`; a origem fica congelada enquanto o empréstimo é usado, conferido na compilação. `vec.at`/`last` e `map.get`/`key_ref`/`value_ref`. Veja [docs/memoria.md](docs/memoria.md)
-- [x] **Testes:** `mlc test` roda as funções `test_*` dos arquivos `*_test.mlc`, cada uma num processo, e aceita `-run` e `-v`. As verificações ficam em `std/testing` (`eq_int`, `eq_str`, `near`, `expect_panic`, ...) e apontam a linha que falhou. Cada módulo da `std` tem os testes dele. Veja [docs/testes.md](docs/testes.md)
-- [x] **Documentação no terminal:** `mlc doc` (módulo, tipo, função, método ou embutido, da biblioteca padrão ou de bibliotecas suas), com toda declaração `pub` da `std` comentada (conferido em teste). Veja [Documentação](#documentação-mlc-doc)
-- [x] **LSP:** `mlc lsp` com diagnósticos ao digitar, cores, formatação, hover, ir para a definição e sugestões ao digitar; extensão para VS Code e configuração para Neovim. Veja [Editores](#editores)
+- [x] **Milestone 1:** `import`, functions with parameters and return values, `int`/`bool`/`string` literals, checked arithmetic, `io.print`
+- [x] **Milestone 2:** `var`, `:=`, assignment (`=`, `+=`...), `++`/`--`, `if`/`else if`/`else`, `for` (infinite, condition and three clauses), `break`/`continue`
+- [x] **Milestone 3:** `match` with literal patterns and `_`, coverage checking; becomes a C `switch` on `int` and an `if` chain on `string`/`bool`; `==`/`!=` between strings
+- [x] **Milestone 4:** `struct` (by value, in any declaration order), composite literals with every field explicit, reading and assigning fields, `==` and `io.print` of structs, `const` evaluated at compile time (also as a `match` pattern)
+- [x] **Evaluation order:** arguments, operands and literal fields are evaluated left to right, with the order written in the generated C (temporaries + comma operator), not relying on the C compiler
+- [x] **Milestone 5a:** `alloc`/`free`, `*T`, `?*T`, `&T` and the ownership checker for variables and parameters
+- [x] **Milestone 5b:** pointers inside structs (lists, trees), with ownership tracked per field; `nil` checks by flow (`if`, `for`, `&&`, `||`); loops analyzed to a fixed point
+- [x] **Milestone 6:** owning slices `[]T` (`alloc([]T, n)`, `free`), bounds checking, `len`, `for x in s`, `&[]T`; `len` and indexing on strings
+- [x] **Slices, part 2:** `realloc(s, n)` (consumes the slice and returns another, new elements zeroed) and borrowed sub-slices `&s[a:b]`
+- [x] **Slices of owners:** `[]?*T` and `[][]T`, with `take(&s[i])`, `replace(&s[i], v)` and `for x in drain(s)`; `free(s)` proven safe at compile time
+- [x] **Milestone 7:** text in explicit buffers: the `byte` type and `'a'` literals, `int(x)`/`byte(x)` conversions, the `str` module (`copy`, `put_int`, `int_len`, `eq`, `parse_int`) and `io.write`/`io.read_line`, none of which allocate. See [docs/text.md](docs/text.md)
+- [x] **Multiple files:** `import "geometry"` (path relative to the main file's folder), explicit visibility with `pub`, qualified names (`geometry.area`, `geometry.Point`), circular imports refused
+- [x] **Methods:** `fn (p &Point) area() int`, called as `p.area()`; the receiver (`Point`, `&Point` or `*Point`) says whether the call copies, borrows or moves
+- [x] **Generics:** `fn larger[T ordered](a T, b T) T`, `struct Pair[A any, B any]`, generic methods, inference; constraints `any`, `comparable`, `ordered`, `number`, `integer`; monomorphization in C
+- [x] **Enums with data:** `enum Shape { Circle(radius float64); Empty }`, `match` with destructuring and mandatory coverage, generic enums (`Result[T]`) inferred from the value or from the context
+- [x] **Numbers:** `int8`, `int16`, `int32`, `uint16`, `uint32`, `uint64`, `float32`, `float64`; untyped constants; checked conversions. See [docs/types.md](docs/types.md)
+- [x] **Arrays `[N]T`:** fixed size, by value, on the stack or in structs, without `alloc`; `&a` borrows as `&[]T`
+- [x] **Standard library** in MLC, imported with `std/`: `io`, `str`, `result`, `math`, `sort`, `text`, `vec`, `rand`, `os`, `fs`, `time`, `testing`, `thread`, `chan`, `mutex`, `atomic`, `args`, `process`, `bytes`, `utf8`, `net`, `json`, `encoding`, `cmp`, `slices`, `hash`, `map`, `bufio`, `path`, `binary`, `deque`, `heap`, `signal`, `log`, `sync`, `http`, `url`, `hmac`, `uuid`, `sqlite`, `config`, `csv`, `arena`, `tls`, `password`. Nothing allocates behind your back; errors as `Result[T, E]`. See [docs/library.md](docs/library.md)
+- [x] **`mlc fmt`:** canonical formatter (4 spaces), keeping comments and line breaks; `-l` lists, `-` uses standard input
+- [x] **Static interfaces:** `interface`, `impl` (one-line, with a block or generic) and `impl auto`; interfaces as generic constraints, with direct calls (no method tables). `io.print`/`io.printf`/`io.eprintf` over `io.Display`, with the formatting in MLC. See [docs/interfaces.md](docs/interfaces.md)
+- [x] **Bits and functions as values:** `& | ^ << >>`, `^x`, wrapping arithmetic (`+% -% *%`), literals `0xFF`, `0b1010`, `0o17`, `1_000_000`; `fn(int) bool` types, functions as values and indirect calls (no closures, no allocation). `std/rand` became MLC; new `std/hash` and `sort.sort_by`. See [docs/types.md](docs/types.md)
+- [x] **Owners in generics:** the `owned` constraint (`Vec[[]byte]`, `Vec[?*Node]`), `drop(x)` in generic code, constraints on the receiver (`fn (v &Vec[T any]) get`); `std/vec` with `push`/`pop`/`take`/`put`/`set` moving ownership and `free` freeing the elements; ownership errors reported at the generic's definition. See [docs/types.md](docs/types.md)
+- [x] **Hash map in MLC:** `std/map` (`Map[K owned + hash.Hash, V owned]`, open addressing) and the `hash.Hash` interface for integers, `bool`, `string` and slices; constraints combined with `+`. See [docs/library.md](docs/library.md)
+- [x] **Returned and stored borrows:** `fn (v &Vec[T]) at(i int) &T`, `x := m.get(&k)`, `x := &a[i]`; the source stays frozen while the borrow is used, checked at compile time. `vec.at`/`last` and `map.get`/`key_ref`/`value_ref`. See [docs/memory.md](docs/memory.md)
+- [x] **Tests:** `mlc test` runs the `test_*` functions of `*_test.mlc` files, each in a process, and accepts `-run` and `-v`. The checks live in `std/testing` (`eq_int`, `eq_str`, `near`, `expect_panic`, ...) and point at the line that failed. Every `std` module has its tests. See [docs/testing.md](docs/testing.md)
+- [x] **Documentation in the terminal:** `mlc doc` (module, type, function, method or built-in, from the standard library or your own libraries), with every `pub` declaration of the `std` commented (checked by a test). See [Documentation](#documentation-mlc-doc)
+- [x] **LSP:** `mlc lsp` with diagnostics as you type, colors, formatting, hover, go to definition and completions; a VS Code extension and a Neovim configuration. See [Editors](#editors)
 
-### Próximos passos (em ordem de prioridade)
+### Next steps (in order of priority)
 
-- [x] **Donos aninhados:** `Vec[?*vec.Vec[int]]`, `Map[[]byte, ?*vec.Vec[[]byte]]`, `Vec[[][]byte]` e árvores (`Vec[?*Valor]` dentro de `Valor`); structs com donos se liberam com `fn (x *X) free()`, que o `drop` genérico chama. Enums com dados donos vieram no item de erros com conteúdo. Veja [docs/tipos.md](docs/tipos.md)
-- [x] **FFI para bibliotecas do usuário:** `extern "C" fn` em qualquer arquivo, com a fronteira conferida (números, `string`, `&[]T`, `&T` e handles `extern "C" type`, que o verificador obriga a fechar); `link "nome"` e `-L`; erros de ligação apontados como erro do programa. Veja [docs/ffi.md](docs/ffi.md)
-- [x] **Caminho de busca de bibliotecas:** imports procurados na pasta do projeto, em `lib/`, nas pastas de `-I` e nas de `MLC_PATH`. Veja [Bibliotecas](#bibliotecas)
-- [x] **Formatação para buffer:** `str.format(&dst, "...", x)`, `str.format_len` e `w.printf` (num Writer reaproveitado, sem flush a cada chamada) sobre o mesmo `io.Writer` do `io.printf`, com o destino conferido no runtime. Especificações `{:x}`, `{:#x}`, `{:.2}`, `{:>8}`, `{:*^8}`, `{:08}` e `{:s}`, com a largura contada em caracteres. Veja [docs/texto.md](docs/texto.md)
-- [x] **Parâmetros de saída na FFI:** `extern "C" fn sqlite3_open(nome string, db &?*sqlite3) int32` e `sqlite3_open("x.db", &db)`. O verificador exige que `db` não tenha handle antes da chamada e cobra o fechamento depois. Veja [docs/ffi.md](docs/ffi.md#handles-devolvidos-por-ponteiro-x)
-- [x] **Biblioteca para ferramentas de linha de comando:** `fs` com arquivos abertos (`open`, `read`, `write`, `seek`), diretórios, `stat`, `mkdir` e `rename`; `args` (opções e posicionais); `process` (rodar programas, sem shell); `bytes.Buf` (texto que cresce, à vista); `utf8`; `text.split_next` e `word_next`; `os.setenv`, `cwd` e `chdir`. Veja [docs/biblioteca.md](docs/biblioteca.md)
-- [x] **Rede, JSON e datas:** `std/net` (TCP: `listen`, `accept`, `connect`, `read`, `write`, timeouts, erros portáveis, sem `SIGPIPE`); `std/json` (leitor sem alocação que devolve tokens como enum, `skip`, `escape`/`unescape`); `std/time` com datas (`utc`, `local`, `iso`, `parse_iso`). Veja [docs/biblioteca.md](docs/biblioteca.md)
-- [x] **Hash, encoding e benchmarks:** SHA-256 (incremental) e CRC32 em `std/hash`; `std/encoding` com hex e base64; benchmarks no `mlc test -bench` (`fn bench_*(b &testing.B)`). Veja [docs/testes.md](docs/testes.md#benchmarks)
-- [x] **Ponteiros `NULL` opcionais na FFI:** `?&T`, `?&[]T` e `?&?*X` em parâmetros de `extern "C" fn`, que aceitam `nil` ou um empréstimo (`getaddrinfo(host, porta, nil, &res)`, o `errmsg` do `sqlite3_exec`). Veja [docs/ffi.md](docs/ffi.md#ponteiros-que-podem-ser-null-t)
-- [x] **Leitura genérica, caminhos e texto dos erros:** a interface `io.Reader` (implementada por `fs.File`, `net.Conn` e `io.stdin()`), `std/bufio` (`read_line`, `read_until`, `read_exact`, `read_byte`, com buffer fixo dentro do leitor e a fonte emprestada a cada chamada), `std/path` (`join`, `clean`, `dir`, `base`, `ext`), um só espaço de códigos de erro e `os.error_text`. Tipos de C opacos como argumento de genéricos `[T ref]`. Veja [docs/biblioteca.md](docs/biblioteca.md#stdbufio)
-- [x] **Números em bytes:** `std/binary` com inteiros de 16, 32 e 64 bits (com e sem sinal) e reais em big-endian e little-endian, e varints (com zigzag para os com sinal); `math.float64_bits`/`float64_from_bits`. Veja [docs/biblioteca.md](docs/biblioteca.md#stdbinary)
-- [x] **Filas:** `std/deque` (buffer circular, push e pop nas duas pontas em O(1)) e `std/heap` (fila de prioridade sobre `cmp.Ord`, `new_max`, `replace_top` para top-K), com alocação à vista e donos como elementos. Veja [docs/biblioteca.md](docs/biblioteca.md#stddeque)
-- [x] **Serviços:** `std/signal` (Ctrl+C e `TERM` anotados, `received`, `wait`), `std/log` (logger como objeto, sem estado global, com nível, horário, `lg.info("...", x)` conferido na compilação e linhas inteiras entre threads), `std/sync` (grupo de threads com `wait` cobrado pelo verificador) e timeout no `accept`. `tests/run/servico.mlc` encerra com calma ao receber `TERM`. Veja [docs/biblioteca.md](docs/biblioteca.md#stdsignal)
-- [x] **HTTP/1.1:** `std/http` com servidor e cliente sobre `net.Conn` (ou qualquer `http.Stream`), sem alocação: `Message` com buffer fixo, `Content-Length`, `chunked`, keep-alive, consulta decodificada, `Builder` com `Content-Length` automático; `sync.group` como limite de conexões simultâneas (`add` espera uma vaga, `reap`). HTTPS pelo `std/tls`. Veja [docs/biblioteca.md](docs/biblioteca.md#stdhttp)
-- [x] **Segurança básica:** `rand.secure` (bytes da fonte criptográfica do sistema, `secure_int_n` sem viés, `seeded`), `std/hmac` (HMAC-SHA256 com `verify` e comparação em tempo constante, testado com a RFC 4231) e `std/uuid` (v4 e v7 ordenado pelo tempo). Veja [docs/biblioteca.md](docs/biblioteca.md#stdhmac)
-- [x] **URL, cliente HTTP e roteador:** `std/url` (partes, porta padrão, IPv6, consulta decodificada, `Query` para montar), `http.get`/`post`/`request` e `dial` + `request_to` para cabeçalhos próprios, `http.Router[S, C]` (S: `net.Conn` ou `tls.Conn`) com `{id}` e `{resto...}`, 404/405, e `serve_conn` com o laço de keep-alive. Veja [docs/biblioteca.md](docs/biblioteca.md#roteador)
-- [x] **SQLite:** `std/sqlite` com banco e consulta preparada como handles cobrados pelo verificador, parâmetros, transações, colunas copiadas para buffers e erros no espaço único (4000 + o código do SQLite). A biblioteca do sistema é carregada só quando usada, sem flags. Veja [docs/biblioteca.md](docs/biblioteca.md#stdsqlite)
-- [x] **Configuração, CSV e árvores de arquivos:** `std/config` (`.env` e INI, seções, aspas, `env` que prefere o ambiente), `std/csv` (leitor em fluxo e escritor, RFC 4180, separador configurável) e `fs.walk`, `glob` (com `**`), `mkdir_all`, `remove_all` (sem seguir links) e `temp_path`. Veja [docs/biblioteca.md](docs/biblioteca.md#stdconfig)
-- [x] **Arena:** `std/arena`, memória de rascunho por tarefa com um `alloc` só, pedaços como `Span` (posição, tamanho e geração), `reset` que devolve tudo e panic ao usar um pedaço de antes do `reset`. A mensagem de vazamento passa a sugerir `x.free()` para os tipos que têm esse método. Veja [docs/biblioteca.md](docs/biblioteca.md#stdarena)
-- [x] **TLS, JSON e senhas:** `std/tls` (cliente e servidor com o OpenSSL do sistema carregado sob demanda; certificado, validade e nome conferidos sempre; `http.get` com `https://` e `Router[tls.Conn, C]` para servir HTTPS), `json.Writer` (vírgulas, aspas e escapes certos, buffer que cresce) e `std/password` (PBKDF2-HMAC-SHA256 com 600 mil iterações, sal aleatório, formato PHC, `verify` em tempo constante; `hmac.pbkdf2` testado com os vetores da RFC 7914). Veja [docs/biblioteca.md](docs/biblioteca.md#stdtls)
-- [x] **Pilha conferida:** o checker estima a pilha de cada função (quadro mais a maior pilha das funções chamadas) e recusa um `thread.spawn` ou um `main` que não cabe, com a variável que mais pesa e a constante sugerida; funções de quadro grande conferem na entrada se cabem no que resta da pilha e dão panic em vez de pular a página de guarda (recursão, valores `fn`, tamanho calculado). Veja [docs/memoria.md](docs/memoria.md#pilha)
-- [x] **Testar o verificador de propósito:** oráculo em tempo de execução (AddressSanitizer, UndefinedBehaviorSanitizer, ThreadSanitizer e o contador de alocações) sobre a suíte, mutação de programas corretos, gerador de programas focado em posse, enumeração exaustiva de programas pequenos contra um modelo de referência, e testes metamórficos e de cobertura. Veja [docs/verificacao.md](docs/verificacao.md)
-  - [x] fase 1: oráculo sobre a suíte atual (`-sanitize address|thread`, `make sanitize`): a suíte inteira passa sob AddressSanitizer + UBSan e ThreadSanitizer
-  - [x] fase 2: mutação de programas corretos (`make mutate`): 1.944 mutantes de 116 programas, todos recusados ou sem bug; achou e corrigiu um buraco (empréstimo de um enum com donos já liberado)
-  - [x] fase 3: gerador de programas focado em posse (`make fuzz`): programas válidos e com um bug injetado que a execução vê; um bug aceito é reduzido ao menor exemplo, e os válidos recusados formam o catálogo de falsos positivos
-  - [x] fase 4: enumeração exaustiva com um modelo de referência (`make enum`): todos os programas até o tamanho 6 (12,7 milhões) de um alfabeto de posse, julgados também por um interpretador abstrato que segue cada caminho; nenhum buraco, e o catálogo de falsos positivos (todos do empréstimo que vale até o último uso no texto)
-  - [x] fase 5: robustez (`make robust`: `go test -fuzz` sobre o compilador e o formatador; achou e corrigiu 4 panics e 4 erros do formatador), cobertura (`make cover`, com testes para as regras de segurança que nenhum teste disparava), testes metamórficos e casos difíceis clássicos
-- [ ] **Callbacks de C para MLC na FFI:** ponteiros de função na fronteira (`qsort`, `sqlite3_exec` com função), com o `void *ctx` das APIs de C
-- [x] **Callbacks com contexto:** métodos com parâmetros de tipo próprios (`fn (m &Map[K, V]) each_with[C ref](ctx &C, f fn(&C, &K, &V))`), deduzidos na chamada ou escritos; a restrição `ref` para o contexto, que só é emprestado; `map.each_with`, `vec.each_with`, `sort.sort_by_with`, `slices.index_by` e `count_by`. Veja [docs/tipos.md](docs/tipos.md#métodos-genéricos-e-callbacks-com-contexto)
-- [x] **Erros com conteúdo:** enums com dados donos (mensagens alocadas explicitamente por quem cria o erro, liberadas por quem o trata); `match` que consome ou só lê, `free` de enum; `Result[T, E]` com donos nos dois lados. Sem atalho de propagação (`try`): toda saída da função continua escrita como `return`. Veja [docs/tipos.md](docs/tipos.md#enums-com-donos)
-- [x] **Interfaces `Ord` e `Eq`:** `std/cmp` com `Eq` e `Ord` (já implementadas para números, `bool`, `string` e slices); `impl auto cmp.Eq`, `cmp.Ord` e `hash.Hash` para structs e enums; `sort.sort` sobre `cmp.Ord`, trocando por posse (ordena structs e donos); `std/slices` (`index`, `contains`, `count`, `equal`, `search`, `binary_search`, `min_index`, `max_index`, `dedup`, `fill`). Veja [docs/interfaces.md](docs/interfaces.md)
-- [ ] **Iteradores como objetos:** empréstimos guardados em structs, com tempo de vida conferido
-- [ ] **Interfaces dinâmicas:** `&I` e `*I`, para guardar valores de tipos diferentes juntos (sem boxing: só a partir de `&T` ou `*T`)
-- [ ] **Concorrência:** threads do sistema criadas explicitamente, com a posse garantindo a ausência de data races. Veja [docs/concorrencia.md](docs/concorrencia.md)
-  - [x] fase A: `thread.spawn(f, ctx, stack)` e `thread.join(t)`; o contexto e o resultado atravessam por movimento; a pilha tem tamanho explícito; todo `spawn` precisa de `join`
-  - [x] fase B: canais com capacidade fixa (`std/chan`): `chan.new[T](n)`, pontas `Sender`/`Receiver` que precisam de `close()`, `recv` devolvendo `Got(v)`/`Closed`, `send` sem receptor liberando o valor, vários produtores e consumidores
-  - [x] fase C: `mutex.new(v)`, dono do valor, com `lock()` devolvendo um guard que precisa de `unlock()` e `get()` emprestando o valor só enquanto a trava existe; `wait`/`notify`; travar duas vezes na mesma thread dá panic; `atomic.Int` e `atomic.Bool`
-  - Fora do roteiro: threads com escopo que recebem empréstimos (pedaços disjuntos de um mesmo buffer). Só entram se um programa real precisar; antes disso viria um empréstimo só de leitura, útil para a linguagem inteira. Veja [docs/concorrencia.md](docs/concorrencia.md#o-que-ficou-de-fora)
+- [x] **Nested owners:** `Vec[?*vec.Vec[int]]`, `Map[[]byte, ?*vec.Vec[[]byte]]`, `Vec[[][]byte]` and trees (`Vec[?*Value]` inside `Value`); structs with owners are freed with `fn (x *X) free()`, which the generic `drop` calls. Enums with owning data came with the errors-with-content item. See [docs/types.md](docs/types.md)
+- [x] **FFI for user libraries:** `extern "C" fn` in any file, with the boundary checked (numbers, `string`, `&[]T`, `&T` and `extern "C" type` handles, which the checker forces you to close); `link "name"` and `-L`; link errors reported as program errors. See [docs/ffi.md](docs/ffi.md)
+- [x] **Library search path:** imports looked up in the project folder, in `lib/`, in the `-I` folders and in `MLC_PATH`'s. See [Libraries](#libraries)
+- [x] **Formatting into a buffer:** `str.format(&dst, "...", x)`, `str.format_len` and `w.printf` (on a reused Writer, without a flush on every call) over the same `io.Writer` as `io.printf`, with the destination checked at run time. Specs `{:x}`, `{:#x}`, `{:.2}`, `{:>8}`, `{:*^8}`, `{:08}` and `{:s}`, with the width counted in characters. See [docs/text.md](docs/text.md)
+- [x] **Out parameters in the FFI:** `extern "C" fn sqlite3_open(name string, db &?*sqlite3) int32` and `sqlite3_open("x.db", &db)`. The checker requires `db` to hold no handle before the call and requires closing it afterwards. See [docs/ffi.md](docs/ffi.md#handles-returned-through-a-pointer-x)
+- [x] **A library for command-line tools:** `fs` with open files (`open`, `read`, `write`, `seek`), directories, `stat`, `mkdir` and `rename`; `args` (options and positionals); `process` (running programs, without a shell); `bytes.Buf` (growing text, in plain sight); `utf8`; `text.split_next` and `word_next`; `os.setenv`, `cwd` and `chdir`. See [docs/library.md](docs/library.md)
+- [x] **Network, JSON and dates:** `std/net` (TCP: `listen`, `accept`, `connect`, `read`, `write`, timeouts, portable errors, no `SIGPIPE`); `std/json` (an allocation-free reader that returns tokens as an enum, `skip`, `escape`/`unescape`); `std/time` with dates (`utc`, `local`, `iso`, `parse_iso`). See [docs/library.md](docs/library.md)
+- [x] **Hash, encoding and benchmarks:** SHA-256 (incremental) and CRC32 in `std/hash`; `std/encoding` with hex and base64; benchmarks in `mlc test -bench` (`fn bench_*(b &testing.B)`). See [docs/testing.md](docs/testing.md#benchmarks)
+- [x] **Optional `NULL` pointers in the FFI:** `?&T`, `?&[]T` and `?&?*X` in `extern "C" fn` parameters, which accept `nil` or a borrow (`getaddrinfo(host, port, nil, &res)`, `sqlite3_exec`'s `errmsg`). See [docs/ffi.md](docs/ffi.md#pointers-that-may-be-null-t)
+- [x] **Generic reading, paths and error texts:** the `io.Reader` interface (implemented by `fs.File`, `net.Conn` and `io.stdin()`), `std/bufio` (`read_line`, `read_until`, `read_exact`, `read_byte`, with a fixed buffer inside the reader and the source borrowed on each call), `std/path` (`join`, `clean`, `dir`, `base`, `ext`), a single error-code space and `os.error_text`. Opaque C types as arguments of `[T ref]` generics. See [docs/library.md](docs/library.md#stdbufio)
+- [x] **Numbers as bytes:** `std/binary` with 16-, 32- and 64-bit integers (signed and unsigned) and reals in big-endian and little-endian, and varints (zigzag for signed ones); `math.float64_bits`/`float64_from_bits`. See [docs/library.md](docs/library.md#stdbinary)
+- [x] **Queues:** `std/deque` (a ring buffer, push and pop at both ends in O(1)) and `std/heap` (a priority queue over `cmp.Ord`, `new_max`, `replace_top` for top-K), with visible allocation and owners as elements. See [docs/library.md](docs/library.md#stddeque)
+- [x] **Services:** `std/signal` (Ctrl+C and `TERM` recorded, `received`, `wait`), `std/log` (a logger as an object, no global state, with level, time, `lg.info("...", x)` checked at compile time and whole lines across threads), `std/sync` (a thread group whose `wait` the checker requires) and a timeout on `accept`. `tests/run/servico.mlc` shuts down calmly on `TERM`. See [docs/library.md](docs/library.md#stdsignal)
+- [x] **HTTP/1.1:** `std/http` with a server and a client over `net.Conn` (or any `http.Stream`), without allocation: `Message` with a fixed buffer, `Content-Length`, `chunked`, keep-alive, decoded query, `Builder` with automatic `Content-Length`; `sync.group` as the limit of simultaneous connections (`add` waits for a slot, `reap`). HTTPS through `std/tls`. See [docs/library.md](docs/library.md#stdhttp)
+- [x] **Basic security:** `rand.secure` (bytes from the system's cryptographic source, unbiased `secure_int_n`, `seeded`), `std/hmac` (HMAC-SHA256 with `verify` and constant-time comparison, tested with RFC 4231) and `std/uuid` (v4 and time-ordered v7). See [docs/library.md](docs/library.md#stdhmac)
+- [x] **URL, HTTP client and router:** `std/url` (parts, default port, IPv6, decoded query, `Query` for building), `http.get`/`post`/`request` and `dial` + `request_to` for custom headers, `http.Router[S, C]` (S: `net.Conn` or `tls.Conn`) with `{id}` and `{rest...}`, 404/405, and `serve_conn` with the keep-alive loop. See [docs/library.md](docs/library.md#router)
+- [x] **SQLite:** `std/sqlite` with the database and the prepared statement as handles the checker requires closing, parameters, transactions, columns copied into buffers and errors in the single space (4000 + SQLite's code). The system library is loaded only when used, without flags. See [docs/library.md](docs/library.md#stdsqlite)
+- [x] **Configuration, CSV and file trees:** `std/config` (dotenv and INI, sections, quotes, `env` that prefers the environment), `std/csv` (streaming reader and writer, RFC 4180, configurable separator) and `fs.walk`, `glob` (with `**`), `mkdir_all`, `remove_all` (without following links) and `temp_path`. See [docs/library.md](docs/library.md#stdconfig)
+- [x] **Arena:** `std/arena`, scratch memory per task with a single `alloc`, pieces as a `Span` (position, size and generation), a `reset` that gives everything back and a panic when using a piece from before the `reset`. The leak message now suggests `x.free()` for types that have that method. See [docs/library.md](docs/library.md#stdarena)
+- [x] **TLS, JSON and passwords:** `std/tls` (client and server with the system's OpenSSL loaded on demand; certificate, validity and name always checked; `http.get` with `https://` and `Router[tls.Conn, C]` to serve HTTPS), `json.Writer` (the right commas, quotes and escapes, a growing buffer) and `std/password` (PBKDF2-HMAC-SHA256 with 600 thousand iterations, random salt, PHC format, constant-time `verify`; `hmac.pbkdf2` tested with the RFC 7914 vectors). See [docs/library.md](docs/library.md#stdtls)
+- [x] **Checked stack:** the checker estimates each function's stack (its frame plus the largest stack of the functions it calls) and refuses a `thread.spawn` or a `main` that doesn't fit, naming the heaviest variable and the suggested constant; functions with a large frame check on entry whether they fit in what's left of the stack and panic instead of jumping over the guard page (recursion, `fn` values, computed sizes). See [docs/memory.md](docs/memory.md#stack)
+- [x] **Testing the checker on purpose:** a run-time oracle (AddressSanitizer, UndefinedBehaviorSanitizer, ThreadSanitizer and the allocation counter) over the suite, mutation of correct programs, an ownership-focused program generator, exhaustive enumeration of small programs against a reference model, and metamorphic and coverage tests. See [docs/verification.md](docs/verification.md)
+  - [x] phase 1: an oracle over the current suite (`-sanitize address|thread`, `make sanitize`): the whole suite passes under AddressSanitizer + UBSan and ThreadSanitizer
+  - [x] phase 2: mutation of correct programs (`make mutate`): 1,944 mutants of 116 programs, all refused or bug-free; it found and fixed one hole (a borrow of an enum with owners already freed)
+  - [x] phase 3: an ownership-focused program generator (`make fuzz`): valid programs and programs with an injected bug that execution sees; an accepted bug is reduced to the smallest example, and the refused valid ones form the catalog of false positives
+  - [x] phase 4: exhaustive enumeration with a reference model (`make enum`): every program up to size 6 (12.7 million) over an ownership alphabet, also judged by an abstract interpreter that follows each path; no holes, and the catalog of false positives (all from the borrow that lasts until its last textual use)
+  - [x] phase 5: robustness (`make robust`: `go test -fuzz` over the compiler and the formatter; it found and fixed 4 panics and 4 formatter errors), coverage (`make cover`, with tests for the safety rules no test triggered), metamorphic tests and classic hard cases
+- [ ] **C-to-MLC callbacks in the FFI:** function pointers at the boundary (`qsort`, `sqlite3_exec` with a function), with the C APIs' `void *ctx`
+- [x] **Callbacks with a context:** methods with their own type parameters (`fn (m &Map[K, V]) each_with[C ref](ctx &C, f fn(&C, &K, &V))`), inferred at the call or written out; the `ref` constraint for the context, which is only borrowed; `map.each_with`, `vec.each_with`, `sort.sort_by_with`, `slices.index_by` and `count_by`. See [docs/types.md](docs/types.md#generic-methods-and-callbacks-with-a-context)
+- [x] **Errors with content:** enums with owning data (messages explicitly allocated by whoever creates the error, freed by whoever handles it); a `match` that consumes or only reads, `free` of an enum; `Result[T, E]` with owners on both sides. No propagation shortcut (`try`): every exit from a function is still written as a `return`. See [docs/types.md](docs/types.md#enums-with-owners)
+- [x] **`Ord` and `Eq` interfaces:** `std/cmp` with `Eq` and `Ord` (already implemented for numbers, `bool`, `string` and slices); `impl auto cmp.Eq`, `cmp.Ord` and `hash.Hash` for structs and enums; `sort.sort` over `cmp.Ord`, swapping by ownership (sorts structs and owners); `std/slices` (`index`, `contains`, `count`, `equal`, `search`, `binary_search`, `min_index`, `max_index`, `dedup`, `fill`). See [docs/interfaces.md](docs/interfaces.md)
+- [ ] **Iterators as objects:** borrows stored in structs, with their lifetime checked
+- [ ] **Dynamic interfaces:** `&I` and `*I`, to store values of different types together (no boxing: only from `&T` or `*T`)
+- [ ] **Concurrency:** system threads created explicitly, with ownership guaranteeing the absence of data races. See [docs/concurrency.md](docs/concurrency.md)
+  - [x] phase A: `thread.spawn(f, ctx, stack)` and `thread.join(t)`; the context and the result cross by move; the stack has an explicit size; every `spawn` needs a `join`
+  - [x] phase B: fixed-capacity channels (`std/chan`): `chan.new[T](n)`, `Sender`/`Receiver` ends that need `close()`, `recv` returning `Got(v)`/`Closed`, a `send` without a receiver freeing the value, several producers and consumers
+  - [x] phase C: `mutex.new(v)`, owner of the value, with `lock()` returning a guard that needs `unlock()` and `get()` borrowing the value only while the lock exists; `wait`/`notify`; locking twice on the same thread panics; `atomic.Int` and `atomic.Bool`
+  - Off the roadmap: scoped threads that receive borrows (disjoint pieces of the same buffer). They only come in if a real program needs them; before that would come a read-only borrow, useful for the whole language. See [docs/concurrency.md](docs/concurrency.md#what-was-left-out)

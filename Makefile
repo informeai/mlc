@@ -28,7 +28,7 @@ check: build
 # make sanitize: roda os programas de teste (tests/run, tests/panic, tests/ffi
 # e os testes da std) sob AddressSanitizer + UndefinedBehaviorSanitizer e
 # depois sob ThreadSanitizer. Todo programa que o checker aceita precisa rodar
-# limpo (veja docs/verificacao.md).
+# limpo (veja docs/verification.md).
 SANITIZE_TESTS := 'TestRun|TestPanic|TestStdLibrary|TestFFIOutHandle'
 
 sanitize:
@@ -39,7 +39,7 @@ sanitize:
 # free, liberar antes do uso, mover duas vezes...) aos programas de teste. O
 # verificador precisa recusar cada mutante; um mutante aceito roda sob
 # AddressSanitizer e o contador de alocações, e um erro ali é um buraco no
-# verificador (o mutante fica em MUTATE_OUT). Veja docs/verificacao.md.
+# verificador (o mutante fica em MUTATE_OUT). Veja docs/verification.md.
 MUTATE_OUT ?= /tmp/mlc-mutate
 
 mutate:
@@ -49,7 +49,7 @@ mutate:
 # 1m), metade válidos e metade com um bug injetado que a execução vê. Um bug
 # aceito pelo verificador é um buraco: o programa é reduzido ao menor que
 # ainda reproduz e fica em FUZZ_OUT. Os válidos recusados aparecem agrupados,
-# como candidatos a falso positivo. Veja docs/verificacao.md.
+# como candidatos a falso positivo. Veja docs/verification.md.
 FUZZTIME ?= 1m
 FUZZ_OUT ?= /tmp/mlc-fuzz
 
@@ -61,7 +61,7 @@ fuzz:
 # julgado pelo verificador e por um modelo de referência que segue todos os
 # caminhos. O verificador aceitar um programa que o modelo diz inseguro é
 # buraco; recusar um seguro é falso positivo, catalogado pela mensagem. Veja
-# docs/verificacao.md.
+# docs/verification.md.
 ENUM ?= 5
 ENUM_OUT ?= /tmp/mlc-enum
 

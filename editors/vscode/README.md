@@ -1,14 +1,14 @@
-# MLC para VS Code
+# MLC for VS Code
 
-Suporte à linguagem MLC (My Lang C):
+Support for the MLC language (My Lang C):
 
-- cores para palavras reservadas, tipos, funções, literais e comentários (gramática TextMate, mais as cores semânticas do servidor);
-- erros ao digitar: sintaxe, tipos e posse de memória, marcados na linha, sem precisar salvar;
-- formatação pelo `mlc fmt` (Format Document, ou `editor.formatOnSave`).
+- colors for keywords, types, functions, literals and comments (a TextMate grammar, plus the server's semantic colors);
+- errors as you type: syntax, types and memory ownership, marked on the line, without saving;
+- formatting through `mlc fmt` (Format Document, or `editor.formatOnSave`).
 
-A extensão inicia `mlc lsp`. O `mlc` precisa estar no `PATH`, ou configurado em `mlc.path`.
+The extension starts `mlc lsp`. `mlc` must be in the `PATH`, or configured in `mlc.path`.
 
-## Instalar
+## Install
 
 ```sh
 cd editors/vscode

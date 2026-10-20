@@ -1,26 +1,27 @@
-# MLC — regras do projeto
+# MLC — project rules
 
-## Princípio central: toda alocação é explícita
+## Core principle: every allocation is explicit
 
-A ideia do MLC é que quem programa **entenda e saiba quanto e onde está alocando memória**. Por isso:
+The idea of MLC is that whoever programs **understands and knows how much and where they're allocating memory**. So:
 
-- Toda alocação no heap aparece no código-fonte como uma chamada explícita (`alloc`, `realloc`, e as que vierem). Nenhuma construção da linguagem pode alocar escondido: nada de concatenação de strings que aloca, `append` embutido que realoca por conta própria, closures que capturam no heap, boxing automático ou cópias implícitas para o heap.
-- Toda liberação também é explícita (`free`), e o verificador de posse garante na compilação que ela acontece em todos os caminhos.
-- Se uma funcionalidade nova precisar de memória, ela recebe a memória de quem chama, ou vira uma função com nome que deixa claro que aloca. Na dúvida, a funcionalidade não entra.
-- Conveniências que alocam (como um `append` com capacidade) só podem existir como funções comuns, escritas em MLC e visíveis no código, nunca como parte implícita da linguagem.
+- Every heap allocation appears in the source code as an explicit call (`alloc`, `realloc`, and whatever comes next). No language construct may allocate behind your back: no string concatenation that allocates, no built-in `append` that reallocates on its own, no closures that capture on the heap, no automatic boxing and no implicit copies to the heap.
+- Every release is explicit too (`free`), and the ownership checker guarantees at compile time that it happens on every path.
+- If a new feature needs memory, it receives the memory from the caller, or it becomes a function whose name makes clear that it allocates. When in doubt, the feature stays out.
+- Conveniences that allocate (like an `append` with capacity) may only exist as ordinary functions, written in MLC and visible in the code, never as an implicit part of the language.
 
-## Convenções
+## Conventions
 
-- Funções de runtime e de biblioteca expostas na linguagem são sempre em inglês (`io.print`, `alloc`, `free`, `realloc`, `len`, `str.copy`).
-- Funções de biblioteca não alocam: escrevem em buffers emprestados por quem chama (veja `docs/texto.md`).
-- Mensagens do compilador são em português.
-- Identificadores do código do compilador (Go) e do runtime (C) são em inglês; comentários e documentação, em português.
-- Commits sem linha de co-autoria.
+- Runtime and library functions exposed in the language are always in English (`io.print`, `alloc`, `free`, `realloc`, `len`, `str.copy`).
+- Library functions don't allocate: they write into buffers borrowed from the caller (see `docs/text.md`).
+- Compiler messages are in Portuguese.
+- Identifiers in the compiler (Go) and runtime (C) code are in English; code comments are in Portuguese.
+- Documentation (`README.md`, `docs/*.md`, `editors/*/README.md`) is in English, including the names of the files in `docs/`.
+- Commits without a co-author line.
 
-## Como trabalhar
+## How to work
 
-- Toda mudança de comportamento vem com teste em `tests/` (`run`, `panic` ou `errors`). Mudança na biblioteca padrão vem com teste em `std/<módulo>_test.mlc` (`mlc test std`, veja `docs/testes.md`). Os testes compilam o C gerado com `-Werror`, e o runtime acusa erro interno se sobrar alocação no fim do programa.
-- O verificador de posse (`internal/checker/ownership.go`) precisa continuar conservador: na dúvida, recusa o programa.
-- Ordem de avaliação: sempre da esquerda para a direita, escrita explicitamente no C gerado.
-- Os `.mlc` de `std/`, `tests/run`, `tests/panic` e `tests/testing` ficam formatados com `mlc fmt` (`make fmt`).
-- Antes de considerar um marco pronto: `make check` limpo (gofmt, `mlc fmt -l`, go vet e testes), e `README.md`, `docs/gramatica.md` e `docs/memoria.md` atualizados. Mudança no checker, no gerador ou no runtime também passa por `make sanitize` (a suíte sob AddressSanitizer + UBSan e ThreadSanitizer) e `make mutate` (mutantes que criam bugs de posse precisam ser recusados); veja `docs/verificacao.md`.
+- Every behavior change comes with a test in `tests/` (`run`, `panic` or `errors`). A change to the standard library comes with a test in `std/<module>_test.mlc` (`mlc test std`, see `docs/testing.md`). The tests compile the generated C with `-Werror`, and the runtime reports an internal error if any allocation is left at the end of the program.
+- The ownership checker (`internal/checker/ownership.go`) must stay conservative: when in doubt, it refuses the program.
+- Evaluation order: always left to right, written explicitly in the generated C.
+- The `.mlc` files in `std/`, `tests/run`, `tests/panic` and `tests/testing` stay formatted with `mlc fmt` (`make fmt`).
+- Before considering a milestone done: `make check` clean (gofmt, `mlc fmt -l`, go vet and tests), and `README.md`, `docs/grammar.md` and `docs/memory.md` updated. A change to the checker, the generator or the runtime also goes through `make sanitize` (the suite under AddressSanitizer + UBSan and ThreadSanitizer) and `make mutate` (mutants that create ownership bugs must be refused); see `docs/verification.md`.

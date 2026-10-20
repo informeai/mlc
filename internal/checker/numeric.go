@@ -303,7 +303,7 @@ func (c *checker) binary(e *ast.BinaryExpr) Type {
 	case token.ADD, token.SUB, token.MUL, token.QUO, token.REM:
 		switch {
 		case e.Op == token.ADD && x == String && y == String:
-			c.errorf(e.OpPos, "concatenação de strings exige alocação explícita: monte o texto num buffer (veja docs/texto.md)")
+			c.errorf(e.OpPos, "concatenação de strings exige alocação explícita: monte o texto num buffer (veja docs/text.md)")
 			return Invalid
 		case x != y || (!numLike(x) && !isUntyped(x)):
 			return mismatch()

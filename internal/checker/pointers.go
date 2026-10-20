@@ -7,7 +7,7 @@ import (
 	"mlc/internal/token"
 )
 
-// Ponteiros e empréstimos (docs/memoria.md)
+// Ponteiros e empréstimos (docs/memory.md)
 //
 //   - *T: ponteiro dono, nunca nil. Quem tem um *T precisa liberá-lo (free)
 //     ou passar a posse adiante, em todos os caminhos.

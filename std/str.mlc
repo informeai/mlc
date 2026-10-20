@@ -1,6 +1,6 @@
 // Texto em buffers []byte. Nenhuma função aloca: as que escrevem recebem o
 // buffer de quem chama (dst), devolvem quantos bytes usaram e dão panic se o
-// texto não couber. Veja docs/texto.md.
+// texto não couber. Veja docs/text.md.
 //
 // As que podem dar panic são extern (no runtime C), para o panic apontar a
 // linha de quem chamou; as outras são MLC comum.

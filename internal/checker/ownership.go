@@ -7,7 +7,7 @@ import (
 	"mlc/internal/token"
 )
 
-// Verificador de posse (docs/memoria.md)
+// Verificador de posse (docs/memory.md)
 //
 // Roda depois da checagem de tipos, uma vez por função. Acompanha o estado de
 // cada caminho dono: uma variável (p) ou um campo ponteiro alcançado a partir

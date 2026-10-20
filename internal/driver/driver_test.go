@@ -18,7 +18,7 @@ func init() { extraCFlags = []string{"-Werror"} }
 
 // sanitize é o sanitizer dos testes de execução (MLC_SANITIZE=address ou
 // thread, como no make sanitize): todo programa que o checker aceita precisa
-// rodar limpo sob eles (veja docs/verificacao.md).
+// rodar limpo sob eles (veja docs/verification.md).
 var sanitize = os.Getenv("MLC_SANITIZE")
 
 // buildAndRun compila tests/<dir>/<name> e executa o binário.
