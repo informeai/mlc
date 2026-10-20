@@ -18,7 +18,7 @@ Tudo que vem com a linguagem está aqui, inclusive entrada e saída (`std/io`) e
 
 ## Regras da biblioteca
 
-- **Nada aloca escondido.** As funções escrevem em buffers emprestados por quem chama (`dst &[]byte`) e devolvem quantos bytes usaram. A única exceção é `std/vec`, cujas alocações (`new`, `push` via `grow`) estão escritas em MLC, à vista em [`std/vec.mlc`](../std/vec.mlc).
+- **Nada aloca escondido.** As funções escrevem em buffers emprestados por quem chama (`dst &[]byte`) e devolvem quantos bytes usaram, ou guardam um buffer fixo dentro da própria struct (`http.Message`, `url.URL`, `config.Config`, `csv.Reader`). Alocam só os tipos que existem para isso, e sempre de forma visível: são criados por uma função `new` (ou `writer`, `open`) que faz o `alloc`, crescem com `realloc` escrito em MLC no próprio módulo, e precisam de `free` (ou `close`), cobrado pelo verificador. São eles `vec`, `map`, `deque`, `heap`, `bytes.Buf`, `arena`, `json.Writer`, e os handles do sistema (`fs.File`, `net.Conn`, `tls.Conn`, `sqlite.DB`...). Veja [`std/vec.mlc`](../std/vec.mlc) como exemplo.
 - **Erros são valores.** Quem pode falhar devolve um `result.Result[T, E]`, o enum de `std/result`; `fs` e `os` devolvem `Result[int, int]` (bytes usados ou código de erro). O `match` obriga a tratar os dois casos:
 
   ```
@@ -28,7 +28,18 @@ Tudo que vem com a linguagem está aqui, inclusive entrada e saída (`std/io`) e
   }
   ```
 
-- **Um só espaço de códigos de erro.** Abaixo de 1000 são os do sistema (`errno`: `fs.NOT_FOUND` e `os.NOT_FOUND` são 2, `fs.DENIED` é 13); de 1000 em diante são do MLC e iguais em todos os sistemas (`fs.TOO_BIG` 1000, `fs.NOT_EMPTY` 1001, `os.TOO_LONG`/`process.TOO_LONG`/`bufio.TOO_LONG` 1002, `io.EOF` 1003, `net.REFUSED`... 2001–2005). `os.error_text(code, &msg)` escreve o texto de qualquer um deles:
+- **Um só espaço de códigos de erro.** Abaixo de 1000 são os do sistema (`errno`: `fs.NOT_FOUND` e `os.NOT_FOUND` são 2, `fs.DENIED` é 13); de 1000 em diante são do MLC e iguais em todos os sistemas:
+
+  | Faixa | Códigos |
+  |---|---|
+  | 1000–1004 | gerais: `TOO_BIG` 1000 (não cabe), `fs.NOT_EMPTY` 1001, `TOO_LONG` 1002 (`os`, `process`, `bufio`, `csv`), `io.EOF` 1003, `fs.TOO_DEEP` 1004 |
+  | 2001–2005 | `net`: `REFUSED`, `NO_HOST`, `IN_USE`, `TIMEOUT`, `RESET` |
+  | 3001–3003 | `http`: `BAD_MESSAGE`, `HEAD_TOO_BIG`, `UNSUPPORTED_SCHEME` |
+  | 3101, 3201, 3301 | `url.BAD_URL`, `config.BAD_LINE`, `csv.BAD_QUOTE` |
+  | 4001–4899, 4900 | `sqlite`: 4000 + o código do SQLite (`ERROR` 4001, `BUSY` 4005, `CONSTRAINT` 4019...), `UNAVAILABLE` 4900 |
+  | 5001–5005 | `tls`: `HANDSHAKE`, `BAD_CERT`, `UNAVAILABLE`, `BROKEN`, `SERVER_FILES` |
+
+  `os.error_text(code, &msg)` escreve o texto de qualquer um deles:
 
   ```
   Err(code) => {
@@ -43,6 +54,21 @@ Tudo que vem com a linguagem está aqui, inclusive entrada e saída (`std/io`) e
 - **O que precisa do sistema** (arquivos, relógio, `libm`) é declarado como `extern fn` e implementado no runtime C (`mlc_std_<módulo>_<nome>`). `extern fn` só é aceita dentro da biblioteca padrão; o resto é MLC comum, com as mesmas checagens de posse e de tipos de qualquer programa.
 
 ## Módulos
+
+| Área | Módulos | Para quê |
+|---|---|---|
+| Texto e números | [`io`](#stdio-e-stdstr), [`str`](#stdio-e-stdstr), [`text`](#stdtext), [`utf8`](#stdutf8), [`bytes`](#stdbytes), [`math`](#stdmath), [`binary`](#stdbinary), [`encoding`](#stdencoding) | imprimir e formatar, buscar e cortar texto, UTF-8, texto que cresce, contas, números em bytes, hex e base64 |
+| Coleções e ordem | [`vec`](#stdvec), [`map`](#stdmap), [`deque`](#stddeque), [`heap`](#stdheap), [`slices`](#stdslices), [`sort`](#stdsort), [`cmp`](#stdcmp) | vetor que cresce, tabela de espalhamento, fila de duas pontas, fila de prioridade, operações sobre slices, ordenação |
+| Memória | [`arena`](#stdarena) | memória de rascunho por tarefa, com um alloc só |
+| Erros | [`result`](#stdresult) | o valor ou o erro, com match |
+| Arquivos e sistema | [`fs`](#stdfs), [`path`](#stdpath), [`bufio`](#stdbufio), [`os`](#stdos), [`args`](#stdargs), [`process`](#stdprocess), [`signal`](#stdsignal), [`time`](#stdtime) | arquivos, diretórios e árvores, caminhos, leitura com buffer, ambiente, argumentos, outros programas, sinais, relógio e datas |
+| Dados e configuração | [`json`](#stdjson), [`csv`](#stdcsv), [`config`](#stdconfig), [`sqlite`](#stdsqlite) | JSON (ler e escrever), planilhas, arquivos dotenv e INI, banco de dados |
+| Rede | [`net`](#stdnet), [`http`](#stdhttp), [`url`](#stdurl), [`tls`](#stdtls) | TCP, HTTP/1.1 (servidor, cliente, roteador), URLs, HTTPS |
+| Segurança | [`rand`](#stdrand), [`hash`](#stdhash), [`hmac`](#stdhmac), [`password`](#stdpassword), [`uuid`](#stduuid) | aleatório (e seguro), hashes, assinaturas, senhas, identificadores |
+| Concorrência | [`thread`](#stdthread), [`chan`](#stdchan), [`mutex`](#stdmutex-e-stdatomic), [`atomic`](#stdmutex-e-stdatomic), [`sync`](#stdsync) | threads, canais, mutex, atômicos, grupos (detalhes em [concorrencia.md](concorrencia.md)) |
+| Observação e testes | [`log`](#stdlog), [`testing`](#stdtesting) | log com nível e horário, testes e benchmarks |
+
+Os detalhes de cada função também estão no próprio código, e `mlc doc` os mostra no terminal (`mlc doc http`, `mlc doc http.Router`).
 
 ### `std/io` e `std/str`
 
