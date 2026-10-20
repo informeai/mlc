@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("import\"std/thread\"\nfn churn(A A){thread.spawn(churn,0,0)%thread.spawn(churn,0,0)}fn quiet(A A){cs:=alloc([]?*thread.Thread[int]0)\n{replace(!A0[0],A00000000000(A00000000))}A00%alloc([] A0000000000000[A000]0)\n{A000000(A00[0]%0)}A00000000000(A00000000)}")

@@ -83,6 +83,7 @@ func (c *checker) collectInterfaces(f *ast.File) {
 			continue
 		}
 		seen := map[string]bool{}
+		var valid []*ast.FuncDecl
 		for _, m := range d.Methods {
 			switch {
 			case seen[m.Name]:
@@ -93,10 +94,16 @@ func (c *checker) collectInterfaces(f *ast.File) {
 				c.errorf(m.P, "um método de interface não pode devolver empréstimo nesta versão")
 			case len(m.Params) == 0 || !isSelfBorrow(m.Params[0].Type):
 				c.errorf(m.P, "o primeiro parâmetro de %s.%s precisa ser self &Self (nesta versão o receptor é sempre emprestado)", d.Name, m.Name)
+			default:
+				valid = append(valid, m)
 			}
 			seen[m.Name] = true
 		}
-		c.mod.ifaces[d.Name] = &Interface{Name: d.Name, File: c.mod.file, Pub: d.Pub, Decl: d, mod: c.mod}
+		// só os métodos bem escritos entram: o resto do checker conta com o
+		// self &Self no primeiro parâmetro
+		decl := *d
+		decl.Methods = valid
+		c.mod.ifaces[d.Name] = &Interface{Name: d.Name, File: c.mod.file, Pub: d.Pub, Decl: &decl, mod: c.mod}
 	}
 }
 

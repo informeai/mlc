@@ -20,6 +20,9 @@ type Stmt struct {
 	Body    []*Stmt
 	Else    []*Stmt
 	HasElse bool
+	// formas usadas só pelos testes metamórficos (metamorphic.go)
+	Block   bool // { Body }: um bloco solto
+	Negated bool // if !flip(): a mesma escolha desconhecida
 }
 
 // Atoms são os comandos simples. A semântica de cada um está em model.go.
@@ -202,8 +205,14 @@ func render(ss []*Stmt, depth int) string {
 			b.WriteString(ind + "if q != nil {\n" + ind + "    acc += q.v\n" + ind + "}\n")
 		case s.Atom != "":
 			b.WriteString(ind + s.Atom + "\n")
+		case s.Block:
+			b.WriteString(ind + "{\n" + render(s.Body, depth+1) + ind + "}\n")
 		case s.If:
-			b.WriteString(ind + "if flip() {\n" + render(s.Body, depth+1))
+			cond := "flip()"
+			if s.Negated {
+				cond = "!flip()"
+			}
+			b.WriteString(ind + "if " + cond + " {\n" + render(s.Body, depth+1))
 			if s.HasElse {
 				b.WriteString(ind + "} else {\n" + render(s.Else, depth+1))
 			}

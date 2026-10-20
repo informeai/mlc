@@ -1,0 +1,8 @@
+// erro: vem de thread.spawn, não de alloc
+// Cobertura do verificador (fase 5): regra de posse que nenhum teste disparava.
+import "std/thread"
+
+fn main() {
+    t := alloc(thread.Thread)
+    thread.join(t)
+}

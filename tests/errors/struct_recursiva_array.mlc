@@ -1,0 +1,15 @@
+// erro: struct C contém a si mesma por valor (C → D → C)
+// Um array guarda os elementos por valor: [2]D dentro de C, com C dentro
+// de D, também é infinito.
+struct C {
+    d [2]D
+}
+
+struct D {
+    c C
+}
+
+fn main() {
+    c := alloc(C)
+    free(c)
+}

@@ -1,0 +1,11 @@
+// erro: free espera um ponteiro dono, encontrado Ponto
+// Cobertura do verificador (fase 5): regra de posse que nenhum teste disparava.
+struct Ponto {
+    x int
+}
+
+fn main() {
+    var p Ponto
+    p.x = 1
+    free(p)
+}

@@ -1,0 +1,43 @@
+// erro: p não pode ser movida: p.a foi movida para fora
+// Caso difícil (fase 5 do plano de verificação): mover o objeto inteiro depois de mover um campo dele para fora.
+struct Box {
+    v int
+}
+
+struct Par {
+    a ?*Box
+    b ?*Box
+}
+
+enum Opt {
+    Nada
+    Tem(b ?*Box)
+}
+
+extern "C" fn rand() int32
+
+fn flip() bool {
+    return rand() % 2 == 0
+}
+
+fn consume(b *Box) int {
+    n := b.v
+    free(b)
+    return n
+}
+
+fn sink(n int) {
+}
+
+fn guarda(p *Par) {
+    free(p.a)
+    free(p.b)
+    free(p)
+}
+
+fn main() {
+    p := alloc(Par{a: alloc(Box{v: 1}), b: alloc(Box{v: 2})})
+    a := p.a
+    guarda(p)
+    free(a)
+}

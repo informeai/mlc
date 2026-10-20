@@ -1,0 +1,11 @@
+// erro: struct A contém a si mesma por valor (A → A)
+// Achado pelo fuzz de robustez: o alloc de uma struct que contém a si
+// mesma derrubava o compilador (recursão infinita).
+struct A {
+    a A
+}
+
+fn main() {
+    a := alloc(A)
+    free(a)
+}

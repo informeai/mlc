@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("import\"\"\nfn A(A A)A{if 000{0}for 0;;{}}")

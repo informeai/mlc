@@ -1,0 +1,42 @@
+// Caso difícil (fase 5 do plano de verificação): mover um campo para fora e usar outro campo do mesmo objeto.
+struct Box {
+    v int
+}
+
+struct Par {
+    a ?*Box
+    b ?*Box
+}
+
+enum Opt {
+    Nada
+    Tem(b ?*Box)
+}
+
+extern "C" fn rand() int32
+
+fn flip() bool {
+    return rand() % 2 == 0
+}
+
+fn consume(b *Box) int {
+    n := b.v
+    free(b)
+    return n
+}
+
+fn sink(n int) {
+}
+
+fn main() {
+    p := alloc(Par{a: alloc(Box{v: 1}), b: alloc(Box{v: 2})})
+    a := p.a
+    acc := 0
+    if p.b != nil {
+        acc += p.b.v
+    }
+    free(a)
+    free(p.b)
+    free(p)
+    sink(acc)
+}

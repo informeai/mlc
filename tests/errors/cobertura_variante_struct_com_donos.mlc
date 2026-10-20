@@ -1,0 +1,16 @@
+// erro: uma struct com donos só existe atrás de ponteiro
+// Cobertura do verificador (fase 5): regra de posse que nenhum teste disparava.
+struct Box {
+    v int
+}
+
+struct Par {
+    a ?*Box
+}
+
+enum E {
+    Tem(p Par)
+}
+
+fn main() {
+}

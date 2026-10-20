@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("interface Area{fn A()A}\nstruct Q{}impl Area for Q")

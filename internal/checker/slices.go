@@ -288,7 +288,8 @@ func isPath(e ast.Expr) bool {
 func (c *checker) ownerElem(a ast.Expr, fn string) Type {
 	u, ok := a.(*ast.UnaryExpr)
 	var ix *ast.IndexExpr
-	if ok && u.Op == token.AMP {
+	ok = ok && u.Op == token.AMP // !s[i] e -s[i] não são empréstimos
+	if ok {
 		ix, ok = u.X.(*ast.IndexExpr)
 	}
 	if !ok {

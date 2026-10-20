@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("struct B{A int}struct A{A A}fn main(){a:=alloc(A)\nfree(a)}")

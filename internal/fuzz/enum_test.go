@@ -141,3 +141,26 @@ func TestEnumerate(t *testing.T) {
 		t.Errorf("%d buraco(s) no verificador", holes)
 	}
 }
+
+// O modelo trata cada r := &v como um empréstimo próprio: o r de dentro de
+// um bloco esconde o de fora só até o fim do bloco (achado na enumeração
+// do tamanho 6, quando o modelo tinha um r só e acusava buracos falsos).
+func TestModelShadowedRef(t *testing.T) {
+	a := func(s string) *Stmt { return &Stmt{Atom: s} }
+	prog := []*Stmt{
+		a("r := &x"),
+		{If: true, Body: []*Stmt{a("r := &y"), a("acc += r.v")}},
+		a("free(y)"),    // o r de fora empresta x, não y
+		a("acc += r.v"), // o r de fora
+		a("free(x)"),
+		a("free(q)"),
+	}
+	if v := Verdict(prog); v != "" {
+		t.Errorf("seguro, mas o modelo diz: %s", v)
+	}
+	prog[2] = a("free(x)") // agora sim: x é tocada antes do último uso do r de fora
+	prog[4] = a("free(y)")
+	if v := Verdict(prog); v == "" {
+		t.Error("inseguro, mas o modelo aceitou")
+	}
+}

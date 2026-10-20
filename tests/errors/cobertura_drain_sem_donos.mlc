@@ -1,0 +1,9 @@
+// erro: drain serve para slices de donos
+// Cobertura do verificador (fase 5): regra de posse que nenhum teste disparava.
+fn main() {
+    s := alloc([]int, 2)
+    for x in drain(s) {
+        s[0] = x
+    }
+    free(s)
+}

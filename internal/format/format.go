@@ -140,8 +140,8 @@ func (p *printer) run() {
 		case t.Kind == token.SEMICOLON && t.Lit == "\n":
 			continue // ';' automático: a quebra de linha já está no original
 		case t.Kind == token.SEMICOLON:
-			if next := p.nextSignificant(i); next == nil || next.Pos.Line > t.Pos.Line || next.Kind == token.RBRACE {
-				continue // ';' explícito sem nada depois na linha
+			if next := p.afterSemicolons(i); next == nil || next.Pos.Line > t.Pos.Line || next.Kind == token.RBRACE {
+				continue // ';' explícito sem nada depois na linha (também ;; antes de })
 			}
 		case t.Kind == token.COMMENT:
 			p.comment(t)
@@ -157,6 +157,19 @@ func (p *printer) nextSignificant(i int) *token.Token {
 	for j := i + 1; j < len(p.toks); j++ {
 		t := &p.toks[j]
 		if t.Kind == token.COMMENT || (t.Kind == token.SEMICOLON && t.Lit == "\n") {
+			continue
+		}
+		return t
+	}
+	return nil
+}
+
+// afterSemicolons devolve o próximo token depois de i que não é comentário
+// nem ';' (automático ou explícito): o que vem depois de um ;; seguido.
+func (p *printer) afterSemicolons(i int) *token.Token {
+	for j := i + 1; j < len(p.toks); j++ {
+		t := &p.toks[j]
+		if t.Kind == token.COMMENT || t.Kind == token.SEMICOLON {
 			continue
 		}
 		return t
@@ -242,7 +255,7 @@ func (p *printer) token(i int, t *token.Token) {
 	switch t.Kind {
 	case token.LPAREN, token.LBRACK, token.LBRACE:
 		o := opener{kind: t.Kind}
-		if next := p.nextSignificant(i); next != nil && next.Pos.Line > t.Pos.Line {
+		if next := p.afterSemicolons(i); next != nil && next.Pos.Line > t.Pos.Line {
 			o.indented = true
 		}
 		o.composite = t.Kind == token.LBRACE && p.marks.composite[t.Pos]
@@ -321,7 +334,8 @@ func (p *printer) space(prev, t *token.Token) bool {
 		return false
 	}
 	if p.unary(prev) {
-		return false
+		// & &x e - -x precisam do espaço: colados viram && e --
+		return prev.Kind == t.Kind && (t.Kind == token.AMP || t.Kind == token.SUB)
 	}
 	switch {
 	case prev.Kind == token.COLON:

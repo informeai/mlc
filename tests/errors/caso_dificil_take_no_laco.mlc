@@ -1,0 +1,48 @@
+// erro: free(s): os elementos de s podem ainda ser donos de memória; esvazie antes com for x in drain(s)
+// Caso difícil (fase 5 do plano de verificação): CONSERVADOR: o laço tira todos os elementos com take, mas o verificador não sabe que todos saíram; o jeito certo é for x in drain(s).
+struct Box {
+    v int
+}
+
+struct Par {
+    a ?*Box
+    b ?*Box
+}
+
+enum Opt {
+    Nada
+    Tem(b ?*Box)
+}
+
+extern "C" fn rand() int32
+
+fn flip() bool {
+    return rand() % 2 == 0
+}
+
+fn consume(b *Box) int {
+    n := b.v
+    free(b)
+    return n
+}
+
+fn sink(n int) {
+}
+
+fn main() {
+    s := alloc([]?*Box, 3)
+    for i := 0; i < len(s); i++ {
+        old := replace(&s[i], alloc(Box{v: i}))
+        free(old)
+    }
+    acc := 0
+    for i := 0; i < len(s); i++ {
+        e := take(&s[i])
+        if e != nil {
+            acc += e.v
+        }
+        free(e)
+    }
+    free(s)
+    sink(acc)
+}

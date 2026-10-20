@@ -1,6 +1,6 @@
 # Como testar o verificador
 
-Plano para atacar o verificador de posse e de empréstimos (`internal/checker/ownership.go`, `borrows.go` e o que eles usam) de propósito, antes de chamar a linguagem de beta. Cada fase diz o que entregar e quando ela está pronta. **As fases 1 a 4 estão feitas** (`make sanitize`, `make mutate`, `make fuzz` e `make enum`); a 5 continua como plano.
+Plano para atacar o verificador de posse e de empréstimos (`internal/checker/ownership.go`, `borrows.go` e o que eles usam) de propósito, antes de chamar a linguagem de beta. Cada fase diz o que entregar e quando ela está pronta. **As cinco fases estão feitas** (`make sanitize`, `make mutate`, `make fuzz`, `make enum`, e na fase 5 `make robust`, `make cover` e os testes metamórficos e de casos difíceis).
 
 ## O que procurar
 
@@ -187,9 +187,10 @@ O modelo (`internal/fuzz/model.go`, umas 250 linhas) é um interpretador abstrat
 | 2 | 100 | 26 | 74 | 0 | 0 |
 | 3 | 1.573 | 216 | 1.357 | 0 | 0 |
 | 4 | 28.912 | 2.108 | 26.803 | 0 | 1 |
-| 5 | 586.940 | 23.880 | 562.978 | 0 | 82 |
+| 5 | 586.940 | 23.880 | 562.981 | 0 | 79 |
+| 6 | 12.710.438 | 311.198 | 12.395.868 | 0 | 3.452 |
 
-**Nenhum buraco** até o tamanho 5 (com `make enum ENUM=6`, uns 10 minutos, vai até o 6). Até o tamanho 5 leva uns 30 segundos com 8 núcleos (`make enum`); `TestEnumerateSmall` roda os tamanhos até 3 a cada `go test` (0,1 s).
+**Nenhum buraco** até o tamanho 6. Até o tamanho 5 leva uns 30 segundos (`make enum`); o 6, uns 20 minutos (`make enum ENUM=6`). `TestEnumerateSmall` roda os tamanhos até 3 a cada `go test` (0,1 s).
 
 **Os falsos positivos são todos do mesmo tipo:** o empréstimo vale até o último uso **no texto**, não em cada caminho. Os dois exemplos mínimos:
 
@@ -223,6 +224,8 @@ if flip() {
 }
 ```
 
+**O modelo também erra, e a comparação mostra:** a primeira rodada do tamanho 6 acusou 8 buracos, todos o mesmo programa em formas diferentes. O erro era do modelo: ele tinha um `r` só, e um `r := &y` dentro de um bloco apagava o `r := &x` de fora, que volta a valer depois do bloco. O verificador estava certo. O modelo passou a ter um empréstimo por declaração, ligado aos usos pelo escopo (`TestModelShadowedRef`), e a rodada seguinte não mostrou nenhum buraco.
+
 **O que fica para depois:** campos de struct, enums com donos, `take`/`replace` e chamadas de função no alfabeto (cada uma multiplica o tamanho da enumeração; o modelo precisa crescer junto).
 
 ## Fase 5: contínuo
@@ -231,6 +234,49 @@ if flip() {
 - **Cobertura:** `go test -coverprofile` sobre `ownership.go`, `borrows.go`, `owned.go` e `threads.go`; cada ramo que nenhum teste alcança ganha um teste dirigido.
 - **Casos difíceis conhecidos:** a história do verificador de empréstimos do Rust tem uma lista de casos difíceis (empréstimos em laços, aliasing por campos, moves dentro de `match`, genéricos instanciados com donos, empréstimos devolvidos por caminhos diferentes). Cada um vira um teste.
 - **Robustez:** `go test -fuzz` sobre o parser e o checker com textos aleatórios, para garantir que o compilador nunca dá panic (como o do `match *(&e)`, achado no item de erros com conteúdo).
+
+**Feito**, nas quatro frentes:
+
+**Robustez** (`internal/driver/robust_test.go`, `make robust`): `go test -fuzz` sobre o compilador (parser, checker e gerador de C, como programa e como arquivo de teste) e sobre o formatador, com a suíte e a `std` como sementes. Achou, em poucos minutos:
+
+| Entrada | O que acontecia | Correção |
+|---|---|---|
+| `struct A { a A }` com `alloc(A)` | estouro de pilha no checker (o erro de struct recursiva era dado, mas o tipo continuava cíclico) | o campo que fecha o ciclo perde o tipo; ciclos por `[N]T` também são achados; um erro por ciclo |
+| `struct T { t T; d T }` com `[2]T` | o mesmo, pelo segundo campo | todos os campos do ciclo perdem o tipo |
+| `interface A { fn a() int }` com um `impl` | índice fora do slice (método sem `self`) | só os métodos bem escritos entram na interface |
+| `replace(!s[0], v)` | ponteiro nulo (o operador não era conferido) | só `&s[i]` é aceito |
+| `struct A{ ;;}` | formatar duas vezes dava textos diferentes | `;;` antes de `}` sai inteiro |
+| `for 0;;{}` | a correção anterior quebrava o `for` | o `;` só sai quando não há nada depois dele na linha |
+| `(& &x)` | o formatador colava `& &` em `&&` (outro operador) | espaço entre dois `&` ou dois `-` unários |
+| `match 0 {;` e quebra de linha | a indentação mudava na segunda formatação | o `;` não conta para decidir se o bloco abre linhas |
+
+Cada entrada fica em `internal/driver/testdata/fuzz` e roda a cada `go test`; os casos do checker também viraram testes em `tests/errors`.
+
+**Cobertura** (`make cover`): a cobertura do checker pela suíte, a mutação, o fuzz e a enumeração (89%), com uma página HTML e a lista dos erros do verificador que nenhum teste dispara. Eram 76; os que tratam de segurança ganharam um teste cada (`tests/errors/cobertura_*.mlc`: aliasing na mesma chamada, `nil` indo para `*T`, `free` de temporário com donos, empréstimo devolvido de temporário, struct com donos numa variante, thread que devolve empréstimo, `free` de mutex, `alloc` zerado com campo `*T`, ponteiro para ponteiro, empréstimo de empréstimo, `drain` sem donos e outros). Sobraram 66, quase todos erros de uso (número de argumentos, nome repetido, visibilidade); alguns parecem inalcançáveis, porque uma regra mais geral pega o caso antes.
+
+**Testes metamórficos** (`internal/fuzz/metamorphic.go`, `TestMetamorphic`): cada programa da enumeração ganha versões que não mudam a segurança (o corpo dentro de um bloco, `if`/`else` com a condição negada e os lados trocados, `else` vazio, dois comandos independentes trocados, um comando neutro inserido), e o verificador precisa dar o mesmo veredito. O modelo de referência confere que a transformação de fato não mudou a segurança. Até o tamanho 4 (30 mil programas, 340 mil versões): nenhum buraco, e só duas divergências, as duas a mesma, que mostra o falso positivo do empréstimo da forma mais clara possível:
+
+```mlc
+r := &x
+if flip() {
+    acc += x.v       // recusado
+} else {
+    acc += r.v
+}
+```
+
+```mlc
+r := &x
+if !flip() {
+    acc += r.v
+} else {
+    acc += x.v       // aceito: o mesmo programa, com os lados trocados
+}
+```
+
+O veredito depende de qual lado vem primeiro no texto. `TestMetamorphic` roda até o tamanho 3 a cada `go test` e falha com qualquer divergência num programa sem empréstimo (`MLC_META=4` vai mais longe).
+
+**Casos difíceis** (`tests/run/casos_dificeis_*.mlc` e `tests/errors/caso_dificil_*.mlc`): os padrões que costumam quebrar verificadores de posse, cada um com o veredito esperado. Empréstimo usado em todas as voltas de um laço, e o inválido (origem refeita numa volta, empréstimo usado na seguinte); campos disjuntos de um objeto; mover o objeto inteiro depois de mover um campo; `match` com um caminho que move e outro que libera, e o que esquece; código genérico que libera duas vezes; empréstimo devolvido por dois caminhos; mover no laço com e sem valor novo; `break` depois de liberar; `continue` depois de dar valor novo; `replace` num laço com `drain`; devolver empréstimo de local. Todos com o veredito certo. Um ficou registrado como conservadorismo: tirar todos os elementos com `take` num laço por índice e depois liberar o slice é recusado, porque o verificador não sabe que o laço esvaziou tudo; o jeito certo é `for x in drain(s)`.
 
 ## Ordem sugerida
 

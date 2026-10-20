@@ -1,6 +1,6 @@
 BIN := bin/mlc
 
-.PHONY: build test test-std check sanitize mutate fuzz enum fmt clean
+.PHONY: build test test-std check sanitize mutate fuzz enum robust cover fmt clean
 
 # make (ou make build): gera o compilador em bin/mlc
 build:
@@ -67,6 +67,28 @@ ENUM_OUT ?= /tmp/mlc-enum
 
 enum:
 	@MLC_ENUM=$(ENUM) MLC_ENUM_OUT=$(ENUM_OUT) go test ./internal/fuzz -run 'TestEnumerate$$' -count=1 -timeout 0 > /dev/null; status=$$?; cat $(ENUM_OUT)/relatorio.txt; exit $$status
+
+# make robust: go test -fuzz sobre o compilador (parser, checker e gerador
+# de C) e o formatador, por ROBUSTTIME cada (padrão 1m): o compilador nunca
+# dá panic, e formatar duas vezes dá o mesmo texto. Uma entrada que falha
+# fica em internal/driver/testdata/fuzz e passa a rodar a cada go test.
+ROBUSTTIME ?= 1m
+
+robust:
+	go test ./internal/driver -run '^$$' -fuzz '^FuzzCheck$$' -fuzztime $(ROBUSTTIME)
+	go test ./internal/driver -run '^$$' -fuzz '^FuzzFormat$$' -fuzztime $(ROBUSTTIME)
+
+# make cover: a cobertura do checker pela suíte, a mutação, o fuzz e a
+# enumeração, com a lista dos erros do verificador que nenhum teste dispara.
+COVER_OUT ?= /tmp/mlc-cover
+
+cover:
+	@mkdir -p $(COVER_OUT)
+	@go test ./internal/driver ./internal/fuzz ./internal/lsp -coverpkg=./internal/checker -coverprofile=$(COVER_OUT)/checker.out -count=1 > /dev/null
+	@go tool cover -func=$(COVER_OUT)/checker.out | tail -1
+	@go tool cover -html=$(COVER_OUT)/checker.out -o $(COVER_OUT)/checker.html
+	@MLC_COVER=$(COVER_OUT)/checker.out go test ./internal/fuzz -run 'TestCoverReport$$' -count=1 > /dev/null; cat $(COVER_OUT)/relatorio.txt
+	@echo "página com as linhas: $(COVER_OUT)/checker.html"
 
 # make fmt: formata o Go (gofmt) e o MLC (mlc fmt)
 fmt: build

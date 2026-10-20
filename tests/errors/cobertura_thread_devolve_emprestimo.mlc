@@ -1,0 +1,16 @@
+// erro: a função da thread não pode devolver um empréstimo
+// Cobertura do verificador (fase 5): regra de posse que nenhum teste disparava.
+import "std/thread"
+
+struct Box {
+    v int
+}
+
+fn work(b *Box) &Box {
+    return b
+}
+
+fn main() {
+    t := thread.spawn(work, alloc(Box{v: 1}), thread.STACK_64KB)
+    thread.join(t)
+}

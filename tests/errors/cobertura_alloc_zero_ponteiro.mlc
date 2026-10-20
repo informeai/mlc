@@ -1,0 +1,14 @@
+// erro: zera a memória, mas
+// Cobertura do verificador (fase 5): regra de posse que nenhum teste disparava.
+struct Box {
+    v int
+}
+
+struct Par {
+    a *Box
+}
+
+fn main() {
+    p := alloc(Par)
+    free(p)
+}

@@ -121,6 +121,7 @@ func (c *checker) collectStructs(f *ast.File) {
 		done
 	)
 	state := map[*Struct]int{}
+	reported := map[*Struct]bool{}
 	var path []*Struct
 	var visit func(s *Struct) bool
 	visit = func(s *Struct) bool {
@@ -139,6 +140,10 @@ func (c *checker) collectStructs(f *ast.File) {
 				names = append(names, p.Name)
 			}
 			names = append(names, s.Name)
+			if reported[s] {
+				return false // o mesmo ciclo por outro campo: um erro basta
+			}
+			reported[s] = true
 			c.errorf(s.Decl.P, "struct %s contém a si mesma por valor (%s); isso vai ser possível com ponteiros",
 				s.Name, strings.Join(names, " → "))
 			return false
@@ -147,9 +152,17 @@ func (c *checker) collectStructs(f *ast.File) {
 		path = append(path, s)
 		ok := true
 		for _, f := range s.Fields {
-			if inner, isStruct := f.Type.(*Struct); isStruct && !visit(inner) {
+			// [N]T também guarda T por valor
+			t := f.Type
+			for a, isArray := t.(*Array); isArray; a, isArray = t.(*Array) {
+				t = a.Elem
+			}
+			if inner, isStruct := t.(*Struct); isStruct && !visit(inner) {
+				// o campo fica sem tipo: o ciclo some, e o resto da checagem
+				// (tamanho, campos donos) não entra em recursão infinita.
+				// Todos os campos são vistos: dois podem fechar ciclos.
+				f.Type = Invalid
 				ok = false
-				break
 			}
 		}
 		path = path[:len(path)-1]

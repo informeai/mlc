@@ -1,0 +1,46 @@
+// erro: pick devolve &Box e recebe mais de um empréstimo: não dá para saber de qual o resultado vem (receba só um, ou faça um método com receptor &)
+// Caso difícil (fase 5 do plano de verificação): função que devolve um de dois empréstimos (não dá para saber de qual vem).
+struct Box {
+    v int
+}
+
+struct Par {
+    a ?*Box
+    b ?*Box
+}
+
+enum Opt {
+    Nada
+    Tem(b ?*Box)
+}
+
+extern "C" fn rand() int32
+
+fn flip() bool {
+    return rand() % 2 == 0
+}
+
+fn consume(b *Box) int {
+    n := b.v
+    free(b)
+    return n
+}
+
+fn sink(n int) {
+}
+
+fn pick(a &Box, b &Box) &Box {
+    if flip() {
+        return a
+    }
+    return b
+}
+
+fn main() {
+    x := alloc(Box{v: 1})
+    y := alloc(Box{v: 2})
+    r := pick(&x, &y)
+    free(y)
+    sink(r.v)
+    free(x)
+}
