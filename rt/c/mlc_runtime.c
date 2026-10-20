@@ -1484,10 +1484,12 @@ int64_t mlc_std_net_port_raw(mlc_sock *l, const char *file, int line) {
     return -1;
 }
 
-mlc_sock *mlc_std_net_connect(mlc_sl_byte *host, int64_t port, int64_t *err, const char *file, int line) {
+/* mlc_tcp_dial abre uma conexão TCP com host:port e devolve o descritor,
+ * ou -1 com o código em err (também usada pelo std/tls). */
+static int mlc_tcp_dial(mlc_sl_byte *host, int64_t port, int64_t *err) {
     struct addrinfo *res;
     *err = 0;
-    if (!mlc_net_resolve(host, port, false, &res, err)) return NULL;
+    if (!mlc_net_resolve(host, port, false, &res, err)) return -1;
     int fd = -1;
     int last = 0;
     for (struct addrinfo *a = res; a != NULL; a = a->ai_next) {
@@ -1508,11 +1510,17 @@ mlc_sock *mlc_std_net_connect(mlc_sl_byte *host, int64_t port, int64_t *err, con
     freeaddrinfo(res);
     if (fd < 0) {
         *err = mlc_net_err(last);
-        return NULL;
+        return -1;
     }
     mlc_net_nosigpipe(fd);
     int one = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
+    return fd;
+}
+
+mlc_sock *mlc_std_net_connect(mlc_sl_byte *host, int64_t port, int64_t *err, const char *file, int line) {
+    int fd = mlc_tcp_dial(host, port, err);
+    if (fd < 0) return NULL;
     return mlc_net_wrap(fd, file, line);
 }
 
@@ -1609,6 +1617,12 @@ void mlc_std_fs_fail(mlc_str msg, const char *file, int line) { mlc_std_process_
 
 void mlc_std_arena_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
 
+void mlc_std_json_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
+
+void mlc_std_hmac_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
+
+void mlc_std_password_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
+
 /* os.error_text: o texto de um código de erro da biblioteca. Os códigos
  * abaixo de 1000 são os do sistema (errno), com os mais comuns em português;
  * os de 1000 em diante são do MLC e valem em todos os sistemas. */
@@ -1627,7 +1641,7 @@ static const char *mlc_error_text(int64_t code) {
     case 2005: return "a conexão foi fechada pelo outro lado";
     case 3001: return "mensagem HTTP inválida";
     case 3002: return "cabeçalho HTTP grande demais";
-    case 3003: return "esquema de URL sem suporte (https precisa de TLS)";
+    case 3003: return "esquema de URL sem suporte (só http e https)";
     case 3101: return "URL inválida";
     case 3201: return "linha de configuração inválida (esperado chave=valor)";
     case 3301: return "aspas erradas num campo de CSV";
@@ -1638,6 +1652,11 @@ static const char *mlc_error_text(int64_t code) {
     case 4019: return "restrição do banco violada (UNIQUE, NOT NULL, FOREIGN KEY ou CHECK)";
     case 4021: return "uso errado da API do SQLite";
     case 4900: return "a biblioteca do SQLite não foi encontrada neste sistema";
+    case 5001: return "o aperto de mão TLS falhou";
+    case 5002: return "o certificado do servidor não vale (expirado, de outro nome ou de autoridade desconhecida)";
+    case 5003: return "a biblioteca de TLS (OpenSSL) não foi encontrada neste sistema";
+    case 5004: return "erro na conexão TLS";
+    case 5005: return "o certificado ou a chave do servidor não carregaram";
     case EPERM: return "operação não permitida";
     case ENOENT: return "não existe";
     case EIO: return "erro de entrada e saída";
@@ -2343,3 +2362,339 @@ int64_t mlc_std_sqlite_last_insert_id_raw(void *db, const char *file, int line) 
 }
 
 void mlc_std_sqlite_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
+
+/* std/tls. A libssl (OpenSSL 3, ou 1.1) é carregada na primeira chamada,
+ * como o SQLite: só quem usa precisa dela, e ninguém precisa de flags.
+ * MLC_TLS_LIB escolhe o arquivo; sem ela, tenta o OpenSSL do Homebrew no
+ * macOS (a /usr/lib/libssl.dylib do macOS aborta o processo de propósito,
+ * e nunca é carregada) e a do sistema no Linux. O cliente confere o
+ * certificado (cadeia, validade e nome do host) com as autoridades do
+ * sistema, ou com o arquivo de MLC_TLS_CA; TLS 1.2 no mínimo. */
+
+typedef struct ssl_st SSL;
+typedef struct ssl_ctx_st SSL_CTX;
+typedef struct ssl_method_st SSL_METHOD;
+
+static struct {
+    int (*init_ssl)(uint64_t, const void *);
+    const SSL_METHOD *(*client_method)(void);
+    const SSL_METHOD *(*server_method)(void);
+    SSL_CTX *(*ctx_new)(const SSL_METHOD *);
+    void (*ctx_free)(SSL_CTX *);
+    long (*ctx_ctrl)(SSL_CTX *, int, long, void *);
+    int (*ctx_default_paths)(SSL_CTX *);
+    int (*ctx_load_locations)(SSL_CTX *, const char *, const char *);
+    void (*ctx_set_verify)(SSL_CTX *, int, void *);
+    int (*ctx_use_chain)(SSL_CTX *, const char *);
+    int (*ctx_use_key)(SSL_CTX *, const char *, int);
+    int (*ctx_check_key)(const SSL_CTX *);
+    SSL *(*ssl_new)(SSL_CTX *);
+    void (*ssl_free)(SSL *);
+    int (*set_fd)(SSL *, int);
+    long (*ctrl)(SSL *, int, long, void *);
+    int (*set1_host)(SSL *, const char *);
+    int (*connect)(SSL *);
+    int (*accept)(SSL *);
+    int (*read)(SSL *, void *, int);
+    int (*write)(SSL *, const void *, int);
+    int (*get_error)(const SSL *, int);
+    long (*verify_result)(const SSL *);
+    int (*shutdown)(SSL *);
+    const char *(*verify_string)(long);
+    unsigned long (*err_get)(void);
+    void (*err_string)(unsigned long, char *, size_t);
+    void (*err_clear)(void);
+    int loaded;
+    SSL_CTX *client; /* o contexto do cliente, um só para o programa */
+} mlc_tl;
+
+static pthread_once_t mlc_tl_once = PTHREAD_ONCE_INIT;
+static _Thread_local char mlc_tl_msg[256]; /* a explicação do último erro desta thread */
+
+static void mlc_tl_load(void) {
+    const char *names[] = {getenv("MLC_TLS_LIB"),
+                           "/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib",
+                           "/usr/local/opt/openssl@3/lib/libssl.3.dylib",
+                           "/opt/homebrew/opt/openssl@1.1/lib/libssl.1.1.dylib",
+#ifndef __APPLE__
+                           "libssl.so.3", "libssl.so.1.1", "libssl.so",
+#endif
+                           NULL};
+    void *h = NULL;
+    for (int i = 0; i < (int)(sizeof names / sizeof names[0]) && h == NULL; i++) {
+        if (names[i] != NULL && names[i][0] != 0) h = dlopen(names[i], RTLD_NOW | RTLD_LOCAL);
+    }
+    mlc_tl.loaded = -1;
+    if (h == NULL) return;
+#define MLC_TL(field, sym)                    \
+    *(void **)&mlc_tl.field = dlsym(h, sym);  \
+    if (mlc_tl.field == NULL) return
+    MLC_TL(init_ssl, "OPENSSL_init_ssl");
+    MLC_TL(client_method, "TLS_client_method");
+    MLC_TL(server_method, "TLS_server_method");
+    MLC_TL(ctx_new, "SSL_CTX_new");
+    MLC_TL(ctx_free, "SSL_CTX_free");
+    MLC_TL(ctx_ctrl, "SSL_CTX_ctrl");
+    MLC_TL(ctx_default_paths, "SSL_CTX_set_default_verify_paths");
+    MLC_TL(ctx_load_locations, "SSL_CTX_load_verify_locations");
+    MLC_TL(ctx_set_verify, "SSL_CTX_set_verify");
+    MLC_TL(ctx_use_chain, "SSL_CTX_use_certificate_chain_file");
+    MLC_TL(ctx_use_key, "SSL_CTX_use_PrivateKey_file");
+    MLC_TL(ctx_check_key, "SSL_CTX_check_private_key");
+    MLC_TL(ssl_new, "SSL_new");
+    MLC_TL(ssl_free, "SSL_free");
+    MLC_TL(set_fd, "SSL_set_fd");
+    MLC_TL(ctrl, "SSL_ctrl");
+    MLC_TL(set1_host, "SSL_set1_host");
+    MLC_TL(connect, "SSL_connect");
+    MLC_TL(accept, "SSL_accept");
+    MLC_TL(read, "SSL_read");
+    MLC_TL(write, "SSL_write");
+    MLC_TL(get_error, "SSL_get_error");
+    MLC_TL(verify_result, "SSL_get_verify_result");
+    MLC_TL(shutdown, "SSL_shutdown");
+    MLC_TL(verify_string, "X509_verify_cert_error_string"); /* da libcrypto, que a libssl carrega */
+    MLC_TL(err_get, "ERR_get_error");
+    MLC_TL(err_string, "ERR_error_string_n");
+    MLC_TL(err_clear, "ERR_clear_error");
+#undef MLC_TL
+    mlc_tl.init_ssl(0, NULL);
+    mlc_tl.loaded = 1;
+}
+
+static int mlc_tl_ready(void) {
+    pthread_once(&mlc_tl_once, mlc_tl_load);
+    return mlc_tl.loaded == 1;
+}
+
+/* os códigos de controle das macros do OpenSSL */
+#define MLC_TL_CTRL_SET_MIN_PROTO 123
+#define MLC_TL_TLS1_2 0x0303
+#define MLC_TL_CTRL_SNI 55
+
+static void mlc_tl_note(const char *what) {
+    unsigned long e = mlc_tl.err_get();
+    if (e != 0) {
+        char buf[200];
+        mlc_tl.err_string(e, buf, sizeof buf);
+        snprintf(mlc_tl_msg, sizeof mlc_tl_msg, "%s: %s", what, buf);
+    } else {
+        snprintf(mlc_tl_msg, sizeof mlc_tl_msg, "%s", what);
+    }
+    mlc_tl.err_clear();
+}
+
+static pthread_mutex_t mlc_tl_mu = PTHREAD_MUTEX_INITIALIZER;
+
+/* o contexto do cliente: as autoridades do sistema (ou MLC_TLS_CA),
+ * conferência obrigatória, TLS 1.2 no mínimo */
+static SSL_CTX *mlc_tl_client(void) {
+    pthread_mutex_lock(&mlc_tl_mu);
+    if (mlc_tl.client == NULL) {
+        SSL_CTX *ctx = mlc_tl.ctx_new(mlc_tl.client_method());
+        if (ctx != NULL) {
+            mlc_tl.ctx_ctrl(ctx, MLC_TL_CTRL_SET_MIN_PROTO, MLC_TL_TLS1_2, NULL);
+            const char *ca = getenv("MLC_TLS_CA");
+            if (ca != NULL && ca[0] != 0) mlc_tl.ctx_load_locations(ctx, ca, NULL);
+            else mlc_tl.ctx_default_paths(ctx);
+            mlc_tl.ctx_set_verify(ctx, 1 /* SSL_VERIFY_PEER */, NULL);
+            mlc_tl.client = ctx;
+        }
+    }
+    pthread_mutex_unlock(&mlc_tl_mu);
+    return mlc_tl.client;
+}
+
+typedef struct mlc_tls {
+    int fd;
+    SSL *ssl;
+} mlc_tls;
+
+/* os erros: 5001 o aperto de mão falhou, 5002 o certificado não vale,
+ * 5003 sem biblioteca de TLS, 5004 erro na conexão TLS, 5005 o
+ * certificado ou a chave do servidor não carregaram */
+
+mlc_tls *mlc_std_tls_connect(mlc_sl_byte *host, int64_t port, int64_t *err, const char *file, int line) {
+    if (!mlc_tl_ready()) {
+        snprintf(mlc_tl_msg, sizeof mlc_tl_msg, "a libssl (OpenSSL) não foi encontrada; instale o OpenSSL ou aponte MLC_TLS_LIB para ela");
+        *err = 5003;
+        return NULL;
+    }
+    SSL_CTX *ctx = mlc_tl_client();
+    if (ctx == NULL) {
+        mlc_tl_note("não foi possível criar o contexto TLS");
+        *err = 5001;
+        return NULL;
+    }
+    char name[256];
+    if (host->len >= (int64_t)sizeof name) mlc_panic(file, line, "tls.connect: nome do host longo demais");
+    memcpy(name, host->ptr, (size_t)host->len);
+    name[host->len] = 0;
+    int fd = mlc_tcp_dial(host, port, err);
+    if (fd < 0) {
+        snprintf(mlc_tl_msg, sizeof mlc_tl_msg, "a conexão TCP falhou");
+        return NULL;
+    }
+    SSL *ssl = mlc_tl.ssl_new(ctx);
+    mlc_tl.set_fd(ssl, fd);
+    mlc_tl.ctrl(ssl, MLC_TL_CTRL_SNI, 0 /* TLSEXT_NAMETYPE_host_name */, name);
+    mlc_tl.set1_host(ssl, name); /* o certificado precisa ser deste nome */
+    if (mlc_tl.connect(ssl) != 1) {
+        long v = mlc_tl.verify_result(ssl);
+        if (v != 0) {
+            snprintf(mlc_tl_msg, sizeof mlc_tl_msg, "certificado recusado: %s", mlc_tl.verify_string(v));
+            mlc_tl.err_clear();
+            *err = 5002;
+        } else {
+            mlc_tl_note("o aperto de mão TLS falhou");
+            *err = 5001;
+        }
+        mlc_tl.ssl_free(ssl);
+        close(fd);
+        return NULL;
+    }
+    mlc_tls *t = mlc_alloc(sizeof *t, file, line);
+    t->fd = fd;
+    t->ssl = ssl;
+    *err = 0;
+    return t;
+}
+
+/* o servidor: um contexto com o certificado (a cadeia, em PEM) e a chave */
+void *mlc_std_tls_server_raw(mlc_sl_byte *cert, mlc_sl_byte *key, int64_t *err, const char *file, int line) {
+    if (!mlc_tl_ready()) {
+        snprintf(mlc_tl_msg, sizeof mlc_tl_msg, "a libssl (OpenSSL) não foi encontrada; instale o OpenSSL ou aponte MLC_TLS_LIB para ela");
+        *err = 5003;
+        return NULL;
+    }
+    char c[4096], k[4096];
+    if (!mlc_cpath(c, sizeof c, cert) || !mlc_cpath(k, sizeof k, key)) mlc_panic(file, line, "tls.new_server: caminho longo demais");
+    SSL_CTX *ctx = mlc_tl.ctx_new(mlc_tl.server_method());
+    if (ctx == NULL) {
+        mlc_tl_note("não foi possível criar o contexto TLS");
+        *err = 5005;
+        return NULL;
+    }
+    mlc_tl.ctx_ctrl(ctx, MLC_TL_CTRL_SET_MIN_PROTO, MLC_TL_TLS1_2, NULL);
+    if (mlc_tl.ctx_use_chain(ctx, c) != 1) {
+        mlc_tl_note("o certificado não carregou");
+        mlc_tl.ctx_free(ctx);
+        *err = 5005;
+        return NULL;
+    }
+    if (mlc_tl.ctx_use_key(ctx, k, 1 /* SSL_FILETYPE_PEM */) != 1 || mlc_tl.ctx_check_key(ctx) != 1) {
+        mlc_tl_note("a chave não carregou (ou não é a do certificado)");
+        mlc_tl.ctx_free(ctx);
+        *err = 5005;
+        return NULL;
+    }
+    mlc_live_allocs++; /* o contexto conta como alocação: o close desconta */
+    *err = 0;
+    return ctx;
+}
+
+void mlc_std_tls_server_close(void *ctx, const char *file, int line) {
+    (void)file;
+    (void)line;
+    mlc_tl.ctx_free(ctx);
+    mlc_live_allocs--;
+}
+
+/* accept faz o aperto de mão do servidor numa conexão aceita (que passa a
+ * ser do TLS: em caso de erro, ela é fechada aqui) */
+mlc_tls *mlc_std_tls_accept_raw(mlc_sock *c, void *ctx, int64_t *err, const char *file, int line) {
+    int fd = c->fd;
+    mlc_free(c);
+    SSL *ssl = mlc_tl.ssl_new(ctx);
+    mlc_tl.set_fd(ssl, fd);
+    if (mlc_tl.accept(ssl) != 1) {
+        mlc_tl_note("o aperto de mão TLS falhou");
+        mlc_tl.ssl_free(ssl);
+        close(fd);
+        *err = 5001;
+        return NULL;
+    }
+    mlc_tls *t = mlc_alloc(sizeof *t, file, line);
+    t->fd = fd;
+    t->ssl = ssl;
+    *err = 0;
+    return t;
+}
+
+int64_t mlc_std_tls_read_raw(mlc_tls *t, mlc_sl_byte *dst, const char *file, int line) {
+    (void)file;
+    (void)line;
+    if (dst->len == 0) return 0;
+    int n = dst->len > INT32_MAX ? INT32_MAX : (int)dst->len;
+    for (;;) {
+        int r = mlc_tl.read(t->ssl, dst->ptr, n);
+        if (r > 0) return r;
+        int e = mlc_tl.get_error(t->ssl, r);
+        if (e == 6 /* SSL_ERROR_ZERO_RETURN: o outro lado fechou */) return 0;
+        if (e == 2 /* WANT_READ */ || e == 3 /* WANT_WRITE */) continue;
+        if (e == 5 /* SSL_ERROR_SYSCALL */) {
+            if (errno == EINTR) continue;
+            if (errno == 0) return 0; /* fechou sem o aviso do TLS */
+            return -mlc_net_err(errno);
+        }
+        mlc_tl_note("erro na conexão TLS");
+        return -5004;
+    }
+}
+
+int64_t mlc_std_tls_write_raw(mlc_tls *t, mlc_sl_byte *data, const char *file, int line) {
+    (void)file;
+    (void)line;
+    int64_t done = 0;
+    while (done < data->len) {
+        int64_t left = data->len - done;
+        int n = left > INT32_MAX ? INT32_MAX : (int)left;
+        int r = mlc_tl.write(t->ssl, data->ptr + done, n);
+        if (r > 0) {
+            done += r;
+            continue;
+        }
+        int e = mlc_tl.get_error(t->ssl, r);
+        if (e == 2 || e == 3) continue;
+        if (e == 5 && errno == EINTR) continue;
+        if (e == 5 && errno != 0) return -mlc_net_err(errno);
+        mlc_tl_note("erro na conexão TLS");
+        return -5004;
+    }
+    return done;
+}
+
+int64_t mlc_std_tls_timeout_raw(mlc_tls *t, int64_t ms, const char *file, int line) {
+    (void)file;
+    (void)line;
+    struct timeval tv = {(time_t)(ms / 1000), (suseconds_t)((ms % 1000) * 1000)};
+    if (setsockopt(t->fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv) != 0) return -errno;
+    if (setsockopt(t->fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv) != 0) return -errno;
+    return 0;
+}
+
+void mlc_std_tls_close_raw(mlc_tls *t, const char *file, int line) {
+    (void)file;
+    (void)line;
+    mlc_tl.shutdown(t->ssl); /* o aviso de fim ao outro lado (sem esperar a resposta) */
+    mlc_tl.ssl_free(t->ssl);
+    close(t->fd);
+    mlc_free(t);
+}
+
+int64_t mlc_std_tls_last_error(mlc_sl_byte *dst, const char *file, int line) {
+    (void)file;
+    (void)line;
+    int64_t n = (int64_t)strlen(mlc_tl_msg);
+    if (n > dst->len) n = dst->len;
+    memcpy(dst->ptr, mlc_tl_msg, (size_t)n);
+    return n;
+}
+
+bool mlc_std_tls_available(const char *file, int line) {
+    (void)file;
+    (void)line;
+    return mlc_tl_ready();
+}
+
+void mlc_std_tls_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }

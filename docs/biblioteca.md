@@ -368,6 +368,7 @@ HMAC-SHA256 (RFC 2104) em MLC, sobre o `hash.sha256`: a assinatura de uma mensag
 | `verify(key, data, mac &[]byte) bool` | confere uma assinatura, em tempo constante |
 | `equal(a, b &[]byte) bool` | compara em tempo constante: o tempo não depende de onde está a primeira diferença |
 | `new(key) Hmac`, `h.write(data)`, `h.sum(dst)` | o mesmo em pedaços |
+| `pbkdf2(&password, &salt, iterations, &dst)` | PBKDF2-HMAC-SHA256 (RFC 8018): deriva `len(dst)` bytes de chave; para senhas de usuários, use `std/password` |
 
 ```mlc
 if !hmac.verify(&segredo, &corpo, &assinatura) {
@@ -377,6 +378,32 @@ if !hmac.verify(&segredo, &corpo, &assinatura) {
 ```
 
 Para conferir uma assinatura ou um token, use `verify` ou `equal`, nunca `str.eq_bytes`: uma comparação comum para no primeiro byte diferente, e o tempo que ela leva diz a quem ataca quantos bytes ele já acertou. A chave pode ter qualquer tamanho; uma maior que 64 bytes é trocada pelo SHA-256 dela, como manda a RFC. Testado com os vetores da RFC 4231.
+
+### `std/password`
+
+Guardar e conferir senhas de usuários sem nunca guardar a senha: PBKDF2-HMAC-SHA256 com 600 mil iterações (a recomendação da OWASP) e um sal de 16 bytes de `rand.secure` por senha, no formato PHC, que leva o algoritmo, as iterações e o sal junto:
+
+```
+$pbkdf2-sha256$i=600000$0nG8n3nC3B7oTq7wR3a3Ow$Kj...
+```
+
+```mlc
+var stored [password.MAX_LEN]byte
+n := password.hash(&senha, &stored)          // grava &stored[:n] no banco
+...
+if password.verify(&tentativa, &guardado) {  // em tempo constante
+    ...
+}
+```
+
+| Declaração | O que faz |
+|---|---|
+| `hash(&pw, &dst) int` | o hash (dst com `MAX_LEN` bytes) |
+| `hash_with(&pw, iterations, &dst) int` | com outro número de iterações (menos só em testes) |
+| `verify(&pw, &stored) bool` | confere; um hash mal formado dá `false` |
+| `needs_rehash(&stored, iterations) bool` | o hash usa menos iterações que o pedido: grave um novo no próximo login certo |
+
+Cada hash leva uns 0,6 s de propósito: é o que torna caro testar milhões de palpites se o banco vazar. O formato é o mesmo do `hashlib` do Python e de outras bibliotecas PHC (o teste confere um hash feito pelo Python).
 
 ### `std/uuid`
 
@@ -942,6 +969,52 @@ db.close()
 
 Os erros são 4000 mais o código do SQLite: `ERROR` (4001), `BUSY` (4005), `CANTOPEN` (4014), `CONSTRAINT` (4019), `MISUSE` (4021), e `UNAVAILABLE` (4900) quando a biblioteca não existe. `os.error_text` dá o texto, e `db.error(&buf)` a mensagem do SQLite. Use sempre parâmetros (`?`) para os valores, nunca SQL montado com texto de fora: é o que impede injeção de SQL.
 
+### `std/tls`
+
+Conexões cifradas (HTTPS), de cliente e de servidor, com o OpenSSL do sistema, carregado na primeira chamada (sem flags de ligação). No macOS, `brew install openssl@3`; no Linux, ele costuma vir com o sistema. `MLC_TLS_LIB` aponta outra `libssl`, e `available()` diz se ela foi achada.
+
+**Cliente.** `connect` abre o TCP e faz o aperto de mão conferindo o certificado do servidor: a cadeia até uma autoridade do sistema, a validade e o nome do host (com SNI). Um certificado que não vale é recusado com `BAD_CERT`, e não há como desligar a conferência. Para uma autoridade própria (servidor interno, testes), `MLC_TLS_CA` aponta o arquivo dela. TLS 1.2 no mínimo.
+
+```mlc
+err := 0
+c := tls.connect_str("api.exemplo.com", 443, &err)
+if c == nil {
+    var why [256]byte
+    n := tls.last_error(&why)     // "certificado recusado: certificate has expired"
+    return
+}
+c.write(&pedido)
+c.close()
+```
+
+Com o `http`, basta a URL: `http.get("https://...", &m, &body)` usa TLS sozinho, e `http.dial_tls(&u, &err)` abre a conexão para cabeçalhos próprios.
+
+**Servidor.** `new_server` carrega o certificado (a cadeia, em PEM) e a chave; `srv.accept(c, &err)` faz o aperto de mão numa conexão aceita por um `net.Listener` (a `net.Conn` passa a ser do TLS). Com o `Router[tls.Conn, App]`, as mesmas rotas servem HTTPS:
+
+```mlc
+srv := tls.new_server_str("cert.pem", "chave.pem", &err)
+...
+c := l.accept(&err)
+if c != nil {
+    t := srv.accept(c, &err)
+    if t != nil {
+        t.set_timeout(5000)
+        http.serve_conn(&t, &router, &app)
+        t.close()
+    }
+}
+srv.close()
+```
+
+| Declaração | O que faz |
+|---|---|
+| `connect(&host, port, &err)`, `connect_str(host, port, &err)` | cliente |
+| `new_server(&cert, &key, &err)`, `new_server_str(...)`, `srv.accept(c, &err)`, `srv.close()` | servidor |
+| `c.read(&dst)`, `c.write(&data)`, `c.set_timeout(ms)`, `c.close()` | como `net.Conn`; `tls.Conn` implementa `io.Reader` e `http.Stream` |
+| `last_error(&dst)` | por que o último erro desta thread aconteceu |
+
+Os erros: `HANDSHAKE` (5001), `BAD_CERT` (5002), `UNAVAILABLE` (5003, sem `libssl`), `BROKEN` (5004) e `SERVER_FILES` (5005), além dos de `net.connect`. O teste (`std/tls_test.mlc`) gera um certificado para `localhost` com o `openssl` e roda servidor e cliente, inclusive os casos que precisam ser recusados (autoridade desconhecida e nome errado); contra servidores reais, um certificado expirado e um de outro nome também são recusados.
+
 ### `std/http`
 
 HTTP/1.1 sobre qualquer `http.Stream` (a interface `read` + `write`, implementada por `net.Conn`; nos testes, por uma conexão falsa). O servidor lê pedidos e escreve respostas, o cliente escreve pedidos e lê respostas. **Nada aloca:** a mensagem recebida (`Message`) guarda um buffer fixo de 8 KB dentro dela, onde ficam o cabeçalho e o começo do corpo; a que sai (`Builder`) monta o cabeçalho num buffer de 4 KB; o corpo vai e vem por buffers de quem chama. Os textos (método, caminho, campos) são copiados para buffers seus ou comparados sem cópia.
@@ -1014,7 +1087,7 @@ O corpo pode vir com `Content-Length`, `Transfer-Encoding: chunked` ou, numa res
 
 #### Roteador
 
-`Router[C]` escolhe a função de cada pedido pelo método e pelo caminho, numa tabela fixa (até 64 rotas), sem alocação. `C` é o estado que cada função recebe (um logger, uma conexão de banco, contadores). No padrão, `{nome}` casa com um pedaço entre barras e `{nome...}`, no fim, com todo o resto; os valores chegam decodificados em `Params`.
+`Router[S, C]` escolhe a função de cada pedido pelo método e pelo caminho, numa tabela fixa (até 64 rotas), sem alocação. `S` é a conexão (`net.Conn`, ou `tls.Conn` para HTTPS) e `C` é o estado que cada função recebe (um logger, uma conexão de banco, contadores). No padrão, `{nome}` casa com um pedaço entre barras e `{nome...}`, no fim, com todo o resto; os valores chegam decodificados em `Params`.
 
 ```mlc
 fn get_item(c &net.Conn, m &http.Message, p &http.Params, app &App) {
@@ -1026,7 +1099,7 @@ fn get_item(c &net.Conn, m &http.Message, p &http.Params, app &App) {
     ...
 }
 
-var r http.Router[App]
+var r http.Router[net.Conn, App]     // tls.Conn no lugar de net.Conn: as mesmas rotas por HTTPS
 r.handle("GET", "/itens/{id}", get_item)
 r.handle("POST", "/itens", create_item)
 r.handle("GET", "/arquivos/{caminho...}", serve_file)
@@ -1052,7 +1125,7 @@ c.close()
 | `get(url, &m, &body)` | GET; `m` guarda o código e os cabeçalhos, o corpo vai para `body`; devolve o tamanho |
 | `post(url, content_type, &data, &m, &body)` | POST |
 | `request(method, &url, content_type, &data, &m, &body)` | qualquer método, com a URL montada em tempo de execução |
-| `dial(&u, &err) ?*net.Conn` e `b.request_to(method, &u)` | para cabeçalhos próprios: abre a conexão e começa o pedido (linha e `Host`) |
+| `dial(&u, &err) ?*net.Conn`, `dial_tls(&u, &err) ?*tls.Conn` e `b.request_to(method, &u)` | para cabeçalhos próprios: abre a conexão (http ou https) e começa o pedido (linha e `Host`) |
 
 ```mlc
 var m http.Message
@@ -1063,7 +1136,51 @@ match http.get("http://127.0.0.1:8080/itens/7", &m, &body) {
 }
 ```
 
-Os erros são `url.BAD_URL`, `UNSUPPORTED_SCHEME` (https precisa de TLS, que esta versão não tem), os de `net.connect` e `TOO_BIG` (o corpo não cabe em `body`). Cada chamada abre e fecha a conexão (`Connection: close`).
+As URLs podem ser `http://` ou `https://` (por `std/tls`, com o certificado conferido). Os erros são `url.BAD_URL`, `UNSUPPORTED_SCHEME` (outro esquema), os de `net.connect`, os de `tls` (`BAD_CERT`...) e `TOO_BIG` (o corpo não cabe em `body`). Cada chamada abre e fecha a conexão (`Connection: close`).
+
+### `std/json`
+
+**Ler.** `json.Reader` percorre o texto e devolve um token por vez (um enum: `ObjectStart`, `Key(a, b)`, `String(a, b)`, `Number(a, b)`, `True`, `Null`, `End`, `Error(at)`...), sem alocar: os pares `(a, b)` são posições no texto, e `json.unescape` decodifica uma string quando precisar. `r.skip(&doc)` pula o valor inteiro que vem a seguir.
+
+```mlc
+r := json.reader()
+for {
+    match r.next(&doc) {
+        Key(a, b) => { ... &doc[a:b] é o nome ... }
+        Number(a, b) => { ... str.parse_int(&doc[a:b], &n) ... }
+        End => break
+        Error(at) => { ... texto inválido na posição at ... }
+        _ => {}
+    }
+}
+```
+
+**Escrever.** `json.Writer` monta o documento com as vírgulas, as aspas e os escapes certos. O texto fica em `&w.buf[:w.n]`, e o buffer é um dono que cresce (`realloc`): crie uma vez, use `reset` entre documentos, `free` no fim.
+
+```mlc
+w := json.writer(4096)
+w.object()
+w.field_int("id", 7)
+w.field_str("nome", "café")
+w.key("tags")
+w.array()
+w.str("quente")
+w.str("forte")
+w.end()
+w.end()
+http.respond(&c, 200, "application/json", &w.buf[:w.n])   // {"id":7,"nome":"café","tags":["quente","forte"]}
+w.reset()
+```
+
+| Declaração | O que faz |
+|---|---|
+| `writer(cap) *Writer`, `w.free()`, `w.reset()`, `w.done()` | criar, liberar, reaproveitar, e conferir que o documento está completo |
+| `w.object()`, `w.array()`, `w.end()` | abrir e fechar (até 32 níveis) |
+| `w.key(nome)`, `w.key_bytes(&nome)` | a chave do próximo valor, num objeto |
+| `w.str(s)`, `w.text(&s)`, `w.int(v)`, `w.float(v)`, `w.bool(v)`, `w.null()`, `w.raw(&json)` | os valores (`raw` escreve um pedaço que já é JSON) |
+| `w.field_str`, `field_text`, `field_int`, `field_float`, `field_bool`, `field_null` | chave e valor de uma vez |
+
+Um uso errado (valor sem chave num objeto, chave num array, `end` sem nada aberto, dois valores na raiz) é erro do programa e dá panic. NaN e infinito, que o JSON não tem, viram `null`.
 
 ### `std/url`
 

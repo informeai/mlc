@@ -1,0 +1,320 @@
+import "std/fs"
+import "std/http"
+import "std/net"
+import "std/os"
+import "std/process"
+import "std/str"
+import "std/testing"
+import "std/thread"
+import "std/tls"
+
+// make_cert gera um certificado autoassinado para localhost (e a chave)
+// numa pasta temporária, com o openssl da linha de comando. Devolve o
+// tamanho do caminho da pasta em dir, ou -1 se este sistema não tem o
+// OpenSSL (a biblioteca ou o comando): aí os testes não rodam.
+fn make_cert(dir &[]byte) int {
+    if !tls.available() {
+        return -1
+    }
+    n := fs.temp_path("mlc-tls-", dir)
+    fs.mkdir_all(&dir[:n])
+    var cert [300]byte
+    var key [300]byte
+    cn := path_in(&dir[:n], "cert.pem", &cert)
+    kn := path_in(&dir[:n], "priv.pem", &key)
+    c := process.cmd("openssl")
+    c.arg("req")
+    c.arg("-x509")
+    c.arg("-newkey")
+    c.arg("rsa:2048")
+    c.arg("-nodes")
+    c.arg("-keyout")
+    c.arg_bytes(&key[:kn])
+    c.arg("-out")
+    c.arg_bytes(&cert[:cn])
+    c.arg("-days")
+    c.arg("2")
+    c.arg("-subj")
+    c.arg("/CN=localhost")
+    c.arg("-addext")
+    c.arg("subjectAltName=DNS:localhost")
+    var out [4096]byte
+    status := 0
+    match c.run(&out, &status) {
+        Ok(_) => {}
+        Err(_) => status = -1
+    }
+    if status != 0 {
+        fs.remove_all(&dir[:n])
+        return -1
+    }
+    return n
+}
+
+fn path_in(dir &[]byte, name string, dst &[]byte) int {
+    n := str.copy_bytes(dst, dir)
+    n += str.copy(&dst[n:], "/")
+    return n + str.copy(&dst[n:], name)
+}
+
+struct Echo {
+    l *net.Listener
+    srv *tls.Server
+}
+
+// serve_echo aceita uma conexão TLS, lê uma mensagem e devolve "eco: ...".
+// Devolve quantos bytes leu (-1 se o aperto de mão falhou, o que é
+// esperado quando o cliente recusa o certificado).
+fn serve_echo(e *Echo) int {
+    l := e.l
+    srv := e.srv
+    free(e)
+    err := 0
+    got := -1
+    c := l.accept(&err)
+    if c != nil {
+        t := srv.accept(c, &err)
+        if t != nil {
+            var buf [64]byte
+            match t.read(&buf) {
+                Ok(n) => {
+                    got = n
+                    var resp [80]byte
+                    k := str.copy(&resp, "eco: ")
+                    k += str.copy_bytes(&resp[k:], &buf[:n])
+                    t.write(&resp[:k])
+                }
+                Err(_) => {}
+            }
+            t.close()
+        }
+    }
+    l.close()
+    srv.close()
+    return got
+}
+
+// start sobe o servidor numa thread e devolve a porta.
+fn start(dir &[]byte, port &int) ?*thread.Thread[int] {
+    var cert [300]byte
+    var key [300]byte
+    cn := path_in(dir, "cert.pem", &cert)
+    kn := path_in(dir, "priv.pem", &key)
+    err := 0
+    srv := tls.new_server(&cert[:cn], &key[:kn], &err)
+    testing.eq_int(err, 0)
+    var h [16]byte
+    hn := str.copy(&h, "127.0.0.1")
+    l := net.listen(&h[:hn], 0, &err)
+    if srv == nil || l == nil {
+        if srv != nil {
+            srv.close()
+        }
+        if l != nil {
+            l.close()
+        }
+        return nil
+    }
+    *port = l.port()
+    return thread.spawn(serve_echo, alloc(Echo{l: l, srv: srv}), thread.STACK_256KB)
+}
+
+// available só diz se a libssl existe: num sistema sem ela, os testes que
+// precisam dela não rodam (make_cert devolve -1)
+fn test_available() {
+    if tls.available() {
+        testing.check(true, "a libssl foi achada")
+    }
+}
+
+// com a autoridade certa (MLC_TLS_CA), o certificado vale e a conversa passa
+fn test_round_trip() {
+    var dir [256]byte
+    dn := make_cert(&dir)
+    if dn < 0 {
+        return // sem OpenSSL neste sistema
+    }
+    var cert [300]byte
+    cn := path_in(&dir[:dn], "cert.pem", &cert)
+    os.setenv("MLC_TLS_CA", &cert[:cn])
+    port := 0
+    t := start(&dir[:dn], &port)
+    if t == nil {
+        testing.fail("o servidor não subiu")
+        fs.remove_all(&dir[:dn])
+        return
+    }
+    err := 0
+    c := tls.connect_str("localhost", port, &err)
+    if c != nil {
+        var msg [16]byte
+        k := str.copy(&msg, "olá, tls")
+        c.write(&msg[:k])
+        var buf [64]byte
+        match c.read(&buf) {
+            Ok(n) => testing.eq_str(&buf[:n], "eco: olá, tls")
+            Err(code) => testing.eq_int(code, 0)
+        }
+        c.close()
+    } else {
+        var why [256]byte
+        n := tls.last_error(&why)
+        testing.eq_str(&why[:n], "")
+    }
+    testing.eq_int(thread.join(t), 9)
+    fs.remove_all(&dir[:dn])
+}
+
+// sem a autoridade, o certificado autoassinado é recusado
+fn test_untrusted_rejected() {
+    var dir [256]byte
+    dn := make_cert(&dir)
+    if dn < 0 {
+        return // sem OpenSSL neste sistema
+    }
+    port := 0
+    t := start(&dir[:dn], &port)
+    if t == nil {
+        testing.fail("o servidor não subiu")
+        fs.remove_all(&dir[:dn])
+        return
+    }
+    err := 0
+    c := tls.connect_str("localhost", port, &err)
+    testing.check(c == nil, "recusado")
+    testing.eq_int(err, tls.BAD_CERT)
+    var why [256]byte
+    n := tls.last_error(&why)
+    testing.check(n > 0, "com a explicação")
+    if c != nil {
+        c.close()
+    }
+    thread.join(t)
+    fs.remove_all(&dir[:dn])
+}
+
+// com a autoridade certa mas outro nome (o certificado é de localhost), é
+// recusado
+fn test_wrong_name_rejected() {
+    var dir [256]byte
+    dn := make_cert(&dir)
+    if dn < 0 {
+        return // sem OpenSSL neste sistema
+    }
+    var cert [300]byte
+    cn := path_in(&dir[:dn], "cert.pem", &cert)
+    os.setenv("MLC_TLS_CA", &cert[:cn])
+    port := 0
+    t := start(&dir[:dn], &port)
+    if t == nil {
+        testing.fail("o servidor não subiu")
+        fs.remove_all(&dir[:dn])
+        return
+    }
+    err := 0
+    c := tls.connect_str("127.0.0.1", port, &err)
+    testing.check(c == nil, "recusado")
+    testing.eq_int(err, tls.BAD_CERT)
+    if c != nil {
+        c.close()
+    }
+    thread.join(t)
+    fs.remove_all(&dir[:dn])
+}
+
+fn test_server_files_missing() {
+    if !tls.available() {
+        return
+    }
+    err := 0
+    srv := tls.new_server_str("/nao/existe.pem", "/nao/existe.pem", &err)
+    testing.check(srv == nil, "sem arquivos")
+    testing.eq_int(err, tls.SERVER_FILES)
+    if srv != nil {
+        srv.close()
+    }
+}
+
+// ---------- HTTPS de ponta a ponta ----------
+
+struct App {
+    hits int
+}
+
+fn h_ola(c &tls.Conn, m &http.Message, p &http.Params, app &App) {
+    app.hits++
+    var body [64]byte
+    n := str.copy(&body, "olá, ")
+    n += p.get("nome", &body[n:])
+    http.respond(c, 200, "text/plain", &body[:n])
+}
+
+struct Site {
+    l *net.Listener
+    srv *tls.Server
+}
+
+// serve_https atende uma conexão HTTPS com o Router e devolve os acessos.
+fn serve_https(s *Site) int {
+    l := s.l
+    srv := s.srv
+    free(s)
+    var r http.Router[tls.Conn, App]
+    r.handle("GET", "/ola/{nome}", h_ola)
+    var app App
+    err := 0
+    c := l.accept(&err)
+    if c != nil {
+        t := srv.accept(c, &err)
+        if t != nil {
+            t.set_timeout(5000)
+            http.serve_conn(&t, &r, &app)
+            t.close()
+        }
+    }
+    l.close()
+    srv.close()
+    return app.hits
+}
+
+fn test_https_router_and_client() {
+    var dir [256]byte
+    dn := make_cert(&dir)
+    if dn < 0 {
+        return // sem OpenSSL neste sistema
+    }
+    var cert [300]byte
+    var key [300]byte
+    cn := path_in(&dir[:dn], "cert.pem", &cert)
+    kn := path_in(&dir[:dn], "priv.pem", &key)
+    os.setenv("MLC_TLS_CA", &cert[:cn])
+    err := 0
+    srv := tls.new_server(&cert[:cn], &key[:kn], &err)
+    var h [16]byte
+    hn := str.copy(&h, "127.0.0.1")
+    l := net.listen(&h[:hn], 0, &err)
+    if srv == nil || l == nil {
+        testing.fail("o servidor não subiu")
+        if srv != nil {
+            srv.close()
+        }
+        if l != nil {
+            l.close()
+        }
+        fs.remove_all(&dir[:dn])
+        return
+    }
+    port := l.port()
+    t := thread.spawn(serve_https, alloc(Site{l: l, srv: srv}), thread.STACK_256KB)
+    var addr [64]byte
+    n := str.format(&addr, "https://localhost:{}/ola/mundo", port)
+    var m http.Message
+    var body [64]byte
+    match http.request("GET", &addr[:n], "", &addr[:0], &m, &body) {
+        Ok(k) => testing.eq_str(&body[:k], "olá, mundo")
+        Err(code) => testing.eq_int(code, 0)
+    }
+    testing.eq_int(m.status(), 200)
+    testing.eq_int(thread.join(t), 1)
+    fs.remove_all(&dir[:dn])
+}

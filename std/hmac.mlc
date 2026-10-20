@@ -90,3 +90,52 @@ pub fn equal(a &[]byte, b &[]byte) bool {
     }
     return diff == 0
 }
+
+// ---------- PBKDF2 ----------
+
+// pbkdf2 deriva uma chave de uma senha (PBKDF2-HMAC-SHA256, RFC 8018): o
+// HMAC repetido iterations vezes sobre a senha e o sal, para que testar
+// cada palpite de senha custe caro. dst recebe len(dst) bytes de chave.
+// Para guardar senhas de usuários, use std/password, que escolhe o sal e o
+// número de iterações e confere em tempo constante.
+pub fn pbkdf2(password &[]byte, salt &[]byte, iterations int, dst &[]byte) {
+    if iterations < 1 {
+        fail("hmac.pbkdf2: iterations precisa ser pelo menos 1")
+    }
+    keyed := new(password) // o HMAC já com a chave: copiado a cada passo
+    block := 1
+    done := 0
+    for done < len(dst) {
+        // U1 = HMAC(senha, sal || número do bloco, em big-endian)
+        h := keyed
+        h.write(salt)
+        var idx [4]byte
+        idx[0] = byte((block >> 24) & 0xFF)
+        idx[1] = byte((block >> 16) & 0xFF)
+        idx[2] = byte((block >> 8) & 0xFF)
+        idx[3] = byte(block & 0xFF)
+        h.write(&idx)
+        var u [32]byte
+        h.sum(&u)
+        var t [32]byte
+        for i := 0; i < 32; i++ {
+            t[i] = u[i]
+        }
+        // U2..Uc, cada um o HMAC do anterior, somados (xor) em t
+        for k := 1; k < iterations; k++ {
+            h2 := keyed
+            h2.write(&u)
+            h2.sum(&u)
+            for i := 0; i < 32; i++ {
+                t[i] ^= u[i]
+            }
+        }
+        for i := 0; i < 32 && done < len(dst); i++ {
+            dst[done] = t[i]
+            done++
+        }
+        block++
+    }
+}
+
+extern fn fail(msg string)

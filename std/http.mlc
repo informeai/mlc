@@ -45,6 +45,7 @@ import "std/io"
 import "std/net"
 import "std/result"
 import "std/str"
+import "std/tls"
 import "std/url"
 
 // códigos de erro (os da fonte, como net.TIMEOUT, chegam como vieram)
@@ -61,6 +62,8 @@ pub interface Stream {
 }
 
 impl Stream for net.Conn
+
+impl Stream for tls.Conn
 
 // ---------- mensagem recebida ----------
 
@@ -864,12 +867,11 @@ pub fn escape(dst &[]byte, src &[]byte) int {
 
 // ---------- cliente ----------
 
-// UNSUPPORTED_SCHEME: a URL não é http:// (https precisa de TLS, que esta
-// versão não tem; ponha um proxy na frente ou use um programa externo).
+// UNSUPPORTED_SCHEME: a URL não é http:// nem https://.
 pub const UNSUPPORTED_SCHEME = 3003
 
-// dial abre uma conexão com o host e a porta de u (só http://). Se não
-// conseguir, devolve nil e põe o código em err.
+// dial abre uma conexão com o host e a porta de u (só http://; para
+// https://, dial_tls). Se não conseguir, devolve nil e põe o código em err.
 pub fn dial(u &url.URL, err &int) ?*net.Conn {
     if !u.scheme_is("http") {
         *err = UNSUPPORTED_SCHEME
@@ -878,6 +880,19 @@ pub fn dial(u &url.URL, err &int) ?*net.Conn {
     var h [256]byte
     n := u.dial_host(&h)
     return net.connect(&h[:n], u.port(), err)
+}
+
+// dial_tls abre uma conexão TLS com o host e a porta de u (https://),
+// conferindo o certificado. Se não conseguir, devolve nil e põe o código
+// em err (tls.BAD_CERT...; tls.last_error explica).
+pub fn dial_tls(u &url.URL, err &int) ?*tls.Conn {
+    if !u.scheme_is("https") {
+        *err = UNSUPPORTED_SCHEME
+        return nil
+    }
+    var h [256]byte
+    n := u.dial_host(&h)
+    return tls.connect(&h[:n], u.port(), err)
 }
 
 // request_to começa um pedido para u: a linha do pedido com o alvo de u e
@@ -931,34 +946,50 @@ pub fn post(rawurl string, content_type string, data &[]byte, m &Message, body &
 }
 
 // request faz um pedido com qualquer método e a URL montada em tempo de
-// execução. content_type vazio não manda o cabeçalho. Para cabeçalhos
-// próprios, use dial e Builder.request_to.
+// execução, por http:// ou https://. content_type vazio não manda o
+// cabeçalho. Para cabeçalhos próprios, use dial (ou dial_tls) e
+// Builder.request_to.
 pub fn request(method string, rawurl &[]byte, content_type string, data &[]byte, m &Message, body &[]byte) result.Result[int, int] {
     var u url.URL
     if !url.parse(rawurl, &u) {
         return result.Result.Err(url.BAD_URL)
     }
     err := 0
+    if u.scheme_is("https") {
+        t := dial_tls(&u, &err)
+        if t == nil {
+            return result.Result.Err(err)
+        }
+        r := exchange(&t, method, &u, content_type, data, m, body)
+        t.close()
+        return r
+    }
     c := dial(&u, &err)
     if c == nil {
         return result.Result.Err(err)
     }
+    r := exchange(&c, method, &u, content_type, data, m, body)
+    c.close()
+    return r
+}
+
+// exchange manda o pedido e lê a resposta inteira, por qualquer Stream.
+fn exchange[S ref + Stream](c &S, method string, u &url.URL, content_type string, data &[]byte, m &Message, body &[]byte) result.Result[int, int] {
     var b Builder
-    b.request_to(method, &u)
+    b.request_to(method, u)
     b.header("Connection", "close")
     if len(content_type) > 0 {
         b.header("Content-Type", content_type)
     }
-    r := b.send(&c, data)
+    r := b.send(c, data)
     match r {
-        Ok(_) => r = m.read_response(&c)
+        Ok(_) => r = m.read_response(c)
         Err(_) => {}
     }
     match r {
-        Ok(_) => r = m.read_all(&c, body)
+        Ok(_) => r = m.read_all(c, body)
         Err(_) => {}
     }
-    c.close()
     return r
 }
 
@@ -1085,15 +1116,16 @@ pub fn match_path(pattern string, path &[]byte, p &Params) bool {
 }
 
 // Route é uma rota: o método ("" para qualquer um), o padrão e a função.
-pub struct Route[C any] {
+pub struct Route[S ref + Stream, C any] {
     method string
     pattern string
-    h fn(&net.Conn, &Message, &Params, &C)
+    h fn(&S, &Message, &Params, &C)
 }
 
 // Router escolhe a função de cada pedido pelo método e pelo caminho. A
-// tabela é um array fixo (MAX_ROUTES rotas), sem alocação; C é o estado que
-// cada função recebe (um logger, uma conexão de banco, contadores).
+// tabela é um array fixo (MAX_ROUTES rotas), sem alocação. S é a conexão
+// (net.Conn, ou tls.Conn para HTTPS) e C é o estado que cada função recebe
+// (um logger, uma conexão de banco, contadores).
 //
 //     fn get_item(c &net.Conn, m &http.Message, p &http.Params, app &App) {
 //         id := 0
@@ -1101,29 +1133,29 @@ pub struct Route[C any] {
 //         ...
 //     }
 //
-//     var r http.Router[App]
+//     var r http.Router[net.Conn, App]
 //     r.handle("GET", "/itens/{id}", get_item)
 //     r.handle("POST", "/itens", create_item)
 //     ...
 //     http.serve_conn(&c, &r, &app)     // numa thread por conexão
-pub struct Router[C any] {
-    routes [64]Route[C]
+pub struct Router[S ref + Stream, C any] {
+    routes [64]Route[S, C]
     n int
 }
 
 // handle acrescenta uma rota. As rotas são tentadas na ordem em que foram
 // acrescentadas.
-pub fn (r &Router[C]) handle(method string, pattern string, h fn(&net.Conn, &Message, &Params, &C)) {
+pub fn (r &Router[S, C]) handle(method string, pattern string, h fn(&S, &Message, &Params, &C)) {
     if r.n == MAX_ROUTES {
         fail("http.Router: rotas demais (o máximo é 64)")
     }
-    r.routes[r.n] = Route[C]{method: method, pattern: pattern, h: h}
+    r.routes[r.n] = Route[S, C]{method: method, pattern: pattern, h: h}
     r.n++
 }
 
 // dispatch chama a função da rota do pedido m. Sem rota para o caminho,
 // responde 404; com rota para o caminho mas não para o método, 405.
-pub fn (r &Router[C]) dispatch(c &net.Conn, m &Message, ctx &C) {
+pub fn (r &Router[S, C]) dispatch(c &S, m &Message, ctx &C) {
     var path [2048]byte
     n := m.path(&path)
     if n < 0 {
@@ -1155,7 +1187,7 @@ pub fn (r &Router[C]) dispatch(c &net.Conn, m &Message, ctx &C) {
 // conexão chegar inteiro). Responde 431 a um cabeçalho grande demais e 400
 // a um pedido inválido. O timeout fica com quem chama (c.set_timeout), e a
 // conexão continua aberta: quem chama a fecha.
-pub fn serve_conn[C any](c &net.Conn, r &Router[C], ctx &C) {
+pub fn serve_conn[S ref + Stream, C any](c &S, r &Router[S, C], ctx &C) {
     var m Message
     for {
         match m.read_request(c) {

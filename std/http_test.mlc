@@ -397,7 +397,7 @@ fn h_health(c &net.Conn, m &http.Message, p &http.Params, app &App) {
 // serve_router atende 4 conexões (uma por pedido do cliente) e devolve
 // quantos itens foram criados.
 fn serve_router(l *net.Listener) int {
-    var r http.Router[App]
+    var r http.Router[net.Conn, App]
     r.handle("GET", "/health", h_health)
     r.handle("GET", "/itens/{id}", h_item)
     r.handle("POST", "/itens", h_create)
@@ -466,8 +466,8 @@ fn test_router_and_client() {
 fn test_client_errors() {
     var m http.Message
     var body [16]byte
-    match http.get("https://exemplo.com/", &m, &body) {
-        Ok(_) => testing.fail("https sem TLS")
+    match http.get("ftp://exemplo.com/", &m, &body) {
+        Ok(_) => testing.fail("ftp não é http")
         Err(code) => testing.eq_int(code, http.UNSUPPORTED_SCHEME)
     }
     match http.get("http://x:porta/", &m, &body) {

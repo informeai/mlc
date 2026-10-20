@@ -82,6 +82,9 @@ func (c *checker) collectStructs(f *ast.File) {
 		case c.mod.structs[d.Name] != nil:
 			c.errorf(d.P, "struct %s já declarada na linha %d", d.Name, c.mod.structs[d.Name].Decl.P.Line)
 			continue
+		case c.mod.ifaces[d.Name] != nil:
+			c.errorf(d.P, "%s já foi declarado neste arquivo", d.Name)
+			continue
 		}
 		s := &Struct{
 			Name: c.qualify(d.Name), Methods: map[string]*Func{}, CName: c.mod.prefix + d.Name, File: c.mod.file, Pub: d.Pub, Decl: d,

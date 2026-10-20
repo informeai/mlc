@@ -440,3 +440,289 @@ pub fn escape(dst &[]byte, s &[]byte) int {
     }
     return n
 }
+
+// ---------- escrita ----------
+
+// MAX_DEPTH é quantos objetos e arrays um Writer aninha.
+pub const MAX_DEPTH = 32
+
+// Writer monta um documento JSON com as vírgulas, as aspas e os escapes
+// certos. O texto fica em &w.buf[:w.n]. O buffer é um dono que cresce
+// (realloc, à vista em grow): crie o Writer uma vez, use reset entre um
+// documento e outro, e free no fim.
+//
+//     w := json.writer(4096)
+//     w.object()
+//     w.field_int("id", 7)
+//     w.field_str("nome", "café")
+//     w.key("tags")
+//     w.array()
+//     w.str("quente")
+//     w.str("forte")
+//     w.end()
+//     w.field_bool("ativo", true)
+//     w.end()
+//     // &w.buf[:w.n] é {"id":7,"nome":"café","tags":["quente","forte"],"ativo":true}
+//     http.respond(&c, 200, "application/json", &w.buf[:w.n])
+//     w.reset()
+//     ...
+//     w.free()
+//
+// Um uso errado (um valor sem key dentro de um objeto, key num array, end
+// sem nada aberto, dois valores na raiz) é um erro do programa e dá panic.
+// NaN e infinito, que o JSON não tem, viram null.
+pub struct Writer {
+    buf []byte
+    n int
+    kind [32]byte // 'o' (objeto) ou 'a' (array), por nível
+    count [32]int // itens já escritos em cada nível
+    depth int
+    after_key bool // num objeto, a key foi escrita e falta o valor
+    roots int      // valores escritos na raiz (um documento tem um)
+}
+
+// writer aloca um Writer com cap bytes (ele cresce se precisar).
+pub fn writer(cap int) *Writer {
+    if cap < 16 {
+        cap = 16
+    }
+    return alloc(Writer{buf: alloc([]byte, cap), n: 0, kind: [32]byte{}, count: [32]int{}, depth: 0, after_key: false, roots: 0})
+}
+
+// free libera o Writer.
+pub fn (w *Writer) free() {
+    free(w.buf)
+    free(w)
+}
+
+// reset esvazia o Writer para o próximo documento (o buffer fica).
+pub fn (w &Writer) reset() {
+    w.n = 0
+    w.depth = 0
+    w.after_key = false
+    w.roots = 0
+}
+
+// done diz se o documento está completo: um valor na raiz e tudo fechado.
+pub fn (w &Writer) done() bool {
+    return w.roots == 1 && w.depth == 0
+}
+
+// object abre um objeto ({).
+pub fn (w &Writer) object() {
+    w.open('o', '{')
+}
+
+// array abre um array ([).
+pub fn (w &Writer) array() {
+    w.open('a', '[')
+}
+
+// end fecha o objeto ou o array aberto por último.
+pub fn (w &Writer) end() {
+    if w.depth == 0 {
+        fail("json.Writer.end: não há objeto nem array aberto")
+    }
+    if w.after_key {
+        fail("json.Writer.end: a última key ficou sem valor")
+    }
+    w.depth--
+    if w.kind[w.depth] == 'o' {
+        w.put('}')
+    } else {
+        w.put(']')
+    }
+}
+
+// key escreve a chave do próximo valor, num objeto.
+pub fn (w &Writer) key(name string) {
+    var b [256]byte
+    if len(name) > len(b) {
+        fail("json.Writer.key: chave maior que 256 bytes; use key_bytes")
+    }
+    n := str.copy(&b, name)
+    w.key_bytes(&b[:n])
+}
+
+// key_bytes é key com a chave montada em tempo de execução.
+pub fn (w &Writer) key_bytes(name &[]byte) {
+    if w.depth == 0 || w.kind[w.depth - 1] != 'o' {
+        fail("json.Writer.key: key só existe dentro de um objeto")
+    }
+    if w.after_key {
+        fail("json.Writer.key: a key anterior ficou sem valor")
+    }
+    if w.count[w.depth - 1] > 0 {
+        w.put(',')
+    }
+    w.count[w.depth - 1]++
+    w.quoted(name)
+    w.put(':')
+    w.after_key = true
+}
+
+// str escreve um texto fixo do programa (com aspas e escapes).
+pub fn (w &Writer) str(s string) {
+    var b [1024]byte
+    if len(s) > len(b) {
+        fail("json.Writer.str: texto maior que 1 KB; use text")
+    }
+    n := str.copy(&b, s)
+    w.text(&b[:n])
+}
+
+// text escreve um texto (com aspas e escapes).
+pub fn (w &Writer) text(s &[]byte) {
+    w.before()
+    w.quoted(s)
+}
+
+// int escreve um inteiro.
+pub fn (w &Writer) int(v int) {
+    w.before()
+    w.reserve(24)
+    w.n += str.put_int(&w.buf[w.n:w.n + 24], v)
+}
+
+// float escreve um real (o menor texto que o representa; NaN e infinito
+// viram null).
+pub fn (w &Writer) float(v float64) {
+    w.before()
+    if v != v || v - v != 0.0 {
+        w.literal("null")
+        return
+    }
+    w.reserve(40)
+    w.n += str.put_float(&w.buf[w.n:w.n + 40], v)
+}
+
+// bool escreve true ou false.
+pub fn (w &Writer) bool(v bool) {
+    w.before()
+    if v {
+        w.literal("true")
+    } else {
+        w.literal("false")
+    }
+}
+
+// null escreve null.
+pub fn (w &Writer) null() {
+    w.before()
+    w.literal("null")
+}
+
+// raw escreve um pedaço que já é JSON válido (não é conferido).
+pub fn (w &Writer) raw(s &[]byte) {
+    w.before()
+    w.reserve(len(s))
+    for i := 0; i < len(s); i++ {
+        w.buf[w.n + i] = s[i]
+    }
+    w.n += len(s)
+}
+
+// field_str escreve "key": "texto" num objeto.
+pub fn (w &Writer) field_str(key string, v string) {
+    w.key(key)
+    w.str(v)
+}
+
+// field_text escreve "key": texto num objeto.
+pub fn (w &Writer) field_text(key string, v &[]byte) {
+    w.key(key)
+    w.text(v)
+}
+
+// field_int escreve "key": inteiro num objeto.
+pub fn (w &Writer) field_int(key string, v int) {
+    w.key(key)
+    w.int(v)
+}
+
+// field_float escreve "key": real num objeto.
+pub fn (w &Writer) field_float(key string, v float64) {
+    w.key(key)
+    w.float(v)
+}
+
+// field_bool escreve "key": true ou false num objeto.
+pub fn (w &Writer) field_bool(key string, v bool) {
+    w.key(key)
+    w.bool(v)
+}
+
+// field_null escreve "key": null num objeto.
+pub fn (w &Writer) field_null(key string) {
+    w.key(key)
+    w.null()
+}
+
+// before confere onde um valor pode entrar e escreve a vírgula.
+fn (w &Writer) before() {
+    if w.depth == 0 {
+        if w.roots > 0 {
+            fail("json.Writer: o documento já tem um valor na raiz (use reset para começar outro)")
+        }
+        w.roots++
+        return
+    }
+    d := w.depth - 1
+    if w.kind[d] == 'o' {
+        if !w.after_key {
+            fail("json.Writer: dentro de um objeto, cada valor precisa de uma key antes")
+        }
+        w.after_key = false
+        return
+    }
+    if w.count[d] > 0 {
+        w.put(',')
+    }
+    w.count[d]++
+}
+
+fn (w &Writer) open(kind byte, c byte) {
+    w.before()
+    if w.depth == MAX_DEPTH {
+        fail("json.Writer: aninhamento demais (o máximo é 32)")
+    }
+    w.kind[w.depth] = kind
+    w.count[w.depth] = 0
+    w.depth++
+    w.put(c)
+}
+
+fn (w &Writer) quoted(s &[]byte) {
+    k := escape_len(s)
+    w.reserve(k + 2)
+    w.buf[w.n] = '"'
+    w.n++
+    w.n += escape(&w.buf[w.n:w.n + k], s)
+    w.buf[w.n] = '"'
+    w.n++
+}
+
+fn (w &Writer) literal(s string) {
+    w.reserve(len(s))
+    w.n += str.copy(&w.buf[w.n:], s)
+}
+
+fn (w &Writer) put(c byte) {
+    w.reserve(1)
+    w.buf[w.n] = c
+    w.n++
+}
+
+// reserve garante k bytes livres, crescendo o buffer (realloc).
+fn (w &Writer) reserve(k int) {
+    if w.n + k <= len(w.buf) {
+        return
+    }
+    size := len(w.buf) * 2
+    if size < w.n + k {
+        size = w.n + k
+    }
+    w.buf = realloc(w.buf, size)
+}
+
+extern fn fail(msg string)

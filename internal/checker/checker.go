@@ -297,9 +297,9 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 		c.collectLinks(src.AST)
 		c.collectConsts(src.AST) // antes das structs: [N]T usa constantes
 		c.collectEnumNames(src.AST)
+		c.collectInterfaces(src.AST) // antes das structs: uma struct genérica pode usar uma interface do arquivo como restrição
 		c.collectStructs(src.AST)
 		c.collectEnumVariants(src.AST)
-		c.collectInterfaces(src.AST)
 		c.declareImpls(src.AST)
 		c.collectFuncs(src.AST)
 		c.collectImpls(src.AST)

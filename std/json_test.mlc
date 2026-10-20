@@ -1,5 +1,6 @@
 import "std/io"
 import "std/json"
+import "std/math"
 import "std/str"
 import "std/testing"
 import "std/utf8"
@@ -181,4 +182,75 @@ fn test_build_document_with_format() {
     testing.eq_str(&out[:m], "{\"name\": \"Ana \\\"A\\\"\", \"age\": 30}")
     testing.check(!is_error_bytes(&out[:m]), "o documento montado é válido")
     io.print("") // usa io (o Display dos tokens)
+}
+
+// ---------- escrita ----------
+
+fn test_writer_document() {
+    w := json.writer(16) // pequeno de propósito: cresce
+    w.object()
+    w.field_int("id", 7)
+    w.field_str("nome", "café \"forte\"\n")
+    w.key("tags")
+    w.array()
+    w.str("quente")
+    w.int(-3)
+    w.float(2.5)
+    w.bool(false)
+    w.null()
+    w.object()
+    w.end()
+    w.array()
+    w.end()
+    w.end()
+    w.field_bool("ativo", true)
+    w.field_null("dono")
+    w.field_float("nan", math.sqrt(-1.0))
+    var raw [16]byte
+    k := str.copy(&raw, "{\"x\":1}")
+    w.key("bruto")
+    w.raw(&raw[:k])
+    w.end()
+    testing.check(w.done(), "documento completo")
+    testing.eq_str(&w.buf[:w.n], "{\"id\":7,\"nome\":\"café \\\"forte\\\"\\n\",\"tags\":[\"quente\",-3,2.5,false,null,{},[]],\"ativo\":true,\"dono\":null,\"nan\":null,\"bruto\":{\"x\":1}}")
+    // o que o Writer escreve, o Reader lê
+    var out [1024]byte
+    n := tokens(&w.buf[:w.n], &out)
+    testing.check(n > 4 && str.eq(&out[n - 4:n], "End "), "lido de volta sem erro")
+    w.reset()
+    w.array()
+    w.end()
+    testing.eq_str(&w.buf[:w.n], "[]")
+    w.free()
+}
+
+fn test_writer_value_without_key() {
+    testing.expect_panic()
+    w := json.writer(64)
+    w.object()
+    w.int(1) // falta a key
+    w.free()
+}
+
+fn test_writer_key_in_array() {
+    testing.expect_panic()
+    w := json.writer(64)
+    w.array()
+    w.key("x")
+    w.free()
+}
+
+fn test_writer_two_roots() {
+    testing.expect_panic()
+    w := json.writer(64)
+    w.int(1)
+    w.int(2)
+    w.free()
+}
+
+fn test_writer_unbalanced_end() {
+    testing.expect_panic()
+    w := json.writer(64)
+    w.end()
+    w.free()
 }

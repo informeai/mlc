@@ -74,3 +74,28 @@ fn test_verify_and_equal() {
     testing.check(!hmac.verify(&key[:k], &body[:n], &mac[:16]), "tamanho errado")
     testing.check(hmac.equal(&body[:0], &key[:0]), "vazios são iguais")
 }
+
+fn pbkdf2_hex(password string, salt string, iterations int, size int) [128]byte {
+    var p [32]byte
+    var s [32]byte
+    pn := str.copy(&p, password)
+    sn := str.copy(&s, salt)
+    var key [64]byte
+    hmac.pbkdf2(&p[:pn], &s[:sn], iterations, &key[:size])
+    var out [128]byte
+    encoding.hex(&out, &key[:size])
+    return out
+}
+
+// os vetores de PBKDF2-HMAC-SHA256 (RFC 7914 e os de uso comum)
+fn test_pbkdf2() {
+    out := pbkdf2_hex("password", "salt", 1, 32)
+    testing.eq_str(&out[:64], "120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b")
+    out = pbkdf2_hex("password", "salt", 2, 32)
+    testing.eq_str(&out[:64], "ae4d0c95af6b46d32d0adff928f06dd02a303f8ef3c251dfd6e2d85a95474c43")
+    out = pbkdf2_hex("password", "salt", 4096, 32)
+    testing.eq_str(&out[:64], "c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a")
+    // mais de um bloco (64 bytes), da RFC 7914
+    out = pbkdf2_hex("passwd", "salt", 1, 64)
+    testing.eq_str(&out, "55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc49ca9cccf179b645991664b39d77ef317c71b845b1e30bd509112041d3a19783")
+}
