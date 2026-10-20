@@ -1,4 +1,4 @@
-// erro: braço _ nunca é executado: true e false já foram cobertos
+// error: the _ arm is never executed: true and false are already covered
 fn main() {
     match true {
         true => {}

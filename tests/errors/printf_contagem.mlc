@@ -1,4 +1,4 @@
-// erro: o formato tem 2 {} e a chamada passa 1 valor(es)
+// error: the format has 2 {} and the call passes 1 value(s)
 import "std/io"
 
 fn main() {

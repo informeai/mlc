@@ -8,10 +8,10 @@ import (
 	"mlc/internal/checker"
 )
 
-// Slices viram "struct { T *ptr; int64_t len; }", um tipo C por tipo de
-// elemento (mlc_sl_int, mlc_sl_st_Ponto). O índice passa por MLC_INDEX, que
-// dá panic fora dos limites. alloc([]T, n) vira mlc_alloc_array (zerado), e
-// free(s) libera s.ptr.
+// Slices become "struct { T *ptr; int64_t len; }", one C type per element
+// type (mlc_sl_int, mlc_sl_st_Point). The index goes through MLC_INDEX, which
+// panics out of bounds. alloc([]T, n) becomes mlc_alloc_array (zeroed), and
+// free(s) frees s.ptr.
 
 func sliceCType(s *checker.Slice) string { return "mlc_sl_" + mangle(s.Elem) }
 
@@ -45,17 +45,17 @@ func mangle(t checker.Type) string {
 	case checker.String:
 		return "str"
 	}
-	panic(fmt.Sprintf("codegen: elemento de slice sem nome em C: %s", t))
+	panic(fmt.Sprintf("codegen: slice element without a C name: %s", t))
 }
 
 func (g *gen) sliceTypedefs() {
-	// primeiro os nomes, depois os tipos fn (que podem receber slices) e só
-	// então os corpos (um slice pode ter elementos fn)
-	// tipos diferentes no MLC podem ser o mesmo no C ([]?*thread.Thread[int]
-	// e []?*thread.Thread[[]byte]): cada nome sai uma vez só
+	// first the names, then the fn types (which can take slices) and only
+	// then the bodies (a slice can have fn elements)
+	// different types in MLC can be the same in C ([]?*thread.Thread[int]
+	// and []?*thread.Thread[[]byte]): each name comes out only once
 	named, defined := map[string]bool{}, map[string]bool{}
 	for _, s := range g.info.Slices {
-		if name := sliceCType(s); s.Elem != checker.Byte && !named[name] { // mlc_sl_byte vem do runtime, que também o usa
+		if name := sliceCType(s); s.Elem != checker.Byte && !named[name] { // mlc_sl_byte comes from the runtime, which also uses it
 			named[name] = true
 			g.raw("typedef struct %s %s;\n", name, name)
 		}
@@ -72,7 +72,7 @@ func (g *gen) sliceTypedefs() {
 	}
 }
 
-// funcTypedefs declara um tipo C (ponteiro de função) para cada tipo fn.
+// funcTypedefs declares a C type (function pointer) for each fn type.
 func (g *gen) funcTypedefs() {
 	for _, f := range g.info.FuncTypes {
 		params := []string{}
@@ -88,7 +88,7 @@ func (g *gen) funcTypedefs() {
 
 func funcCType(f *checker.FuncType) string { return fmt.Sprintf("mlc_fnt_%d", f.ID) }
 
-// sliceVal devolve o slice de e em C, seguindo o empréstimo se e for &[]T.
+// sliceVal returns e's slice in C, following the borrow if e is &[]T.
 func (g *gen) sliceVal(e ast.Expr) string {
 	if _, ok := g.info.Types[e].(*checker.Borrow); ok {
 		return "(*" + g.expr(e) + ")"
@@ -106,9 +106,9 @@ func (g *gen) index(e *ast.IndexExpr) string {
 		i = g.expr(e.Index)
 	}
 	if st, isSl := g.info.Types[e.X].(*checker.Slice); isSl && hasCall(e.X) {
-		// m[f()][j]: o slice de dentro aparece duas vezes no C (.ptr e .len);
-		// guardar o endereço dele numa temporária chama f uma vez só, e o
-		// resultado continua podendo receber atribuição.
+		// m[f()][j]: the inner slice appears twice in C (.ptr and .len);
+		// keeping its address in a temporary calls f only once, and the
+		// result can still be assigned to.
 		p := g.temp(&checker.Borrow{Elem: st})
 		return fmt.Sprintf("(*(%s = &%s, &(*%s).ptr[MLC_INDEX(%s, (*%s).len)]))", p, s, p, i, p)
 	}
@@ -119,7 +119,7 @@ func (g *gen) index(e *ast.IndexExpr) string {
 	return elem
 }
 
-// allocSlice traduz alloc([]T, n): o tamanho é calculado uma vez só.
+// allocSlice translates alloc([]T, n): the size is computed only once.
 func (g *gen) allocSlice(e *ast.CallExpr, callee checker.Callee) string {
 	s := callee.Elem.(*checker.Slice)
 	n := g.temp(checker.Int)
@@ -128,8 +128,8 @@ func (g *gen) allocSlice(e *ast.CallExpr, callee checker.Callee) string {
 		n, g.expr(e.Args[1]), sliceCType(s), elem, n, elem, n)
 }
 
-// forIn traduz "for x in s": o slice é lido de novo a cada volta (ele é
-// sempre uma variável ou um campo), e x recebe uma cópia do elemento.
+// forIn translates "for x in s": the slice is read again on each iteration (it's
+// always a variable or a field), and x receives a copy of the element.
 func (g *gen) forIn(s *ast.ForStmt) {
 	if _, at := g.arrayOf(s.Iter); at != nil && g.info.Drains[s] == nil {
 		g.forInArray(s)
@@ -147,7 +147,7 @@ func (g *gen) forIn(s *ast.ForStmt) {
 		g.line("%s %s = %s.ptr[%s];", cType(l.Type), l.CName, sl, i)
 	}
 	if drain {
-		// o elemento sai do slice: o lugar fica vazio
+		// the element leaves the slice: the slot stays empty
 		st, _ := g.info.Types[iter].(*checker.Slice)
 		if b, ok := g.info.Types[iter].(*checker.Borrow); ok {
 			st = b.Elem.(*checker.Slice)
@@ -157,10 +157,10 @@ func (g *gen) forIn(s *ast.ForStmt) {
 	g.indent--
 }
 
-// hoistIndex trata o destino s[i] de uma atribuição: se o índice tem efeito
-// (ou o lado direito tem), o índice é calculado antes, uma vez só, numa
-// temporária. Assim s[f()] += 1 chama f uma vez, e s[i] = g() checa o
-// índice antes de chamar g, da esquerda para a direita.
+// hoistIndex handles the target s[i] of an assignment: if the index has an effect
+// (or the right side has), the index is computed first, only once, in a
+// temporary. So s[f()] += 1 calls f once, and s[i] = g() checks the
+// index before calling g, left to right.
 func (g *gen) hoistIndex(target ast.Expr, rhsEffects bool) []string {
 	ix, ok := target.(*ast.IndexExpr)
 	if !ok || g.isLiteral(ix.Index) || (!g.effectful(ix.Index) && !rhsEffects) {
@@ -169,7 +169,7 @@ func (g *gen) hoistIndex(target ast.Expr, rhsEffects bool) []string {
 	t := g.temp(checker.Int)
 	var pre string
 	if a := arrayType(g.info.Types[ix.X]); a != nil {
-		// [N]T: o tamanho é constante
+		// [N]T: the size is constant
 		pre = fmt.Sprintf("%s = MLC_INDEX(%s, INT64_C(%d))", t, g.expr(ix.Index), a.Len)
 	} else {
 		pre = fmt.Sprintf("%s = MLC_INDEX(%s, %s.len)", t, g.expr(ix.Index), g.sliceVal(ix.X))
@@ -184,16 +184,16 @@ func (g *gen) dropIndex(target ast.Expr) {
 	}
 }
 
-// realloc traduz realloc(s, n). O slice e o tamanho são calculados antes,
-// da esquerda para a direita; mlc_realloc_array copia os elementos antigos e
-// zera os novos.
+// realloc translates realloc(s, n). The slice and the size are computed first,
+// left to right; mlc_realloc_array copies the old elements and
+// zeroes the new ones.
 func (g *gen) realloc(e *ast.CallExpr, callee checker.Callee) string {
 	s := callee.Elem.(*checker.Slice)
 	old := g.temp(s)
 	n := g.temp(checker.Int)
 	elem := cType(s.Elem)
-	// Slice de donos só pode crescer: encolher descartaria elementos que
-	// podem ter memória (o runtime dá panic).
+	// A slice of owners can only grow: shrinking would discard elements that
+	// may have memory (the runtime panics).
 	growOnly := 0
 	if _, ok := s.Elem.(*checker.Pointer); ok {
 		growOnly = 1
@@ -204,9 +204,9 @@ func (g *gen) realloc(e *ast.CallExpr, callee checker.Callee) string {
 		old, g.expr(e.Args[0]), n, g.expr(e.Args[1]), sliceCType(s), elem, old, old, n, elem, growOnly, n)
 }
 
-// subSlice traduz &s[a:b]: um slice temporário (literal composto do C, que
-// vive até o fim da chamada) apontando para os elementos de a até b-1. Os
-// limites são checados antes: 0 <= a <= b <= len(s).
+// subSlice translates &s[a:b]: a temporary slice (a C compound literal, which
+// lives until the end of the call) pointing to the elements from a to b-1. The
+// bounds are checked first: 0 <= a <= b <= len(s).
 func (g *gen) subSlice(e *ast.SliceExpr) string {
 	if _, at := g.arrayOf(e.X); at != nil {
 		return g.arraySubSlice(e)
@@ -226,13 +226,13 @@ func (g *gen) subSlice(e *ast.SliceExpr) string {
 	if e.High != nil {
 		high = g.expr(e.High)
 	}
-	// Somar a NULL é comportamento indefinido em C, mesmo somando zero: o
-	// slice vazio fica com ptr NULL.
+	// Adding to NULL is undefined behavior in C, even adding zero: the
+	// empty slice keeps ptr NULL.
 	return fmt.Sprintf("(%s = %s, %s = %s, mlc_check_slice(%s, %s, %s.len, __FILE__, __LINE__), &(%s){%s.ptr == NULL ? NULL : %s.ptr + %s, %s - %s})",
 		lo, low, hi, high, lo, hi, sv, sliceCType(s), sv, sv, lo, hi, lo)
 }
 
-// hasCall diz se avaliar e chama alguma função.
+// hasCall says whether evaluating e calls some function.
 func hasCall(e ast.Expr) bool {
 	switch e := e.(type) {
 	case *ast.CallExpr:
@@ -249,9 +249,9 @@ func hasCall(e ast.Expr) bool {
 	return false
 }
 
-// takeReplace traduz take(&s[i]) e replace(&s[i], v): o índice é checado
-// uma vez, o elemento antigo vai para uma temporária, e o lugar recebe o
-// valor zero (take) ou v (replace).
+// takeReplace translates take(&s[i]) and replace(&s[i], v): the index is checked
+// once, the old element goes into a temporary, and the slot receives the
+// zero value (take) or v (replace).
 func (g *gen) takeReplace(e *ast.CallExpr, callee checker.Callee) string {
 	ix := e.Args[0].(*ast.UnaryExpr).X.(*ast.IndexExpr)
 	s := g.sliceVal(ix.X)

@@ -1,4 +1,4 @@
-// erro: q pode ser nil aqui: verifique com if q != nil antes de usar o conteúdo
+// error: q may be nil here: check with if q != nil before using the pointee
 import "std/io"
 struct Ponto { x int; y int }
 fn talvez() ?*Ponto {

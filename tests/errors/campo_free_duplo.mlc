@@ -1,4 +1,4 @@
-// erro: p.prox liberada duas vezes
+// error: p.prox freed twice: it was already freed or moved (line 9)
 struct No {
     valor int
     prox ?*No

@@ -4,9 +4,9 @@ import "reflect"
 
 var nodeType = reflect.TypeOf((*Node)(nil)).Elem()
 
-// Inspect percorre a árvore a partir de n, em profundidade, e chama f para
-// cada nó (comandos, expressões, padrões, tipos). Quando f devolve false, os
-// filhos daquele nó não são visitados.
+// Inspect walks the tree from n, depth first, and calls f for
+// each node (statements, expressions, patterns, types). When f returns false, the
+// children of that node aren't visited.
 func Inspect(n Node, f func(Node) bool) {
 	inspectValue(reflect.ValueOf(n), f)
 }

@@ -1,4 +1,4 @@
-// erro: divisão por zero na constante
+// error: division by zero in the constant
 const N = 10 / (5 - 5)
 fn main() {
 }

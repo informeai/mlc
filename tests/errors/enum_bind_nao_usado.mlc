@@ -1,4 +1,4 @@
-// erro: r declarada e não usada
+// error: r declared and not used
 enum Forma {
     Circulo(raio float64)
     Vazio

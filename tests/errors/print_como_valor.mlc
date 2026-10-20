@@ -1,4 +1,4 @@
-// erro: io.printf só pode ser usado como chamada
+// error: io.printf can only be used as a call
 import "std/io"
 
 fn main() {

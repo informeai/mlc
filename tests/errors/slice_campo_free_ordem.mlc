@@ -1,4 +1,4 @@
-// erro: free(p): p.itens ainda pode ser dona de memória
+// error: free(p): p.itens may still own memory; free or move p.itens first
 struct Pilha { itens []int; topo int }
 fn main() {
     p := alloc(Pilha)

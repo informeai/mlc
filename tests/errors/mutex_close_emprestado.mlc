@@ -1,4 +1,4 @@
-// erro: close precisa do dono, e m é um empréstimo
+// error: close needs the owner, and m is a borrow (&mutex.Mutex[int])
 import "std/atomic"
 import "std/io"
 import "std/mutex"

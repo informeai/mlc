@@ -1,4 +1,4 @@
-// erro: alloc de slice precisa do tamanho: alloc([]int, n)
+// error: alloc of a slice needs the size: alloc([]int, n)
 fn main() {
     s := alloc([]int)
     free(s)

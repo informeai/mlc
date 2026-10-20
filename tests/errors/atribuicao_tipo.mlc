@@ -1,4 +1,4 @@
-// erro: atribuição: esperado int, encontrado string
+// error: assignment: expected int, found string
 import "std/io"
 fn main() {
     x := 1

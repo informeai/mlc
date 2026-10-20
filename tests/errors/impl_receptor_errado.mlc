@@ -1,4 +1,4 @@
-// erro: o receptor de area precisa ser &int
+// error: the receiver of area must be &int
 interface Area {
     fn area(self &Self) int
 }

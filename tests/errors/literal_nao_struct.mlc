@@ -1,4 +1,4 @@
-// erro: Foo não é uma struct
+// error: Foo isn't a struct
 import "std/io"
 fn main() {
     io.print(Foo{x: 1})

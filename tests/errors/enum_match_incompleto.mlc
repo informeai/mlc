@@ -1,4 +1,4 @@
-// erro: match sobre Forma precisa cobrir todas as variantes (faltam: Vazio) ou ter um braço _
+// error: a match on Forma must cover every variant (missing: Vazio) or have a _ arm
 enum Forma {
     Circulo(raio float64)
     Vazio

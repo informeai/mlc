@@ -1,4 +1,4 @@
-// erro: argumento 2 de h_open: esperado &?*H; passe a variável que recebe o handle com &
+// error: argument 2 of h_open: expected &?*H; pass the variable that receives the handle with &: f(&h)
 extern "C" type H
 extern "C" type G
 extern "C" fn h_open(n int32, out &?*H) int32

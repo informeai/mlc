@@ -1,23 +1,23 @@
-// Package format implementa o mlc fmt: reescreve um arquivo .mlc na forma
-// canônica, com indentação de 4 espaços.
+// Package format implements mlc fmt: it rewrites a .mlc file in the
+// canonical form, with 4-space indentation.
 //
-// O formatador trabalha sobre os tokens (com os comentários), e não
-// reimprimindo a AST: assim os comentários, os parênteses e as quebras de
-// linha que quem programa escolheu são preservados. A AST serve só para tirar
-// as ambiguidades que os tokens sozinhos não resolvem: se um '-' ou '*' é
-// binário (a - b) ou unário (-x, *T), se um '{' abre um literal (Ponto{...})
-// ou um bloco, e se um '[' é índice (s[i]) ou começo de tipo ([]int).
+// The formatter works over the tokens (with the comments), and not by
+// reprinting the AST: that way the comments, the parentheses and the line
+// breaks the programmer chose are preserved. The AST only serves to remove
+// the ambiguities the tokens alone don't resolve: whether a '-' or '*' is
+// binary (a - b) or unary (-x, *T), whether a '{' opens a literal (Point{...})
+// or a block, and whether a '[' is an index (s[i]) or the start of a type ([]int).
 //
-// Regras:
-//   - indentação de 4 espaços por nível de bloco ou de parêntese/colchete
-//     aberto no fim da linha; uma linha que continua uma expressão (quebrada
-//     depois de um operador) ganha um nível a mais;
-//   - um espaço em volta dos operadores binários, de =, := e =>, e depois de
-//     vírgulas e palavras-chave; nenhum depois de operador unário;
-//   - as quebras de linha do original são mantidas; linhas em branco
-//     seguidas viram uma só, e somem logo depois de '{' e antes de '}';
-//   - ';' explícito no fim da linha é removido;
-//   - comentários no fim de linhas consecutivas ficam alinhados.
+// Rules:
+//   - 4-space indentation per level of block or of parenthesis/bracket
+//     open at the end of the line; a line that continues an expression (broken
+//     after an operator) gets one more level;
+//   - one space around binary operators, around =, := and =>, and after
+//     commas and keywords; none after a unary operator;
+//   - the original's line breaks are kept; consecutive blank lines
+//     become one, and vanish right after '{' and before '}';
+//   - an explicit ';' at the end of the line is removed;
+//   - comments at the end of consecutive lines are aligned.
 package format
 
 import (
@@ -32,8 +32,8 @@ import (
 
 const indentUnit = "    "
 
-// Source devolve src formatado. Um arquivo com erro de sintaxe não é
-// formatado: os erros são devolvidos.
+// Source returns src formatted. A file with a syntax error isn't
+// formatted: the errors are returned.
 func Source(file string, src []byte) ([]byte, []token.Error) {
 	f, errs := parser.ParseFile(file, src)
 	if len(errs) > 0 {
@@ -56,15 +56,15 @@ func Source(file string, src []byte) ([]byte, []token.Error) {
 	return p.output(), nil
 }
 
-// marks guarda o que a AST diz sobre posições de tokens.
+// marks keeps what the AST says about token positions.
 type marks struct {
-	binary    map[token.Pos]bool // operadores binários
-	composite map[token.Pos]bool // '{' de literais compostos
-	index     map[token.Pos]bool // '[' de índice, sub-slice ou argumentos de tipo
+	binary    map[token.Pos]bool // binary operators
+	composite map[token.Pos]bool // '{' of composite literals
+	index     map[token.Pos]bool // '[' of an index, sub-slice or type arguments
 }
 
-// collectMarks percorre a AST (por reflexão, para não depender de cada tipo
-// de nó) anotando as posições de que o formatador precisa.
+// collectMarks walks the AST (by reflection, so as not to depend on each node
+// type) noting the positions the formatter needs.
 func collectMarks(f *ast.File) marks {
 	m := marks{binary: map[token.Pos]bool{}, composite: map[token.Pos]bool{}, index: map[token.Pos]bool{}}
 	var walk func(v reflect.Value)
@@ -103,12 +103,12 @@ func collectMarks(f *ast.File) marks {
 	return m
 }
 
-// opener é um '(', '[' ou '{' ainda aberto.
+// opener is a '(', '[' or '{' still open.
 type opener struct {
 	kind      token.Kind
-	indented  bool // é o último token da linha: o conteúdo vem indentado
-	composite bool // '{' de literal composto
-	attached  bool // '[' colado no que vem antes: índice ou argumentos de tipo
+	indented  bool // it's the line's last token: the content comes indented
+	composite bool // '{' of a composite literal
+	attached  bool // '[' attached to what comes before: an index or type arguments
 }
 
 type line struct {
@@ -125,12 +125,12 @@ type printer struct {
 
 	lines    []*line
 	stack    []opener
-	prev     *token.Token // último token (não comentário) escrito na linha atual
-	prev2    *token.Token // o anterior a prev, na mesma linha
-	last     *token.Token // último token (não comentário) escrito
-	lastLine int          // linha, no original, do último token ou comentário escrito
-	closed   opener       // o par fechado pelo último ']', ')' ou '}'
-	attached bool         // o '[' sendo escrito está colado (índice ou tipos)
+	prev     *token.Token // last token (not a comment) written on the current line
+	prev2    *token.Token // the one before prev, on the same line
+	last     *token.Token // last token (not a comment) written
+	lastLine int          // line, in the original, of the last token or comment written
+	closed   opener       // the pair closed by the last ']', ')' or '}'
+	attached bool         // the '[' being written is attached (an index or types)
 }
 
 func (p *printer) run() {
@@ -138,10 +138,10 @@ func (p *printer) run() {
 		t := &p.toks[i]
 		switch {
 		case t.Kind == token.SEMICOLON && t.Lit == "\n":
-			continue // ';' automático: a quebra de linha já está no original
+			continue // automatic ';': the line break is already in the original
 		case t.Kind == token.SEMICOLON:
 			if next := p.afterSemicolons(i); next == nil || next.Pos.Line > t.Pos.Line || next.Kind == token.RBRACE {
-				continue // ';' explícito sem nada depois na linha (também ;; antes de })
+				continue // explicit ';' with nothing after it on the line (also ;; before })
 			}
 		case t.Kind == token.COMMENT:
 			p.comment(t)
@@ -151,8 +151,8 @@ func (p *printer) run() {
 	}
 }
 
-// nextSignificant devolve o próximo token depois de i que não é comentário
-// nem ';' automático.
+// nextSignificant returns the next token after i that isn't a comment
+// nor an automatic ';'.
 func (p *printer) nextSignificant(i int) *token.Token {
 	for j := i + 1; j < len(p.toks); j++ {
 		t := &p.toks[j]
@@ -164,8 +164,8 @@ func (p *printer) nextSignificant(i int) *token.Token {
 	return nil
 }
 
-// afterSemicolons devolve o próximo token depois de i que não é comentário
-// nem ';' (automático ou explícito): o que vem depois de um ;; seguido.
+// afterSemicolons returns the next token after i that isn't a comment
+// nor a ';' (automatic or explicit): what comes after a run of ;;.
 func (p *printer) afterSemicolons(i int) *token.Token {
 	for j := i + 1; j < len(p.toks); j++ {
 		t := &p.toks[j]
@@ -179,7 +179,7 @@ func (p *printer) afterSemicolons(i int) *token.Token {
 
 func (p *printer) cur() *line { return p.lines[len(p.lines)-1] }
 
-// newLine começa uma linha para o token t (que vem numa linha nova do original).
+// newLine starts a line for the token t (which comes on a new line in the original).
 func (p *printer) newLine(t *token.Token, closer bool) {
 	if p.lastLine > 0 && t.Pos.Line-p.lastLine >= 2 && !closer && !p.afterOpener() {
 		p.lines = append(p.lines, &line{blank: true})
@@ -193,8 +193,8 @@ func (p *printer) newLine(t *token.Token, closer bool) {
 	if closer && len(p.stack) > 0 && p.stack[len(p.stack)-1].indented {
 		indent--
 	}
-	// continuação: a linha anterior parou no meio de uma expressão, ou dentro
-	// de um parêntese aberto no meio da linha: f(a,\n b)
+	// continuation: the previous line stopped in the middle of an expression, or inside
+	// a parenthesis opened in the middle of the line: f(a,\n b)
 	if !closer && p.last != nil {
 		top := p.top()
 		inOpen := len(p.stack) > 0 && !top.indented && !(top.kind == token.LBRACE && !top.composite)
@@ -206,15 +206,15 @@ func (p *printer) newLine(t *token.Token, closer bool) {
 	p.prev, p.prev2 = nil, nil
 }
 
-// afterOpener diz se a última linha escrita termina abrindo um bloco ou
-// parêntese indentado (então não cabe linha em branco logo depois).
+// afterOpener says whether the last line written ends opening an indented block or
+// parenthesis (so a blank line doesn't fit right after).
 func (p *printer) afterOpener() bool {
 	return len(p.stack) > 0 && p.stack[len(p.stack)-1].indented && p.last != nil &&
 		(p.last.Kind == token.LBRACE || p.last.Kind == token.LPAREN || p.last.Kind == token.LBRACK)
 }
 
-// continues diz se uma quebra de linha depois de t continua a expressão (a
-// próxima linha ganha um nível a mais de indentação).
+// continues says whether a line break after t continues the expression (the
+// next line gets one more level of indentation).
 func (p *printer) continues(t *token.Token) bool {
 	switch t.Kind {
 	case token.LAND, token.LOR, token.ASSIGN, token.DEFINE, token.ARROW, token.PERIOD,
@@ -230,7 +230,7 @@ func (p *printer) comment(t *token.Token) {
 	} else {
 		p.newLine(t, false)
 		p.cur().code.WriteString(t.Lit)
-		p.cur().comment = "" // a linha é só o comentário
+		p.cur().comment = "" // the line is only the comment
 	}
 	p.lastLine = t.Pos.Line
 }
@@ -266,14 +266,14 @@ func (p *printer) token(i int, t *token.Token) {
 	p.lastLine = t.Pos.Line
 }
 
-// attachedBracket diz se o '[' em i é índice, sub-slice ou lista de tipos,
-// colado no nome (s[i], Vec[T], fn f[T any]), e não o começo de um tipo
-// ([]int, a [3]byte). Depois de um nome, é começo de tipo quando o ']'
-// correspondente é seguido de outro tipo: a [3]int, mas Vec[T]{...},
-// f[T any](...) e Result[int].Err.
+// attachedBracket says whether the '[' at i is an index, sub-slice or type list,
+// attached to the name (s[i], Vec[T], fn f[T any]), and not the start of a type
+// ([]int, a [3]byte). After a name, it's the start of a type when the matching ']'
+// is followed by another type: a [3]int, but Vec[T]{...},
+// f[T any](...) and Result[int].Err.
 func (p *printer) attachedBracket(i int, t *token.Token) bool {
 	if p.marks.index[t.Pos] || p.prev != nil && p.prev.Kind == token.IMPL {
-		return true // s[i], ou impl[T Display]
+		return true // s[i], or impl[T Display]
 	}
 	if p.prev == nil || p.prev.Kind != token.IDENT {
 		return false
@@ -304,13 +304,13 @@ func (p *printer) attachedBracket(i int, t *token.Token) bool {
 	return true
 }
 
-// unary diz se t, um operador, está sendo usado como unário (-x, *p, &x, !b)
-// ou faz parte de um tipo (*T, ?*T, &T).
+// unary says whether t, an operator, is used as unary (-x, *p, &x, !b)
+// or is part of a type (*T, ?*T, &T).
 func (p *printer) unary(t *token.Token) bool {
 	switch t.Kind {
 	case token.NOT, token.QUESTION:
 		return true
-	case token.SUB, token.MUL, token.AMP, token.XOR: // &x ou a & b, ^x ou a ^ b (+ unário não existe)
+	case token.SUB, token.MUL, token.AMP, token.XOR: // &x or a & b, ^x or a ^ b (unary + doesn't exist)
 		return !p.marks.binary[t.Pos]
 	}
 	return false
@@ -323,7 +323,7 @@ func (p *printer) top() opener {
 	return p.stack[len(p.stack)-1]
 }
 
-// space diz se vai um espaço entre prev e t, na mesma linha.
+// space says whether a space goes between prev and t, on the same line.
 func (p *printer) space(prev, t *token.Token) bool {
 	switch t.Kind {
 	case token.COMMA, token.RPAREN, token.RBRACK, token.PERIOD, token.INC, token.DEC, token.SEMICOLON, token.COLON:
@@ -334,36 +334,36 @@ func (p *printer) space(prev, t *token.Token) bool {
 		return false
 	}
 	if p.unary(prev) {
-		// & &x e - -x precisam do espaço: colados viram && e --
+		// & &x and - -x need the space: attached they become && and --
 		return prev.Kind == t.Kind && (t.Kind == token.AMP || t.Kind == token.SUB)
 	}
 	switch {
 	case prev.Kind == token.COLON:
-		return p.top().kind != token.LBRACK // s[a:b], mas Ponto{x: 1}
+		return p.top().kind != token.LBRACK // s[a:b], but Point{x: 1}
 	case t.Kind == token.LBRACE:
 		return !p.marks.composite[t.Pos]
 	case prev.Kind == token.LBRACE:
 		return !p.top().composite && t.Kind != token.RBRACE
 	case t.Kind == token.RBRACE:
-		return !p.top().composite && prev.Kind != token.LBRACE // o '{' ainda está na pilha
+		return !p.top().composite && prev.Kind != token.LBRACE // the '{' is still on the stack
 	case t.Kind == token.LPAREN && prev.Kind == token.FN:
-		// fn (p &Ponto) area(): receptor, separado; fn(int) bool: tipo, colado
+		// fn (p &Point) area(): a receiver, separate; fn(int) bool: a type, attached
 		return p.prev2 == nil || p.prev2.Kind == token.PUB || p.prev2.Kind == token.EXTERN
 	case t.Kind == token.LPAREN:
 		if prev.Kind == token.IDENT {
-			return false // chamada ou conversão: f(x), int(x)
+			return false // a call or conversion: f(x), int(x)
 		}
 		return !(prev.Kind == token.RBRACK && p.closed.attached) // f[int](x)
 	case t.Kind == token.LBRACK:
 		return prev.Kind != token.RBRACK && !p.attached
 	case prev.Kind == token.RBRACK:
-		return p.closed.attached // []int e [3]byte, colados; Vec[T] x, separado
+		return p.closed.attached // []int and [3]byte, attached; Vec[T] x, separate
 	}
 	return true
 }
 
 func (p *printer) output() []byte {
-	// alinha os comentários no fim de linhas consecutivas
+	// aligns the comments at the end of consecutive lines
 	for i := 0; i < len(p.lines); {
 		j := i
 		width := 0

@@ -1,4 +1,4 @@
-// erro: operador +% só se aplica a inteiros, não a float64
+// error: operator +% only applies to integers, not to float64
 fn main() {
     var f float64 = 1.0
     g := f +% 2.0

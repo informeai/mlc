@@ -1,4 +1,4 @@
-// erro: um guard não pode ir para outra thread
+// error: a guard can't go to another thread: it must be unlocked on the thread that locked the mutex
 import "std/atomic"
 import "std/io"
 import "std/mutex"

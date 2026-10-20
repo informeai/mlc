@@ -1,4 +1,4 @@
-// erro: nil não é um slice; o valor zero de []int já é o slice vazio
+// error: declaration of s: nil isn't a slice; the zero value of []int is already the empty slice
 fn main() {
     var s []int = nil
 }

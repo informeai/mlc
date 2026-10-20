@@ -1,5 +1,5 @@
--- Configuração do servidor para vim.lsp.config (Neovim 0.11+). Para usar outro
--- executável: vim.lsp.config("mlc", { cmd = { "/caminho/do/mlc", "lsp" } })
+-- Server configuration for vim.lsp.config (Neovim 0.11+). To use another
+-- executable: vim.lsp.config("mlc", { cmd = { "/path/to/mlc", "lsp" } })
 return {
   cmd = { "mlc", "lsp" },
   filetypes = { "mlc" },

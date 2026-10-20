@@ -1,4 +1,4 @@
-// erro: T tem a restrição ref e só pode aparecer emprestado
+// error: T has the ref constraint and can only appear borrowed (&T): the type may have owners and not be copyable
 extern "C" type FILE
 
 extern "C" fn fopen(caminho string, modo string) ?*FILE

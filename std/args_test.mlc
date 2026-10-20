@@ -5,5 +5,5 @@ import "std/testing"
 // index, which the runtime hides); tests/run/ferramenta tests the options.
 fn test_no_arguments() {
     a := args.new()
-    testing.check(!a.next(), "sem argumentos")
+    testing.check(!a.next(), "no arguments")
 }

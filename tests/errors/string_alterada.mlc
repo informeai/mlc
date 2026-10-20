@@ -1,4 +1,4 @@
-// erro: strings não podem ser alteradas
+// error: strings can't be changed
 fn main() {
     s := "abc"
     s[0] = 65

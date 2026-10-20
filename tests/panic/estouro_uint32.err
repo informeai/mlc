@@ -1,1 +1,1 @@
-panic: estouro_uint32.mlc:4: estouro de uint32 na subtração
+panic: estouro_uint32.mlc:4: overflow of uint32 in subtraction

@@ -1,4 +1,4 @@
-// erro: enums que guardam donos não podem ser comparados com ==: use
+// error: enums that hold owners can't be compared with ==: use match
 enum E {
     Msg(m []byte)
     Nada

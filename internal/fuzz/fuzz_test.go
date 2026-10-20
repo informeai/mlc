@@ -19,18 +19,18 @@ import (
 
 func noImports(string) ([]byte, error) { return nil, os.ErrNotExist }
 
-// checkGen passa o programa pelo verificador.
+// checkGen passes the program through the checker.
 func checkGen(p *Program) error {
 	_, _, err := driver.Check("gerado.mlc", p.Source(), noImports, driver.Options{})
 	return err
 }
 
-// typeError diz se o erro não é de posse: o gerador escreveu um programa
-// mal formado (o verificador nem chegou a julgar a posse).
-var ownershipError = regexp.MustCompile(`liberad|movid|emprestad|dona de memória|vazamento|nil aqui|sem free`)
+// typeError says whether the error isn't about ownership: the generator wrote a malformed
+// program (the checker didn't even get to judge ownership).
+var ownershipError = regexp.MustCompile(`freed|moved|borrowed|own(s)? (the )?memory|leak|nil here|without free`)
 
-// A cada go test: o gerador escreve programas bem formados, o verificador
-// recusa todos os que têm bug injetado e aceita quase todos os válidos.
+// On every go test: the generator writes well-formed programs, the checker
+// refuses all the ones with an injected bug and accepts almost all the valid ones.
 func TestGenerate(t *testing.T) {
 	accepted, valid := 0, 0
 	for seed := int64(1); seed <= 300; seed++ {
@@ -39,23 +39,23 @@ func TestGenerate(t *testing.T) {
 		if err := checkGen(p); err == nil {
 			accepted++
 		} else if !ownershipError.MatchString(err.Error()) {
-			t.Errorf("semente %d: programa válido mal formado: %v", seed, firstLine(err.Error()))
+			t.Errorf("seed %d: malformed valid program: %v", seed, firstLine(err.Error()))
 		}
 		b := Generate(seed, true)
 		err := checkGen(b)
 		switch {
 		case err == nil:
-			t.Errorf("semente %d: o verificador aceitou o bug injetado (%s):\n%s", seed, b.Bug, b.Source())
+			t.Errorf("seed %d: the checker accepted the injected bug (%s):\n%s", seed, b.Bug, b.Source())
 		case !ownershipError.MatchString(err.Error()):
-			t.Errorf("semente %d: programa com bug mal formado: %v", seed, firstLine(err.Error()))
+			t.Errorf("seed %d: malformed program with a bug: %v", seed, firstLine(err.Error()))
 		}
 	}
 	if accepted*100 < valid*97 {
-		t.Errorf("o verificador aceitou só %d de %d programas válidos", accepted, valid)
+		t.Errorf("the checker accepted only %d of %d valid programs", accepted, valid)
 	}
 }
 
-// TestReduce: o redutor chega a um programa pequeno que ainda tem o bug.
+// TestReduce: the reducer gets to a small program that still has the bug.
 func TestReduce(t *testing.T) {
 	for seed := int64(1); seed <= 50; seed++ {
 		p := Generate(seed, true)
@@ -64,11 +64,11 @@ func TestReduce(t *testing.T) {
 		}
 		r := Reduce(p, func(q *Program) bool { return checkGen(q) != nil && hasBugNode(q.Body) })
 		if !hasBugNode(r.Body) || count(r.Body) >= count(p.Body) {
-			t.Errorf("semente %d: redução de %d para %d comandos", seed, count(p.Body), count(r.Body))
+			t.Errorf("seed %d: reduction from %d to %d statements", seed, count(p.Body), count(r.Body))
 		}
 		return
 	}
-	t.Skip("nenhuma semente grande")
+	t.Skip("no large seed")
 }
 
 func count(ns []*Node) int {
@@ -88,19 +88,19 @@ func hasBugNode(ns []*Node) bool {
 	return false
 }
 
-// TestFuzz é o make fuzz: gera programas por FUZZTIME (padrão 1m), metade
-// válidos e metade com um bug, e confere cada um. Só roda com MLC_FUZZ=1.
+// TestFuzz is make fuzz: it generates programs for FUZZTIME (default 1m), half
+// valid and half with a bug, and checks each one. It only runs with MLC_FUZZ=1.
 //
-//   - com bug e aceito: buraco (o oráculo confirma, e o programa é reduzido);
-//   - válido, aceito e com erro na execução: buraco (no gerador de C ou no
-//     runtime, ou no verificador);
-//   - válido e recusado: candidato a falso positivo, agrupado pela mensagem.
+//   - with a bug and accepted: a hole (the oracle confirms, and the program is reduced);
+//   - valid, accepted and with a run-time error: a hole (in the C generator or in the
+//     runtime, or in the checker);
+//   - valid and refused: a false-positive candidate, grouped by message.
 //
-// MLC_FUZZ_SEED escolhe a primeira semente (para reproduzir: MLC_FUZZ_SEED=n
-// MLC_FUZZ_COUNT=1); MLC_FUZZ_OUT, a pasta dos achados (padrão /tmp/mlc-fuzz).
+// MLC_FUZZ_SEED picks the first seed (to reproduce: MLC_FUZZ_SEED=n
+// MLC_FUZZ_COUNT=1); MLC_FUZZ_OUT, the findings folder (default /tmp/mlc-fuzz).
 func TestFuzz(t *testing.T) {
 	if os.Getenv("MLC_FUZZ") == "" {
-		t.Skip("rode com MLC_FUZZ=1 (make fuzz)")
+		t.Skip("run with MLC_FUZZ=1 (make fuzz)")
 	}
 	dur := time.Minute
 	if s := os.Getenv("FUZZTIME"); s != "" {
@@ -154,33 +154,33 @@ func TestFuzz(t *testing.T) {
 	wg.Wait()
 	rep := st.report(start, next.Load()-1, out)
 	t.Log(rep)
-	os.WriteFile(filepath.Join(out, "relatorio.txt"), []byte(rep), 0o644)
+	os.WriteFile(filepath.Join(out, "report.txt"), []byte(rep), 0o644)
 	if st.holes > 0 {
-		t.Errorf("%d buraco(s): veja %s", st.holes, out)
+		t.Errorf("%d hole(s): see %s", st.holes, out)
 	}
 }
 
-// finding é o resultado de um programa.
+// finding is the result of one program.
 type finding struct {
 	p       *Program
 	checker error
-	oracle  string // o erro na execução ("" se rodou limpo, ou não rodou)
-	ran     bool   // rodou sob o oráculo
+	oracle  string // the run-time error ("" if it ran clean, or didn't run)
+	ran     bool   // ran under the oracle
 	hole    bool
 	reduced *Program
 }
 
-// fuzzOne gera, confere e (num buraco) reduz um programa.
+// fuzzOne generates, checks and (on a hole) reduces a program.
 func fuzzOne(seed int64, withBug bool, exe string) finding {
 	p := Generate(seed, withBug)
 	f := finding{p: p, checker: checkGen(p)}
 	if f.checker != nil {
 		return f
 	}
-	// aceito. Um programa com bug sempre roda sob o oráculo; um válido, só
-	// 1 em cada 10 (procura bug no gerador de C e no runtime; os buracos do
-	// verificador aparecem nos programas com bug, que só compilam quando
-	// são aceitos)
+	// accepted. A program with a bug always runs under the oracle; a valid one, only
+	// 1 in 10 (looks for bugs in the C generator and in the runtime; the checker's
+	// holes show up in the programs with a bug, which only compile when
+	// they're accepted)
 	if !withBug && seed%10 != 0 {
 		return f
 	}
@@ -195,7 +195,7 @@ func fuzzOne(seed int64, withBug bool, exe string) finding {
 			return false
 		}
 		if f.oracle == "" {
-			return hasBugNode(q.Body) // o oráculo não viu: guarda o comando com o bug
+			return hasBugNode(q.Body) // the oracle didn't see it: keeps the statement with the bug
 		}
 		return runGen(q, exe) != ""
 	}
@@ -203,12 +203,12 @@ func fuzzOne(seed int64, withBug bool, exe string) finding {
 	return f
 }
 
-// runGen compila o programa com AddressSanitizer e roda, devolvendo o que o
-// oráculo achou ("" se nada).
+// runGen compiles the program with AddressSanitizer and runs it, returning what the
+// oracle found ("" if nothing).
 func runGen(p *Program, exe string) string {
 	opts := driver.Options{Sanitize: "address"}
 	if err := driver.BuildOpts("gerado.mlc", p.Source(), exe, noImports, opts); err != nil {
-		return "aceito, mas o C não compila: " + firstLine(err.Error())
+		return "accepted, but the C doesn't compile: " + firstLine(err.Error())
 	}
 	t := &Target{}
 	return t.oracle(exe, nil)
@@ -216,7 +216,7 @@ func runGen(p *Program, exe string) string {
 
 type fuzzStats struct {
 	programs, valid, validOK, validRan, bugs, bugsRejected, holes int
-	fp                                                            map[string]int // mensagem normalizada → quantos
+	fp                                                            map[string]int // normalized message → how many
 	fpSeed                                                        map[string]int64
 	holeLines                                                     []string
 }
@@ -250,13 +250,13 @@ func (s *fuzzStats) add(f finding, out string) {
 		return
 	}
 	s.holes++
-	what := "válido"
+	what := "valid"
 	if f.p.Bug != "" {
 		what = "bug " + f.p.Bug
 	}
 	detail := f.oracle
 	if detail == "" {
-		detail = "o verificador aceitou, e a execução não mostrou o bug"
+		detail = "the checker accepted, and execution didn't show the bug"
 	}
 	file := filepath.Join(out, fmt.Sprintf("achado_%d.mlc", f.p.Seed))
 	if f.p.Bug != "" {
@@ -270,44 +270,44 @@ func (s *fuzzStats) add(f finding, out string) {
 
 func (s *fuzzStats) report(first, last int64, out string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "\nsementes %d a %d: %d programas\n", first, last, s.programs)
-	fmt.Fprintf(&b, "  válidos:       %d, aceitos %d (%d rodaram sob o oráculo), recusados %d\n", s.valid, s.validOK, s.validRan, s.valid-s.validOK-countValidHoles(s))
-	fmt.Fprintf(&b, "  com bug:       %d, recusados %d\n", s.bugs, s.bugsRejected)
-	fmt.Fprintf(&b, "  buracos:       %d\n", s.holes)
+	fmt.Fprintf(&b, "\nseeds %d to %d: %d programs\n", first, last, s.programs)
+	fmt.Fprintf(&b, "  valid:         %d, accepted %d (%d ran under the oracle), refused %d\n", s.valid, s.validOK, s.validRan, s.valid-s.validOK-countValidHoles(s))
+	fmt.Fprintf(&b, "  with a bug:    %d, refused %d\n", s.bugs, s.bugsRejected)
+	fmt.Fprintf(&b, "  holes:         %d\n", s.holes)
 	for _, l := range s.holeLines {
 		fmt.Fprintf(&b, "\n%s\n", l)
 	}
 	if len(s.fp) > 0 {
-		fmt.Fprintf(&b, "\nVálidos recusados (candidatos a falso positivo; MLC_FUZZ_SEED=<semente> MLC_FUZZ_COUNT=1 reproduz):\n")
+		fmt.Fprintf(&b, "\nRefused valid ones (false-positive candidates; MLC_FUZZ_SEED=<seed> MLC_FUZZ_COUNT=1 reproduces):\n")
 		var ks []string
 		for k := range s.fp {
 			ks = append(ks, k)
 		}
 		sort.Slice(ks, func(i, j int) bool { return s.fp[ks[i]] > s.fp[ks[j]] })
 		for _, k := range ks {
-			fmt.Fprintf(&b, "  %5d  (semente %d) %s\n", s.fp[k], s.fpSeed[k], k)
+			fmt.Fprintf(&b, "  %5d  (seed %d) %s\n", s.fp[k], s.fpSeed[k], k)
 		}
 	}
-	fmt.Fprintf(&b, "\nachados em %s\n", out)
+	fmt.Fprintf(&b, "\nfindings in %s\n", out)
 	return b.String()
 }
 
 func countValidHoles(s *fuzzStats) int {
 	n := 0
 	for _, l := range s.holeLines {
-		if strings.Contains(l, "(válido)") {
+		if strings.Contains(l, "(valid)") {
 			n++
 		}
 	}
 	return n
 }
 
-// TestDump escreve o programa de uma semente (MLC_FUZZ_DUMP=n, e
-// MLC_FUZZ_BUG=1 para a versão com bug), para ver ou reproduzir.
+// TestDump writes the program of a seed (MLC_FUZZ_DUMP=n, and
+// MLC_FUZZ_BUG=1 for the version with the bug), to look at or reproduce.
 func TestDump(t *testing.T) {
 	s := os.Getenv("MLC_FUZZ_DUMP")
 	if s == "" {
-		t.Skip("MLC_FUZZ_DUMP=<semente>")
+		t.Skip("MLC_FUZZ_DUMP=<seed>")
 	}
 	seed, _ := strconv.ParseInt(s, 10, 64)
 	os.Stdout.Write(Generate(seed, os.Getenv("MLC_FUZZ_BUG") != "").Source())

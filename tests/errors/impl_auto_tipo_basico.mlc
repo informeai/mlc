@@ -1,4 +1,4 @@
-// erro: impl io.Display for bool precisa ficar no arquivo de bool ou no de io.Display
+// error: impl io.Display for bool must be in the file of bool or of io.Display
 import "std/io"
 
 impl auto io.Display for bool

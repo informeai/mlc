@@ -1,4 +1,4 @@
-// erro: constante decimal 2.5 não é inteira
+// error: decimal constant 2.5 isn't an integer: use int(x) to convert a value, or write an integer
 fn main() {
     var n int = 2.5
 }

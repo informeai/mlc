@@ -12,8 +12,8 @@ import (
 	"mlc/internal/token"
 )
 
-// significant devolve os tokens de src, com comentários e sem os ';'
-// (que mudam com as quebras de linha), para comparar dois textos.
+// significant returns the tokens of src, with comments and without the ';'
+// (which change with line breaks), to compare two texts.
 func significant(src []byte) []string {
 	lx := lexer.NewWithComments("x.mlc", src)
 	var out []string
@@ -29,9 +29,9 @@ func significant(src []byte) []string {
 	}
 }
 
-// TestRepository formata todos os .mlc do projeto: o resultado tem os
-// mesmos tokens, ainda compila sintaticamente e formatar de novo não muda
-// nada.
+// TestRepository formats every .mlc of the project: the result has the
+// same tokens, still parses and formatting again changes
+// nothing.
 func TestRepository(t *testing.T) {
 	var files []string
 	for _, pattern := range []string{"../../std/*.mlc", "../../tests/*/*.mlc", "../../tests/*/*/*.mlc"} {
@@ -47,7 +47,7 @@ func TestRepository(t *testing.T) {
 			t.Fatal(err)
 		}
 		if _, errs := parser.ParseFile(file, src); len(errs) > 0 {
-			continue // erro de sintaxe proposital (tests/errors)
+			continue // intentional syntax error (tests/errors)
 		}
 		out, errs := Source(file, src)
 		if len(errs) > 0 {
@@ -55,11 +55,11 @@ func TestRepository(t *testing.T) {
 			continue
 		}
 		if a, b := strings.Join(significant(src), "\n"), strings.Join(significant(out), "\n"); a != b {
-			t.Errorf("%s: a formatação mudou os tokens:\n%s", file, out)
+			t.Errorf("%s: the formatting changed the tokens:\n%s", file, out)
 			continue
 		}
 		if _, errs := parser.ParseFile(file, out); len(errs) > 0 {
-			t.Errorf("%s: o resultado não compila: %v\n%s", file, errs, out)
+			t.Errorf("%s: the result doesn't compile: %v\n%s", file, errs, out)
 			continue
 		}
 		again, _ := Source(file, out)
@@ -155,13 +155,13 @@ fn main() {
 
 func TestSyntaxError(t *testing.T) {
 	if _, errs := Source("x.mlc", []byte("fn main( {\n}\n")); len(errs) == 0 {
-		t.Fatal("um arquivo com erro de sintaxe não deveria ser formatado")
+		t.Fatal("a file with a syntax error shouldn't be formatted")
 	}
 }
 
-// TestMessy desarruma cada arquivo do projeto (tira a indentação e põe de 1
-// a 3 espaços entre todos os tokens da mesma linha) e confere que formatar a
-// versão bagunçada dá o mesmo que formatar a original.
+// TestMessy scrambles each file of the project (removes the indentation and puts 1
+// to 3 spaces between all the tokens of the same line) and checks that formatting the
+// scrambled version gives the same as formatting the original.
 func TestMessy(t *testing.T) {
 	var files []string
 	for _, pattern := range []string{"../../std/*.mlc", "../../tests/*/*.mlc", "../../tests/*/*/*.mlc"} {
@@ -201,12 +201,12 @@ func TestMessy(t *testing.T) {
 			continue
 		}
 		if string(got) != string(want) {
-			t.Errorf("%s: a versão bagunçada formata diferente:\n%s", file, diffLines(string(want), string(got)))
+			t.Errorf("%s: the scrambled version formats differently:\n%s", file, diffLines(string(want), string(got)))
 		}
 	}
 }
 
-// diffLines mostra as primeiras linhas diferentes.
+// diffLines shows the first different lines.
 func diffLines(a, b string) string {
 	la, lb := strings.Split(a, "\n"), strings.Split(b, "\n")
 	var out []string

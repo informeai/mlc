@@ -133,7 +133,7 @@ pub fn (m &Map[K, V]) has(k &K) bool {
 pub fn (m &Map[K, V]) get(k &K) &V {
     i := m.find(k)
     if i < 0 {
-        fail("map.get: a chave não existe (confira com has, ou use index)")
+        fail("map.get: the key doesn't exist (check with has, or use index)")
     }
     return &m.vals[i]
 }
@@ -146,7 +146,7 @@ pub fn (m &Map[K, V]) index(k &K) int {
 // value_ref borrows the value at slot i (from index or next).
 pub fn (m &Map[K, V]) value_ref(i int) &V {
     if i < 0 || i >= len(m.state) || m.state[i] != FULL {
-        fail("map.value_ref: posição vazia")
+        fail("map.value_ref: empty slot")
     }
     return &m.vals[i]
 }
@@ -154,7 +154,7 @@ pub fn (m &Map[K, V]) value_ref(i int) &V {
 // key_ref borrows the key at slot i (from index or next).
 pub fn (m &Map[K, V]) key_ref(i int) &K {
     if i < 0 || i >= len(m.state) || m.state[i] != FULL {
-        fail("map.key_ref: posição vazia")
+        fail("map.key_ref: empty slot")
     }
     return &m.keys[i]
 }

@@ -9,20 +9,20 @@ import (
 	"mlc/internal/token"
 )
 
-// Números
+// Numbers
 //
-// Inteiros com tamanho explícito (int8, int16, int32, int = 64 bits; byte =
-// 8 bits sem sinal, uint16, uint32, uint64) e decimais (float32, float64).
-// Contas só entre valores do mesmo tipo: misturar exige converter, com
-// int32(x), float64(n)... Estouro de inteiro dá panic, em todos os tamanhos.
+// Integers with an explicit size (int8, int16, int32, int = 64 bits; byte =
+// 8 unsigned bits, uint16, uint32, uint64) and reals (float32, float64).
+// Arithmetic only between values of the same type: mixing requires converting, with
+// int32(x), float64(n)... Integer overflow panics, at every size.
 //
-// Literais são constantes sem tipo: 5 vira int32 numa conta com int32, e
-// float64 numa variável float64. Sem contexto, viram int (5) ou float64
-// (2.5). Expressões só de constantes são calculadas na compilação, com
-// estouro e divisão por zero como erro de compilação.
+// Literals are untyped constants: 5 becomes int32 in an arithmetic with int32, and
+// float64 in a float64 variable. Without context, they become int (5) or float64
+// (2.5). Constant-only expressions are computed at compile time, with
+// overflow and division by zero as compile errors.
 //
-// Valores constantes ficam em Info.Values: *big.Int para inteiros (e bytes),
-// float64 para decimais, string e bool.
+// Constant values live in Info.Values: *big.Int for integers (and bytes),
+// float64 for reals, string and bool.
 
 var (
 	Int8    = &Basic{"int8"}
@@ -34,7 +34,7 @@ var (
 	Float32 = &Basic{"float32"}
 	Float64 = &Basic{"float64"}
 
-	UntypedInt   = &Basic{"constante inteira"}
+	UntypedInt   = &Basic{"integer constant"}
 	UntypedFloat = &Basic{"constante decimal"}
 )
 
@@ -53,13 +53,13 @@ func isFloat(t Type) bool   { return t == Float32 || t == Float64 }
 func isNumeric(t Type) bool { return isInteger(t) || isFloat(t) }
 func isUntyped(t Type) bool { return t == UntypedInt || t == UntypedFloat }
 
-// IsInteger, IsSigned e IntBits descrevem os tipos inteiros para o gerador.
+// IsInteger, IsSigned and IntBits describe the integer types for the generator.
 func IsInteger(t Type) bool { return isInteger(t) }
 func IsFloat(t Type) bool   { return isFloat(t) }
 func IsSigned(t Type) bool  { return intKinds[t].signed }
 func IntBits(t Type) int    { return intKinds[t].bits }
 
-// DefaultType é o tipo que uma constante sem tipo assume sem contexto.
+// DefaultType is the type an untyped constant takes without context.
 func DefaultType(t Type) Type {
 	switch t {
 	case UntypedInt:
@@ -70,7 +70,7 @@ func DefaultType(t Type) Type {
 	return t
 }
 
-// IntRange devolve o menor e o maior valor de um tipo inteiro.
+// IntRange returns the smallest and the largest value of an integer type.
 func IntRange(t Type) (lo, hi *big.Int) {
 	k := intKinds[t]
 	one := big.NewInt(1)
@@ -84,8 +84,8 @@ func IntRange(t Type) (lo, hi *big.Int) {
 	return big.NewInt(0), hi.Sub(hi, one)
 }
 
-// representable converte o valor constante v para o tipo t, ou explica por
-// que não cabe.
+// representable converts the constant value v to the type t, or explains why
+// it doesn't fit.
 func representable(v any, t Type) (any, string) {
 	switch {
 	case isInteger(t):
@@ -94,13 +94,13 @@ func representable(v any, t Type) (any, string) {
 		case *big.Int:
 			b = v
 		case float64:
-			return nil, fmt.Sprintf("constante decimal %s não é inteira: use %s(x) para converter um valor, ou escreva um inteiro", formatFloat(v), t)
+			return nil, fmt.Sprintf("decimal constant %s isn't an integer: use %s(x) to convert a value, or write an integer", formatFloat(v), t)
 		default:
-			return nil, fmt.Sprintf("constante não numérica não cabe em %s", t)
+			return nil, fmt.Sprintf("non-numeric constant doesn't fit in %s", t)
 		}
 		lo, hi := IntRange(t)
 		if b.Cmp(lo) < 0 || b.Cmp(hi) > 0 {
-			return nil, fmt.Sprintf("constante %s não cabe em %s (%s a %s)", b, t, lo, hi)
+			return nil, fmt.Sprintf("constant %s doesn't fit in %s (%s to %s)", b, t, lo, hi)
 		}
 		return b, ""
 	case isFloat(t):
@@ -111,30 +111,30 @@ func representable(v any, t Type) (any, string) {
 		case float64:
 			f = v
 		default:
-			return nil, fmt.Sprintf("constante não numérica não cabe em %s", t)
+			return nil, fmt.Sprintf("non-numeric constant doesn't fit in %s", t)
 		}
 		if math.IsInf(f, 0) || (t == Float32 && math.Abs(f) > math.MaxFloat32) {
-			return nil, fmt.Sprintf("constante %s não cabe em %s", formatFloat(f), t)
+			return nil, fmt.Sprintf("constant %s doesn't fit in %s", formatFloat(f), t)
 		}
 		if t == Float32 {
 			f = float64(float32(f))
 		}
 		return f, ""
 	}
-	return nil, fmt.Sprintf("constante não cabe em %s", t)
+	return nil, fmt.Sprintf("constant doesn't fit in %s", t)
 }
 
 func formatFloat(f float64) string { return fmt.Sprint(f) }
 
-// convertUntyped dá o tipo target a uma constante sem tipo e checa se o valor
-// cabe. Devolve false se target não é numérico (quem chama reporta o erro).
+// convertUntyped gives the type target to an untyped constant and checks whether the value
+// fits. Returns false if target isn't numeric (the caller reports the error).
 func (c *checker) convertUntyped(e ast.Expr, target Type) bool {
 	t := c.info.Types[e]
 	if !isUntyped(t) {
 		return true
 	}
 	if _, isVar := target.(*TypeVar); isVar {
-		// na definição genérica: o valor é checado em cada instância
+		// in the generic definition: the value is checked in each instance
 		if !numLike(target) {
 			return false
 		}
@@ -147,7 +147,7 @@ func (c *checker) convertUntyped(e ast.Expr, target Type) bool {
 	c.info.Types[e] = target
 	v, ok := c.info.Values[e]
 	if !ok {
-		return true // houve erro na constante; já foi reportado
+		return true // there was an error in the constant; it was already reported
 	}
 	nv, msg := representable(v, target)
 	if msg != "" {
@@ -159,8 +159,8 @@ func (c *checker) convertUntyped(e ast.Expr, target Type) bool {
 	return true
 }
 
-// valueAs checa uma expressão que vai para um lugar do tipo want (variável,
-// argumento, retorno, campo). Uma constante sem tipo assume want.
+// valueAs checks an expression that goes to a place of type want (variable,
+// argument, return, field). An untyped constant takes want.
 func (c *checker) valueAs(e ast.Expr, want Type, context string) Type {
 	savedT, savedE := c.expected, c.expectedFor
 	c.expected, c.expectedFor = want, e
@@ -170,15 +170,15 @@ func (c *checker) valueAs(e ast.Expr, want Type, context string) Type {
 		if c.convertUntyped(e, want) {
 			return want
 		}
-		c.errorf(e.Pos(), "%s: esperado %s, encontrado %s", context, want, t)
+		c.errorf(e.Pos(), "%s: expected %s, found %s", context, want, t)
 		return Invalid
 	}
 	c.assignable(t, want, e.Pos(), context)
 	return t
 }
 
-// valueDefault checa uma expressão sem tipo esperado: uma constante sem tipo
-// vira int ou float64.
+// valueDefault checks an expression without an expected type: an untyped constant
+// becomes int or float64.
 func (c *checker) valueDefault(e ast.Expr) Type {
 	t := c.value(e)
 	if isUntyped(t) {
@@ -188,7 +188,7 @@ func (c *checker) valueDefault(e ast.Expr) Type {
 	return t
 }
 
-// intValue checa uma expressão que precisa ser int (índice, tamanho).
+// intValue checks an expression that must be int (index, size).
 func (c *checker) intValue(e ast.Expr, what string) {
 	t := c.value(e)
 	if isUntyped(t) {
@@ -196,14 +196,14 @@ func (c *checker) intValue(e ast.Expr, what string) {
 		return
 	}
 	if t != Int && t != Invalid {
-		c.errorf(e.Pos(), "%s precisa ser int, encontrado %s", what, t)
+		c.errorf(e.Pos(), "%s must be int, found %s", what, t)
 	}
 }
 
 func (c *checker) unary(e *ast.UnaryExpr) Type {
 	switch e.Op {
 	case token.AMP:
-		c.errorf(e.P, "& só pode aparecer como argumento de chamada, para emprestar: f(&x)")
+		c.errorf(e.P, "& can only appear as a call argument, to borrow: f(&x)")
 		c.value(e.X)
 		return Invalid
 	case token.MUL:
@@ -212,12 +212,12 @@ func (c *checker) unary(e *ast.UnaryExpr) Type {
 			return Invalid
 		}
 		if !isPointerType(t) {
-			c.errorf(e.P, "operador * só se aplica a ponteiros e empréstimos, não a %s", t)
+			c.errorf(e.P, "operator * only applies to pointers and borrows, not to %s", t)
 			return Invalid
 		}
 		elem, _ := c.deref(t, e.X.Pos(), exprName(e.X))
 		if isExternStruct(elem) {
-			c.errorf(e.P, "%s é um tipo de C opaco: não dá para ler o conteúdo", elem)
+			c.errorf(e.P, "%s is an opaque C type: its content can't be read", elem)
 			return Invalid
 		}
 		return elem
@@ -227,16 +227,16 @@ func (c *checker) unary(e *ast.UnaryExpr) Type {
 	case t == Invalid:
 		return Invalid
 	case e.Op == token.NOT && t != Bool:
-		c.errorf(e.P, "operador ! não se aplica a %s", t)
+		c.errorf(e.P, "operator ! doesn't apply to %s", t)
 		return Invalid
 	case e.Op == token.XOR && !intLike(t):
-		c.errorf(e.P, "operador ^ (inverter os bits) só se aplica a inteiros, não a %s", t)
+		c.errorf(e.P, "operator ^ (bit inversion) only applies to integers, not to %s", t)
 		return Invalid
 	case e.Op == token.SUB && !numLike(t) && !isUntyped(t):
-		c.errorf(e.P, "operador - não se aplica a %s", t)
+		c.errorf(e.P, "operator - doesn't apply to %s", t)
 		return Invalid
 	case e.Op == token.SUB && isInteger(t) && !IsSigned(t):
-		c.errorf(e.P, "operador - não se aplica a %s, que não tem sinal", t)
+		c.errorf(e.P, "operator - doesn't apply to %s, which is unsigned", t)
 		return Invalid
 	}
 	if v, ok := c.info.Values[e.X]; ok {
@@ -262,12 +262,12 @@ func foldUnary(op token.Kind, v any, t Type) (any, string) {
 		r := new(big.Int).Neg(v)
 		if isInteger(t) {
 			if _, msg := representable(r, t); msg != "" {
-				return nil, "estouro de inteiro na constante: " + msg
+				return nil, "integer overflow in the constant: " + msg
 			}
 		}
 		return r, ""
 	}
-	return nil, "constante inválida"
+	return nil, "invalid constant"
 }
 
 func (c *checker) binary(e *ast.BinaryExpr) Type {
@@ -278,8 +278,8 @@ func (c *checker) binary(e *ast.BinaryExpr) Type {
 	if e.Op == token.SHL || e.Op == token.SHR {
 		return c.shift(e, x, y)
 	}
-	// Uma constante sem tipo assume o tipo do outro lado: em n + 1, com n
-	// int32, o 1 é int32.
+	// An untyped constant takes the type of the other side: in n + 1, with n
+	// int32, the 1 is int32.
 	switch {
 	case isUntyped(x) && !isUntyped(y) && numLike(y):
 		c.convertUntyped(e.X, y)
@@ -293,9 +293,9 @@ func (c *checker) binary(e *ast.BinaryExpr) Type {
 	mismatch := func() Type {
 		hint := ""
 		if isNumeric(x) && isNumeric(y) {
-			hint = fmt.Sprintf(" (converta um dos lados: %s(x) ou %s(x))", x, y)
+			hint = fmt.Sprintf(" (convert one of the sides: %s(x) or %s(x))", x, y)
 		}
-		c.errorf(e.OpPos, "operador %s não se aplica a %s e %s%s", e.Op, x, y, hint)
+		c.errorf(e.OpPos, "operator %s doesn't apply to %s and %s%s", e.Op, x, y, hint)
 		return Invalid
 	}
 	var result Type
@@ -303,12 +303,12 @@ func (c *checker) binary(e *ast.BinaryExpr) Type {
 	case token.ADD, token.SUB, token.MUL, token.QUO, token.REM:
 		switch {
 		case e.Op == token.ADD && x == String && y == String:
-			c.errorf(e.OpPos, "concatenação de strings exige alocação explícita: monte o texto num buffer (veja docs/text.md)")
+			c.errorf(e.OpPos, "string concatenation requires explicit allocation: build the text in a buffer (see docs/text.md)")
 			return Invalid
 		case x != y || (!numLike(x) && !isUntyped(x)):
 			return mismatch()
 		case e.Op == token.REM && (isFloat(x) || x == UntypedFloat || (abstract(x) && !tvHas(x, "mod"))):
-			c.errorf(e.OpPos, "operador %% não se aplica a %s (só a inteiros)", x)
+			c.errorf(e.OpPos, "operator %% doesn't apply to %s (only to integers)", x)
 			return Invalid
 		}
 		result = x
@@ -317,7 +317,7 @@ func (c *checker) binary(e *ast.BinaryExpr) Type {
 		case x != y && intLike(x) && intLike(y):
 			return mismatch()
 		case !intLike(x) || !intLike(y):
-			c.errorf(e.OpPos, "operador %s só se aplica a inteiros, não a %s", e.Op, x)
+			c.errorf(e.OpPos, "operator %s only applies to integers, not to %s", e.Op, x)
 			return Invalid
 		}
 		result = x
@@ -331,24 +331,24 @@ func (c *checker) binary(e *ast.BinaryExpr) Type {
 		case x == NilType || y == NilType:
 			return c.nilComparison(e, x, y)
 		case isPointerType(x) || isPointerType(y):
-			c.errorf(e.OpPos, "ponteiros só podem ser comparados com nil")
+			c.errorf(e.OpPos, "pointers can only be compared with nil")
 			return Invalid
 		case c.noSliceCompare(e, x) || c.noSliceCompare(e, y):
 			return Invalid
 		case isFuncType(x) || isFuncType(y):
-			c.errorf(e.OpPos, "valores fn não podem ser comparados")
+			c.errorf(e.OpPos, "fn values can't be compared")
 			return Invalid
 		case ownedVar(x) || ownedVar(y):
-			c.errorf(e.OpPos, "valores de um T owned não podem ser comparados (T pode ser um dono)")
+			c.errorf(e.OpPos, "values of an owned T can't be compared (T may be an owner)")
 			return Invalid
 		case x != y:
-			c.errorf(e.OpPos, "comparação entre tipos diferentes: %s e %s", x, y)
+			c.errorf(e.OpPos, "comparison between different types: %s and %s", x, y)
 			return Invalid
 		case isResource(x):
-			c.errorf(e.OpPos, "structs que contêm ponteiros donos não podem ser comparadas com ==")
+			c.errorf(e.OpPos, "structs that contain owning pointers can't be compared with ==")
 			return Invalid
 		case isEnum(x) && IsOwner(x):
-			c.errorf(e.OpPos, "enums que guardam donos não podem ser comparados com ==: use match")
+			c.errorf(e.OpPos, "enums that hold owners can't be compared with ==: use match")
 			return Invalid
 		}
 		result = Bool
@@ -358,7 +358,7 @@ func (c *checker) binary(e *ast.BinaryExpr) Type {
 		}
 		result = Bool
 	default:
-		panic(fmt.Sprintf("checker: operador binário desconhecido %s", e.Op))
+		panic(fmt.Sprintf("checker: unknown binary operator %s", e.Op))
 	}
 	a, okA := c.info.Values[e.X]
 	b, okB := c.info.Values[e.Y]
@@ -372,9 +372,9 @@ func (c *checker) binary(e *ast.BinaryExpr) Type {
 	return result
 }
 
-// foldBinary calcula uma operação entre constantes. t é o tipo dos operandos.
+// foldBinary computes an operation between constants. t is the operands' type.
 func foldBinary(op token.Kind, a, b any, t Type) (any, string) {
-	// Com t decimal, inteiros viram decimais (1 + 2.5).
+	// With a real t, integers become reals (1 + 2.5).
 	if isFloat(t) || t == UntypedFloat {
 		a, b = toFloat(a), toFloat(b)
 	}
@@ -397,10 +397,10 @@ func foldBinary(op token.Kind, a, b any, t Type) (any, string) {
 			r.Mul(a, b)
 		case token.QUO, token.REM:
 			if b.Sign() == 0 {
-				return nil, "divisão por zero na constante"
+				return nil, "division by zero in the constant"
 			}
 			if op == token.QUO {
-				r.Quo(a, b) // trunca em direção a zero, como o C
+				r.Quo(a, b) // truncates toward zero, like C
 			} else {
 				r.Rem(a, b)
 			}
@@ -409,7 +409,7 @@ func foldBinary(op token.Kind, a, b any, t Type) (any, string) {
 		}
 		if isInteger(t) {
 			if _, msg := representable(r, t); msg != "" {
-				return nil, "estouro de inteiro na constante: " + msg
+				return nil, "integer overflow in the constant: " + msg
 			}
 		}
 		return r, ""
@@ -424,7 +424,7 @@ func foldBinary(op token.Kind, a, b any, t Type) (any, string) {
 			return roundFloat(a*b, t), ""
 		case token.QUO:
 			if b == 0 {
-				return nil, "divisão por zero na constante"
+				return nil, "division by zero in the constant"
 			}
 			return roundFloat(a/b, t), ""
 		}
@@ -482,12 +482,12 @@ func roundFloat(f float64, t Type) float64 {
 	return f
 }
 
-// conversion checa int(x), byte(x), float64(x) e as demais conversões entre
-// números. Converter uma constante é checado na compilação; um valor, em
-// tempo de execução (panic se não couber).
+// conversion checks int(x), byte(x), float64(x) and the other conversions between
+// numbers. Converting a constant is checked at compile time; a value, at
+// run time (panic if it doesn't fit).
 func (c *checker) conversion(e *ast.CallExpr, target Type) Type {
 	if len(e.Args) != 1 {
-		c.errorf(e.Lparen, "%s(x) recebe um valor", target)
+		c.errorf(e.Lparen, "%s(x) takes one value", target)
 		c.checkArgs(e)
 		return Invalid
 	}
@@ -497,7 +497,7 @@ func (c *checker) conversion(e *ast.CallExpr, target Type) Type {
 	case t == Invalid:
 		return Invalid
 	case !numLike(target) || (!numLike(t) && !isUntyped(t)):
-		c.errorf(a.Pos(), "não é possível converter %s em %s", t, target)
+		c.errorf(a.Pos(), "can't convert %s to %s", t, target)
 		return Invalid
 	}
 	c.info.Calls[e] = Callee{Builtin: Convert, Elem: target}
@@ -505,11 +505,11 @@ func (c *checker) conversion(e *ast.CallExpr, target Type) Type {
 		if isUntyped(t) {
 			c.convertUntyped(a, target)
 		}
-		return target // na definição genérica, a conversão é checada em cada instância
+		return target // in the generic definition, the conversion is checked in each instance
 	}
 	if f, ok := c.info.Values[a].(float64); ok && t == UntypedFloat && isInteger(target) {
-		// conversão explícita de constante decimal: trunca, como int(x) faz
-		// em tempo de execução (int(-2.9) é -2)
+		// explicit conversion of a decimal constant: truncates, as int(x) does
+		// at run time (int(-2.9) is -2)
 		c.info.Values[a], _ = new(big.Float).SetFloat64(math.Trunc(f)).Int(nil)
 		c.info.Types[a] = UntypedInt
 		t = UntypedInt
@@ -522,10 +522,10 @@ func (c *checker) conversion(e *ast.CallExpr, target Type) Type {
 		return target
 	}
 	if v, ok := c.info.Values[a]; ok {
-		// conversão de constante com tipo: calculada aqui
+		// conversion of a typed constant: computed here
 		if f, isF := v.(float64); isF && isInteger(target) {
 			if math.IsNaN(f) || math.IsInf(f, 0) {
-				c.errorf(a.Pos(), "constante %s não cabe em %s", formatFloat(f), target)
+				c.errorf(a.Pos(), "constant %s doesn't fit in %s", formatFloat(f), target)
 				return target
 			}
 			v, _ = new(big.Float).SetFloat64(math.Trunc(f)).Int(nil)

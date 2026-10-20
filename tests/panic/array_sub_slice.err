@@ -1,1 +1,1 @@
-panic: array_sub_slice.mlc:8: sub-slice [1:5] fora dos limites (tamanho 3)
+panic: array_sub_slice.mlc:8: sub-slice [1:5] out of bounds (length 3)

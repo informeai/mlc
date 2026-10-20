@@ -1,1 +1,1 @@
-panic: conversao_nan.mlc:4: valor NaN não cabe em int32
+panic: conversao_nan.mlc:4: value NaN doesn't fit in int32

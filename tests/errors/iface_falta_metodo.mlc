@@ -1,4 +1,4 @@
-// erro: Q não implementa Area: falta o método fn (self &Q) area() int
+// error: Q doesn't implement Area: the method fn (self &Q) area() int is missing
 interface Area {
     fn area(self &Self) int
 }

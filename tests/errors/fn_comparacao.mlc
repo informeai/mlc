@@ -1,4 +1,4 @@
-// erro: valores fn não podem ser comparados
+// error: fn values can't be compared
 fn f() {
 }
 

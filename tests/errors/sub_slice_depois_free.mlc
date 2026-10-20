@@ -1,4 +1,4 @@
-// erro: s já foi liberada ou movida (linha 6)
+// error: s was already freed or moved (line 6)
 fn f(s &[]int) {
 }
 fn main() {

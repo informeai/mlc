@@ -1,4 +1,4 @@
-// erro: o método Ponto.destroi recebe a posse do receptor (*Ponto): chame num ponteiro dono
+// error: the method Ponto.destroi takes ownership of the receiver (*Ponto): call it on an owning pointer
 struct Ponto { x int; y int }
 fn (p *Ponto) destroi() {
     free(p)

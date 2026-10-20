@@ -1,4 +1,4 @@
-// erro: return: esperado int, encontrado bool
+// error: return: expected int, found bool
 fn f() int {
     return true
 }

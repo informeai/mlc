@@ -1,4 +1,4 @@
-// erro: chan.new precisa do tipo dos valores
+// error: chan.new needs the type of the values: chan.new[int](16)
 import "std/chan"
 import "std/io"
 

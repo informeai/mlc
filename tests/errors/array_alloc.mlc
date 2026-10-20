@@ -1,4 +1,4 @@
-// erro: ponteiro para array não é suportado
+// error: pointer to array isn't supported: use the array directly, or alloc([]T, n)
 fn main() {
     p := alloc([3]int{1, 2, 3})
     free(p)

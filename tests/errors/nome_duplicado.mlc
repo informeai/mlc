@@ -1,4 +1,4 @@
-// erro: o nome Ponto já é usado por uma struct ou constante
+// error: the name Ponto is already used by a struct or constant
 struct Ponto { x int }
 fn Ponto() {
 }

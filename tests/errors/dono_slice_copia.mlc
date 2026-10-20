@@ -1,4 +1,4 @@
-// erro: um elemento dono não pode ser copiado nem movido direto: use take(&s[i])
+// error: an owning element can't be copied or moved directly: use take(&s[i]) (leaves an empty slot)
 struct Item { peso int }
 fn main() {
     s := alloc([]?*Item, 2)

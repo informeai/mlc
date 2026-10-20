@@ -9,9 +9,9 @@ import (
 	"mlc/internal/token"
 )
 
-// Semantic tokens: o editor colore cada token pelo tipo informado aqui. A
-// classificação é feita sobre os tokens, sem checar o programa, para
-// funcionar mesmo com o arquivo incompleto enquanto se digita.
+// Semantic tokens: the editor colors each token by the type given here. The
+// classification is done over the tokens, without checking the program, so it
+// works even with the file incomplete while typing.
 
 var tokenTypes = []string{
 	"keyword", "type", "function", "method", "property", "variable",
@@ -52,8 +52,8 @@ var builtins = map[string]bool{
 	"take": true, "replace": true, "drain": true, "drop": true,
 }
 
-// semanticTokens devolve os tokens de src no formato do LSP: para cada um,
-// (linha, coluna) relativas ao anterior, tamanho, tipo e modificadores.
+// semanticTokens returns the tokens of src in the LSP format: for each one,
+// (line, column) relative to the previous one, length, type and modifiers.
 func semanticTokens(src []byte) []int {
 	lx := lexer.NewWithComments("", src)
 	var toks []token.Token
@@ -77,7 +77,7 @@ func semanticTokens(src []byte) []int {
 	data := []int{}
 	prevLine, prevChar := 0, 0
 	emit := func(t token.Token, typ, mods int) {
-		// um token nunca atravessa linhas (strings e comentários vão até o fim da linha)
+		// a token never spans lines (strings and comments go to the end of the line)
 		start := lines.position(src, t.Off)
 		length := utf16Len(src[t.Off:t.End])
 		if start.Line != prevLine {
@@ -114,7 +114,7 @@ func isKeyword(t token.Token) bool {
 	return token.Lookup(t.Lit) == t.Kind && t.Kind != token.IDENT
 }
 
-// classifyIdent decide a cor de um identificador olhando os vizinhos.
+// classifyIdent decides the color of an identifier by looking at its neighbors.
 func classifyIdent(toks []token.Token, i int, at func(int) token.Kind, modules map[string]bool) (int, int) {
 	name := toks[i].Lit
 	prev, next := at(i-1), at(i+1)
@@ -134,13 +134,13 @@ func classifyIdent(toks []token.Token, i int, at func(int) token.Kind, modules m
 	case prev == token.FN:
 		return tFunction, mDeclaration
 	case prev == token.RPAREN && next == token.LPAREN && i >= 2 && funcHeader(toks, i):
-		return tMethod, mDeclaration // fn (p &Ponto) area()
+		return tMethod, mDeclaration // fn (p &Point) area()
 	case allCaps(name):
-		return tVariable, mReadonly // constante: PI, NOT_FOUND
+		return tVariable, mReadonly // constant: PI, NOT_FOUND
 	case capitalized(name) && (next == token.LPAREN || next == token.ARROW || next == token.COMMA && afterDot):
-		return tEnumMember, 0 // Circulo(r) =>, Forma.Circulo(...), Vazio =>
+		return tEnumMember, 0 // Circle(r) =>, Shape.Circle(...), Empty =>
 	case capitalized(name) && afterDot && !onModule:
-		return tEnumMember, 0 // Forma.Vazio
+		return tEnumMember, 0 // Shape.Empty
 	case capitalized(name):
 		return tType, 0
 	case next == token.LPAREN || next == token.LBRACK && genericCall(toks, i):
@@ -154,8 +154,8 @@ func classifyIdent(toks []token.Token, i int, at func(int) token.Kind, modules m
 	return tVariable, 0
 }
 
-// funcHeader diz se o identificador em i vem logo depois do receptor de um
-// método: fn (p &Ponto) nome(.
+// funcHeader says whether the identifier at i comes right after the receiver of a
+// method: fn (p &Point) name(.
 func funcHeader(toks []token.Token, i int) bool {
 	depth := 0
 	for j := i - 1; j >= 0; j-- {
@@ -172,7 +172,7 @@ func funcHeader(toks []token.Token, i int) bool {
 	return false
 }
 
-// genericCall diz se f[...] em i é seguido de '(' (chamada genérica explícita).
+// genericCall says whether f[...] at i is followed by '(' (an explicit generic call).
 func genericCall(toks []token.Token, i int) bool {
 	depth := 0
 	for j := i + 1; j < len(toks); j++ {

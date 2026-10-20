@@ -19,7 +19,7 @@ fn test_sort_large_random() {
         s[i] = r.range(-50, 50) // with repeats
     }
     sort.sort(&s)
-    testing.check(sort.is_sorted(&s), "1000 números ordenados")
+    testing.check(sort.is_sorted(&s), "1000 numbers sorted")
     free(s)
 }
 
@@ -32,7 +32,7 @@ fn test_sort_already_sorted() {
     testing.eq_int(s[0], 1)
     testing.eq_int(s[499], 500)
     sort.sort(&s)
-    testing.check(sort.is_sorted(&s), "ordenar de novo")
+    testing.check(sort.is_sorted(&s), "sorting again")
     free(s)
 }
 
@@ -44,10 +44,10 @@ fn test_sort_floats() {
 
 fn test_is_sorted() {
     a := [4]int{1, 2, 2, 3}
-    testing.check(sort.is_sorted(&a), "com repetidos")
+    testing.check(sort.is_sorted(&a), "with repeats")
     b := [3]int{1, 3, 2}
-    testing.check(!sort.is_sorted(&b), "fora de ordem")
-    testing.check(sort.is_sorted(&b[:0]), "vazio")
+    testing.check(!sort.is_sorted(&b), "out of order")
+    testing.check(sort.is_sorted(&b[:0]), "empty")
 }
 
 fn test_swap_reverse() {
@@ -103,7 +103,7 @@ fn test_sort_structs() {
     sort.sort(&items)
     testing.check(sort.is_sorted(&items), "ordenado")
     testing.eq_int(items[0].price, 10)
-    testing.check(items[0].name == "a" && items[1].name == "b", "empate no preço: o nome decide")
+    testing.check(items[0].name == "a" && items[1].name == "b", "tie on price: the name decides")
     testing.eq_int(items[3].price, 30)
 }
 
@@ -160,7 +160,7 @@ fn test_sort_by_with_context() {
     }
     sort.sort_by_with(&ids, &prio, by_priority) // more than 16: uses quicksort
     for i := 1; i < len(ids); i++ {
-        testing.check(prio.get_or(&ids[i - 1], 0) >= prio.get_or(&ids[i], 0), "em ordem de prioridade")
+        testing.check(prio.get_or(&ids[i - 1], 0) >= prio.get_or(&ids[i], 0), "in priority order")
     }
     testing.eq_int(prio.get_or(&ids[0], 0), 39)
     free(ids)

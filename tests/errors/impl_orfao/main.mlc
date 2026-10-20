@@ -1,4 +1,4 @@
-// erro: impl io.Display for geo.Ponto precisa ficar no arquivo de geo.Ponto ou no de io.Display
+// error: impl io.Display for geo.Ponto must be in the file of geo.Ponto or of io.Display
 import "std/io"
 import "geo"
 

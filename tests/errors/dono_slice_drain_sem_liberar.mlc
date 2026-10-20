@@ -1,4 +1,4 @@
-// erro: vazamento: x ainda é dona da memória (linha 5) no fim da volta do for (o elemento tirado por drain)
+// error: leak: x still owns the memory (line 5) at the end of the for iteration (the element taken out by drain); free it with free(x) or pass ownership along
 struct Item { peso int }
 fn main() {
     s := alloc([]?*Item, 2)

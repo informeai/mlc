@@ -1,4 +1,4 @@
-// erro: Ponto não é genérica
+// error: Ponto isn't generic
 struct Ponto { x int }
 fn main() {
     var p Ponto[int]

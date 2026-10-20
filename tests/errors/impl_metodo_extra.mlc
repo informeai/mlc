@@ -1,4 +1,4 @@
-// erro: volume não é método da interface Area
+// error: volume isn't a method of the interface Area
 interface Area {
     fn area(self &Self) int
 }

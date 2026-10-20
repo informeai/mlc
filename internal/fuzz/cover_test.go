@@ -12,15 +12,15 @@ import (
 	"testing"
 )
 
-// TestCoverReport é o fim do make cover: lê o perfil de cobertura do
-// checker (MLC_COVER) e lista os erros que nenhum teste dispara nos
-// arquivos do verificador de posse. Cada um é uma regra que pode estar
-// quebrada sem ninguém perceber: merece um teste em tests/errors (ou é
-// código que nunca roda, porque outra regra pega antes).
+// TestCoverReport is the end of make cover: it reads the checker's coverage
+// profile (MLC_COVER) and lists the errors no test triggers in the
+// ownership checker's files. Each one is a rule that may be
+// broken without anyone noticing: it deserves a test in tests/errors (or it's
+// code that never runs, because another rule catches it first).
 func TestCoverReport(t *testing.T) {
 	profile := os.Getenv("MLC_COVER")
 	if profile == "" {
-		t.Skip("rode com make cover")
+		t.Skip("run with make cover")
 	}
 	f, err := os.Open(profile)
 	if err != nil {
@@ -28,8 +28,8 @@ func TestCoverReport(t *testing.T) {
 	}
 	defer f.Close()
 	re := regexp.MustCompile(`^mlc/internal/checker/(\w+\.go):(\d+)\.\d+,(\d+)\.\d+ \d+ (\d+)$`)
-	hit := map[string]map[int]bool{}  // arquivo → linha → executada
-	seen := map[string]map[int]bool{} // linhas com código
+	hit := map[string]map[int]bool{}  // file → line → executed
+	seen := map[string]map[int]bool{} // lines with code
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		m := re.FindStringSubmatch(sc.Text())
@@ -71,7 +71,7 @@ func TestCoverReport(t *testing.T) {
 			fmt.Fprintf(&b, "  %s:%d: %s\n", file, l, strings.TrimSpace(lines[l-1]))
 		}
 	}
-	rep := fmt.Sprintf("\nerros do verificador que nenhum teste dispara: %d\n%s", total, b.String())
+	rep := fmt.Sprintf("\nchecker errors no test triggers: %d\n%s", total, b.String())
 	t.Log(rep)
-	os.WriteFile(filepath.Join(filepath.Dir(profile), "relatorio.txt"), []byte(rep), 0o644)
+	os.WriteFile(filepath.Join(filepath.Dir(profile), "report.txt"), []byte(rep), 0o644)
 }

@@ -119,7 +119,7 @@ pub fn open(path &[]byte, err &int) ?*DB {
 pub fn open_str(path string, err &int) ?*DB {
     var b [1024]byte
     if len(path) > len(b) {
-        fail("sqlite.open_str: caminho longo demais")
+        fail("sqlite.open_str: path too long")
     }
     n := str.copy(&b, path)
     return open(&b[:n], err)
@@ -148,7 +148,7 @@ pub fn (db &DB) exec(sql &[]byte) int {
 pub fn (db &DB) exec_str(sql string) int {
     var b [8192]byte
     if len(sql) > len(b) {
-        fail("sqlite.exec_str: SQL maior que 8 KB; use exec com um buffer seu")
+        fail("sqlite.exec_str: SQL larger than 8 KB; use exec with a buffer of yours")
     }
     n := str.copy(&b, sql)
     return db.exec(&b[:n])
@@ -195,7 +195,7 @@ pub fn (db &DB) prepare(sql &[]byte, err &int) ?*Stmt {
 pub fn (db &DB) prepare_str(sql string, err &int) ?*Stmt {
     var b [8192]byte
     if len(sql) > len(b) {
-        fail("sqlite.prepare_str: SQL maior que 8 KB; use prepare com um buffer seu")
+        fail("sqlite.prepare_str: SQL larger than 8 KB; use prepare with a buffer of yours")
     }
     n := str.copy(&b, sql)
     return db.prepare(&b[:n], err)
@@ -227,7 +227,7 @@ pub fn (st &Stmt) bind_text(i int, s &[]byte) int {
 pub fn (st &Stmt) bind_str(i int, s string) int {
     var b [4096]byte
     if len(s) > len(b) {
-        fail("sqlite.bind_str: texto maior que 4 KB; use bind_text com um buffer seu")
+        fail("sqlite.bind_str: text larger than 4 KB; use bind_text with a buffer of yours")
     }
     n := str.copy(&b, s)
     return bind_text_raw(st, i, &b[:n])
@@ -284,7 +284,7 @@ pub fn (st &Stmt) columns() int {
 pub fn (st &Stmt) column_name(i int, dst &[]byte) int {
     n := column_name_raw(st, i, dst)
     if n < 0 {
-        fail("sqlite.column_name: o nome não cabe no destino")
+        fail("sqlite.column_name: the name doesn't fit in the destination")
     }
     return n
 }
@@ -316,7 +316,7 @@ pub fn (st &Stmt) float(i int) float64 {
 pub fn (st &Stmt) text(i int, dst &[]byte) int {
     n := column_text_raw(st, i, dst)
     if n < 0 {
-        fail("sqlite.Stmt.text: o texto não cabe no destino (veja text_len)")
+        fail("sqlite.Stmt.text: the text doesn't fit in the destination (see text_len)")
     }
     return n
 }
@@ -325,7 +325,7 @@ pub fn (st &Stmt) text(i int, dst &[]byte) int {
 pub fn (st &Stmt) blob(i int, dst &[]byte) int {
     n := column_blob_raw(st, i, dst)
     if n < 0 {
-        fail("sqlite.Stmt.blob: os bytes não cabem no destino (veja text_len)")
+        fail("sqlite.Stmt.blob: the bytes don't fit in the destination (see text_len)")
     }
     return n
 }

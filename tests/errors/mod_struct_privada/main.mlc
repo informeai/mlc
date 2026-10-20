@@ -1,4 +1,4 @@
-// erro: geometria.Ponto não é pública (declare com pub struct)
+// error: geometria.Ponto isn't public (declare it with pub struct)
 import "geometria"
 fn main() {
     var p geometria.Ponto

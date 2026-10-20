@@ -1,4 +1,4 @@
-// erro: o primeiro parâmetro de Area.area precisa ser self &Self
+// error: the first parameter of Area.area must be self &Self (in this version the receiver is always borrowed)
 interface Area {
     fn area(x int) int
 }

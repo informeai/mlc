@@ -1,4 +1,4 @@
-// erro: não foi possível deduzir T em vazio: escreva os tipos, como vazio[int](...)
+// error: couldn't infer T in vazio: write the types, like vazio[int](...)
 fn vazio[T any]() int {
     return 0
 }

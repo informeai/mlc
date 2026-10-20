@@ -1,4 +1,4 @@
-// erro: vazamento: o ponteiro dono temporário é perdido aqui
+// error: leak: the temporary owning pointer is lost here; store it in a variable first
 import "std/io"
 fn faz() []int {
     return alloc([]int, 2)

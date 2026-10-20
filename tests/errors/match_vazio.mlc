@@ -1,4 +1,4 @@
-// erro: match sem braços
+// error: match without arms
 fn main() {
     match 1 {
     }

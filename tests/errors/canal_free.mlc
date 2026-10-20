@@ -1,4 +1,4 @@
-// erro: é uma ponta de canal: feche com close(), não com free
+// error: *chan.Receiver[int] is a channel end: close it with close(), not with free
 import "std/chan"
 import "std/io"
 

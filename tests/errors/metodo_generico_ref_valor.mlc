@@ -1,4 +1,4 @@
-// erro: C tem a restrição ref e só pode aparecer emprestado (&C)
+// error: C has the ref constraint and can only appear borrowed (&C): the type may have owners and not be copyable
 struct K {
     n int
 }

@@ -1,4 +1,4 @@
-// erro: comparação entre tipos diferentes: byte e int
+// error: comparison between different types: byte and int
 import "std/io"
 fn main() {
     s := "abc"

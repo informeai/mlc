@@ -1,4 +1,4 @@
-// erro: s já foi liberada ou movida (linha 5)
+// error: s was already freed or moved (line 5)
 import "std/io"
 fn main() {
     s := alloc([]int, 3)

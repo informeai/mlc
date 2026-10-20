@@ -1,4 +1,4 @@
-// erro: a guardaria um empréstimo de um valor temporário
+// error: a would store a borrow of a temporary value: store the source in a variable first
 import "std/io"
 import "std/vec"
 

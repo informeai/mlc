@@ -100,5 +100,5 @@ fn test_small_stack() {
 }
 
 fn test_cpu_count() {
-    testing.check(thread.cpu_count() >= 1, "pelo menos um processador")
+    testing.check(thread.cpu_count() >= 1, "at least one processor")
 }

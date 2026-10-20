@@ -1,4 +1,4 @@
-// erro: as pontas de canal vêm de chan.new, sender() e clone(), não de alloc
+// error: channel ends come from chan.new, sender() and clone(), not from alloc
 import "std/chan"
 import "std/io"
 

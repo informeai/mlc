@@ -9,10 +9,10 @@ import (
 
 // Arrays [N]T
 //
-// Um array tem tamanho fixo, conhecido na compilação, e é um valor: vive na
-// pilha ou dentro de uma struct, sem alloc nem free. Atribuir copia. &a
-// empresta o array como &[]T, para usar com funções de slice e de texto.
-// Nesta versão os elementos não podem ser donos.
+// An array has a fixed size, known at compile time, and is a value: it lives on the
+// stack or inside a struct, without alloc or free. Assigning copies. &a
+// borrows the array as &[]T, to use with slice and text functions.
+// In this version the elements can't be owners.
 
 type Array struct {
 	Elem Type
@@ -26,8 +26,8 @@ type arrKey struct {
 	n    int64
 }
 
-// maxArrayBytes limita o tamanho de um array: ele pode ir para a pilha, que
-// costuma ter 8 MB. Para mais, o caminho é alloc([]T, n).
+// maxArrayBytes limits the size of an array: it can go on the stack, which
+// usually has 8 MB. For more, the way is alloc([]T, n).
 const maxArrayBytes = 1 << 20
 
 func (c *checker) arrayOf(elem Type, n int64) *Array {
@@ -48,8 +48,8 @@ func isArray(t Type) bool {
 	return ok
 }
 
-// arrayElem devolve o tipo dos elementos de um array ou de um empréstimo de
-// array.
+// arrayElem returns the element type of an array or of an array
+// borrow.
 func arrayElem(t Type) (*Array, bool) {
 	if b, ok := t.(*Borrow); ok {
 		t = b.Elem
@@ -60,7 +60,7 @@ func arrayElem(t Type) (*Array, bool) {
 
 func (c *checker) resolveArray(t *ast.TypeExpr, ctx typeCtx) Type {
 	if ctx == ctxElem {
-		c.errorf(t.P, "ponteiro para array não é suportado: use o array direto ([N]T), ou alloc([]T, n) para memória no heap")
+		c.errorf(t.P, "pointer to array isn't supported: use the array directly ([N]T), or alloc([]T, n) for heap memory")
 		return Invalid
 	}
 	n, ok := c.arrayLen(t.Len)
@@ -69,20 +69,20 @@ func (c *checker) resolveArray(t *ast.TypeExpr, ctx typeCtx) Type {
 		return Invalid
 	}
 	if IsOwner(elem) || isResource(elem) {
-		c.errorf(t.Elem.P, "arrays de %s ainda não são suportados: os elementos não podem ser donos", elem)
+		c.errorf(t.Elem.P, "arrays of %s aren't supported yet: the elements can't be owners", elem)
 		return Invalid
 	}
 	if size := sizeOf(elem) * n; size > maxArrayBytes {
-		c.errorf(t.P, "array grande demais (%d bytes; o limite é %d, para não estourar a pilha): use alloc([]%s, %d)", size, maxArrayBytes, elem, n)
+		c.errorf(t.P, "array too large (%d bytes; the limit is %d, so the stack doesn't overflow): use alloc([]%s, %d)", size, maxArrayBytes, elem, n)
 		return Invalid
 	}
 	return c.arrayOf(elem, n)
 }
 
-// arrayLen avalia o tamanho de [N]T: uma constante inteira maior que zero.
+// arrayLen evaluates the size of [N]T: an integer constant greater than zero.
 func (c *checker) arrayLen(e ast.Expr) (int64, bool) {
 	if c.scope == nil {
-		// tipos de campos e de parâmetros: só as constantes do topo valem
+		// types of fields and parameters: only the top-level constants apply
 		c.scope = c.mod.global
 		defer func() { c.scope = nil }()
 	}
@@ -92,17 +92,17 @@ func (c *checker) arrayLen(e ast.Expr) (int64, bool) {
 	}
 	v, isConst := c.info.Values[e].(*big.Int)
 	if !isConst || (!isInteger(t) && t != UntypedInt) {
-		c.errorf(e.Pos(), "o tamanho de um array precisa ser uma constante inteira")
+		c.errorf(e.Pos(), "an array's size must be an integer constant")
 		return 0, false
 	}
 	if v.Sign() <= 0 || !v.IsInt64() {
-		c.errorf(e.Pos(), "o tamanho de um array precisa ser maior que zero, encontrado %s", v)
+		c.errorf(e.Pos(), "an array's size must be greater than zero, found %s", v)
 		return 0, false
 	}
 	return v.Int64(), true
 }
 
-// sizeOf estima quantos bytes um valor do tipo t ocupa (sem alinhamento).
+// sizeOf estimates how many bytes a value of type t takes (without alignment).
 func sizeOf(t Type) int64 {
 	switch t := t.(type) {
 	case *Enum:
@@ -143,7 +143,7 @@ func sizeOf(t Type) int64 {
 	return 8
 }
 
-// arrayLit checa "[3]int{1, 2, 3}": todos os elementos, ou nenhum (valor zero).
+// arrayLit checks "[3]int{1, 2, 3}": every element, or none (zero value).
 func (c *checker) arrayLit(e *ast.ArrayLit) Type {
 	t := c.resolveType(e.Type, ctxVar)
 	a, ok := t.(*Array)
@@ -154,7 +154,7 @@ func (c *checker) arrayLit(e *ast.ArrayLit) Type {
 		return Invalid
 	}
 	if n := int64(len(e.Elems)); n != 0 && n != a.Len {
-		c.errorf(e.Lbrace, "o literal de %s tem %d elemento(s): liste os %d, ou use %s{} para o valor zero", a, n, a.Len, a)
+		c.errorf(e.Lbrace, "the literal of %s has %d element(s): list all %d, or use %s{} for the zero value", a, n, a.Len, a)
 	}
 	for i, el := range e.Elems {
 		c.valueAs(el, a.Elem, fmt.Sprintf("elemento %d", i))
@@ -162,9 +162,9 @@ func (c *checker) arrayLit(e *ast.ArrayLit) Type {
 	return a
 }
 
-// checkArrayIndex recusa na compilação um índice constante fora do array.
+// checkArrayIndex refuses at compile time a constant index outside the array.
 func (c *checker) checkArrayIndex(a *Array, i ast.Expr) {
 	if v, ok := c.info.Values[i].(*big.Int); ok && (v.Sign() < 0 || v.Cmp(big.NewInt(a.Len)) >= 0) {
-		c.errorf(i.Pos(), "índice %s fora dos limites de %s (0 a %d)", v, a, a.Len-1)
+		c.errorf(i.Pos(), "index %s out of bounds of %s (0 to %d)", v, a, a.Len-1)
 	}
 }

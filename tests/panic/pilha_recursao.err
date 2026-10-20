@@ -1,1 +1,1 @@
-panic: pilha_recursao.mlc:5: estouro de pilha: o quadro da função (cerca de 4 KB) não cabe no que resta da pilha desta thread (peça uma pilha maior no thread.spawn, ou ponha os buffers grandes no heap com alloc)
+panic: pilha_recursao.mlc:5: stack overflow: the function's frame (about 4 KB) doesn't fit in what's left of this thread's stack (ask for a larger stack in thread.spawn, or put the large buffers on the heap with alloc)

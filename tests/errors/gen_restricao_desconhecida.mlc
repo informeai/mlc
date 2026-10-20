@@ -1,4 +1,4 @@
-// erro: restrição desconhecida "numero"
+// error: unknown constraint "numero" (use any, comparable, ordered, number, integer, owned or an interface)
 fn f[T numero](x T) T {
     return x
 }

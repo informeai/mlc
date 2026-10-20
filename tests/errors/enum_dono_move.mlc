@@ -1,4 +1,4 @@
-// erro: e liberada duas vezes: já foi liberada ou movida (linha 13)
+// error: e freed twice: it was already freed or moved (line 13)
 enum E {
     Msg(m []byte)
     Nada

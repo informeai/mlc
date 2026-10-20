@@ -7,67 +7,67 @@ import (
 	"mlc/internal/token"
 )
 
-// Empréstimos devolvidos e guardados
+// Returned and stored borrows
 //
-//	fn (v &Vec[T]) at(i int) &T { return &v.items[i] }   // devolve parte de v
+//	fn (v &Vec[T]) at(i int) &T { return &v.items[i] }   // returns part of v
 //	x := v.at(0)                                        // x: &T
-//	x.campo = 3
+//	x.field = 3
 //	io.print(*x)
 //
-// Uma função pode devolver &T quando o resultado vem de um empréstimo que ela
-// recebeu: o receptor &, num método, ou o único parâmetro &, numa função. O
-// return é conferido: &v.items[i] vale; &local, não (sobraria um ponteiro
-// pendente).
+// A function can return &T when the result comes from a borrow it
+// received: the & receiver, in a method, or the only & parameter, in a function. The
+// return is checked: &v.items[i] is valid; &local isn't (a dangling pointer
+// would be left).
 //
-// O empréstimo devolvido pode ser usado na hora (*v.at(0), v.at(0).campo,
-// f(v.at(0))) ou guardado numa variável. Enquanto essa variável é usada, a
-// origem fica congelada: não pode ser mencionada a não ser através dela.
-// Assim não dá para liberar, mover, crescer ou passar de novo a origem
-// enquanto um pedaço dela está emprestado. Na mesma instrução em que uma
-// chamada empresta parte de m, m não pode aparecer de novo.
+// The returned borrow can be used on the spot (*v.at(0), v.at(0).field,
+// f(v.at(0))) or stored in a variable. While that variable is used, the
+// source stays frozen: it can't be mentioned except through it.
+// So there's no way to free, move, grow or pass the source again
+// while a piece of it is borrowed. In the same statement where a
+// call borrows part of m, m can't appear again.
 //
-// Empréstimos não podem ser guardados em structs, slices ou campos, nem
-// reapontados; donos dentro de um empréstimo guardado podem ser movidos para
-// fora só se voltarem antes do fim do escopo, como num parâmetro &T.
+// Borrows can't be stored in structs, slices or fields, nor
+// repointed; owners inside a stored borrow can be moved
+// out only if they come back before the end of the scope, as in a &T parameter.
 
-// borrowParam devolve o índice do parâmetro de onde vem o empréstimo
-// devolvido por fn, ou -1.
+// borrowParam returns the index of the parameter the borrow
+// returned by fn comes from, or -1.
 func (fn *Func) borrowParam() int { return fn.BorrowFrom - 1 }
 
-// setBorrowFrom decide, para uma função que devolve &T, de qual parâmetro o
-// resultado vem.
+// setBorrowFrom decides, for a function that returns &T, which parameter the
+// result comes from.
 func (c *checker) setBorrowFrom(fn *Func, d *ast.FuncDecl) {
 	if !isBorrow(fn.Result) {
 		return
 	}
 	if d.Extern {
-		c.errorf(d.P, "extern fn não pode devolver empréstimo")
+		c.errorf(d.P, "an extern fn can't return a borrow")
 		return
 	}
 	if fn.Method && isBorrow(fn.Params[0].Type) {
-		fn.BorrowFrom = 1 // o receptor
+		fn.BorrowFrom = 1 // the receiver
 		return
 	}
 	found := -1
 	for i, p := range fn.Params {
 		if isBorrow(p.Type) {
 			if found >= 0 {
-				c.errorf(d.P, "%s devolve %s e recebe mais de um empréstimo: não dá para saber de qual o resultado vem (receba só um, ou faça um método com receptor &)", fn.Name, fn.Result)
+				c.errorf(d.P, "%s returns %s and takes more than one borrow: there's no way to know which one the result comes from (take only one, or make a method with a & receiver)", fn.Name, fn.Result)
 				return
 			}
 			found = i
 		}
 	}
 	if found < 0 {
-		c.errorf(d.P, "%s devolve %s sem receber nenhum empréstimo: o resultado apontaria para algo que deixa de existir", fn.Name, fn.Result)
+		c.errorf(d.P, "%s returns %s without taking any borrow: the result would point to something that stops existing", fn.Name, fn.Result)
 		return
 	}
 	fn.BorrowFrom = found + 1
 }
 
-// borrowExpr checa uma expressão usada como empréstimo (o valor de x := ...,
-// ou de um return &T): &lugar, &s[a:b], ou algo que já é um empréstimo.
-// Devolve o tipo.
+// borrowExpr checks an expression used as a borrow (the value of x := ...,
+// or of a return &T): &place, &s[a:b], or something that's already a borrow.
+// Returns the type.
 func (c *checker) borrowExpr(e ast.Expr, want *Borrow, context string) Type {
 	if u, ok := e.(*ast.UnaryExpr); ok && u.Op == token.AMP {
 		if want != nil {
@@ -88,11 +88,11 @@ func (c *checker) borrowExpr(e ast.Expr, want *Borrow, context string) Type {
 	return c.value(e)
 }
 
-// borrowRoot devolve a variável de onde vem o empréstimo e (a raiz do lugar
-// emprestado, seguindo as variáveis emprestadas até a origem), ou nil se ele
-// vem de um valor temporário. view diz se o empréstimo é uma visão criada na
-// hora (&s[a:b], &a com a um array visto como slice), que não pode sair da
-// função.
+// borrowRoot returns the variable the borrow e comes from (the root of the borrowed
+// place, following the borrowed variables up to the source), or nil if it
+// comes from a temporary value. view says whether the borrow is a view created on
+// the spot (&s[a:b], &a with a an array viewed as a slice), which can't leave the
+// function.
 func (c *checker) borrowRoot(e ast.Expr) (root *Local, view bool) {
 	switch e := e.(type) {
 	case *ast.Ident:
@@ -113,7 +113,7 @@ func (c *checker) borrowRoot(e ast.Expr) (root *Local, view bool) {
 			}
 			if isArray(c.info.Types[e.X]) && !isArray(elemOf(c.info.Types[e])) {
 				r, _ := c.placeRoot(e.X)
-				return r, true // &a visto como &[]T
+				return r, true // &a viewed as &[]T
 			}
 			return c.placeRoot(e.X)
 		case token.MUL:
@@ -136,7 +136,7 @@ func (c *checker) borrowRoot(e ast.Expr) (root *Local, view bool) {
 	return nil, false
 }
 
-// placeRoot devolve a variável na raiz de um lugar (p, p.campo, s[i], *p).
+// placeRoot returns the variable at the root of a place (p, p.field, s[i], *p).
 func (c *checker) placeRoot(e ast.Expr) (*Local, bool) {
 	switch e := e.(type) {
 	case *ast.Ident:
@@ -152,36 +152,36 @@ func (c *checker) placeRoot(e ast.Expr) (*Local, bool) {
 			return c.placeRoot(e.X)
 		}
 	case *ast.CallExpr:
-		return c.borrowRoot(e) // &m.get(&k).campo
+		return c.borrowRoot(e) // &m.get(&k).field
 	}
 	return nil, false
 }
 
-// checkBorrowReturn confere o valor de um return numa função que devolve &T.
+// checkBorrowReturn checks the value of a return in a function that returns &T.
 func (c *checker) checkBorrowReturn(s *ast.ReturnStmt, want *Borrow) {
-	c.borrowExpr(s.Value, want, "retorno")
+	c.borrowExpr(s.Value, want, "return")
 	i := c.fn.borrowParam()
 	if i < 0 {
-		return // o erro já foi dado na assinatura
+		return // the error was already given in the signature
 	}
 	src := c.fn.Params[i]
 	root, view := c.borrowRoot(s.Value)
 	switch {
 	case root == nil:
-		c.errorf(s.Value.Pos(), "o empréstimo devolvido vem de um valor temporário; ele precisa vir de %s", src.Name)
+		c.errorf(s.Value.Pos(), "the returned borrow comes from a temporary value; it must come from %s", src.Name)
 	case root != src:
-		c.errorf(s.Value.Pos(), "o empréstimo devolvido vem de %s, que deixa de existir no fim da função; ele precisa vir de %s", root.Name, src.Name)
+		c.errorf(s.Value.Pos(), "the returned borrow comes from %s, which stops existing at the end of the function; it must come from %s", root.Name, src.Name)
 	case view:
-		c.errorf(s.Value.Pos(), "não dá para devolver um sub-slice ou um array visto como slice: a visão é criada na hora e some no fim da função")
+		c.errorf(s.Value.Pos(), "a sub-slice or an array viewed as a slice can't be returned: the view is created on the spot and vanishes at the end of the function")
 	}
 }
 
-// declareBorrow registra x := <empréstimo>: a origem e o pai (se x vem de
-// outra variável emprestada).
+// declareBorrow registers x := <borrow>: the source and the parent (if x comes from
+// another borrowed variable).
 func (c *checker) declareBorrow(l *Local, value ast.Expr) {
 	root, view := c.borrowRoot(value)
 	if root == nil {
-		c.errorf(value.Pos(), "%s guardaria um empréstimo de um valor temporário: guarde a origem numa variável primeiro", l.Name)
+		c.errorf(value.Pos(), "%s would store a borrow of a temporary value: store the source in a variable first", l.Name)
 		return
 	}
 	c.info.BorrowSrc[l] = root
@@ -191,8 +191,8 @@ func (c *checker) declareBorrow(l *Local, value ast.Expr) {
 	}
 }
 
-// borrowParent devolve a variável emprestada de que value é derivado
-// diretamente (y := &x.campo, com x emprestada), ou nil.
+// borrowParent returns the borrowed variable value is derived from
+// directly (y := &x.field, with x borrowed), or nil.
 func (c *checker) borrowParent(e ast.Expr) *Local {
 	var walk func(e ast.Expr) *Local
 	walk = func(e ast.Expr) *Local {
@@ -222,10 +222,10 @@ func (c *checker) borrowParent(e ast.Expr) *Local {
 	return walk(e)
 }
 
-// ---------- tempo de vida ----------
+// ---------- lifetime ----------
 
-// borrowDecl é uma variável emprestada: x := ..., ou o nome de um padrão
-// que empresta um campo dono. start é onde o empréstimo passa a valer.
+// borrowDecl is a borrowed variable: x := ..., or the name of a pattern
+// that borrows an owning field. start is where the borrow starts to apply.
 type borrowDecl struct {
 	l     *Local
 	start token.Pos
@@ -237,9 +237,9 @@ type borrowUse struct {
 	pos token.Pos
 }
 
-// checkBorrowLifetimes confere, numa função, que a origem de cada empréstimo
-// guardado não é mencionada enquanto ele é usado, e que uma chamada que
-// devolve um empréstimo não divide a instrução com outra menção da origem.
+// checkBorrowLifetimes checks, in a function, that the source of each stored
+// borrow isn't mentioned while it's used, and that a call that
+// returns a borrow doesn't share the statement with another mention of the source.
 func (c *checker) checkBorrowLifetimes(fn *Func) {
 	if fn.Decl == nil || fn.Decl.Body == nil {
 		return
@@ -260,7 +260,7 @@ func (c *checker) checkBorrowLifetimes(fn *Func) {
 				decls = append(decls, borrowDecl{l, maxPos(n.Value), n.P})
 			}
 		case *ast.Pattern:
-			// Circulo(r) num match que só lê: r empresta um campo dono
+			// Circle(r) in a match that only reads: r borrows an owning field
 			for _, l := range c.info.PatternBinds[n] {
 				if l != nil && c.info.BorrowSrc[l] != nil {
 					decls = append(decls, borrowDecl{l, l.Pos, l.Pos})
@@ -274,12 +274,12 @@ func (c *checker) checkBorrowLifetimes(fn *Func) {
 			borrowParams = append(borrowParams, p)
 		}
 	}
-	// variáveis que podem enxergar o mesmo objeto que root
+	// variables that can see the same object as root
 	group := func(root *Local) map[*Local]bool {
 		g := map[*Local]bool{root: true}
 		if root.Param && isBorrow(root.Type) {
 			for _, p := range borrowParams {
-				g[p] = true // parâmetros & podem apontar para o mesmo objeto
+				g[p] = true // & parameters can point to the same object
 			}
 		}
 		for _, d := range decls {
@@ -307,7 +307,7 @@ func (c *checker) checkBorrowLifetimes(fn *Func) {
 			}
 			e := u.pos
 			for _, lp := range loops {
-				// usada num laço que começou antes da declaração: vale o laço todo
+				// used in a loop that started before the declaration: the whole loop applies
 				if within(u.pos, lp.P, lp.Body.End) && !within(d.pos, lp.P, lp.Body.End) && e.Before(lp.Body.End) {
 					e = lp.Body.End
 				}
@@ -321,16 +321,16 @@ func (c *checker) checkBorrowLifetimes(fn *Func) {
 			if !g[u.l] || u.l == x || descends(u.l, x) || !start.Before(u.pos) || end.Before(u.pos) {
 				continue
 			}
-			c.errorf(u.pos, "%s está emprestada a %s (linha %d) até a linha %d: use %s, ou termine de usar %s antes",
+			c.errorf(u.pos, "%s is borrowed by %s (line %d) until line %d: use %s, or finish using %s first",
 				u.l.Name, x.Name, d.pos.Line, end.Line, x.Name, x.Name)
 		}
 	}
 	c.sameStatementBorrows(fn, group)
 }
 
-// sameStatementBorrows recusa, numa instrução com uma chamada que devolve um
-// empréstimo de m, outra menção de m fora dessa chamada: f(m.get(&k), &m)
-// deixaria f mudar m enquanto segura um pedaço dela.
+// sameStatementBorrows refuses, in a statement with a call that returns a
+// borrow of m, another mention of m outside that call: f(m.get(&k), &m)
+// would let f change m while holding a piece of it.
 func (c *checker) sameStatementBorrows(fn *Func, group func(*Local) map[*Local]bool) {
 	check := func(stmt any, exprs ...ast.Node) {
 		var calls []*ast.CallExpr
@@ -347,7 +347,7 @@ func (c *checker) sameStatementBorrows(fn *Func, group func(*Local) map[*Local]b
 			})
 		}
 		parents := map[any]any{}
-		parentsOf(stmt, parents) // a partir da instrução: o lado esquerdo de = sabe que é alvo
+		parentsOf(stmt, parents) // starting at the statement: the left side of = knows it's a target
 		for _, call := range calls {
 			root, _ := c.borrowRoot(call)
 			if root == nil || readAtOnce(call, parents) {
@@ -367,7 +367,7 @@ func (c *checker) sameStatementBorrows(fn *Func, group func(*Local) map[*Local]b
 				inspect(e, func(n any) {
 					if id, ok := n.(*ast.Ident); ok && !inside[id.P] {
 						if l := c.info.Locals[id]; l != nil && g[l] {
-							c.errorf(id.P, "%s aparece de novo na instrução em que %s empresta parte dela: use o empréstimo numa instrução só para ele (x := ...)", l.Name, exprName(call.Fun))
+							c.errorf(id.P, "%s appears again in the statement where %s borrows part of it: use the borrow in a statement of its own (x := ...)", l.Name, exprName(call.Fun))
 						}
 					}
 				})
@@ -402,11 +402,11 @@ func (c *checker) sameStatementBorrows(fn *Func, group func(*Local) map[*Local]b
 	})
 }
 
-// readAtOnce diz se o empréstimo devolvido por call é só lido na hora (*call,
-// call.campo, call[i] como valor): o valor é copiado ali e o empréstimo
-// acaba, então mencionar a origem depois, na mesma instrução, é seguro. Não
-// vale se o lugar for emprestado (&call.campo), receber uma atribuição ou
-// for o receptor de outra chamada.
+// readAtOnce says whether the borrow returned by call is only read on the spot (*call,
+// call.field, call[i] as a value): the value is copied there and the borrow
+// ends, so mentioning the source afterwards, in the same statement, is safe. It doesn't
+// apply if the place is borrowed (&call.field), receives an assignment or
+// is the receiver of another call.
 func readAtOnce(call *ast.CallExpr, parents map[any]any) bool {
 	var top any = call
 	p := parents[top]
@@ -420,7 +420,7 @@ func readAtOnce(call *ast.CallExpr, parents map[any]any) bool {
 	default:
 		return false
 	}
-	// sobe pela cadeia de campos e índices: call.a.b[i]
+	// goes up the chain of fields and indices: call.a.b[i]
 	for {
 		next := parents[top]
 		switch n := next.(type) {
@@ -432,14 +432,14 @@ func readAtOnce(call *ast.CallExpr, parents map[any]any) bool {
 			continue
 		case *ast.IndexExpr:
 			if n.X != top {
-				return true // usado como índice: lido
+				return true // used as an index: read
 			}
 			top = n
 			continue
 		case *ast.UnaryExpr:
-			return n.Op != token.AMP // &call.campo continua emprestado
+			return n.Op != token.AMP // &call.field stays borrowed
 		case *ast.CallExpr:
-			return n.Fun != top // call.metodo(): o receptor fica emprestado
+			return n.Fun != top // call.method(): the receiver stays borrowed
 		case *ast.AssignStmt:
 			return n.Lhs != top
 		case *ast.IncDecStmt:
@@ -449,7 +449,7 @@ func readAtOnce(call *ast.CallExpr, parents map[any]any) bool {
 	}
 }
 
-// parentsOf anota o pai de cada nó dentro de n.
+// parentsOf notes the parent of each node inside n.
 func parentsOf(n any, parents map[any]any) {
 	var walk func(v reflect.Value, parent any)
 	walk = func(v reflect.Value, parent any) {
@@ -482,7 +482,7 @@ func parentsOf(n any, parents map[any]any) {
 
 func within(p, from, to token.Pos) bool { return !p.Before(from) && !to.Before(p) }
 
-// maxPos devolve a maior posição dentro de n.
+// maxPos returns the largest position inside n.
 func maxPos(n ast.Node) token.Pos {
 	best := n.Pos()
 	inspect(n, func(x any) {
@@ -492,7 +492,7 @@ func maxPos(n ast.Node) token.Pos {
 			}
 		}
 		if id, ok := x.(*ast.Ident); ok {
-			// o fim do nome conta (para a declaração terminar depois dele)
+			// the end of the name counts (so the declaration ends after it)
 			end := token.Pos{Line: id.P.Line, Col: id.P.Col + len(id.Name)}
 			if best.Before(end) {
 				best = end
@@ -502,8 +502,8 @@ func maxPos(n ast.Node) token.Pos {
 	return best
 }
 
-// inspect chama f com cada nó da AST de n (por reflexão, para não depender de
-// cada tipo de nó).
+// inspect calls f with each AST node of n (by reflection, so as not to depend on
+// each node type).
 func inspect(n any, f func(any)) {
 	var walk func(v reflect.Value)
 	walk = func(v reflect.Value) {

@@ -1,4 +1,4 @@
-// erro: p.prox pode ser nil aqui: verifique com if p.prox != nil antes de usar o conteúdo
+// error: p.prox may be nil here: check with if p.prox != nil before using the pointee
 import "std/io"
 struct No {
     valor int

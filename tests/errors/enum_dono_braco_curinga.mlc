@@ -1,4 +1,4 @@
-// erro: o braço _ tiraria a variante Msg, que guarda donos, sem libe
+// error: the _ arm would take out the variant Msg, which holds owners, without freeing them: handle Msg in its own arm
 enum E {
     Msg(m []byte)
     Nada

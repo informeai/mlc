@@ -1,4 +1,4 @@
-// erro: b é o destino de str.format e também um valor do formato
+// error: b is the destination of str.format and also a value of the format: the text would be read while it's overwritten
 import "std/io"
 import "std/str"
 

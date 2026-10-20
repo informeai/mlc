@@ -1,4 +1,4 @@
-// erro: t pode ser nil aqui
+// error: t may be nil here, but thread.join expects *thread.Thread[int]; check with if t != nil first
 import "std/io"
 import "std/thread"
 import "std/vec"

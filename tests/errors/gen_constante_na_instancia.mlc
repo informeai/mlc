@@ -1,4 +1,4 @@
-// erro: constante 300 não cabe em int8 (-128 a 127) (na instância mais[int8])
+// error: constant 300 doesn't fit in int8 (-128 to 127) (in the instance mais[int8])
 import "std/io"
 fn mais[T number](x T) T {
     return x + 300

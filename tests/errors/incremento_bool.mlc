@@ -1,4 +1,4 @@
-// erro: operador ++ não se aplica a bool
+// error: operator ++ doesn't apply to bool
 import "std/io"
 fn main() {
     b := true

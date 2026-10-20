@@ -19,28 +19,28 @@ import (
 	"mlc/std"
 )
 
-// Hover e "ir para a definição"
+// Hover and "go to definition"
 //
-// O programa é checado como no diagnóstico (driver.Analyze), e o nome sob o
-// cursor é ligado à sua declaração pelo resultado do checker (variáveis,
-// chamadas, construtores de enum, campos pelo tipo) ou pelas declarações da
-// AST (tipos, variantes, nomes declarados). O hover mostra a declaração e os
-// comentários // logo acima dela.
+// The program is checked as in the diagnostics (driver.Analyze), and the name under the
+// cursor is bound to its declaration by the checker's result (variables,
+// calls, enum constructors, fields by type) or by the AST's declarations
+// (types, variants, declared names). The hover shows the declaration and the
+// // comments right above it.
 
-// symbol é uma declaração encontrada.
+// symbol is a declaration that was found.
 type symbol struct {
-	file  string    // arquivo da declaração, como em checker.Source.File
-	pos   token.Pos // posição do nome na declaração (zero: começo do arquivo)
-	code  string    // assinatura, mostrada como código
-	doc   string    // documentação, em texto
-	noDef bool      // sem lugar para ir (funções embutidas, tipos básicos)
+	file  string    // the declaration's file, as in checker.Source.File
+	pos   token.Pos // the name's position in the declaration (zero: start of the file)
+	code  string    // the signature, shown as code
+	doc   string    // the documentation, as text
+	noDef bool      // nowhere to go (built-in functions, basic types)
 }
 
-// navigator responde hover e definição para um documento.
+// navigator answers hover and definition for a document.
 type navigator struct {
 	prog  *driver.Program
 	read  driver.Loader
-	text  []byte // texto do documento (Target)
+	text  []byte // the document's text (Target)
 	idx   *index
 	texts map[string][]byte
 }
@@ -49,8 +49,8 @@ func newNavigator(prog *driver.Program, read driver.Loader, text []byte) *naviga
 	return &navigator{prog: prog, read: read, text: text, idx: buildIndex(prog.Target.AST), texts: map[string][]byte{}}
 }
 
-// fileText devolve o texto de um arquivo do programa (os da biblioteca padrão
-// vêm de dentro do mlc).
+// fileText returns the text of a program file (the standard library's
+// come from inside mlc).
 func (n *navigator) fileText(name string) []byte {
 	if t, ok := n.texts[name]; ok {
 		return t
@@ -76,12 +76,12 @@ func (n *navigator) isStd(file string) bool {
 	return false
 }
 
-// ---------- índice das posições da AST do documento ----------
+// ---------- index of the positions of the document's AST ----------
 
 type patternRef struct {
 	pat   *ast.Pattern
 	match *ast.MatchStmt
-	bind  int // índice do nome em Binds; -1 no nome da variante
+	bind  int // index of the name in Binds; -1 on the variant's name
 }
 
 type fieldInitRef struct {
@@ -91,13 +91,13 @@ type fieldInitRef struct {
 
 type index struct {
 	idents     map[token.Pos]*ast.Ident
-	sels       map[token.Pos]*ast.SelectorExpr // pela posição do nome depois do '.'
-	calls      map[ast.Expr]*ast.CallExpr      // pela expressão chamada
+	sels       map[token.Pos]*ast.SelectorExpr // by the position of the name after the '.'
+	calls      map[ast.Expr]*ast.CallExpr      // by the called expression
 	patterns   map[token.Pos]patternRef
 	varDecls   map[token.Pos]*ast.VarDecl
 	forVars    map[token.Pos]*ast.ForStmt
 	fieldInits map[token.Pos]fieldInitRef
-	consts     []*ast.ConstDecl // todas, inclusive as de dentro de blocos, na ordem do arquivo
+	consts     []*ast.ConstDecl // all of them, including the ones inside blocks, in file order
 }
 
 func buildIndex(f *ast.File) *index {
@@ -123,8 +123,8 @@ func buildIndex(f *ast.File) *index {
 				ix.sels[x.SelPos] = x
 			case *ast.CallExpr:
 				ix.calls[x.Fun] = x
-				// f[int](x) e vec.new[int](x): o nome da função fica dentro
-				// dos argumentos de tipo
+				// f[int](x) and vec.new[int](x): the function's name is inside
+				// the type arguments
 				switch fun := x.Fun.(type) {
 				case *ast.IndexExpr:
 					ix.calls[fun.X] = x
@@ -149,7 +149,7 @@ func buildIndex(f *ast.File) *index {
 						if p.Variant != nil {
 							ix.patterns[p.Variant.P] = patternRef{p, x, -1}
 						} else if id, ok := p.Lit.(*ast.Ident); ok {
-							ix.patterns[id.P] = patternRef{p, x, -1} // Vazio => (variante sem dados)
+							ix.patterns[id.P] = patternRef{p, x, -1} // Empty => (a variant without data)
 						}
 						for i, b := range p.Binds {
 							ix.patterns[b.P] = patternRef{p, x, i}
@@ -172,10 +172,10 @@ func buildIndex(f *ast.File) *index {
 	return ix
 }
 
-// ---------- resolução ----------
+// ---------- resolution ----------
 
-// tokenAt devolve o token de texto que contém o deslocamento off (um
-// identificador ou uma string), e os tokens anteriores a ele.
+// tokenAt returns the text token that contains the offset off (an
+// identifier or a string), and the tokens before it.
 func tokenAt(text []byte, off int) (tok token.Token, before []token.Token, ok bool) {
 	lx := lexer.New("", text)
 	var toks []token.Token
@@ -198,7 +198,7 @@ func tokenAt(text []byte, off int) (tok token.Token, before []token.Token, ok bo
 	return token.Token{}, nil, false
 }
 
-// resolve encontra a declaração do nome em off, e o token sob o cursor.
+// resolve finds the declaration of the name at off, and the token under the cursor.
 func (n *navigator) resolve(off int) (*symbol, token.Token) {
 	tok, before, ok := tokenAt(n.text, off)
 	if !ok {
@@ -257,7 +257,7 @@ func (n *navigator) resolveIdent(tok token.Token, before []token.Token) *symbol 
 	if l := n.localAt(p); l != nil {
 		return n.localSymbol(l)
 	}
-	// nome qualificado por um módulo: geometria.Ponto em tipos e literais
+	// a name qualified by a module: geometry.Point in types and literals
 	if k := len(before); k >= 2 && before[k-1].Kind == token.PERIOD && before[k-2].Kind == token.IDENT {
 		if m := n.moduleByName(before[k-2].Lit); m != nil {
 			if (m.Path == "std/thread" && tok.Lit == "Thread") || (m.Path == "std/chan" && (tok.Lit == "Sender" || tok.Lit == "Receiver")) ||
@@ -279,7 +279,7 @@ func (n *navigator) resolveIdent(tok token.Token, before []token.Token) *symbol 
 	if s := n.declNamed(n.prog.Target, tok.Lit); s != nil {
 		return s
 	}
-	// constante de bloco: a última com esse nome declarada antes do uso
+	// a block constant: the last one with that name declared before the use
 	for i := len(ix.consts) - 1; i >= 0; i-- {
 		if d := ix.consts[i]; d.Name == tok.Lit && !p.Before(d.P) {
 			return &symbol{file: n.prog.Target.File, pos: d.P, code: lineAt(n.text, d.P), doc: docAbove(n.text, d.P)}
@@ -291,8 +291,8 @@ func (n *navigator) resolveIdent(tok token.Token, before []token.Token) *symbol 
 	return nil
 }
 
-// localAt procura, entre as variáveis do documento, a declarada em p (um
-// parâmetro, no lugar onde é declarado).
+// localAt looks, among the document's variables, for the one declared at p (a
+// parameter, at the place where it's declared).
 func (n *navigator) localAt(p token.Pos) *checker.Local {
 	for id, l := range n.prog.Info.Locals {
 		if l.Pos == p && n.idx.idents[id.P] == id {
@@ -409,7 +409,7 @@ func (n *navigator) funcSymbol(fn *checker.Func) *symbol {
 	text := n.fileText(fn.File)
 	s := &symbol{file: fn.File, pos: namePos(text, fn.Decl.P, fn.Decl.Name), code: signature(text, fn.Decl.P), doc: docAbove(text, fn.Decl.P)}
 	if strings.Contains(fn.Name, "[") {
-		s.doc = strings.TrimSpace(s.doc + "\n\ninstância: `" + fn.Name + "`")
+		s.doc = strings.TrimSpace(s.doc + "\n\ninstance: `" + fn.Name + "`")
 	}
 	return s
 }
@@ -421,7 +421,7 @@ func (n *navigator) localSymbol(l *checker.Local) *symbol {
 		s.code = fmt.Sprintf("const %s %s = %v", l.Name, l.Type, l.Const)
 	case l.Param:
 		s.code = fmt.Sprintf("%s %s", l.Name, l.Type)
-		s.doc = "parâmetro"
+		s.doc = "parameter"
 	default:
 		s.code = fmt.Sprintf("var %s %s", l.Name, l.Type)
 	}
@@ -448,7 +448,7 @@ func (n *navigator) selectorSymbol(sel *ast.SelectorExpr) *symbol {
 	}
 	t := info.Types[sel.X]
 	if t == nil {
-		// &r.campo como argumento: o tipo de r vem da variável
+		// &r.field as an argument: r's type comes from the variable
 		if id, ok := sel.X.(*ast.Ident); ok && info.Locals[id] != nil {
 			t = info.Locals[id].Type
 		}
@@ -476,7 +476,7 @@ func (n *navigator) fieldSymbol(s *checker.Struct, name string) *symbol {
 	for _, fd := range s.Decl.Fields {
 		if fd.Name == name {
 			return &symbol{file: s.File, pos: fd.P, code: fmt.Sprintf("%s %s", f.Name, f.Type),
-				doc: strings.TrimSpace(docAbove(n.fileText(s.File), fd.P) + "\n\ncampo de `" + s.Name + "`")}
+				doc: strings.TrimSpace(docAbove(n.fileText(s.File), fd.P) + "\n\nfield of `" + s.Name + "`")}
 		}
 	}
 	return nil
@@ -491,7 +491,7 @@ func (n *navigator) variantSymbol(v *checker.Variant) *symbol {
 	for _, vd := range en.Decl.Variants {
 		if vd.Name == v.Name {
 			return &symbol{file: en.File, pos: vd.P, code: lineAt(text, vd.P),
-				doc: strings.TrimSpace(docAbove(text, vd.P) + "\n\nvariante de `" + en.Name + "`")}
+				doc: strings.TrimSpace(docAbove(text, vd.P) + "\n\nvariant of `" + en.Name + "`")}
 		}
 	}
 	return nil
@@ -519,8 +519,8 @@ func (n *navigator) patternSymbol(ref patternRef) *symbol {
 	return nil
 }
 
-// declAt devolve a declaração de topo (ou campo, ou variante) cujo nome está
-// em p, no arquivo src.
+// declAt returns the top-level declaration (or field, or variant) whose name is
+// at p, in the file src.
 func (n *navigator) declAt(src *checker.Source, p token.Pos) *symbol {
 	text := n.fileText(src.File)
 	f := src.AST
@@ -534,7 +534,7 @@ func (n *navigator) declAt(src *checker.Source, p token.Pos) *symbol {
 		}
 		for _, prm := range params {
 			if prm.P == p {
-				return &symbol{file: src.File, pos: prm.P, code: prm.Name + " " + typeString(prm.Type), doc: "parâmetro de `" + d.Name + "`"}
+				return &symbol{file: src.File, pos: prm.P, code: prm.Name + " " + typeString(prm.Type), doc: "parameter of `" + d.Name + "`"}
 			}
 		}
 	}
@@ -545,7 +545,7 @@ func (n *navigator) declAt(src *checker.Source, p token.Pos) *symbol {
 		for _, fd := range d.Fields {
 			if fd.P == p {
 				return &symbol{file: src.File, pos: fd.P, code: lineAt(text, fd.P),
-					doc: strings.TrimSpace(docAbove(text, fd.P) + "\n\ncampo de `" + d.Name + "`")}
+					doc: strings.TrimSpace(docAbove(text, fd.P) + "\n\nfield of `" + d.Name + "`")}
 			}
 		}
 	}
@@ -556,12 +556,12 @@ func (n *navigator) declAt(src *checker.Source, p token.Pos) *symbol {
 		for _, vd := range d.Variants {
 			if vd.P == p {
 				return &symbol{file: src.File, pos: vd.P, code: lineAt(text, vd.P),
-					doc: strings.TrimSpace(docAbove(text, vd.P) + "\n\nvariante de `" + d.Name + "`")}
+					doc: strings.TrimSpace(docAbove(text, vd.P) + "\n\nvariant of `" + d.Name + "`")}
 			}
 			for _, fd := range vd.Fields {
 				if fd.P == p {
 					return &symbol{file: src.File, pos: fd.P, code: fd.Name + " " + typeString(fd.Type),
-						doc: "campo da variante `" + d.Name + "." + vd.Name + "`"}
+						doc: "field of the variant `" + d.Name + "." + vd.Name + "`"}
 				}
 			}
 		}
@@ -577,11 +577,11 @@ func (n *navigator) declAt(src *checker.Source, p token.Pos) *symbol {
 		}
 		for _, m := range d.Methods {
 			if namePos(text, m.P, m.Name) == p {
-				return &symbol{file: src.File, pos: p, code: signature(text, m.P), doc: strings.TrimSpace(docAbove(text, m.P) + "\n\nmétodo da interface `" + d.Name + "`")}
+				return &symbol{file: src.File, pos: p, code: signature(text, m.P), doc: strings.TrimSpace(docAbove(text, m.P) + "\n\nmethod of the interface `" + d.Name + "`")}
 			}
 			for _, prm := range m.Params {
 				if prm.P == p {
-					return &symbol{file: src.File, pos: p, code: prm.Name + " " + typeString(prm.Type), doc: "parâmetro de `" + d.Name + "." + m.Name + "`"}
+					return &symbol{file: src.File, pos: p, code: prm.Name + " " + typeString(prm.Type), doc: "parameter of `" + d.Name + "." + m.Name + "`"}
 				}
 			}
 		}
@@ -596,8 +596,8 @@ func (n *navigator) declAt(src *checker.Source, p token.Pos) *symbol {
 	return nil
 }
 
-// typeParam procura o parâmetro de tipo name da declaração genérica que
-// contém p (função, struct ou enum do documento).
+// typeParam looks for the type parameter name of the generic declaration that
+// contains p (a function, struct or enum of the document).
 func (n *navigator) typeParam(name string, p token.Pos) *symbol {
 	f := n.prog.Target.AST
 	type decl struct {
@@ -609,7 +609,7 @@ func (n *navigator) typeParam(name string, p token.Pos) *symbol {
 	for _, d := range f.Funcs {
 		params := d.TypeParams
 		if d.Recv != nil && d.Recv.Type != nil {
-			// fn (v &Vec[T]) push(...): o T vem da struct do receptor
+			// fn (v &Vec[T]) push(...): the T comes from the receiver's struct
 			for _, s := range f.Structs {
 				if s.Name == baseTypeName(d.Recv.Type) {
 					params = append(params, s.TypeParams...)
@@ -627,11 +627,11 @@ func (n *navigator) typeParam(name string, p token.Pos) *symbol {
 	for _, d := range f.Impls {
 		decls = append(decls, decl{d.P, d.TypeParams, "impl " + typeString(d.Iface) + " for " + typeString(d.Type)})
 		for _, m := range d.Methods {
-			// método do bloco: vê os parâmetros do impl e os próprios
+			// a block method: sees the impl's parameters and its own
 			decls = append(decls, decl{m.P, append(append([]*ast.TypeParam{}, d.TypeParams...), m.TypeParams...), m.Name})
 		}
 	}
-	// a declaração que contém p é a última que começa antes dele
+	// the declaration that contains p is the last one that starts before it
 	var best *decl
 	for i := range decls {
 		if !p.Before(decls[i].start) && (best == nil || best.start.Before(decls[i].start)) {
@@ -644,7 +644,7 @@ func (n *navigator) typeParam(name string, p token.Pos) *symbol {
 	for _, tp := range best.params {
 		if tp.Name == name {
 			return &symbol{file: n.prog.Target.File, pos: tp.P, code: tp.Name + " " + tp.Constraint,
-				doc: "parâmetro de tipo de `" + best.what + "`"}
+				doc: "type parameter of `" + best.what + "`"}
 		}
 	}
 	return nil
@@ -660,7 +660,7 @@ func baseTypeName(t *ast.TypeExpr) string {
 	return t.Name
 }
 
-// typeString escreve um tipo da AST como no código.
+// typeString writes an AST type as in the code.
 func typeString(t *ast.TypeExpr) string {
 	if t == nil {
 		return ""
@@ -696,7 +696,7 @@ func typeString(t *ast.TypeExpr) string {
 	return s
 }
 
-// declNamed procura a declaração de topo chamada name no arquivo src.
+// declNamed looks for the top-level declaration called name in the file src.
 func (n *navigator) declNamed(src *checker.Source, name string) *symbol {
 	text := n.fileText(src.File)
 	f := src.AST
@@ -733,7 +733,7 @@ func (n *navigator) funcDeclSymbol(src *checker.Source, d *ast.FuncDecl) *symbol
 	return &symbol{file: src.File, pos: namePos(text, d.P, d.Name), code: signature(text, d.P), doc: docAbove(text, d.P)}
 }
 
-// blockSymbol mostra uma struct ou enum inteira (até 20 linhas).
+// blockSymbol shows a whole struct or enum (up to 20 lines).
 func (n *navigator) blockSymbol(file string, p token.Pos, name string) *symbol {
 	text := n.fileText(file)
 	lines := strings.Split(string(text), "\n")
@@ -751,10 +751,10 @@ func (n *navigator) blockSymbol(file string, p token.Pos, name string) *symbol {
 	return &symbol{file: file, pos: namePos(text, p, name), code: strings.Join(code, "\n"), doc: docAbove(text, p)}
 }
 
-// ---------- texto das declarações ----------
+// ---------- text of the declarations ----------
 
-// namePos devolve a posição do identificador name a partir de p (a palavra
-// fn, struct ou enum da declaração).
+// namePos returns the position of the identifier name starting at p (the word
+// fn, struct or enum of the declaration).
 func namePos(text []byte, p token.Pos, name string) token.Pos {
 	lx := lexer.New("", text)
 	for {
@@ -776,20 +776,20 @@ func lineAt(text []byte, p token.Pos) string {
 	return stripComment(strings.TrimSpace(lines[p.Line-1]))
 }
 
-// signature devolve o cabeçalho de uma função (veja doc.Signature).
+// signature returns a function's header (see doc.Signature).
 func signature(text []byte, p token.Pos) string { return mlcdoc.Signature(text, p) }
 
-// stripComment tira um comentário // do fim da linha (fora de strings).
+// stripComment removes a // comment from the end of the line (outside strings).
 func stripComment(l string) string { return mlcdoc.StripComment(l) }
 
-// docAbove junta os comentários // nas linhas logo acima da linha de p.
+// docAbove joins the // comments on the lines right above p's line.
 func docAbove(text []byte, p token.Pos) string { return formatDoc(mlcdoc.Comment(text, p)) }
 
-// headerDoc é o comentário do começo de um arquivo (a descrição do módulo).
+// headerDoc is the comment at the top of a file (the module's description).
 func headerDoc(text []byte) string { return formatDoc(mlcdoc.Header(text)) }
 
-// formatDoc transforma os comentários em markdown: linhas recuadas (exemplos
-// de código) viram um bloco de código.
+// formatDoc turns the comments into markdown: indented lines (code
+// examples) become a code block.
 func formatDoc(lines []string) string {
 	var out []string
 	inCode := false
@@ -814,14 +814,14 @@ func formatDoc(lines []string) string {
 	return strings.TrimSpace(strings.Join(out, "\n"))
 }
 
-// builtinDocs descreve o que não tem declaração em arquivo (o mesmo do mlc doc).
+// builtinDocs describes what has no declaration in a file (the same as mlc doc).
 var builtinDocs = mlcdoc.Builtins
 
-// ---------- arquivos da biblioteca padrão no disco ----------
+// ---------- standard library files on disk ----------
 
-// stdPath grava os arquivos da biblioteca padrão numa pasta de cache (uma por
-// versão do conteúdo) e devolve o caminho de name ("std/io.mlc"), para o
-// editor abrir na definição.
+// stdPath writes the standard library's files into a cache folder (one per
+// version of the content) and returns the path of name ("std/io.mlc"), for the
+// editor to open on definition.
 func stdPath(name string) string {
 	rest, ok := strings.CutPrefix(name, "std/")
 	if !ok {

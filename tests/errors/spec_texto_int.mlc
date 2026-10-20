@@ -1,4 +1,4 @@
-// erro: {:s} escreve os bytes de um []byte como texto, e o valor é int
+// error: {:s} writes the bytes of a []byte as text, and the value is int
 import "std/io"
 import "std/str"
 

@@ -1,4 +1,4 @@
-// erro: operador & não se aplica a int e byte
+// error: operator & doesn't apply to int and byte (convert one of the sides: int(x) or byte(x))
 fn main() {
     a := 1
     var b byte = 2

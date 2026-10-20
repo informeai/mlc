@@ -7,27 +7,27 @@ import (
 	"mlc/internal/ast"
 )
 
-// Funções como valor
+// Functions as values
 //
-//	var menor fn(&int, &int) bool = compara
-//	sort.sort_by(&s, compara)
-//	fn aplica(f fn(int) int, x int) int { return f(x) }
+//	var less fn(&int, &int) bool = compare
+//	sort.sort_by(&s, compare)
+//	fn apply(f fn(int) int, x int) int { return f(x) }
 //
-// Um valor fn é só o endereço de uma função: não captura variáveis (não há
-// closures), então não aloca e não tem dono; pode ser copiado à vontade. Os
-// tipos dos parâmetros dizem o que a chamada faz com cada argumento (copia,
-// empresta ou move), como numa chamada direta, e o verificador de posse
-// confere do mesmo jeito.
+// An fn value is just the address of a function: it doesn't capture variables (there are no
+// closures), so it doesn't allocate and has no owner; it can be copied freely. The
+// parameter types say what the call does with each argument (copies,
+// borrows or moves), as in a direct call, and the ownership checker
+// checks it the same way.
 //
-// O valor zero de um fn (var f fn(int) int, campo não preenchido, memória de
-// alloc) é uma função que dá panic: nunca existe ponteiro de função nulo.
-// Métodos, funções genéricas sem os tipos e extern fn não viram valor.
+// The zero value of an fn (var f fn(int) int, an unfilled field, alloc's
+// memory) is a function that panics: there's never a null function pointer.
+// Methods, generic functions without the types and extern fn don't become values.
 
-// FuncType é o tipo de um valor fn.
+// FuncType is the type of an fn value.
 type FuncType struct {
 	Params []Type
-	Result Type // Void quando não retorna nada
-	ID     int  // nome no C: mlc_fnt_<ID>
+	Result Type // Void when it returns nothing
+	ID     int  // name in C: mlc_fnt_<ID>
 }
 
 func (f *FuncType) String() string {
@@ -42,7 +42,7 @@ func (f *FuncType) String() string {
 	return s
 }
 
-// funcType devolve o tipo fn (único para cada assinatura).
+// funcType returns the fn type (unique for each signature).
 func (c *checker) funcType(params []Type, result Type) *FuncType {
 	var keys []string
 	for _, p := range params {
@@ -76,22 +76,22 @@ func (c *checker) resolveFuncType(t *ast.TypeExpr) Type {
 			return Invalid
 		}
 		if isBorrow(result) {
-			c.errorf(t.Elem.P, "um tipo fn não pode devolver empréstimo nesta versão")
+			c.errorf(t.Elem.P, "an fn type can't return a borrow in this version")
 			return Invalid
 		}
 	}
 	return c.funcType(params, result)
 }
 
-// funcRef checa o uso de uma função como valor (e é o nome, mod.nome ou
+// funcRef checks the use of a function as a value (e is the name, mod.name or
 // f[int]).
 func (c *checker) funcRef(e ast.Expr, fn *Func) Type {
 	if fn.Native != "" {
-		c.errorf(e.Pos(), "extern fn não pode ser usada como valor; envolva-a numa fn comum")
+		c.errorf(e.Pos(), "an extern fn can't be used as a value; wrap it in an ordinary fn")
 		return Invalid
 	}
 	if fn.borrowParam() >= 0 {
-		c.errorf(e.Pos(), "%s devolve um empréstimo e não pode ser usada como valor nesta versão", fn.Name)
+		c.errorf(e.Pos(), "%s returns a borrow and can't be used as a value in this version", fn.Name)
 		return Invalid
 	}
 	var params []Type
@@ -102,9 +102,9 @@ func (c *checker) funcRef(e ast.Expr, fn *Func) Type {
 	return c.funcType(params, fn.Result)
 }
 
-// indirectCall checa f(args) com f um valor fn.
+// indirectCall checks f(args) with f an fn value.
 func (c *checker) indirectCall(e *ast.CallExpr, ft *FuncType) Type {
-	fn := &Func{Name: "a função " + ft.String(), Result: ft.Result, mod: c.mod}
+	fn := &Func{Name: "the function " + ft.String(), Result: ft.Result, mod: c.mod}
 	for i, p := range ft.Params {
 		fn.Params = append(fn.Params, &Local{Name: fmt.Sprintf("p%d", i+1), Type: p, Param: true})
 	}

@@ -1,4 +1,4 @@
-// erro: {:q} no formato de io.printf: especificação desconhecida
+// error: {:q} in the format of io.printf: unknown spec; use [[fill]align][#][0][width][.places][x|X|b|o|s], like {:>8}, {:08.2}, {:#x} or {:s}
 import "std/io"
 import "std/str"
 

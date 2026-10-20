@@ -5,49 +5,49 @@ import (
 	"strings"
 )
 
-// O modelo de referência: um interpretador abstrato que segue todos os
-// caminhos de um programa enumerado (os dois lados de cada if, o laço com
-// qualquer número de voltas) e julga cada caminho sozinho. É bem menor que
-// o verificador, e por isso erra de outro jeito: onde os dois discordam, um
-// deles está errado, e o exemplo já é mínimo.
+// The reference model: an abstract interpreter that follows every
+// path of an enumerated program (both sides of each if, the loop with
+// any number of iterations) and judges each path alone. It's much smaller than
+// the checker, and so it errs in a different way: where the two disagree, one
+// of them is wrong, and the example is already minimal.
 //
-// A semântica é a que o MLC pretende:
-//   - x e y (*Box) começam vivos; q (?*Box) começa nil ou vivo (quem chama
-//     decide), e todos precisam terminar liberados ou movidos;
-//   - usar, mover ou liberar exige a variável viva (liberar um q nil pode);
-//   - sobrescrever uma variável viva vaza;
-//   - um empréstimo (r := &x) é exclusivo: do momento em que é feito até o
-//     último uso dele no caminho, x não pode ser tocado (nem lido). Fora
-//     disso, x é livre: o empréstimo acaba no último uso de cada caminho.
+// The semantics is the one MLC intends:
+//   - x and y (*Box) start live; q (?*Box) starts nil or live (the caller
+//     decides), and all of them must end freed or moved;
+//   - using, moving or freeing requires the variable to be live (freeing a nil q is fine);
+//   - overwriting a live variable leaks;
+//   - a borrow (r := &x) is exclusive: from the moment it's made until its
+//     last use on the path, x can't be touched (nor read). Outside
+//     that, x is free: the borrow ends at the last use on each path.
 //
-// Cada declaração r := &v é um empréstimo próprio: um r declarado dentro de
-// um bloco esconde o de fora só até o fim do bloco, e depois o de fora volta
-// a valer (os usos são ligados à declaração pelo escopo, antes de rodar).
+// Each declaration r := &v is a borrow of its own: an r declared inside
+// a block hides the outer one only until the end of the block, and then the outer one is
+// valid again (the uses are bound to the declaration by scope, before running).
 //
-// O estado de um caminho é pequeno (o estado das três variáveis e dos
-// empréstimos), então caminhos que chegam ao mesmo estado se fundem, e o
-// laço é calculado até o ponto fixo: o conjunto de estados no começo da
-// volta para de crescer.
+// A path's state is small (the state of the three variables and of the
+// borrows), so paths that reach the same state merge, and the
+// loop is computed to a fixed point: the set of states at the start of the
+// iteration stops growing.
 
 const maxRefs = 8
 
 type mref struct {
-	src     int8 // a variável emprestada, -1 se a declaração ainda não rodou
-	touched bool // a origem foi tocada depois do empréstimo
+	src     int8 // the borrowed variable, -1 if the declaration hasn't run yet
+	touched bool // the source was touched after the borrow
 }
 
 type mstate struct {
 	vars [3]state // x, y, q
 	refs [maxRefs]mref
-	bad  string // a primeira violação no caminho
+	bad  string // the first violation on the path
 }
 
-// model liga cada r (declaração e uso) ao número da declaração.
+// model binds each r (declaration and use) to the declaration's number.
 type model struct {
 	ref map[*Stmt]int
 }
 
-// newModel resolve os r do programa pelo escopo.
+// newModel resolves the program's r by scope.
 func newModel(ss []*Stmt) *model {
 	m := &model{ref: map[*Stmt]int{}}
 	next := 0
@@ -57,7 +57,7 @@ func newModel(ss []*Stmt) *model {
 			switch {
 			case strings.HasPrefix(st.Atom, "r := "):
 				if next == maxRefs {
-					panic("modelo: declarações de r demais")
+					panic("model: too many declarations of r")
 				}
 				visible = next
 				m.ref[st] = next
@@ -73,7 +73,7 @@ func newModel(ss []*Stmt) *model {
 	return m
 }
 
-// mset é um conjunto de estados (os caminhos que chegam a um ponto).
+// mset is a set of states (the paths that reach a point).
 type mset map[mstate]bool
 
 func (s mset) add(o mset) {
@@ -90,8 +90,8 @@ func (s *mstate) fail(format string, args ...any) {
 
 var varNames = [3]string{"x", "y", "q"}
 
-// touch registra um toque em v: os empréstimos de v não podem mais ser
-// usados.
+// touch records a touch on v: v's borrows can no longer be
+// used.
 func (s *mstate) touch(v int) {
 	for i := range s.refs {
 		if int(s.refs[i].src) == v {
@@ -100,23 +100,23 @@ func (s *mstate) touch(v int) {
 	}
 }
 
-// need exige v viva (ou nil, se nilOK).
+// need requires v to be live (or nil, if nilOK).
 func (s *mstate) need(v int, what string, nilOK bool) {
 	s.touch(v)
 	switch st := s.vars[v]; {
 	case st == live, st == null && nilOK:
 	case st == null:
-		s.fail("%s de %s, que é nil", what, varNames[v])
+		s.fail("%s of %s, which is nil", what, varNames[v])
 	default:
-		s.fail("%s de %s, já liberada ou movida", what, varNames[v])
+		s.fail("%s of %s, already freed or moved", what, varNames[v])
 	}
 }
 
-// overwrite atribui um valor novo a v: o antigo não pode estar vivo.
+// overwrite assigns a new value to v: the old one can't be live.
 func (s *mstate) overwrite(v int, to state) {
 	s.touch(v)
 	if s.vars[v] == live {
-		s.fail("vazamento: %s ainda viva é sobrescrita", varNames[v])
+		s.fail("leak: %s still live is overwritten", varNames[v])
 	}
 	s.vars[v] = to
 }
@@ -139,13 +139,13 @@ func (s mstate) atom(a string, ref int) mstate {
 	case "q = alloc(Box{v: 1})":
 		s.overwrite(q, live)
 	case "acc += x.v":
-		s.need(x, "uso", false)
+		s.need(x, "use", false)
 	case "acc += y.v":
-		s.need(y, "uso", false)
+		s.need(y, "use", false)
 	case "use q":
 		s.touch(q)
 		if s.vars[q] == dead {
-			s.fail("uso de q, já liberada ou movida")
+			s.fail("use of q, already freed or moved")
 		}
 	case "y = x", "x = y", "q = x":
 		from, to := x, y
@@ -163,32 +163,32 @@ func (s mstate) atom(a string, ref int) mstate {
 		if a == "r := &y" {
 			v = y
 		}
-		s.need(v, "empréstimo", false)
+		s.need(v, "borrow", false)
 		s.refs[ref] = mref{src: int8(v)}
 	case "acc += r.v":
 		switch {
 		case ref < 0 || s.refs[ref].src < 0:
-			s.fail("uso de r sem empréstimo")
+			s.fail("use of r without a borrow")
 		case s.refs[ref].touched:
-			s.fail("%s tocada enquanto emprestada a r", varNames[s.refs[ref].src])
+			s.fail("%s touched while borrowed by r", varNames[s.refs[ref].src])
 		}
 	case "acc += 1":
-		// não mexe em nada (o comando neutro dos testes metamórficos)
+		// touches nothing (the neutral statement of the metamorphic tests)
 	default:
-		panic("modelo: comando desconhecido " + a)
+		panic("model: unknown statement " + a)
 	}
 	return s
 }
 
-// runModel roda a lista a partir de cada estado e devolve os estados de
-// quem terminou normalmente e de quem saiu por break.
+// runModel runs the list from each state and returns the states of
+// whoever finished normally and of whoever left through break.
 func (m *model) run(ss []*Stmt, in mset) (normal, broke mset) {
 	cur, broke := in, mset{}
 	for _, st := range ss {
 		next := mset{}
 		for s := range cur {
 			if s.bad != "" {
-				next[s] = true // o caminho já falhou: segue parado
+				next[s] = true // the path already failed: stays stopped
 				continue
 			}
 			switch {
@@ -224,9 +224,9 @@ func (m *model) run(ss []*Stmt, in mset) (normal, broke mset) {
 	return cur, broke
 }
 
-// loop calcula os estados na saída do laço: o conjunto dos estados no
-// começo de uma volta cresce até parar (ponto fixo); de cada um, a
-// condição pode dar falso. Um break também sai.
+// loop computes the states at the loop's exit: the set of states at the
+// start of an iteration grows until it stops (fixed point); from each one, the
+// condition can be false. A break also leaves.
 func (m *model) loop(body []*Stmt, s mstate) mset {
 	heads := mset{s: true}
 	exits := mset{}
@@ -248,11 +248,11 @@ func (m *model) loop(body []*Stmt, s mstate) mset {
 			}
 		}
 	}
-	exits.add(heads) // a condição deu falso no começo de qualquer volta
+	exits.add(heads) // the condition was false at the start of some iteration
 	return exits
 }
 
-// start são os estados iniciais: q nil ou vivo.
+// start are the initial states: q nil or live.
 func start() mset {
 	a := mstate{vars: [3]state{live, live, null}}
 	for i := range a.refs {
@@ -263,8 +263,8 @@ func start() mset {
 	return mset{a: true, b: true}
 }
 
-// Verdict é o veredito do modelo: "" se todo caminho é seguro, ou o que deu
-// errado num caminho inseguro.
+// Verdict is the model's verdict: "" if every path is safe, or what went
+// wrong on an unsafe path.
 func Verdict(ss []*Stmt) string {
 	final, _ := newModel(ss).run(ss, start())
 	bad := ""
@@ -272,21 +272,21 @@ func Verdict(ss []*Stmt) string {
 		if s.bad == "" {
 			for v, st := range s.vars {
 				if st == live {
-					s.fail("vazamento: %s ainda viva no fim", varNames[v])
+					s.fail("leak: %s still live at the end", varNames[v])
 				}
 			}
 		}
 		if s.bad != "" && (bad == "" || s.bad < bad) {
-			bad = s.bad // o menor, para o relatório não depender da ordem do mapa
+			bad = s.bad // the smallest, so the report doesn't depend on the map's order
 		}
 	}
 	return bad
 }
 
-// Epilogue devolve os free que fecham o programa: uma variável que termina
-// viva em todo caminho seguro é liberada no fim (q também quando pode ser
-// nil, porque free de nil não faz nada). Uma que termina viva só em alguns
-// caminhos fica como está: o programa vaza de qualquer jeito.
+// Epilogue returns the frees that close the program: a variable that ends
+// live on every safe path is freed at the end (q too when it may be
+// nil, because free of nil does nothing). One that ends live only on some
+// paths stays as it is: the program leaks either way.
 func Epilogue(ss []*Stmt) []*Stmt {
 	final, _ := newModel(ss).run(ss, start())
 	var out []*Stmt

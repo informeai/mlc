@@ -1,4 +1,4 @@
-// erro: import "geometria.mlc": escreva sem a extensão: import "geometria"
+// error: import "geometria.mlc": write it without the extension: import "geometria"
 import "geometria.mlc"
 fn main() {
 }

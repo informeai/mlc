@@ -1,4 +1,4 @@
-// erro: ref devolve &Box sem receber nenhum empréstimo: o resultado apontaria para algo que deixa de existir
+// error: ref returns &Box without taking any borrow: the result would point to something that stops existing
 // Caso difícil (fase 5 do plano de verificação): devolver empréstimo de uma variável local.
 struct Box {
     v int

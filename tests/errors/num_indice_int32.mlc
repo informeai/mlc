@@ -1,4 +1,4 @@
-// erro: o índice precisa ser int, encontrado int32
+// error: the index must be int, found int32
 fn main() {
     s := alloc([]int, 3)
     var i int32 = 1

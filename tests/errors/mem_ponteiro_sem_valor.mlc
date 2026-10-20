@@ -1,4 +1,4 @@
-// erro: var p *Ponto precisa de valor inicial: um ponteiro *T nunca é nil
+// error: var p *Ponto needs an initial value: a *T pointer is never nil (use ?*Ponto to start with nil)
 struct Ponto { x int; y int }
 fn main() {
     var p *Ponto

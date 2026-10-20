@@ -1,4 +1,4 @@
-// erro: p não pode ser movida: p.a foi movida para fora
+// error: p can't be moved: p.a was moved out (line 40) and didn't receive a new value
 // Caso difícil (fase 5 do plano de verificação): mover o objeto inteiro depois de mover um campo dele para fora.
 struct Box {
     v int

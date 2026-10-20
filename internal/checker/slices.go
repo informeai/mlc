@@ -7,16 +7,16 @@ import (
 	"mlc/internal/token"
 )
 
-// Slices (Marco 6)
+// Slices (Milestone 6)
 //
-// []T é dono da memória dos elementos, como *T: criado com alloc([]T, n),
-// com n elementos zerados, e liberado com free(s). O valor zero (var s []T)
-// é o slice vazio, que não precisa de free. s[i] tem checagem de limites em
-// tempo de execução; len(s) dá o tamanho; for x in s percorre cópias dos
-// elementos. &[]T empresta o slice: lê e escreve elementos, sem liberar.
+// []T owns the memory of its elements, like *T: created with alloc([]T, n),
+// with n zeroed elements, and freed with free(s). The zero value (var s []T)
+// is the empty slice, which doesn't need free. s[i] has bounds checking at
+// run time; len(s) gives the length; for x in s walks copies of the
+// elements. &[]T borrows the slice: reads and writes elements, without freeing.
 //
-// Nesta versão os elementos não podem ser donos ([]*No, [][]int): a posse
-// por elemento exigiria rastrear índices.
+// In this version the elements can't be owners ([]*Node, [][]int): ownership
+// per element would require tracking indices.
 
 type Slice struct{ Elem Type }
 
@@ -28,7 +28,7 @@ func (c *checker) sliceOf(elem Type) *Slice {
 	}
 	s := &Slice{Elem: elem}
 	c.slices[elem] = s
-	if !abstract(elem) { // []T da definição genérica não vai para o C
+	if !abstract(elem) { // the generic definition's []T doesn't go to C
 		c.info.Slices = append(c.info.Slices, s)
 	}
 	return s
@@ -39,8 +39,8 @@ func isSlice(t Type) bool {
 	return ok
 }
 
-// sliceElem devolve o tipo dos elementos de um slice ou de um empréstimo de
-// slice.
+// sliceElem returns the element type of a slice or of a slice
+// borrow.
 func sliceElem(t Type) (Type, bool) {
 	if b, ok := t.(*Borrow); ok {
 		t = b.Elem
@@ -54,7 +54,7 @@ func sliceElem(t Type) (Type, bool) {
 func (c *checker) resolveSlice(t *ast.TypeExpr, ctx typeCtx) Type {
 	switch ctx {
 	case ctxElem:
-		c.errorf(t.P, "ponteiro para slice não é suportado: o slice já é dono da memória (use []T, ou &[]T para emprestar)")
+		c.errorf(t.P, "pointer to slice isn't supported: the slice already owns the memory (use []T, or &[]T to borrow)")
 		return Invalid
 	}
 	elem := c.resolveType(t.Elem, ctxSliceElem)
@@ -62,39 +62,39 @@ func (c *checker) resolveSlice(t *ast.TypeExpr, ctx typeCtx) Type {
 		return Invalid
 	}
 	if ctx == ctxSliceElem && IsOwner(elem) {
-		c.errorf(t.P, "slices de slices de donos ainda não são suportados ([][]T só com T simples)")
+		c.errorf(t.P, "slices of slices of owners aren't supported yet ([][]T only with a simple T)")
 		return Invalid
 	}
 	if isResource(elem) {
-		c.errorf(t.Elem.P, "slices de %s ainda não são suportados: %s contém ponteiros donos, e os elementos não podem ser donos", elem, elem)
+		c.errorf(t.Elem.P, "slices of %s aren't supported yet: %s contains owning pointers, and the elements can't be owners", elem, elem)
 		return Invalid
 	}
 	return c.sliceOf(elem)
 }
 
-// allocSlice checa alloc([]T, n).
+// allocSlice checks alloc([]T, n).
 func (c *checker) allocSlice(e *ast.CallExpr, ta *ast.TypeArg) Type {
 	t := c.resolveType(ta.Type, ctxVar)
 	if len(e.Args) != 2 {
-		c.errorf(e.Lparen, "alloc de slice precisa do tamanho: alloc(%s, n)", t)
+		c.errorf(e.Lparen, "alloc of a slice needs the size: alloc(%s, n)", t)
 		return Invalid
 	}
-	c.intValue(e.Args[1], "o tamanho em alloc")
+	c.intValue(e.Args[1], "the size in alloc")
 	if t == Invalid {
 		return Invalid
 	}
 	if !isSlice(t) {
-		c.errorf(ta.Type.P, "alloc(T, n) serve para slices; para %s use alloc(%s)", t, t)
+		c.errorf(ta.Type.P, "alloc(T, n) is for slices; for %s use alloc(%s)", t, t)
 		return Invalid
 	}
 	c.info.Calls[e] = Callee{Builtin: Alloc, Elem: t, Slice: true}
 	return t
 }
 
-// lenCall checa len(x), para slices e strings.
+// lenCall checks len(x), for slices and strings.
 func (c *checker) lenCall(e *ast.CallExpr) Type {
 	if len(e.Args) != 1 {
-		c.errorf(e.Lparen, "len recebe um argumento")
+		c.errorf(e.Lparen, "len takes one argument")
 		c.checkArgs(e)
 		return Invalid
 	}
@@ -102,18 +102,18 @@ func (c *checker) lenCall(e *ast.CallExpr) Type {
 	if a, ok := arrayElem(t); ok {
 		c.info.Calls[e] = Callee{Builtin: Len}
 		if isPath(e.Args[0]) {
-			c.info.Values[e] = big.NewInt(a.Len) // conhecido na compilação
+			c.info.Values[e] = big.NewInt(a.Len) // known at compile time
 		}
 		return Int
 	}
 	if _, ok := sliceElem(t); !ok && t != String && t != Invalid {
-		c.errorf(e.Args[0].Pos(), "len se aplica a slices, arrays e strings, não a %s", t)
+		c.errorf(e.Args[0].Pos(), "len applies to slices, arrays and strings, not to %s", t)
 	}
 	c.info.Calls[e] = Callee{Builtin: Len}
 	return Int
 }
 
-// index checa s[i] em leitura: elemento de slice, ou byte de string (int).
+// index checks s[i] when read: a slice element, or a byte of a string (int).
 func (c *checker) index(e *ast.IndexExpr) Type {
 	bt := c.value(e.X)
 	c.indexValue(e.Index)
@@ -130,15 +130,15 @@ func (c *checker) index(e *ast.IndexExpr) Type {
 	case Invalid:
 		return Invalid
 	}
-	c.errorf(e.Lbrack, "valor do tipo %s não pode ser indexado", bt)
+	c.errorf(e.Lbrack, "a value of type %s can't be indexed", bt)
 	return Invalid
 }
 
 func (c *checker) indexValue(i ast.Expr) {
-	c.intValue(i, "o índice")
+	c.intValue(i, "the index")
 }
 
-// targetIndex checa s[i] como destino de atribuição.
+// targetIndex checks s[i] as an assignment target.
 func (c *checker) targetIndex(e *ast.IndexExpr) Type {
 	bt := c.value(e.X)
 	c.indexValue(e.Index)
@@ -151,16 +151,16 @@ func (c *checker) targetIndex(e *ast.IndexExpr) Type {
 	}
 	switch bt {
 	case String:
-		c.errorf(e.Lbrack, "strings não podem ser alteradas")
+		c.errorf(e.Lbrack, "strings can't be changed")
 	case Invalid:
 	default:
-		c.errorf(e.Lbrack, "valor do tipo %s não pode ser indexado", bt)
+		c.errorf(e.Lbrack, "a value of type %s can't be indexed", bt)
 	}
 	return Invalid
 }
 
-// checkForIn checa "for x in s { }": s é uma variável ou campo slice, e x
-// recebe uma cópia de cada elemento. O nome _ descarta o elemento.
+// checkForIn checks "for x in s { }": s is a slice variable or field, and x
+// receives a copy of each element. The name _ discards the element.
 func (c *checker) checkForIn(s *ast.ForStmt) {
 	c.pushScope()
 	iter := s.Iter
@@ -169,7 +169,7 @@ func (c *checker) checkForIn(s *ast.ForStmt) {
 		if id, ok := call.Fun.(*ast.Ident); ok && id.Name == "drain" && c.scope.lookup("drain") == nil {
 			drain = true
 			if len(call.Args) != 1 {
-				c.errorf(call.Lparen, "drain recebe um slice: for x in drain(s)")
+				c.errorf(call.Lparen, "drain takes a slice: for x in drain(s)")
 				c.checkArgs(call)
 				iter = nil
 			} else {
@@ -185,7 +185,7 @@ func (c *checker) checkForIn(s *ast.ForStmt) {
 		if a, isArr := arrayElem(t); isArr {
 			elem, ok = a.Elem, true
 			if drain {
-				c.errorf(iter.Pos(), "drain serve para slices de donos; para percorrer %s, use for x in a", t)
+				c.errorf(iter.Pos(), "drain is for slices of owners; to walk %s, use for x in a", t)
 			}
 		}
 	}
@@ -193,16 +193,16 @@ func (c *checker) checkForIn(s *ast.ForStmt) {
 	case t == Invalid:
 		elem = Invalid
 	case !ok:
-		c.errorf(iter.Pos(), "for in percorre slices, encontrado %s", t)
+		c.errorf(iter.Pos(), "for in walks slices, found %s", t)
 		elem = Invalid
 	case !isPath(iter):
-		c.errorf(iter.Pos(), "for in percorre uma variável ou campo: guarde o slice em uma variável primeiro")
+		c.errorf(iter.Pos(), "for in walks a variable or field: store the slice in a variable first")
 	case drain && s.Var.Name == "_":
-		c.errorf(s.Var.P, "o elemento tirado por drain precisa de um nome, para ser liberado ou movido")
+		c.errorf(s.Var.P, "the element taken out by drain needs a name, to be freed or moved")
 	case drain && !IsOwner(elem) && !c.genericContext():
-		c.errorf(iter.Pos(), "drain serve para slices de donos; para percorrer %s, use for x in s", t)
+		c.errorf(iter.Pos(), "drain is for slices of owners; to walk %s, use for x in s", t)
 	case !drain && (IsOwner(elem) || ownedVar(elem)):
-		c.errorf(iter.Pos(), "os elementos de %s são donos e não podem ser copiados: use for x in drain(s) para esvaziar o slice", t)
+		c.errorf(iter.Pos(), "the elements of %s are owners and can't be copied: use for x in drain(s) to empty the slice", t)
 	}
 	if s.Var.Name != "_" {
 		c.info.ForVars[s] = c.declare(s.Var.Name, s.Var.P, elem, false)
@@ -215,15 +215,15 @@ func (c *checker) checkForIn(s *ast.ForStmt) {
 
 func (c *checker) noSliceCompare(e *ast.BinaryExpr, t Type) bool {
 	if isSlice(t) {
-		c.errorf(e.OpPos, "slices não podem ser comparados com ==; compare os elementos")
+		c.errorf(e.OpPos, "slices can't be compared with ==; compare the elements")
 		return true
 	}
 	return false
 }
 
-// reallocCall checa realloc(s, n): consome o slice s e devolve um slice novo
-// com n elementos. Os elementos que já existiam são copiados; os novos vêm
-// zerados.
+// reallocCall checks realloc(s, n): consumes the slice s and returns a new slice
+// with n elements. The elements that already existed are copied; the new ones come
+// zeroed.
 func (c *checker) reallocCall(e *ast.CallExpr) Type {
 	if len(e.Args) != 2 {
 		c.errorf(e.Lparen, "realloc recebe o slice e o novo tamanho: s = realloc(s, n)")
@@ -231,23 +231,23 @@ func (c *checker) reallocCall(e *ast.CallExpr) Type {
 		return Invalid
 	}
 	t := c.value(e.Args[0])
-	c.intValue(e.Args[1], "o tamanho em realloc")
+	c.intValue(e.Args[1], "the size in realloc")
 	switch {
 	case t == Invalid:
 		return Invalid
 	case isBorrow(t):
-		c.errorf(e.Args[0].Pos(), "realloc precisa do dono do slice: um empréstimo (%s) não pode ser realocado", t)
+		c.errorf(e.Args[0].Pos(), "realloc needs the slice's owner: a borrow (%s) can't be reallocated", t)
 		return Invalid
 	case !isSlice(t):
-		c.errorf(e.Args[0].Pos(), "realloc se aplica a slices, não a %s", t)
+		c.errorf(e.Args[0].Pos(), "realloc applies to slices, not to %s", t)
 		return Invalid
 	}
 	c.info.Calls[e] = Callee{Builtin: Realloc, Elem: t}
 	return t
 }
 
-// subSlice checa s[a:b] e devolve o tipo do empréstimo: &[]T. Um sub-slice
-// não é dono de nada: enxerga a memória de s.
+// subSlice checks s[a:b] and returns the borrow's type: &[]T. A sub-slice
+// owns nothing: it sees s's memory.
 func (c *checker) subSlice(e *ast.SliceExpr) Type {
 	bt := c.value(e.X)
 	for _, b := range []ast.Expr{e.Low, e.High} {
@@ -262,17 +262,17 @@ func (c *checker) subSlice(e *ast.SliceExpr) Type {
 		bt = b.Elem
 	}
 	if a, ok := bt.(*Array); ok {
-		return c.borrowOf(c.sliceOf(a.Elem)) // parte de um array, vista como slice
+		return c.borrowOf(c.sliceOf(a.Elem)) // part of an array, viewed as a slice
 	}
 	s, ok := bt.(*Slice)
 	if !ok {
-		c.errorf(e.Lbrack, "sub-slice se aplica a slices e arrays, não a %s", bt)
+		c.errorf(e.Lbrack, "sub-slicing applies to slices and arrays, not to %s", bt)
 		return Invalid
 	}
 	return c.borrowOf(s)
 }
 
-// isPath diz se e é uma variável ou um campo (p, p.a.b), sem índices.
+// isPath says whether e is a variable or a field (p, p.a.b), without indices.
 func isPath(e ast.Expr) bool {
 	switch e := e.(type) {
 	case *ast.Ident:
@@ -283,17 +283,17 @@ func isPath(e ast.Expr) bool {
 	return false
 }
 
-// ownerElem checa o argumento &s[i] de take e replace e devolve o tipo do
-// elemento, que precisa ser dono.
+// ownerElem checks the argument &s[i] of take and replace and returns the
+// element's type, which must be an owner.
 func (c *checker) ownerElem(a ast.Expr, fn string) Type {
 	u, ok := a.(*ast.UnaryExpr)
 	var ix *ast.IndexExpr
-	ok = ok && u.Op == token.AMP // !s[i] e -s[i] não são empréstimos
+	ok = ok && u.Op == token.AMP // !s[i] and -s[i] aren't borrows
 	if ok {
 		ix, ok = u.X.(*ast.IndexExpr)
 	}
 	if !ok {
-		c.errorf(a.Pos(), "%s recebe um elemento emprestado: %s(&s[i]...)", fn, fn)
+		c.errorf(a.Pos(), "%s takes a borrowed element: %s(&s[i]...)", fn, fn)
 		c.value(a)
 		return Invalid
 	}
@@ -301,16 +301,16 @@ func (c *checker) ownerElem(a ast.Expr, fn string) Type {
 	c.info.Types[ix] = t
 	c.info.Types[a] = t
 	if t != Invalid && !IsOwner(t) && !c.genericContext() {
-		c.errorf(a.Pos(), "%s serve para elementos donos; os elementos aqui são %s (use s[i] direto)", fn, t)
+		c.errorf(a.Pos(), "%s is for owning elements; the elements here are %s (use s[i] directly)", fn, t)
 		return Invalid
 	}
 	return t
 }
 
-// takeCall checa take(&s[i]): devolve o elemento e deixa vazio no lugar.
+// takeCall checks take(&s[i]): returns the element and leaves the slot empty.
 func (c *checker) takeCall(e *ast.CallExpr) Type {
 	if len(e.Args) != 1 {
-		c.errorf(e.Lparen, "take recebe um elemento: take(&s[i])")
+		c.errorf(e.Lparen, "take takes one element: take(&s[i])")
 		c.checkArgs(e)
 		return Invalid
 	}
@@ -319,16 +319,16 @@ func (c *checker) takeCall(e *ast.CallExpr) Type {
 	return t
 }
 
-// replaceCall checa replace(&s[i], v): põe v e devolve o elemento antigo.
+// replaceCall checks replace(&s[i], v): puts v and returns the old element.
 func (c *checker) replaceCall(e *ast.CallExpr) Type {
 	if len(e.Args) != 2 {
-		c.errorf(e.Lparen, "replace recebe o elemento e o valor novo: replace(&s[i], v)")
+		c.errorf(e.Lparen, "replace takes the element and the new value: replace(&s[i], v)")
 		c.checkArgs(e)
 		return Invalid
 	}
 	t := c.ownerElem(e.Args[0], "replace")
 	if t != Invalid {
-		c.valueAs(e.Args[1], t, "o valor de replace")
+		c.valueAs(e.Args[1], t, "the value of replace")
 	} else {
 		c.value(e.Args[1])
 	}
@@ -336,8 +336,8 @@ func (c *checker) replaceCall(e *ast.CallExpr) Type {
 	return t
 }
 
-// isSlicePtrElem diz se t é um slice de ponteiros (para []([]?*T), que não
-// existe hoje, mas mantém io.print correto se vier a existir).
+// isSlicePtrElem says whether t is a slice of pointers (for []([]?*T), which doesn't
+// exist today, but keeps io.print right if it ever does).
 func isSlicePtrElem(t Type) bool {
 	e, ok := sliceElem(t)
 	return ok && isPointerType(e)

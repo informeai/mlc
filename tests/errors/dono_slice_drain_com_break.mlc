@@ -1,4 +1,4 @@
-// erro: free(s): os elementos de s podem ainda ser donos de memória
+// error: free(s): the elements of s may still own memory; empty it first with for x in drain(s)
 struct Item { peso int }
 fn main() {
     s := alloc([]?*Item, 2)

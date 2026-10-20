@@ -1,4 +1,4 @@
-// erro: mutex.Guard[int] não tem método lock
+// error: mutex.Guard[int] has no method lock (Mutex: lock, clone, close, notify, notify_all; Guard: get, unlock, wait, notify, notify_all)
 import "std/atomic"
 import "std/io"
 import "std/mutex"

@@ -1,4 +1,4 @@
-// erro: é uma thread: espere por ela com thread.join, não com free
+// error: *thread.Thread[int] is a thread: wait for it with thread.join, not with free
 import "std/io"
 import "std/thread"
 import "std/vec"

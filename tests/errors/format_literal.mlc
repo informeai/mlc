@@ -1,4 +1,4 @@
-// erro: o formato de str.format_len precisa ser uma string literal
+// error: the format of str.format_len must be a string literal
 import "std/io"
 import "std/str"
 

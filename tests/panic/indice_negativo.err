@@ -1,1 +1,1 @@
-panic: indice_negativo.mlc:4: índice -1 fora dos limites (tamanho 2)
+panic: indice_negativo.mlc:4: index -1 out of bounds (length 2)

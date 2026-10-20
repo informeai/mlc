@@ -1,4 +1,4 @@
-// erro: s já foi liberada ou movida (linha 7)
+// error: s was already freed or moved (line 7)
 fn soma(s &[]int) int {
     return len(s)
 }

@@ -1,4 +1,4 @@
-// erro: chan.Sender[int] é uma ponta de canal: só existe atrás de ponteiro
+// error: chan.Sender[int] is a channel end: it only exists behind a pointer (*chan.Sender[int], ?*chan.Sender[int])
 import "std/chan"
 import "std/io"
 

@@ -1,4 +1,4 @@
-// erro: v está emprestada a a (linha 12) até a linha 16
+// error: v is borrowed by a (line 12) until line 16: use a, or finish using a first
 import "std/io"
 import "std/vec"
 

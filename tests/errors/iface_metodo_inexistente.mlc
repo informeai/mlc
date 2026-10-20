@@ -1,4 +1,4 @@
-// erro: T não tem método perimetro
+// error: T has no method perimetro: the constraint Area doesn't declare it
 interface Area {
     fn area(self &Self) int
 }

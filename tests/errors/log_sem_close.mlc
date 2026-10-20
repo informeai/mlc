@@ -1,4 +1,4 @@
-// erro: feche com lg.close()
+// error: leak: lg (log.Logger, line 5) may still be open at the end of the function; close it with lg.close()
 import "std/log"
 
 fn main() {

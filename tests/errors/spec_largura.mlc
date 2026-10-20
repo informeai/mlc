@@ -1,4 +1,4 @@
-// erro: {:999} no formato de io.printf: a largura vai até 255
+// error: {:999} in the format of io.printf: the width goes up to 255
 import "std/io"
 import "std/str"
 

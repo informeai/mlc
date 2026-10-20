@@ -1,4 +1,4 @@
-// erro: Box não implementa cmp.Eq, exigida por T em f (declare impl auto cmp.Eq for Box, ou escreva o método)
+// error: Box doesn't implement cmp.Eq, required by T in f (declare impl auto cmp.Eq for Box, or write the method)
 import "std/cmp"
 
 struct Box {

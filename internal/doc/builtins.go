@@ -1,9 +1,9 @@
 package doc
 
-// Builtins descreve o que não tem declaração em arquivo: as funções e os
-// tipos embutidos, as restrições de genéricos e o que o compilador reescreve
-// (io.print, thread.spawn, os métodos de canais e mutex). Cada entrada tem a
-// forma de uso e a descrição, em markdown. É usado pelo mlc doc e pelo LSP.
+// Builtins describes what has no declaration in a file: the built-in functions and
+// types, the generic constraints and what the compiler rewrites
+// (io.print, thread.spawn, the methods of channels and mutexes). Each entry has the
+// usage form and the description, in markdown. It's used by mlc doc and by the LSP.
 var Builtins = map[string][2]string{
 	"alloc":            {"alloc(T) *T · alloc(value) *T · alloc([]T, n) []T", "Allocates on the heap. Returns an owner, which must be freed with `free` (the compiler checks)."},
 	"free":             {"free(p)", "Frees an owning pointer or slice. After that the variable can't be used anymore."},

@@ -153,7 +153,7 @@ For another path to the executable: `vim.lsp.config("mlc", { cmd = { "/path/to/m
 | `std` | the standard library written in MLC (`import "std/io"`, `import "std/math"`), built into the binary, with its tests in `std/*_test.mlc`. See [docs/library.md](docs/library.md) |
 | `tests/run` | programs and expected output (`.out`); optional input (`.in`) |
 | `tests/panic` | programs that must abort (`.out` + `.err`) |
-| `tests/errors` | programs that must be rejected (`// erro: ...` on the 1st line) |
+| `tests/errors` | programs that must be rejected (`// error: ...` on the 1st line) |
 | `tests/testing` | a test file with known results, to check `mlc test` itself |
 
 A multi-file program lives in its own folder, with the main file in `main.mlc` (for example `tests/run/projeto/main.mlc`) and the imported files next to it.
@@ -185,7 +185,7 @@ The idea of MLC is that whoever programs understands and knows **how much and wh
 ## Conventions
 
 - Library and runtime functions exposed in the language are always in English (`io.print`).
-- Compiler messages are in Portuguese, for now.
+- Compiler messages and the tools' output are in English.
 
 ## Roadmap
 

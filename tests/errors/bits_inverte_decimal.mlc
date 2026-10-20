@@ -1,4 +1,4 @@
-// erro: operador ^ (inverter os bits) só se aplica a inteiros, não a float64
+// error: operator ^ (bit inversion) only applies to integers, not to float64
 fn main() {
     var f float64 = 1.0
     g := ^f

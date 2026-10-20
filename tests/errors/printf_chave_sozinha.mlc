@@ -1,4 +1,4 @@
-// erro: '{' sozinho no formato de io.printf
+// error: lone '{' in the format of io.printf: use {} for a value or {{ to write {
 import "std/io"
 
 fn main() {

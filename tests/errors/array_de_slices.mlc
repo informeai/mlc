@@ -1,4 +1,4 @@
-// erro: arrays de []int ainda não são suportados: os elementos não podem ser donos
+// error: arrays of []int aren't supported yet: the elements can't be owners
 fn main() {
     var a [2][]int
 }

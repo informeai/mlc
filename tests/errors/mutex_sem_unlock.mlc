@@ -1,4 +1,4 @@
-// erro: vazamento: o guard g
+// error: leak: the guard g (line 18) may still be locked at the end of the function; unlock it with g.unlock()
 import "std/atomic"
 import "std/io"
 import "std/mutex"

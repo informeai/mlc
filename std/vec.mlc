@@ -44,7 +44,7 @@ pub fn (v &Vec[T]) grow() {
 // pop takes out the last element and returns its ownership.
 pub fn (v &Vec[T]) pop() T {
     if v.count == 0 {
-        fail("vec.pop: vetor vazio")
+        fail("vec.pop: empty vector")
     }
     v.count--
     return take(&v.items[v.count])
@@ -53,7 +53,7 @@ pub fn (v &Vec[T]) pop() T {
 // take takes out element i, leaving the zero value in its place, and returns ownership.
 pub fn (v &Vec[T]) take(i int) T {
     if i < 0 || i >= v.count {
-        fail("vec.take: índice fora do vetor")
+        fail("vec.take: index outside the vector")
     }
     return take(&v.items[i])
 }
@@ -61,7 +61,7 @@ pub fn (v &Vec[T]) take(i int) T {
 // put puts x at position i and returns the element that was there.
 pub fn (v &Vec[T]) put(i int, x T) T {
     if i < 0 || i >= v.count {
-        fail("vec.put: índice fora do vetor")
+        fail("vec.put: index outside the vector")
     }
     return replace(&v.items[i], x)
 }
@@ -69,7 +69,7 @@ pub fn (v &Vec[T]) put(i int, x T) T {
 // swap swaps elements i and j.
 pub fn (v &Vec[T]) swap(i int, j int) {
     if i < 0 || i >= v.count || j < 0 || j >= v.count {
-        fail("vec.swap: índice fora do vetor")
+        fail("vec.swap: index outside the vector")
     }
     a := take(&v.items[i])
     b := replace(&v.items[j], a)
@@ -84,7 +84,7 @@ pub fn (v &Vec[T]) swap(i int, j int) {
 //     x.field = 3
 pub fn (v &Vec[T]) at(i int) &T {
     if i < 0 || i >= v.count {
-        fail("vec.at: índice fora do vetor")
+        fail("vec.at: index outside the vector")
     }
     return &v.items[i]
 }
@@ -92,7 +92,7 @@ pub fn (v &Vec[T]) at(i int) &T {
 // last borrows the last element.
 pub fn (v &Vec[T]) last() &T {
     if v.count == 0 {
-        fail("vec.last: vetor vazio")
+        fail("vec.last: empty vector")
     }
     return &v.items[v.count - 1]
 }
@@ -137,7 +137,7 @@ pub fn (v *Vec[T]) free() {
 // get returns a copy of element i (only for copyable T).
 pub fn (v &Vec[T any]) get(i int) T {
     if i < 0 || i >= v.count {
-        fail("vec.get: índice fora do vetor")
+        fail("vec.get: index outside the vector")
     }
     return v.items[i]
 }
@@ -146,7 +146,7 @@ pub fn (v &Vec[T any]) get(i int) T {
 // After a take(i), it puts the element back in place.
 pub fn (v &Vec[T]) set(i int, x T) {
     if i < 0 || i >= v.count {
-        fail("vec.set: índice fora do vetor")
+        fail("vec.set: index outside the vector")
     }
     old := replace(&v.items[i], x)
     drop(old)

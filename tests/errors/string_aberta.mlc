@@ -1,4 +1,4 @@
-// erro: string não terminada
+// error: unterminated string
 import "std/io"
 fn main() {
     io.print("abc)

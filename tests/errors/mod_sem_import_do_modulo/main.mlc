@@ -1,4 +1,4 @@
-// erro: módulo geometria não foi importado
+// error: module geometria wasn't imported
 fn main() {
     var p geometria.Ponto
 }

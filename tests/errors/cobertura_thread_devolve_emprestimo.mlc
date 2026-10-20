@@ -1,4 +1,4 @@
-// erro: a função da thread não pode devolver um empréstimo
+// error: the thread's function can't return a borrow (&Box)
 // Cobertura do verificador (fase 5): regra de posse que nenhum teste disparava.
 import "std/thread"
 

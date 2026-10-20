@@ -1,4 +1,4 @@
-// erro: thread.Thread é um handle: só existe atrás de ponteiro
+// error: thread.Thread is a handle: it only exists behind a pointer (*thread.Thread, ?*thread.Thread)
 import "std/io"
 import "std/thread"
 import "std/vec"

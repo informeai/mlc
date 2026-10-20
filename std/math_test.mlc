@@ -26,8 +26,8 @@ fn test_functions() {
 }
 
 fn test_nan_inf() {
-    testing.check(math.is_nan(math.sqrt(-1.0)), "sqrt(-1) é NaN")
-    testing.check(!math.is_nan(1.0), "1 não é NaN")
-    testing.check(math.is_inf(math.exp(1000.0)), "exp(1000) é infinito")
-    testing.check(!math.is_inf(1.0), "1 não é infinito")
+    testing.check(math.is_nan(math.sqrt(-1.0)), "sqrt(-1) is NaN")
+    testing.check(!math.is_nan(1.0), "1 isn't NaN")
+    testing.check(math.is_inf(math.exp(1000.0)), "exp(1000) is infinite")
+    testing.check(!math.is_inf(1.0), "1 isn't infinite")
 }

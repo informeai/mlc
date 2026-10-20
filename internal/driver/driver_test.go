@@ -16,12 +16,12 @@ const testsDir = "../../tests"
 
 func init() { extraCFlags = []string{"-Werror"} }
 
-// sanitize é o sanitizer dos testes de execução (MLC_SANITIZE=address ou
-// thread, como no make sanitize): todo programa que o checker aceita precisa
-// rodar limpo sob eles (veja docs/verification.md).
+// sanitize is the sanitizer of the run tests (MLC_SANITIZE=address or
+// thread, as in make sanitize): every program the checker accepts must
+// run clean under them (see docs/verification.md).
 var sanitize = os.Getenv("MLC_SANITIZE")
 
-// buildAndRun compila tests/<dir>/<name> e executa o binário.
+// buildAndRun compiles tests/<dir>/<name> and runs the binary.
 func buildAndRun(t *testing.T, path string) (stdout, stderr string, code int) {
 	t.Helper()
 	src, err := os.ReadFile(path)
@@ -33,13 +33,13 @@ func buildAndRun(t *testing.T, path string) (stdout, stderr string, code int) {
 		t.Fatalf("build falhou:\n%v", err)
 	}
 	var out, errOut bytes.Buffer
-	var args []string // x.args, se existir: os argumentos, um por linha
+	var args []string // x.args, if it exists: the arguments, one per line
 	if b, err := os.ReadFile(strings.TrimSuffix(path, ".mlc") + ".args"); err == nil {
 		args = strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")
 	}
 	cmd := exec.Command(exe, args...)
 	cmd.Stdout, cmd.Stderr = &out, &errOut
-	// x.in, se existir, vira a entrada padrão do programa
+	// x.in, if it exists, becomes the program's standard input
 	if in, err := os.ReadFile(strings.TrimSuffix(path, ".mlc") + ".in"); err == nil {
 		cmd.Stdin = bytes.NewReader(in)
 	}
@@ -65,11 +65,11 @@ func readExpected(t *testing.T, path string) string {
 func requireCC(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("cc"); err != nil && os.Getenv("CC") == "" {
-		t.Skip("compilador C não encontrado")
+		t.Skip("C compiler not found")
 	}
 }
 
-// TestRun: cada tests/run/x.mlc precisa compilar, sair com 0 e imprimir x.out.
+// TestRun: each tests/run/x.mlc must compile, exit with 0 and print x.out.
 func TestRun(t *testing.T) {
 	requireCC(t)
 	files := programs("run")
@@ -77,17 +77,17 @@ func TestRun(t *testing.T) {
 		t.Run(testName(path), func(t *testing.T) {
 			out, errOut, code := buildAndRun(t, path)
 			if code != 0 {
-				t.Fatalf("código de saída %d, stderr:\n%s", code, errOut)
+				t.Fatalf("exit code %d, stderr:\n%s", code, errOut)
 			}
 			if want := readExpected(t, strings.TrimSuffix(path, ".mlc")+".out"); out != want {
-				t.Errorf("saída:\n%q\nesperado:\n%q", out, want)
+				t.Errorf("output:\n%q\nexpected:\n%q", out, want)
 			}
 		})
 	}
 }
 
-// TestPanic: cada tests/panic/x.mlc precisa sair com 2, imprimir x.out e
-// reportar o panic de x.err apontando para a linha do .mlc.
+// TestPanic: each tests/panic/x.mlc must exit with 2, print x.out and
+// report x.err's panic pointing at the .mlc line.
 func TestPanic(t *testing.T) {
 	requireCC(t)
 	files := programs("panic")
@@ -96,7 +96,7 @@ func TestPanic(t *testing.T) {
 			out, errOut, code := buildAndRun(t, path)
 			base := strings.TrimSuffix(path, ".mlc")
 			if code != 2 {
-				t.Errorf("código de saída %d, esperado 2", code)
+				t.Errorf("exit code %d, expected 2", code)
 			}
 			if want := readExpected(t, base+".out"); out != want {
 				t.Errorf("stdout:\n%q\nesperado:\n%q", out, want)
@@ -108,32 +108,32 @@ func TestPanic(t *testing.T) {
 	}
 }
 
-// TestErrors: cada tests/errors/x.mlc começa com "// erro: <trecho>" e
-// precisa ser rejeitado com uma mensagem que contenha o trecho.
+// TestErrors: each tests/errors/x.mlc starts with "// error: <piece>" and
+// must be rejected with a message that contains the piece.
 func TestErrors(t *testing.T) {
 	files := programs("errors")
 	for _, path := range files {
 		t.Run(testName(path), func(t *testing.T) {
 			src := readExpected(t, path)
 			first, _, _ := strings.Cut(src, "\n")
-			want, ok := strings.CutPrefix(first, "// erro: ")
+			want, ok := strings.CutPrefix(first, "// error: ")
 			if !ok {
-				t.Fatal("a primeira linha precisa ser \"// erro: <trecho esperado>\"")
+				t.Fatal("the first line must be \"// error: <expected piece>\"")
 			}
 			_, err := CompileWith(filepath.Base(path), []byte(src), dirLoader(path))
 			if err == nil {
-				t.Fatalf("compilou, mas deveria falhar com %q", want)
+				t.Fatalf("compiled, but should fail with %q", want)
 			}
 			if !strings.Contains(err.Error(), want) {
-				t.Errorf("erro:\n%v\nnão contém %q", err, want)
+				t.Errorf("error:\n%v\ndoesn't contain %q", err, want)
 			}
 		})
 	}
 }
 
-// TestEvaluationOrderIsExplicit confere que a ordem esquerda-para-direita está
-// escrita no C gerado. Rodar o programa não basta: o clang já avalia da
-// esquerda para a direita por conta própria, mas o padrão do C não garante.
+// TestEvaluationOrderIsExplicit checks that the left-to-right order is
+// written in the generated C. Running the program isn't enough: clang already evaluates
+// left to right on its own, but the C standard doesn't guarantee it.
 func TestEvaluationOrderIsExplicit(t *testing.T) {
 	src := `import "std/io"
 fn a() int { return 1 }
@@ -146,8 +146,8 @@ fn main() {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// as temporárias são numeradas no programa todo (a biblioteca também
-	// usa): renumera as da main na ordem em que aparecem
+	// the temporaries are numbered over the whole program (the library also
+	// uses them): renumbers main's in the order they appear
 	start := strings.Index(csrc, "mlc_fn_main(void) {")
 	body := csrc[start:]
 	names := map[string]string{}
@@ -158,29 +158,29 @@ fn main() {
 		return names[n]
 	})
 	for _, want := range []string{
-		// t1 é o io.Writer; os argumentos vão para t2 e t4, da esquerda para a direita
+		// t1 is the io.Writer; the arguments go into t2 and t4, left to right
 		"t2 = (t3 = mlc_fn_a(), mlc_fn_soma(t3, mlc_fn_b()))",
 		"t4 = (t5 = mlc_fn_a(), mlc_sub_i64(t5, mlc_fn_b(), __FILE__, __LINE__))",
-		// io.print calcula todos os argumentos antes de escrever
+		// io.print computes every argument before writing
 		"t4 = (t5 = mlc_fn_a(), mlc_sub_i64(t5, mlc_fn_b(), __FILE__, __LINE__)), mlc_fn_m1_io__impl_Display__int__write(&t2, &t1)",
 	} {
 		if !strings.Contains(body, want) {
-			t.Errorf("C gerado não contém %q:\n%s", want, body)
+			t.Errorf("generated C doesn't contain %q:\n%s", want, body)
 		}
 	}
 }
 
-// programs lista os programas de teste de tests/<kind>: cada x.mlc da pasta e,
-// para programas de vários arquivos, cada <pasta>/main.mlc (os outros
-// arquivos da pasta são os módulos que ele importa).
+// programs lists the test programs of tests/<kind>: each x.mlc of the folder and,
+// for multi-file programs, each <folder>/main.mlc (the other
+// files of the folder are the modules it imports).
 func programs(kind string) []string {
 	files, _ := filepath.Glob(filepath.Join(testsDir, kind, "*.mlc"))
 	multi, _ := filepath.Glob(filepath.Join(testsDir, kind, "*", "main.mlc"))
 	return append(files, multi...)
 }
 
-// dirLoader lê os imports da pasta do programa de teste. O programa é
-// compilado pelo nome sem pasta, para as mensagens não dependerem dela.
+// dirLoader reads the imports from the test program's folder. The program is
+// compiled by its name without the folder, so the messages don't depend on it.
 func dirLoader(path string) Loader {
 	dir := filepath.Dir(path)
 	return func(name string) ([]byte, error) {
@@ -188,8 +188,8 @@ func dirLoader(path string) Loader {
 	}
 }
 
-// testName nomeia o teste pelo arquivo, ou pela pasta num programa de vários
-// arquivos (projeto/main.mlc vira projeto).
+// testName names the test by the file, or by the folder in a multi-file
+// program (projeto/main.mlc becomes projeto).
 func testName(path string) string {
 	if filepath.Base(path) == "main.mlc" {
 		return filepath.Base(filepath.Dir(path))
@@ -197,8 +197,8 @@ func testName(path string) string {
 	return filepath.Base(path)
 }
 
-// TestLinkErrors: uma biblioteca de C ou um símbolo que não existe é erro do
-// programa (LinkError), não do mlc.
+// TestLinkErrors: a C library or a symbol that doesn't exist is an error of the
+// program (LinkError), not of mlc.
 func TestLinkErrors(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "prog")
 	for _, src := range []string{
@@ -207,15 +207,15 @@ func TestLinkErrors(t *testing.T) {
 	} {
 		err := Build("link.mlc", []byte(src), out)
 		var le *LinkError
-		if !errors.As(err, &le) || !strings.Contains(err.Error(), "não foi possível ligar o programa") {
-			t.Errorf("esperado LinkError, veio %v", err)
+		if !errors.As(err, &le) || !strings.Contains(err.Error(), "couldn't link the program") {
+			t.Errorf("expected a LinkError, got %v", err)
 		}
 	}
 }
 
-// TestImportSearch: um import é procurado na pasta do arquivo principal, em
-// lib/ ao lado dele, nas pastas de -I e nas de MLC_PATH, nessa ordem; os
-// imports de dentro de uma biblioteca seguem a mesma busca.
+// TestImportSearch: an import is looked up in the main file's folder, in
+// lib/ next to it, in the -I folders and in MLC_PATH's, in that order; the
+// imports inside a library follow the same search.
 func TestImportSearch(t *testing.T) {
 	root := t.TempDir()
 	write := func(path, src string) {
@@ -255,24 +255,24 @@ fn main() {
 		t.Fatal(err)
 	}
 	if got := strings.TrimSpace(string(out)); got != "1 2 3 projeto" {
-		t.Errorf("saída %q, esperado \"1 2 3 projeto\"", got)
+		t.Errorf("output %q, expected \"1 2 3 projeto\"", got)
 	}
 
-	// sem o -I, o módulo texto não é achado, e a mensagem diz onde procurou
+	// without -I, the module texto isn't found, and the message says where it looked
 	err = BuildOpts(mainPath, src, exe, os.ReadFile, Options{})
-	if err == nil || !strings.Contains(err.Error(), `arquivo texto.mlc não encontrado (procurado em`) || !strings.Contains(err.Error(), "shared") {
-		t.Errorf("esperado erro de módulo desconhecido com as pastas, veio %v", err)
+	if err == nil || !strings.Contains(err.Error(), `file texto.mlc not found (searched in`) || !strings.Contains(err.Error(), "shared") {
+		t.Errorf("expected an unknown-module error with the folders, got %v", err)
 	}
 
-	// o diagnóstico do editor acha lib/ e MLC_PATH (o -I é só da linha de comando)
+	// the editor's diagnostics find lib/ and MLC_PATH (-I is only for the command line)
 	write("proj/main2.mlc", "import \"std/io\"\nimport \"util\"\nimport \"json/parse\"\n\nfn main() {\n    io.print(util.um(), parse.tres())\n}\n")
 	if errs := Diagnose(filepath.Join(root, "proj", "main2.mlc"), Overlay(nil)); len(errs) != 0 {
-		t.Errorf("o diagnóstico não achou os módulos: %v", errs)
+		t.Errorf("the diagnostics didn't find the modules: %v", errs)
 	}
 }
 
-// TestTestRunner confere o resultado e a saída de cada teste de
-// tests/testing/runner_test.mlc (o mlc test).
+// TestTestRunner checks the result and the output of each test of
+// tests/testing/runner_test.mlc (mlc test).
 func TestTestRunner(t *testing.T) {
 	requireCC(t)
 	path := filepath.Join(testsDir, "testing", "runner_test.mlc")
@@ -286,46 +286,46 @@ func TestTestRunner(t *testing.T) {
 	want := []struct {
 		name   string
 		status TestStatus
-		output []string // trechos esperados na saída
+		output []string // pieces expected in the output
 	}{
 		{"test_passes", Passed, nil},
 		{"test_fails", Failed, []string{
 			"saída do teste\n",
-			"runner_test.mlc:17: texto diferente\n    veio:     \"oi\\n\"\n    esperado: \"ola\"\n",
-			"runner_test.mlc:18: veio 3, esperado 4\n",
-			"runner_test.mlc:19: veio 255 (0xff), esperado 256 (0x100)\n",
-			"runner_test.mlc:20: veio 0.30000000000000004, esperado 0.3\n",
+			"runner_test.mlc:17: different text\n    got:      \"oi\\n\"\n    expected: \"ola\"\n",
+			"runner_test.mlc:18: got 3, expected 4\n",
+			"runner_test.mlc:19: got 255 (0xff), expected 256 (0x100)\n",
+			"runner_test.mlc:20: got 0.30000000000000004, expected 0.3\n",
 			"runner_test.mlc:22: explícito\n",
 		}},
-		{"test_panics", Panicked, []string{"panic: runner_test.mlc:29: índice 5 fora dos limites (tamanho 2)"}},
-		{"test_expected_panic", Passed, []string{"panic esperado: runner_test.mlc:37:"}},
-		{"test_missing_panic", Failed, []string{"terminou sem o panic esperado"}},
-		{"test_fails_then_panics", Failed, []string{"runner_test.mlc:47: veio 1, esperado 2", "panic esperado:"}},
+		{"test_panics", Panicked, []string{"panic: runner_test.mlc:29: index 5 out of bounds (length 2)"}},
+		{"test_expected_panic", Passed, []string{"expected panic: runner_test.mlc:37:"}},
+		{"test_missing_panic", Failed, []string{"ended without the expected panic"}},
+		{"test_fails_then_panics", Failed, []string{"runner_test.mlc:47: got 1, expected 2", "expected panic:"}},
 	}
 	if len(names) != len(want) {
-		t.Fatalf("testes: %v", names)
+		t.Fatalf("tests: %v", names)
 	}
 	for i, w := range want {
 		if names[i] != w.name {
-			t.Errorf("teste %d: %s, esperado %s", i, names[i], w.name)
+			t.Errorf("test %d: %s, expected %s", i, names[i], w.name)
 			continue
 		}
 		r := RunTest(exe, i, names[i])
 		if r.Status != w.status {
-			t.Errorf("%s: %v, esperado %v; saída:\n%s", w.name, r.Status, w.status, r.Output)
+			t.Errorf("%s: %v, expected %v; output:\n%s", w.name, r.Status, w.status, r.Output)
 		}
 		for _, frag := range w.output {
 			if !strings.Contains(string(r.Output), frag) {
-				t.Errorf("%s: a saída não contém %q:\n%s", w.name, frag, r.Output)
+				t.Errorf("%s: the output doesn't contain %q:\n%s", w.name, frag, r.Output)
 			}
 		}
 		if w.name == "test_fails" && strings.Contains(string(r.Output), "nunca aparece") {
-			t.Errorf("check verdadeiro não deveria aparecer")
+			t.Errorf("a true check shouldn't show up")
 		}
 	}
 }
 
-// TestStdLibrary roda os testes da biblioteca padrão (std/*_test.mlc).
+// TestStdLibrary runs the standard library's tests (std/*_test.mlc).
 func TestStdLibrary(t *testing.T) {
 	requireCC(t)
 	files, _ := filepath.Glob("../../std/*_test.mlc")
@@ -349,8 +349,8 @@ func TestStdLibrary(t *testing.T) {
 	}
 }
 
-// TestFFIOutHandle liga tests/ffi/out_handle.mlc a uma biblioteca de C feita
-// na hora (tests/ffi/counter.c), que devolve handles por ponteiro (&?*X).
+// TestFFIOutHandle links tests/ffi/out_handle.mlc to a C library made
+// on the spot (tests/ffi/counter.c), which returns handles through a pointer (&?*X).
 func TestFFIOutHandle(t *testing.T) {
 	requireCC(t)
 	dir := counterLib(t)
@@ -364,11 +364,11 @@ func TestFFIOutHandle(t *testing.T) {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	if want := readExpected(t, filepath.Join(testsDir, "ffi", "out_handle.out")); string(out) != want {
-		t.Errorf("saída:\n%s\nesperado:\n%s", out, want)
+		t.Errorf("output:\n%s\nexpected:\n%s", out, want)
 	}
 }
 
-// TestBenchRunner confere os benchmarks de tests/testing/runner_test.mlc.
+// TestBenchRunner checks the benchmarks of tests/testing/runner_test.mlc.
 func TestBenchRunner(t *testing.T) {
 	requireCC(t)
 	path := filepath.Join(testsDir, "testing", "runner_test.mlc")
@@ -385,15 +385,15 @@ func TestBenchRunner(t *testing.T) {
 		t.Errorf("bench_sum: %v, %d ns\n%s", r.Status, r.Ns, r.Output)
 	}
 	if strings.Contains(string(r.Output), "mlc-bench-ns") {
-		t.Errorf("a linha do tempo deveria sair da saída: %q", r.Output)
+		t.Errorf("the time line should leave the output: %q", r.Output)
 	}
 	r = RunBench(exe, 1, 1)
-	if r.Status != Panicked || !strings.Contains(string(r.Output), "fora dos limites") {
+	if r.Status != Panicked || !strings.Contains(string(r.Output), "out of bounds") {
 		t.Errorf("bench_panics: %v\n%s", r.Status, r.Output)
 	}
 }
 
-// counterLib compila tests/ffi/counter.c numa libcounter.a e devolve a pasta.
+// counterLib compiles tests/ffi/counter.c into a libcounter.a and returns the folder.
 func counterLib(t *testing.T) string {
 	t.Helper()
 	cc := os.Getenv("CC")
@@ -411,7 +411,7 @@ func counterLib(t *testing.T) string {
 	return dir
 }
 
-// TestCCFlags confere -cflags, -ldflags e as variáveis CFLAGS e LDFLAGS.
+// TestCCFlags checks -cflags, -ldflags and the variables CFLAGS and LDFLAGS.
 func TestCCFlags(t *testing.T) {
 	requireCC(t)
 	src := []byte("import \"std/io\"\n\nfn main() {\n    io.print(42)\n}\n")
@@ -425,50 +425,50 @@ func TestCCFlags(t *testing.T) {
 	}
 
 	if err := BuildOpts("p.mlc", src, exe, os.ReadFile, Options{CFlags: SplitFlags("-O0 -g -DMLC_FLAG=1")}); err != nil {
-		t.Fatalf("-cflags válidas: %v", err)
+		t.Fatalf("valid -cflags: %v", err)
 	}
 	if got := run(); got != "42\n" {
-		t.Errorf("saída %q", got)
+		t.Errorf("output %q", got)
 	}
 
 	err := BuildOpts("p.mlc", src, exe, os.ReadFile, Options{CFlags: []string{"-fnao-existe-mlc"}})
-	if err == nil || !strings.Contains(err.Error(), "recusou a compilação com as flags") || strings.HasPrefix(err.Error(), "erro interno:") {
-		t.Errorf("flag inválida deveria apontar a flag, não um erro interno: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "refused the compilation with the flags") || strings.HasPrefix(err.Error(), "internal error:") {
+		t.Errorf("an invalid flag should point at the flag, not an internal error: %v", err)
 	}
 
 	err = BuildOpts("p.mlc", src, exe, os.ReadFile, Options{LDFlags: []string{"-lnao-existe-mlc"}})
 	var le *LinkError
-	if !errors.As(err, &le) || !strings.Contains(err.Error(), "flags de ligação (-lnao-existe-mlc)") {
-		t.Errorf("ldflag inválida: %v", err)
+	if !errors.As(err, &le) || !strings.Contains(err.Error(), "link flags (-lnao-existe-mlc)") {
+		t.Errorf("invalid ldflag: %v", err)
 	}
 
 	t.Setenv("CFLAGS", "-fnao-existe-ambiente")
 	err = BuildOpts("p.mlc", src, exe, os.ReadFile, Options{})
 	if err == nil || !strings.Contains(err.Error(), "-fnao-existe-ambiente") {
-		t.Errorf("CFLAGS do ambiente deveria valer: %v", err)
+		t.Errorf("the environment's CFLAGS should apply: %v", err)
 	}
 	t.Setenv("CFLAGS", "")
 
-	// a pasta da biblioteca por -ldflags, em vez de -L
+	// the library's folder through -ldflags, instead of -L
 	dir := counterLib(t)
 	path := filepath.Join(testsDir, "ffi", "out_handle.mlc")
 	if err := BuildOpts(filepath.Base(path), []byte(readExpected(t, path)), exe, dirLoader(path), Options{LDFlags: []string{"-L" + dir}}); err != nil {
 		t.Fatalf("-ldflags -L: %v", err)
 	}
 	if got, want := run(), readExpected(t, filepath.Join(testsDir, "ffi", "out_handle.out")); got != want {
-		t.Errorf("saída:\n%s\nesperado:\n%s", got, want)
+		t.Errorf("output:\n%s\nexpected:\n%s", got, want)
 	}
 
-	// sanitizers pelas duas opções: o executável tem o AddressSanitizer
+	// sanitizers through both options: the executable has AddressSanitizer
 	asan := Options{CFlags: []string{"-fsanitize=address"}, LDFlags: []string{"-fsanitize=address"}}
 	if err := BuildOpts("p.mlc", src, exe, os.ReadFile, asan); err != nil {
-		t.Skipf("o compilador C não tem AddressSanitizer: %v", err)
+		t.Skipf("the C compiler doesn't have AddressSanitizer: %v", err)
 	}
 	if got := run(); got != "42\n" {
-		t.Errorf("com AddressSanitizer: %q", got)
+		t.Errorf("with AddressSanitizer: %q", got)
 	}
 	bin, _ := os.ReadFile(exe)
 	if !bytes.Contains(bin, []byte("asan")) {
-		t.Errorf("o executável deveria ter o AddressSanitizer")
+		t.Errorf("the executable should have AddressSanitizer")
 	}
 }

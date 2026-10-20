@@ -1,4 +1,4 @@
-// erro: Forma não tem variante Quadrado
+// error: Forma has no variant Quadrado
 enum Forma {
     Circulo(raio float64)
     Vazio

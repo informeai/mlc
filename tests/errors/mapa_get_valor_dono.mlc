@@ -1,4 +1,4 @@
-// erro: map.Map[int, []byte].get_or exige V any ([]byte é dono, e o método copia): use os métodos que movem a posse, como take ou put
+// error: map.Map[int, []byte].get_or requires V any ([]byte is an owner, and the method copies): use the methods that move ownership, like take or put
 import "std/map"
 
 fn main() {

@@ -9,32 +9,32 @@ import (
 	"mlc/internal/token"
 )
 
-// Ordem de avaliação
+// Evaluation order
 //
-// O MLC garante que os operandos são avaliados da esquerda para a direita:
-// argumentos de chamada, os dois lados de um operador e os campos de um
-// literal. O C não garante isso: em f(a(), b()) o compilador C pode chamar
-// b() primeiro. Quando a ordem pode ser observada, o gerador calcula os
-// operandos em temporárias, sequenciadas pelo operador vírgula do C:
+// MLC guarantees that operands are evaluated left to right:
+// call arguments, the two sides of an operator and the fields of a
+// literal. C doesn't guarantee that: in f(a(), b()) the C compiler may call
+// b() first. When the order can be observed, the generator computes the
+// operands into temporaries, sequenced by C's comma operator:
 //
-//	soma(a(), b())  →  (mlc_t1 = mlc_fn_a(), mlc_fn_soma(mlc_t1, mlc_fn_b()))
+//	sum(a(), b())  →  (mlc_t1 = mlc_fn_a(), mlc_fn_sum(mlc_t1, mlc_fn_b()))
 //
-// As temporárias são declaradas no começo da função. O último operando que
-// não é literal fica no lugar, porque nada é avaliado depois dele.
+// The temporaries are declared at the start of the function. The last operand that
+// isn't a literal stays in place, because nothing is evaluated after it.
 
-// effectful diz se avaliar e pode ter efeito observável: chamar uma função
-// ou dar panic (aritmética pode estourar ou dividir por zero).
+// effectful says whether evaluating e can have an observable effect: calling a function
+// or panicking (arithmetic can overflow or divide by zero).
 func (g *gen) effectful(e ast.Expr) bool {
 	switch e := e.(type) {
 	case *ast.CallExpr:
 		return true
 	case *ast.IndexExpr:
-		return true // pode dar panic fora dos limites
+		return true // can panic out of bounds
 	case *ast.SliceExpr:
-		return true // pode dar panic fora dos limites
+		return true // can panic out of bounds
 	case *ast.BinaryExpr:
 		if _, isArith := opNames[e.Op]; isArith || e.Op == token.SHL || e.Op == token.SHR {
-			return true // pode dar panic (estouro, divisão por zero, deslocamento)
+			return true // can panic (overflow, division by zero, shift)
 		}
 		return g.effectful(e.X) || g.effectful(e.Y)
 	case *ast.UnaryExpr:
@@ -51,7 +51,7 @@ func (g *gen) effectful(e ast.Expr) bool {
 	return false
 }
 
-// isLiteral diz se e é um valor fixo, que pode ser avaliado a qualquer momento.
+// isLiteral says whether e is a fixed value, which can be evaluated at any moment.
 func (g *gen) isLiteral(e ast.Expr) bool {
 	if _, isConst := g.info.Values[e]; isConst {
 		return true
@@ -64,16 +64,16 @@ func (g *gen) isLiteral(e ast.Expr) bool {
 		return isConst
 	case *ast.Ident:
 		_, isConst := g.info.Values[e]
-		return isConst || g.info.Locals[e] == nil // constante, true ou false
+		return isConst || g.info.Locals[e] == nil // constant, true or false
 	case *ast.UnaryExpr:
 		_, isOut := g.info.Types[e].(*checker.OutHandle)
-		return isOut // &h de um parâmetro &?*X: um endereço, sem efeitos
+		return isOut // &h of a &?*X parameter: an address, without effects
 	}
 	return false
 }
 
-// operands traduz os operandos de uma operação. pre são as atribuições a
-// temporárias que precisam rodar antes, na ordem; vals são os valores a usar.
+// operands translates the operands of an operation. pre are the assignments to
+// temporaries that must run first, in order; vals are the values to use.
 func (g *gen) operands(es []ast.Expr) (pre, vals []string) {
 	effects, last, nonLit := false, -1, 0
 	for i, e := range es {
@@ -96,7 +96,7 @@ func (g *gen) operands(es []ast.Expr) (pre, vals []string) {
 	return pre, vals
 }
 
-// sequence junta as atribuições de pre e a expressão final com o operador vírgula.
+// sequence joins the assignments of pre and the final expression with the comma operator.
 func sequence(pre []string, final string) string {
 	if len(pre) == 0 {
 		return final
@@ -104,19 +104,19 @@ func sequence(pre []string, final string) string {
 	return "(" + strings.Join(pre, ", ") + ", " + final + ")"
 }
 
-// temp cria uma temporária do tipo t, declarada no começo da função.
+// temp creates a temporary of type t, declared at the start of the function.
 func (g *gen) temp(t checker.Type) string {
 	name := g.newName("mlc_t")
 	g.temps = append(g.temps, cType(t)+" "+name)
 	return name
 }
 
-// binary traduz um operador binário. top indica a expressão de nível mais
-// alto de uma condição, que sai sem parênteses externos ("if ((a == b))"
-// gera aviso no clang).
+// binary translates a binary operator. top marks the highest-level
+// expression of a condition, which comes out without outer parentheses ("if ((a == b))"
+// produces a clang warning).
 func (g *gen) binary(e *ast.BinaryExpr, top bool) string {
 	if e.Op == token.LAND || e.Op == token.LOR {
-		// O C já avalia && e || da esquerda para a direita, com curto-circuito.
+		// C already evaluates && and || left to right, with short-circuiting.
 		s := fmt.Sprintf("%s %s %s", g.expr(e.X), e.Op, g.expr(e.Y))
 		if !top {
 			s = "(" + s + ")"
@@ -125,7 +125,7 @@ func (g *gen) binary(e *ast.BinaryExpr, top bool) string {
 	}
 	pre, v := g.operands([]ast.Expr{e.X, e.Y})
 	var core string
-	bare := false // core é "x op y", sem parênteses próprios
+	bare := false // core is "x op y", without its own parentheses
 	t := g.info.Types[e.X]
 	switch {
 	case opNames[e.Op] != "" || intOps[e.Op] != "":

@@ -9,13 +9,13 @@ import (
 	"mlc/internal/parser"
 )
 
-// Fase 5 (robustez): o compilador nunca dá panic, seja qual for o texto. O
-// LSP checa o arquivo a cada tecla, sobre código pela metade, então um
-// panic aqui derruba o editor. As sementes são os programas da suíte e a
-// biblioteca padrão; go test -fuzz muta os bytes a partir delas
+// Phase 5 (robustness): the compiler never panics, whatever the text. The
+// LSP checks the file on every keystroke, over half-written code, so a
+// panic here brings the editor down. The seeds are the suite's programs and the
+// standard library; go test -fuzz mutates the bytes starting from them
 // (make robust).
 
-// seeds acrescenta ao corpus os .mlc da suíte e da std.
+// seeds adds the .mlc files of the suite and of the std to the corpus.
 func seeds(f *testing.F) {
 	var files []string
 	for _, pat := range []string{"run/*.mlc", "run/*/*.mlc", "panic/*.mlc", "errors/*.mlc", "testing/*.mlc", "ffi/*.mlc"} {
@@ -30,21 +30,21 @@ func seeds(f *testing.F) {
 	}
 }
 
-// FuzzCheck: parser, checker (tipos e posse) e gerador de C não dão panic.
-// Os imports da std resolvem (embutidos); os outros não existem.
+// FuzzCheck: the parser, the checker (types and ownership) and the C generator don't panic.
+// The std's imports resolve (built in); the others don't exist.
 func FuzzCheck(f *testing.F) {
 	seeds(f)
 	read := func(string) ([]byte, error) { return nil, os.ErrNotExist }
 	f.Fuzz(func(t *testing.T, src []byte) {
 		if _, _, err := Check("fuzz.mlc", src, read, Options{}); err == nil {
-			CompileWith("fuzz.mlc", src, read) // aceito: o gerador de C também roda
+			CompileWith("fuzz.mlc", src, read) // accepted: the C generator runs too
 		}
-		Check("fuzz_test.mlc", src, read, Options{}) // como arquivo de teste
+		Check("fuzz_test.mlc", src, read, Options{}) // as a test file
 	})
 }
 
-// FuzzFormat: o formatador não dá panic, e formatar de novo não muda nada
-// (o resultado já está na forma canônica) nem cria erro de sintaxe.
+// FuzzFormat: the formatter doesn't panic, and formatting again changes nothing
+// (the result is already in canonical form) nor creates a syntax error.
 func FuzzFormat(f *testing.F) {
 	seeds(f)
 	f.Fuzz(func(t *testing.T, src []byte) {
@@ -54,13 +54,13 @@ func FuzzFormat(f *testing.F) {
 		}
 		again, errs := format.Source("fuzz.mlc", out)
 		if len(errs) > 0 {
-			t.Fatalf("o texto formatado não passa no parser: %v\n--- entrada\n%s\n--- formatado\n%s", errs[0], src, out)
+			t.Fatalf("the formatted text doesn't pass the parser: %v\n--- input\n%s\n--- formatted\n%s", errs[0], src, out)
 		}
 		if string(again) != string(out) {
-			t.Fatalf("formatar duas vezes muda o texto\n--- uma vez\n%s\n--- duas vezes\n%s", out, again)
+			t.Fatalf("formatting twice changes the text\n--- once\n%s\n--- twice\n%s", out, again)
 		}
 		if _, perrs := parser.ParseFile("fuzz.mlc", out); len(perrs) > 0 {
-			t.Fatalf("o texto formatado não passa no parser: %v", perrs[0])
+			t.Fatalf("the formatted text doesn't pass the parser: %v", perrs[0])
 		}
 	})
 }

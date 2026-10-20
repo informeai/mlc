@@ -1,4 +1,4 @@
-// erro: é um guard: destrave com unlock(), não com free
+// error: *mutex.Guard[int] is a guard: unlock it with unlock(), not with free
 import "std/atomic"
 import "std/io"
 import "std/mutex"

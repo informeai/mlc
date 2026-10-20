@@ -1,4 +1,4 @@
-// erro: estouro de inteiro na constante: constante 128 não cabe em int8
+// error: integer overflow in the constant: constant 128 doesn't fit in int8 (-128 to 127)
 const A int8 = 127
 const B = A + 1
 fn main() {

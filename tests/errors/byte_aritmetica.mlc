@@ -1,4 +1,4 @@
-// erro: operador + não se aplica a int32 e int (converta um dos lados: int32(x) ou int(x))
+// error: operator + doesn't apply to int32 and int (convert one of the sides: int32(x) or int(x))
 import "std/io"
 fn main() {
     var a int32 = 1

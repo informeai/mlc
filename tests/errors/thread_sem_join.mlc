@@ -1,4 +1,4 @@
-// erro: vazamento: a thread t
+// error: leak: the thread t (line 20) may not have been waited for at the end of the function; pass it to thread.join
 import "std/io"
 import "std/thread"
 import "std/vec"

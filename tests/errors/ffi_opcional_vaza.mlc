@@ -1,4 +1,4 @@
-// erro: vazamento: o handle de C m
+// error: leak: the C handle m (line 8) may still be open at the end of the function; pass it to the C function that closes it
 extern "C" type Msg
 extern "C" fn f(p ?&int, s ?&[]int, m ?&?*Msg) int32
 extern "C" fn done(m *Msg)

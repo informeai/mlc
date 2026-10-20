@@ -1,5 +1,5 @@
-// Package token define os tokens da linguagem MLC, posições no código-fonte
-// e o tipo de erro de compilação compartilhado pelas fases do compilador.
+// Package token defines the tokens of the MLC language, positions in the source code
+// and the compile error type shared by the compiler's phases.
 package token
 
 import "fmt"
@@ -13,7 +13,7 @@ const (
 	INT
 	FLOAT
 	STRING
-	CHAR // literal de byte: 'a'
+	CHAR // byte literal: 'a'
 
 	ADD        // +
 	SUB        // -
@@ -46,15 +46,15 @@ const (
 	LBRACE     // {
 	RBRACE     // }
 	COMMA      // ,
-	SEMICOLON  // ; (explícito ou inserido no fim da linha)
+	SEMICOLON  // ; (explicit or inserted at the end of the line)
 	PERIOD     // .
 	COLON      // :
-	AMP        // & (empréstimo)
-	QUESTION   // ? (em ?*T)
+	AMP        // & (borrow)
+	QUESTION   // ? (in ?*T)
 
-	// bits e aritmética que dá a volta
+	// bits and wrapping arithmetic
 	OR              // |
-	XOR             // ^ (binário: ou exclusivo; unário: inverte os bits)
+	XOR             // ^ (binary: exclusive or; unary: inverts the bits)
 	SHL             // <<
 	SHR             // >>
 	AND_ASSIGN      // &=
@@ -68,7 +68,7 @@ const (
 	ADD_WRAP_ASSIGN // +%=
 	SUB_WRAP_ASSIGN // -%=
 	MUL_WRAP_ASSIGN // *%=
-	COMMENT         // // até o fim da linha (só no modo com comentários do lexer)
+	COMMENT         // // to the end of the line (only in the lexer's comments mode)
 
 	keywordBeg
 	IMPORT
@@ -153,7 +153,7 @@ var names = [...]string{
 	ADD_WRAP_ASSIGN: "+%=",
 	SUB_WRAP_ASSIGN: "-%=",
 	MUL_WRAP_ASSIGN: "*%=",
-	COMMENT:         "comentário",
+	COMMENT:         "comment",
 
 	IMPORT:    "import",
 	FN:        "fn",
@@ -190,7 +190,7 @@ var keywords = func() map[string]Kind {
 	return m
 }()
 
-// Lookup devolve a palavra-chave correspondente a ident, ou IDENT.
+// Lookup returns the keyword corresponding to ident, or IDENT.
 func Lookup(ident string) Kind {
 	if k, ok := keywords[ident]; ok {
 		return k
@@ -211,12 +211,12 @@ type Token struct {
 	Kind Kind
 	Lit  string
 	Pos  Pos
-	// Off e End delimitam o texto do token no arquivo (src[Off:End]), como
-	// foi escrito: o formatador usa isso para preservar literais.
+	// Off and End delimit the token's text in the file (src[Off:End]), as
+	// it was written: the formatter uses this to preserve literals.
 	Off, End int
 }
 
-// Error é um erro de compilação com posição no arquivo-fonte.
+// Error is a compile error with a position in the source file.
 type Error struct {
 	File string
 	Pos  Pos

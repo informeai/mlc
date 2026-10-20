@@ -1,4 +1,4 @@
-// erro: vazamento: m ainda é dona da memória
+// error: leak: m still owns the memory (line 10) at the end of the match arm; free it with free(m) or pass ownership along
 enum E {
     Msg(m []byte)
     Nada

@@ -1,4 +1,4 @@
-// erro: thread.join recebe o handle devolvido por thread.spawn
+// error: thread.join takes the handle returned by thread.spawn (*thread.Thread), and the value is integer constant
 import "std/io"
 import "std/thread"
 import "std/vec"

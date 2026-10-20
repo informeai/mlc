@@ -1,4 +1,4 @@
-// erro: w.printf escreve num Writer guardado numa variável ou campo
+// error: w.printf writes into a Writer stored in a variable or field (or into a &io.Writer): a temporary Writer would lose what was written
 import "std/io"
 
 fn main() {

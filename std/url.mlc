@@ -360,7 +360,7 @@ pub fn (q &Query) text(dst &[]byte) int {
 
 fn (q &Query) put(s string) {
     if q.n + len(s) > len(q.buf) {
-        fail("url.Query: a consulta não cabe em 2 KB")
+        fail("url.Query: the query doesn't fit in 2 KB")
     }
     q.n += str.copy(&q.buf[q.n:], s)
 }
@@ -389,7 +389,7 @@ pub fn unescape(dst &[]byte, src &[]byte) int {
             c = ' '
         }
         if n == len(dst) {
-            fail("url.unescape: o destino é pequeno demais")
+            fail("url.unescape: the destination is too small")
         }
         dst[n] = c
         n++
@@ -406,13 +406,13 @@ pub fn escape(dst &[]byte, src &[]byte) int {
         c := src[i]
         if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~' {
             if n == len(dst) {
-                fail("url.escape: o destino é pequeno demais")
+                fail("url.escape: the destination is too small")
             }
             dst[n] = c
             n++
         } else {
             if n + 3 > len(dst) {
-                fail("url.escape: o destino é pequeno demais")
+                fail("url.escape: the destination is too small")
             }
             dst[n] = '%'
             dst[n + 1] = HEX[int(c >> 4)]

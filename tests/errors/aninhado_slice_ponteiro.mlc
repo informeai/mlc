@@ -1,4 +1,4 @@
-// erro: elementos de slice começam zerados (nil), então não podem ser *T: use []?*T
+// error: slice elements start zeroed (nil), so they can't be *T: use []?*T
 import "std/vec"
 
 struct No {

@@ -1,4 +1,4 @@
-// erro: x.cabeca foi movida para fora do empréstimo (linha 12) e precisa receber um valor antes do fim do escopo de x
+// error: x.cabeca was moved out of the borrow (line 12) and must receive a value before the end of the scope of x
 struct No {
     v int
 }

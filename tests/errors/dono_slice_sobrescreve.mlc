@@ -1,4 +1,4 @@
-// erro: um elemento dono não pode ser sobrescrito direto (o valor antigo vazaria): use velho := replace(&s[i], v)
+// error: an owning element can't be overwritten directly (the old value would leak): use old := replace(&s[i], v)
 struct Item { peso int }
 fn main() {
     s := alloc([]?*Item, 2)

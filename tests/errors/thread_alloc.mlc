@@ -1,4 +1,4 @@
-// erro: thread.Thread vem de thread.spawn, não de alloc
+// error: thread.Thread comes from thread.spawn, not from alloc
 import "std/io"
 import "std/thread"
 import "std/vec"

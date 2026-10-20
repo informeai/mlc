@@ -100,7 +100,7 @@ pub fn equal(a &[]byte, b &[]byte) bool {
 // number of iterations and checks in constant time.
 pub fn pbkdf2(password &[]byte, salt &[]byte, iterations int, dst &[]byte) {
     if iterations < 1 {
-        fail("hmac.pbkdf2: iterations precisa ser pelo menos 1")
+        fail("hmac.pbkdf2: iterations must be at least 1")
     }
     keyed := new(password) // the HMAC already keyed: copied at each step
     block := 1

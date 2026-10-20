@@ -1,4 +1,4 @@
-// erro: vazamento: p.prox ainda é dona da memória (linha 9) (em algum caminho) e seria sobrescrita
+// error: leak: p.prox still owns the memory (line 9) (on some path) and would be overwritten; free it or pass ownership first
 struct No {
     valor int
     prox ?*No

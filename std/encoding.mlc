@@ -163,7 +163,7 @@ fn b64_digit(c byte) int {
 
 fn need(dst &[]byte, n int) {
     if len(dst) < n {
-        fail("o destino é pequeno demais para o texto")
+        fail("the destination is too small for the text")
     }
 }
 

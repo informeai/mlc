@@ -1,4 +1,4 @@
-// erro: uma função de C pode devolver NULL: o retorno precisa ser ?*H
+// error: return of abre (*H): a C function may return NULL: the return type must be ?*H
 extern "C" type H
 
 extern "C" fn abre() *H

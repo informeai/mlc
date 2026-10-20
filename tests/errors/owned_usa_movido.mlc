@@ -1,4 +1,4 @@
-// erro: x já foi liberada ou movida (linha 3) (verificado com T dono, como duplica[[]byte])
+// error: x was already freed or moved (line 3) (checked with an owning T, like duplica[[]byte])
 fn duplica[T owned](x T) T {
     a := x
     drop(a)

@@ -37,7 +37,7 @@ fn test_more_threads_than_capacity() {
     g := sync.group(3)
     for i := 0; i < 50; i++ {
         g.add(thread.spawn(add_ten, n.clone(), thread.STACK_64KB))
-        testing.check(g.len() <= 3, "nunca mais que a capacidade")
+        testing.check(g.len() <= 3, "never more than the capacity")
     }
     g.wait()
     testing.eq_int(n.load(), 500)

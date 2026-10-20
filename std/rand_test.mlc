@@ -9,7 +9,7 @@ fn test_deterministic() {
     }
     c := rand.new(43)
     d := rand.new(42)
-    testing.check(c.next() != d.next(), "sementes diferentes, sequências diferentes")
+    testing.check(c.next() != d.next(), "different seeds, different sequences")
 }
 
 fn test_splitmix_reference() {
@@ -23,13 +23,13 @@ fn test_ranges() {
     seen := [6]bool{}
     for i := 0; i < 1000; i++ {
         n := r.range(1, 7)
-        testing.check(n >= 1 && n < 7, "range fora de [1, 7)")
+        testing.check(n >= 1 && n < 7, "range outside [1, 7)")
         seen[n - 1] = true
         f := r.float()
-        testing.check(f >= 0.0 && f < 1.0, "float fora de [0, 1)")
+        testing.check(f >= 0.0 && f < 1.0, "float outside [0, 1)")
     }
     for s in seen {
-        testing.check(s, "todo valor de 1 a 6 aparece em 1000 sorteios")
+        testing.check(s, "every value from 1 to 6 shows up in 1000 draws")
     }
 }
 
@@ -44,8 +44,8 @@ fn test_secure() {
         same = same && a[i] == b[i]
         zero = zero && a[i] == 0
     }
-    testing.check(!same, "duas chamadas dão bytes diferentes")
-    testing.check(!zero, "não ficou zerado")
+    testing.check(!same, "two calls give different bytes")
+    testing.check(!zero, "wasn't left zeroed")
     var big [1000]byte // more than the 256 bytes of one system call
     rand.secure(&big)
     zeros := 0
@@ -54,14 +54,14 @@ fn test_secure() {
             zeros++
         }
     }
-    testing.check(zeros < 30, "os bytes se espalham (uns 4 zeros em 1000)")
+    testing.check(zeros < 30, "the bytes spread out (about 4 zeros in 1000)")
 }
 
 fn test_secure_int_n() {
     var seen [6]bool
     for i := 0; i < 600; i++ {
         n := rand.secure_int_n(6)
-        testing.check(n >= 0 && n < 6, "no intervalo")
+        testing.check(n >= 0 && n < 6, "in the range")
         seen[n] = true
     }
     for i := 0; i < 6; i++ {

@@ -1,4 +1,4 @@
-// erro: struct Caixa[int] contém a si mesma por valor; use um ponteiro
+// error: struct Caixa[int] contains itself by value; use a pointer
 struct Caixa[T any] {
     v T
     dentro Caixa[T]

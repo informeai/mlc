@@ -1,4 +1,4 @@
-// erro: *int não atende any, exigida por T em id (é dono: para aceitar donos, a restrição precisa ser owned)
+// error: *int doesn't satisfy any, required by T in id (it's an owner: to accept owners, the constraint must be owned)
 fn id[T any](x T) T {
     return x
 }

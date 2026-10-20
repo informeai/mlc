@@ -1,4 +1,4 @@
-// erro: for in percorre slices, encontrado int
+// error: for in walks slices, found int
 import "std/io"
 fn main() {
     n := 3

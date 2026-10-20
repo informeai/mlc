@@ -1,4 +1,4 @@
-// erro: esperado expressão, encontrado '}'
+// error: expected an expression, found '}'
 import "std/io"
 fn main() {
     io.print(1 +

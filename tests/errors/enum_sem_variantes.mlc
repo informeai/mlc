@@ -1,4 +1,4 @@
-// erro: o enum Nada precisa de pelo menos uma variante
+// error: the enum Nada needs at least one variant
 enum Nada {
 }
 fn main() {

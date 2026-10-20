@@ -1,4 +1,4 @@
-// erro: _ só pode separar dígitos
+// error: malformed number: _ can only separate digits
 fn main() {
     x := 1__000
 }

@@ -1,4 +1,4 @@
-// erro: o nome geometria é um módulo importado
+// error: the name geometria is an imported module
 import "std/io"
 import "geometria"
 fn main() {

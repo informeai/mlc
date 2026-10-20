@@ -1,4 +1,4 @@
-// erro: um mutex vem de mutex.new (e um guard, de lock()), não de alloc
+// error: a mutex comes from mutex.new (and a guard, from lock()), not from alloc
 import "std/atomic"
 import "std/io"
 import "std/mutex"

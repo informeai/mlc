@@ -1,4 +1,4 @@
-// erro: &int não atende ref
+// error: &int doesn't satisfy ref, required by C in K.run (a borrow can't be a type argument: the parameter is already used as &C)
 struct K {
     n int
 }

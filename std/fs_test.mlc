@@ -22,7 +22,7 @@ fn test_write_read_remove() {
         Ok(w) => testing.eq_int(w, 6)
         Err(code) => testing.eq_int(code, 0)
     }
-    testing.check(fs.exists(&p[:n]), "existe depois de escrever")
+    testing.check(fs.exists(&p[:n]), "exists after writing")
     match fs.file_size(&p[:n]) {
         Ok(size) => testing.eq_int(size, 12)
         Err(code) => testing.eq_int(code, 0)
@@ -40,7 +40,7 @@ fn test_write_read_remove() {
         Ok(r) => testing.eq_int(r, 0)
         Err(code) => testing.eq_int(code, 0)
     }
-    testing.check(!fs.exists(&p[:n]), "não existe depois de apagar")
+    testing.check(!fs.exists(&p[:n]), "doesn't exist after deleting")
     free(buf)
     free(data)
     free(p)
@@ -49,13 +49,13 @@ fn test_write_read_remove() {
 fn test_missing_file() {
     p := alloc([]byte, 64)
     n := str.copy(&p, "/tmp/mlc-std-fs-test-nao-existe.txt")
-    testing.check(!fs.exists(&p[:n]), "não existe")
+    testing.check(!fs.exists(&p[:n]), "doesn't exist")
     match fs.file_size(&p[:n]) {
-        Ok(_) => testing.fail("file_size de arquivo que não existe")
+        Ok(_) => testing.fail("file_size of a file that doesn't exist")
         Err(code) => testing.eq_int(code, fs.NOT_FOUND)
     }
     match fs.remove_file(&p[:n]) {
-        Ok(_) => testing.fail("remove_file de arquivo que não existe")
+        Ok(_) => testing.fail("remove_file of a file that doesn't exist")
         Err(code) => testing.eq_int(code, fs.NOT_FOUND)
     }
     free(p)
@@ -72,7 +72,7 @@ fn test_open_write_read_in_chunks() {
     err := 0
     f := fs.open(&p[:n], fs.WRITE, &err)
     if f == nil {
-        testing.fail("open para escrever falhou")
+        testing.fail("open for writing failed")
         return
     }
     var line [16]byte
@@ -86,7 +86,7 @@ fn test_open_write_read_in_chunks() {
     f.close()
     g := fs.open(&p[:n], fs.READ, &err)
     if g == nil {
-        testing.fail("open para ler falhou")
+        testing.fail("open for reading failed")
         return
     }
     var buf [7]byte // pieces that don't line up with the lines
@@ -183,18 +183,18 @@ fn test_dirs() {
     fs.write_file(&f[:k], &data[:dn])
     var info fs.Info
     match fs.stat(&p[:n], &info) {
-        Ok(_) => testing.check(info.is_dir, "é diretório")
+        Ok(_) => testing.check(info.is_dir, "is a directory")
         Err(code) => testing.eq_int(code, 0)
     }
     match fs.stat(&f[:k], &info) {
         Ok(_) => {
-            testing.check(!info.is_dir, "é arquivo")
+            testing.check(!info.is_dir, "is a file")
             testing.eq_int(info.size, 2)
         }
         Err(code) => testing.eq_int(code, 0)
     }
     match fs.remove_dir(&p[:n]) {
-        Ok(_) => testing.fail("remove_dir com arquivo dentro")
+        Ok(_) => testing.fail("remove_dir with a file inside")
         Err(code) => testing.eq_int(code, fs.NOT_EMPTY)
     }
     err := 0
@@ -222,7 +222,7 @@ fn test_dirs() {
     }
     fs.remove_file(&g[:j])
     match fs.remove_dir(&p[:n]) {
-        Ok(_) => testing.check(!fs.exists(&p[:n]), "diretório apagado")
+        Ok(_) => testing.check(!fs.exists(&p[:n]), "directory deleted")
         Err(code) => testing.eq_int(code, 0)
     }
 }
@@ -367,11 +367,11 @@ fn test_links_not_followed() {
     testing.eq_int(cnt.files + cnt.dirs, 2) // the root and the link, without entering it
 
     fs.remove_all(&base[:n])
-    testing.check(!fs.exists(&base[:n]), "apagou o diretório com o link")
+    testing.check(!fs.exists(&base[:n]), "deleted the directory with the link")
     var probe [300]byte
     pn := str.copy_bytes(&probe, &keep[:kn])
     pn += str.copy(&probe[pn:], "/src/main.mlc")
-    testing.check(fs.exists(&probe[:pn]), "o alvo do link ficou intacto")
+    testing.check(fs.exists(&probe[:pn]), "the link's target was left intact")
     fs.remove_all(&keep[:kn])
 }
 
@@ -380,19 +380,19 @@ fn test_glob_match() {
     n := str.copy(&p, "src/pkg/util.mlc")
     testing.check(fs.glob_match("src/pkg/util.mlc", &p[:n]), "igual")
     testing.check(fs.glob_match("src/*/util.mlc", &p[:n]), "*")
-    testing.check(!fs.glob_match("src/*.mlc", &p[:n]), "* não passa de /")
+    testing.check(!fs.glob_match("src/*.mlc", &p[:n]), "* doesn't go past /")
     testing.check(fs.glob_match("**/*.mlc", &p[:n]), "**")
-    testing.check(fs.glob_match("src/**/util.mlc", &p[:n]), "**/ no meio")
-    testing.check(fs.glob_match("src/**", &p[:n]), "** no fim")
+    testing.check(fs.glob_match("src/**/util.mlc", &p[:n]), "**/ in the middle")
+    testing.check(fs.glob_match("src/**", &p[:n]), "** at the end")
     testing.check(fs.glob_match("src/pkg/util.ml?", &p[:n]), "?")
     testing.check(fs.glob_match("src/pkg/[tu]til.mlc", &p[:n]), "classe")
     testing.check(fs.glob_match("src/pkg/[a-z]til.mlc", &p[:n]), "faixa")
-    testing.check(!fs.glob_match("src/pkg/[!u]til.mlc", &p[:n]), "negação")
+    testing.check(!fs.glob_match("src/pkg/[!u]til.mlc", &p[:n]), "negation")
     n = str.copy(&p, "util.mlc")
-    testing.check(fs.glob_match("**/util.mlc", &p[:n]), "**/ casa com nada")
-    testing.check(!fs.glob_match("*.json", &p[:n]), "extensão errada")
+    testing.check(fs.glob_match("**/util.mlc", &p[:n]), "**/ matches nothing")
+    testing.check(!fs.glob_match("*.json", &p[:n]), "wrong extension")
     n = str.copy(&p, "a[b")
-    testing.check(fs.glob_match("a[b", &p[:n]), "[ sem ] é literal")
+    testing.check(fs.glob_match("a[b", &p[:n]), "[ without ] is a literal")
 }
 
 fn test_temp_path() {
@@ -403,5 +403,5 @@ fn test_temp_path() {
     testing.check(!str.eq_bytes(&a[:n], &b[:m]), "nomes diferentes")
     var d [256]byte
     k := fs.temp_dir(&d)
-    testing.check(k > 0 && str.eq_bytes(&a[:k], &d[:k]), "na pasta temporária")
+    testing.check(k > 0 && str.eq_bytes(&a[:k], &d[:k]), "in the temporary folder")
 }

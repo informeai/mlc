@@ -1,4 +1,4 @@
-// erro: & só pode aparecer como argumento de chamada
+// error: & can only appear as a call argument, to borrow: f(&x)
 struct Ponto { x int; y int }
 fn main() {
     s := Ponto{}

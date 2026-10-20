@@ -1,4 +1,4 @@
-// erro: padrão 1 repetido (já aparece na linha 4)
+// error: repeated pattern 1 (already appears on line 4)
 fn main() {
     match 1 {
         1, 2 => {}

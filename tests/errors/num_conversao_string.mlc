@@ -1,4 +1,4 @@
-// erro: não é possível converter string em float64
+// error: can't convert string to float64
 import "std/io"
 fn main() {
     io.print(float64("2.5"))

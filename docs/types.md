@@ -22,7 +22,7 @@ The size of every value is explicit: the programmer chooses how much a field or 
 ## Rules
 
 - **Arithmetic only between values of the same type.** `a + b` with `a int32` and `b int` is an error: convert one side (`int(a) + b`). There's no implicit conversion between numbers.
-- **Integer overflow panics**, at every size, signed and unsigned (`estouro de int8 na soma`, "int8 overflow in addition"). So do division and remainder by zero.
+- **Integer overflow panics**, at every size, signed and unsigned (`overflow of int8 in addition`). So do division and remainder by zero.
 - **Floats follow IEEE 754:** overflow becomes infinity, `1.0 / 0.0` is `+Inf`, `0.0 / 0.0` is `NaN`. None of this is undefined behavior. `%` doesn't exist for floats, and floats can't be `match` patterns.
 - **Unsigned types have no unary `-`.**
 
@@ -81,7 +81,7 @@ sort.sort_by(&people, by_age)          // fn(&Person, &Person) bool
 | Conversion | Behavior |
 |---|---|
 | to an integer that holds every source value | always works |
-| to a smaller integer, or between signed and unsigned | panics if the value doesn't fit: `valor 3000000000 não cabe em int32` ("value 3000000000 doesn't fit in int32") |
+| to a smaller integer, or between signed and unsigned | panics if the value doesn't fit: `value 3000000000 doesn't fit in int32` |
 | from float to integer | truncates toward zero (`int(-2.9)` is -2); panics if it doesn't fit or if it's `NaN` |
 | from integer to float | always works (it may round) |
 | from `float64` to `float32` | rounds; out of range becomes infinity |
@@ -248,7 +248,7 @@ fn (v &Vec[T]) push(x T) {           // x is moved inside
 
 - With `T = ?*X`, `&T` is `&X`: `v.at(i)` borrows the pointed-to object (`grid.at(1).get(2)`), and a `nil` slot panics.
 - **Combined constraints:** a built-in constraint and an interface, with `+`: `[K owned + hash.Hash]` accepts simple owners that implement `Hash` (the keys of `map.Map`). In the receiver's constraint, the missing part comes from the struct: in `Map[K owned + hash.Hash, V owned]`, `fn (m &Map[K any, V]) key_at` asks for `K any + hash.Hash`.
-- **Ownership errors show up in the definition:** each generic with `owned` is also checked with `T = []byte`. Such an error says "verificado com T dono" ("checked with an owning T").
+- **Ownership errors show up in the definition:** each generic with `owned` is also checked with `T = []byte`. Such an error says "checked with an owning T".
 
 ## Enums with data
 

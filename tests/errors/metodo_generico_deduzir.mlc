@@ -1,4 +1,4 @@
-// erro: não foi possível deduzir R em K.make: escreva os tipos, como make[R](...)
+// error: couldn't infer R in K.make: write the types, like make[R](...)
 struct K {
     n int
 }

@@ -1,4 +1,4 @@
-// erro: vazamento: s ainda é dona da memória (linha 2) no fim da função
+// error: leak: s still owns the memory (line 2) at the end of the function; free it with free(s) or pass ownership along
 fn f(s []int) {
 }
 fn main() {

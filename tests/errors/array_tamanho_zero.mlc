@@ -1,4 +1,4 @@
-// erro: o tamanho de um array precisa ser maior que zero
+// error: an array's size must be greater than zero, found 0
 fn main() {
     var a [0]int
 }

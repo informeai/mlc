@@ -1,4 +1,4 @@
-// erro: geometria.valida não é pública (declare com pub fn)
+// error: geometria.valida isn't public (declare it with pub fn)
 import "geometria"
 fn main() {
     geometria.valida(1)

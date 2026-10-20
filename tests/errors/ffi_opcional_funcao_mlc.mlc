@@ -1,4 +1,4 @@
-// erro: ?&T só existe em parâmetros de extern "C" fn
+// error: ?&T only exists in parameters of extern "C" fn (a pointer C accepts as NULL); in an MLC function, use ?*T or two functions
 extern "C" type Msg
 extern "C" fn f(p ?&int, s ?&[]int, m ?&?*Msg) int32
 extern "C" fn done(m *Msg)

@@ -1,4 +1,4 @@
-// erro: _ precisa estar sozinho no braço
+// error: _ must be alone in the arm
 fn main() {
     match 1 {
         1, _ => {}

@@ -1,4 +1,4 @@
-// erro: o destino de str.format: esperado &[]byte; para emprestar, escreva &b
+// error: the destination of str.format: expected &[]byte; to borrow, write &b
 import "std/io"
 import "std/str"
 

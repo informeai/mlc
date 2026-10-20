@@ -1,4 +1,4 @@
-// erro: braço _ nunca é executado: todas as variantes de Forma já foram cobertas
+// error: the _ arm is never executed: every variant of Forma is already covered
 enum Forma {
     Circulo(raio float64)
     Vazio

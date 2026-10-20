@@ -1,14 +1,14 @@
-/* clock_gettime, nanosleep e afins exigem POSIX, que -std=c11 esconde;
- * _SC_NPROCESSORS_ONLN (thread.cpu_count) é extensão do Linux e do macOS. */
+/* clock_gettime, nanosleep and the like require POSIX, which -std=c11 hides;
+ * _SC_NPROCESSORS_ONLN (thread.cpu_count) is a Linux and macOS extension. */
 #define _POSIX_C_SOURCE 200809L
 #define _DEFAULT_SOURCE
 #define _DARWIN_C_SOURCE
-#define _GNU_SOURCE /* pthread_getattr_np, para achar a pilha no Linux */
+#define _GNU_SOURCE /* pthread_getattr_np, to find the stack on Linux */
 
 #include "mlc_runtime.h"
 
 #include <dirent.h>
-#include <dlfcn.h> /* std/sqlite: a biblioteca é carregada só quando usada */
+#include <dlfcn.h> /* std/sqlite: the library is loaded only when used */
 #include <errno.h>
 #include <fcntl.h>
 #include <spawn.h>
@@ -36,15 +36,15 @@
 #include <time.h>
 #include <unistd.h>
 
-/* Atômicos: os testes e as alocações podem acontecer em várias threads. */
-static _Atomic int64_t mlc_test_failures = 0;        /* verificações que falharam no teste */
+/* Atomics: tests and allocations can happen in several threads. */
+static _Atomic int64_t mlc_test_failures = 0;        /* checks that failed in the test */
 static _Atomic bool mlc_test_panic_expected = false; /* testing.expect_panic() */
 
 void mlc_panic(const char *file, int line, const char *msg) {
     fflush(stdout);
     if (mlc_test_panic_expected) {
-        /* o teste pediu este panic: termina como sucesso (se nada mais falhou) */
-        fprintf(stderr, "panic esperado: %s:%d: %s\n", file, line, msg);
+        /* the test asked for this panic: ends as a success (if nothing else failed) */
+        fprintf(stderr, "expected panic: %s:%d: %s\n", file, line, msg);
         exit(mlc_test_failures > 0 ? 1 : 0);
     }
     fprintf(stderr, "panic: %s:%d: %s\n", file, line, msg);
@@ -55,13 +55,13 @@ static _Atomic int64_t mlc_live_allocs = 0;
 
 void *mlc_alloc(size_t size, const char *file, int line) {
     void *p = calloc(1, size);
-    if (p == NULL) mlc_panic(file, line, "memória esgotada");
+    if (p == NULL) mlc_panic(file, line, "out of memory");
     mlc_live_allocs++;
     return p;
 }
 
 void mlc_free(void *p) {
-    if (p == NULL) return; /* free de um ?*T que vale nil */
+    if (p == NULL) return; /* free of a ?*T that is nil */
     mlc_live_allocs--;
     free(p);
 }
@@ -69,64 +69,64 @@ void mlc_free(void *p) {
 void mlc_check_allocs(void) {
     if (mlc_live_allocs != 0) {
         fflush(stdout);
-        fprintf(stderr, "mlc: erro interno: %" PRId64 " alocação(ões) sem free no fim do programa (o verificador de posse deveria ter impedido)\n",
+        fprintf(stderr, "mlc: internal error: %" PRId64 " allocation(s) without free at the end of the program (the ownership checker should have prevented it)\n",
                 (int64_t)mlc_live_allocs);
         exit(3);
     }
 }
 
 void *mlc_alloc_array(int64_t n, size_t size, const char *file, int line) {
-    if (n < 0) mlc_panic(file, line, "tamanho negativo em alloc de slice");
-    if (n == 0) return NULL; /* slice vazio: não conta como alocação */
-    if ((uint64_t)n > SIZE_MAX / size) mlc_panic(file, line, "memória esgotada");
+    if (n < 0) mlc_panic(file, line, "negative size in slice alloc");
+    if (n == 0) return NULL; /* empty slice: doesn't count as an allocation */
+    if ((uint64_t)n > SIZE_MAX / size) mlc_panic(file, line, "out of memory");
     void *p = calloc((size_t)n, size);
-    if (p == NULL) mlc_panic(file, line, "memória esgotada");
+    if (p == NULL) mlc_panic(file, line, "out of memory");
     mlc_live_allocs++;
     return p;
 }
 
 void mlc_panic_index(int64_t i, int64_t len, const char *file, int line) {
     char msg[96];
-    snprintf(msg, sizeof msg, "índice %" PRId64 " fora dos limites (tamanho %" PRId64 ")", i, len);
+    snprintf(msg, sizeof msg, "index %" PRId64 " out of bounds (length %" PRId64 ")", i, len);
     mlc_panic(file, line, msg);
 }
 
 void *mlc_realloc_array(void *old, int64_t old_len, int64_t n, size_t size, int grow_only, const char *file, int line) {
-    if (n < 0) mlc_panic(file, line, "tamanho negativo em realloc");
+    if (n < 0) mlc_panic(file, line, "negative size in realloc");
     if (grow_only && n < old_len) {
         char msg[160];
-        snprintf(msg, sizeof msg, "realloc de slice de donos só pode crescer (de %" PRId64 " para %" PRId64 "); tire os elementos com take ou drain antes", old_len, n);
+        snprintf(msg, sizeof msg, "realloc of a slice of owners can only grow (from %" PRId64 " to %" PRId64 "); take the elements out with take or drain first", old_len, n);
         mlc_panic(file, line, msg);
     }
     if (n == 0) {
-        mlc_free(old); /* slice vazio: não conta como alocação */
+        mlc_free(old); /* empty slice: doesn't count as an allocation */
         return NULL;
     }
     if (old == NULL) return mlc_alloc_array(n, size, file, line);
-    if ((uint64_t)n > SIZE_MAX / size) mlc_panic(file, line, "memória esgotada");
+    if ((uint64_t)n > SIZE_MAX / size) mlc_panic(file, line, "out of memory");
     char *p = realloc(old, (size_t)n * size);
-    if (p == NULL) mlc_panic(file, line, "memória esgotada");
+    if (p == NULL) mlc_panic(file, line, "out of memory");
     if (n > old_len) memset(p + (size_t)old_len * size, 0, (size_t)(n - old_len) * size);
-    return p; /* continua sendo uma alocação viva: o contador não muda */
+    return p; /* still a live allocation: the counter doesn't change */
 }
 
 void mlc_check_slice(int64_t lo, int64_t hi, int64_t len, const char *file, int line) {
     if (lo >= 0 && lo <= hi && hi <= len) return;
     char msg[128];
-    snprintf(msg, sizeof msg, "sub-slice [%" PRId64 ":%" PRId64 "] fora dos limites (tamanho %" PRId64 ")", lo, hi, len);
+    snprintf(msg, sizeof msg, "sub-slice [%" PRId64 ":%" PRId64 "] out of bounds (length %" PRId64 ")", lo, hi, len);
     mlc_panic(file, line, msg);
 }
 
-/* Copia n bytes para o começo de dst, ou dá panic se não couber. */
+/* Copies n bytes to the start of dst, or panics if it doesn't fit. */
 static int64_t mlc_put_bytes(mlc_sl_byte *dst, const void *src, int64_t n, const char *what,
                              const char *file, int line) {
     if (n > dst->len) {
         char msg[160];
-        snprintf(msg, sizeof msg, "%s: o texto (%" PRId64 " bytes) não cabe no destino (%" PRId64 " bytes)",
+        snprintf(msg, sizeof msg, "%s: the text (%" PRId64 " bytes) doesn't fit in the destination (%" PRId64 " bytes)",
                  what, n, dst->len);
         mlc_panic(file, line, msg);
     }
-    if (n > 0) memmove(dst->ptr, src, (size_t)n); /* memmove: origem e destino podem se sobrepor */
+    if (n > 0) memmove(dst->ptr, src, (size_t)n); /* memmove: source and destination may overlap */
     return n;
 }
 
@@ -158,7 +158,7 @@ void mlc_std_io_write_line(mlc_sl_byte *s, const char *file, int line) {
 int64_t mlc_std_io_read_line(mlc_sl_byte *dst, const char *file, int line) {
     (void)file;
     (void)line;
-    fflush(stdout); /* quem lê costuma ter acabado de perguntar algo */
+    fflush(stdout); /* whoever reads has usually just asked something */
     int64_t n = 0;
     while (n < dst->len) {
         int c = getchar();
@@ -172,7 +172,7 @@ int64_t mlc_std_io_read_line(mlc_sl_byte *dst, const char *file, int line) {
 int64_t mlc_std_io_read_stdin(mlc_sl_byte *dst, const char *file, int line) {
     (void)file;
     (void)line;
-    fflush(stdout); /* como em read_line */
+    fflush(stdout); /* as in read_line */
     int64_t n = 0;
     while (n < dst->len) {
         int c = getchar();
@@ -186,9 +186,9 @@ int64_t mlc_std_io_read_stdin(mlc_sl_byte *dst, const char *file, int line) {
     return n;
 }
 
-/* Escreve x com o menor número de dígitos que, lido de volta, dá o mesmo
- * valor (como o Go imprime: 0.1, 3, 1000, 1e+06). digits é 17 para float64 e 9 para
- * float32. Devolve o tamanho. */
+/* Writes x with the fewest digits that, read back, give the same
+ * value (as Go prints: 0.1, 3, 1000, 1e+06). digits is 17 for float64 and 9 for
+ * float32. Returns the length. */
 static int mlc_format_float(char *buf, size_t size, double x, int digits, int is_float32) {
     if (isnan(x)) return snprintf(buf, size, "NaN");
     if (isinf(x)) return snprintf(buf, size, x > 0 ? "+Inf" : "-Inf");
@@ -198,8 +198,8 @@ static int mlc_format_float(char *buf, size_t size, double x, int digits, int is
         double back = strtod(buf, NULL);
         if (is_float32 ? (float)back == (float)x : back == x) break;
     }
-    /* Como o Go: notação exponencial só se o expoente for menor que -4 ou
-     * maior ou igual a 6; senão, decimal comum (1000, não 1e+03). */
+    /* Like Go: exponential notation only if the exponent is less than -4 or
+     * greater than or equal to 6; otherwise, plain decimal (1000, not 1e+03). */
     snprintf(buf, size, "%.*e", p - 1, x);
     int exp = atoi(strchr(buf, 'e') + 1);
     if (exp < -4 || exp >= 6) return snprintf(buf, size, "%.*e", p - 1, x);
@@ -210,7 +210,7 @@ static int mlc_format_float(char *buf, size_t size, double x, int digits, int is
 int64_t mlc_conv_i(int64_t v, int64_t lo, int64_t hi, const char *type, const char *file, int line) {
     if (v < lo || v > hi) {
         char msg[160];
-        snprintf(msg, sizeof msg, "valor %" PRId64 " não cabe em %s (%" PRId64 " a %" PRId64 ")", v, type, lo, hi);
+        snprintf(msg, sizeof msg, "value %" PRId64 " doesn't fit in %s (%" PRId64 " to %" PRId64 ")", v, type, lo, hi);
         mlc_panic(file, line, msg);
     }
     return v;
@@ -219,17 +219,17 @@ int64_t mlc_conv_i(int64_t v, int64_t lo, int64_t hi, const char *type, const ch
 uint64_t mlc_conv_u(uint64_t v, uint64_t hi, const char *type, const char *file, int line) {
     if (v > hi) {
         char msg[160];
-        snprintf(msg, sizeof msg, "valor %" PRIu64 " não cabe em %s (0 a %" PRIu64 ")", v, type, hi);
+        snprintf(msg, sizeof msg, "value %" PRIu64 " doesn't fit in %s (0 to %" PRIu64 ")", v, type, hi);
         mlc_panic(file, line, msg);
     }
     return v;
 }
 
 double mlc_conv_f(double v, double lo, double hi, const char *type, const char *file, int line) {
-    if (!(v > lo && v < hi)) { /* NaN falha nas duas comparações */
+    if (!(v > lo && v < hi)) { /* NaN fails both comparisons */
         char num[32], msg[160];
         mlc_format_float(num, sizeof num, v, 17, 0);
-        snprintf(msg, sizeof msg, "valor %s não cabe em %s", num, type);
+        snprintf(msg, sizeof msg, "value %s doesn't fit in %s", num, type);
         mlc_panic(file, line, msg);
     }
     return v;
@@ -256,21 +256,21 @@ bool mlc_std_str_parse_float(mlc_sl_byte *s, double *out, const char *file, int 
     tmp[s->len] = '\0';
     char *end;
     double v = strtod(tmp, &end);
-    if (end != tmp + s->len) return false; /* sobrou texto que não é número */
+    if (end != tmp + s->len) return false; /* text left over that isn't a number */
     *out = v;
     return true;
 }
 
-/* ---------- biblioteca padrão (extern fn dos arquivos .mlc de std) ----------
- * Cada função recebe, no fim, o arquivo e a linha da chamada no .mlc. As que
- * podem falhar devolvem um número negativo (-errno ou um código próprio), e
- * a camada em MLC transforma isso num Result. */
+/* ---------- standard library (extern fn of the std .mlc files) ----------
+ * Each function receives, at the end, the file and line of the call in the .mlc. The ones that
+ * can fail return a negative number (-errno or a code of their own), and
+ * the MLC layer turns that into a Result. */
 
 static int mlc_argc;
 static char **mlc_argv;
 
 void mlc_args_init(int argc, char **argv) {
-    mlc_stack_init(); /* chamada no começo do main: a pilha da thread principal */
+    mlc_stack_init(); /* called at the start of main: the main thread's stack */
     mlc_argc = argc;
     mlc_argv = argv;
 }
@@ -388,7 +388,7 @@ void mlc_std_os_exit(int64_t code, const char *file, int line) {
     exit((int)code);
 }
 
-/* std/fs: o caminho vem de um []byte, sem '\0' no fim; é copiado para a pilha. */
+/* std/fs: the path comes from a []byte, without '\0' at the end; it's copied to the stack. */
 static int mlc_cpath(char *out, size_t cap, mlc_sl_byte *p) {
     if (p->len <= 0 || p->len >= (int64_t)cap) return 0;
     memcpy(out, p->ptr, (size_t)p->len);
@@ -453,14 +453,14 @@ bool mlc_std_fs_exists(mlc_sl_byte *path, const char *file, int line) {
     return mlc_cpath(p, sizeof p, path) && stat(p, &st) == 0;
 }
 
-/* Erros de fs portáveis: os números do errno que mudam entre sistemas viram
- * constantes do MLC (veja std/fs.mlc). */
+/* Portable fs errors: the errno numbers that change between systems become
+ * MLC constants (see std/fs.mlc). */
 static int64_t mlc_fs_err(int e) {
     if (e == ENOTEMPTY) return -1001; /* fs.NOT_EMPTY */
     return -e;
 }
 
-/* Um arquivo aberto: o descritor do sistema. */
+/* An open file: the system's descriptor. */
 typedef struct mlc_file {
     int fd;
 } mlc_file;
@@ -478,7 +478,7 @@ mlc_file *mlc_std_fs_open(mlc_sl_byte *path, int64_t mode, int64_t *err, const c
     case 1: flags = O_WRONLY | O_CREAT | O_TRUNC; break; /* fs.WRITE */
     case 2: flags = O_WRONLY | O_CREAT | O_APPEND; break; /* fs.APPEND */
     case 3: flags = O_RDWR | O_CREAT; break;             /* fs.READ_WRITE */
-    default: mlc_panic(file, line, "fs.open: modo desconhecido (use fs.READ, fs.WRITE, fs.APPEND ou fs.READ_WRITE)");
+    default: mlc_panic(file, line, "fs.open: unknown mode (use fs.READ, fs.WRITE, fs.APPEND or fs.READ_WRITE)");
     }
     int fd = open(p, flags | O_CLOEXEC, 0644);
     if (fd < 0) {
@@ -529,7 +529,7 @@ void mlc_std_fs_file_close(mlc_file *f, const char *file, int line) {
     mlc_free(f);
 }
 
-/* Um diretório aberto. */
+/* An open directory. */
 typedef struct mlc_dir {
     DIR *d;
 } mlc_dir;
@@ -551,7 +551,7 @@ mlc_dir *mlc_std_fs_open_dir(mlc_sl_byte *path, int64_t *err, const char *file, 
     return r;
 }
 
-/* O próximo nome (sem . e ..), ou -1 no fim. */
+/* The next name (without . and ..), or -1 at the end. */
 int64_t mlc_std_fs_dir_next(mlc_dir *d, mlc_sl_byte *dst, const char *file, int line) {
     for (;;) {
         struct dirent *e = readdir(d->d);
@@ -560,7 +560,7 @@ int64_t mlc_std_fs_dir_next(mlc_dir *d, mlc_sl_byte *dst, const char *file, int 
         int64_t n = mlc_copy_cstr(dst, e->d_name);
         if (n < 0) {
             char msg[160];
-            snprintf(msg, sizeof msg, "fs.Dir.next: o nome tem %zu bytes e o buffer, %" PRId64 " (um [256]byte sempre basta)",
+            snprintf(msg, sizeof msg, "fs.Dir.next: the name has %zu bytes and the buffer, %" PRId64 " (a [256]byte is always enough)",
                      strlen(e->d_name), dst->len);
             mlc_panic(file, line, msg);
         }
@@ -575,8 +575,8 @@ void mlc_std_fs_dir_close(mlc_dir *d, const char *file, int line) {
     mlc_free(d);
 }
 
-/* stat: tamanho, se é diretório e a data de modificação (ms desde 1970). */
-/* is_link diz se o caminho é um link simbólico (lstat: sem seguir o link). */
+/* stat: size, whether it's a directory and the modification date (ms since 1970). */
+/* is_link says whether the path is a symbolic link (lstat: without following the link). */
 bool mlc_std_fs_is_link(mlc_sl_byte *path, const char *file, int line) {
     (void)file;
     (void)line;
@@ -627,7 +627,7 @@ int64_t mlc_std_fs_rename_raw(mlc_sl_byte *from, mlc_sl_byte *to, const char *fi
     return rename(a, b) == 0 ? 0 : mlc_fs_err(errno);
 }
 
-/* std/os: ambiente e diretório atual. */
+/* std/os: environment and current directory. */
 int64_t mlc_std_os_setenv_raw(mlc_str name, mlc_sl_byte *value, const char *file, int line) {
     (void)file;
     (void)line;
@@ -656,18 +656,18 @@ int64_t mlc_std_os_chdir_raw(mlc_sl_byte *path, const char *file, int line) {
     return chdir(p) == 0 ? 0 : -errno;
 }
 
-/* std/process: roda um programa. args tem os argumentos separados por '\0'
- * (count deles, o primeiro é o programa, procurado no PATH). Com capture, a
- * saída padrão do programa vai para out; o que não couber é lido e
- * descartado, e o resultado é -1000 (TOO_BIG). status recebe o código de
- * saída (128 + o sinal, se o programa morreu por sinal). */
+/* std/process: runs a program. args has the arguments separated by '\0'
+ * (count of them, the first is the program, looked up in the PATH). With capture, the
+ * program's standard output goes into out; what doesn't fit is read and
+ * discarded, and the result is -1000 (TOO_BIG). status receives the exit
+ * code (128 + the signal, if the program died from a signal). */
 extern char **environ;
 
 int64_t mlc_std_process_run_raw(mlc_sl_byte *args, int64_t count, mlc_sl_byte *out, bool capture, int64_t *status,
                                 const char *file, int line) {
     char *argv[256];
     char buf[8193];
-    if (count < 1 || count > 255 || args->len > 8192) mlc_panic(file, line, "process: argumentos demais");
+    if (count < 1 || count > 255 || args->len > 8192) mlc_panic(file, line, "process: too many arguments");
     memcpy(buf, args->ptr, (size_t)args->len);
     buf[args->len] = '\0';
     int64_t at = 0;
@@ -688,7 +688,7 @@ int64_t mlc_std_process_run_raw(mlc_sl_byte *args, int64_t count, mlc_sl_byte *o
         posix_spawn_file_actions_addclose(&fa, fds[0]);
         posix_spawn_file_actions_addclose(&fa, fds[1]);
     }
-    fflush(stdout); /* a saída do programa não passa na frente da nossa */
+    fflush(stdout); /* the program's output doesn't jump ahead of ours */
     pid_t pid;
     int err = posix_spawnp(&pid, argv[0], &fa, NULL, argv, environ);
     posix_spawn_file_actions_destroy(&fa);
@@ -721,19 +721,19 @@ int64_t mlc_std_process_run_raw(mlc_sl_byte *args, int64_t count, mlc_sl_byte *o
     return overflow ? -1000 : got;
 }
 
-/* std/rand: bytes aleatórios do sistema operacional (getentropy, a fonte
- * criptográfica do kernel), em pedaços de até 256 bytes, o limite dela. Se
- * o sistema não entregar, é panic: não existe alternativa segura. */
+/* std/rand: random bytes from the operating system (getentropy, the kernel's
+ * cryptographic source), in pieces of up to 256 bytes, its limit. If
+ * the system doesn't deliver, it panics: there's no safe alternative. */
 void mlc_std_rand_secure(mlc_sl_byte *dst, const char *file, int line) {
     int64_t done = 0;
     while (done < dst->len) {
         size_t n = (size_t)(dst->len - done);
         if (n > 256) n = 256;
 #if defined(__APPLE__) || defined(__linux__)
-        if (getentropy(dst->ptr + done, n) != 0) mlc_panic(file, line, "rand.secure: o sistema não entregou bytes aleatórios");
+        if (getentropy(dst->ptr + done, n) != 0) mlc_panic(file, line, "rand.secure: the system didn't deliver random bytes");
 #else
         FILE *f = fopen("/dev/urandom", "rb");
-        if (f == NULL || fread(dst->ptr + done, 1, n, f) != n) mlc_panic(file, line, "rand.secure: o sistema não entregou bytes aleatórios");
+        if (f == NULL || fread(dst->ptr + done, 1, n, f) != n) mlc_panic(file, line, "rand.secure: the system didn't deliver random bytes");
         fclose(f);
 #endif
         done += (int64_t)n;
@@ -774,7 +774,7 @@ void mlc_std_vec_fail(mlc_str msg, const char *file, int line) {
     mlc_panic(file, line, buf);
 }
 
-/* std/io: escrita do Writer e formatação de números reais */
+/* std/io: the Writer's output and the formatting of real numbers */
 void mlc_std_io_write_fd(int64_t fd, mlc_sl_byte *b, const char *file, int line) {
     (void)file;
     (void)line;
@@ -787,7 +787,7 @@ int64_t mlc_std_io_format_f64(mlc_sl_byte *dst, double x, const char *file, int 
     return mlc_put_bytes(dst, buf, n, "io.put_float", file, line);
 }
 
-/* Real com prec casas decimais ({:.2}). */
+/* A real with prec decimal places ({:.2}). */
 int64_t mlc_std_io_format_fixed(mlc_sl_byte *dst, double x, int64_t prec, const char *file, int line) {
     char buf[352];
     int n;
@@ -797,27 +797,27 @@ int64_t mlc_std_io_format_fixed(mlc_sl_byte *dst, double x, int64_t prec, const 
     return mlc_put_bytes(dst, buf, n, "io.put_float", file, line);
 }
 
-/* Destinos do str.format: uma pilha, porque um write pode chamar outro
- * str.format. O Writer guarda só o índice, conferido aqui; o texto que não
- * cabe é contado e, no fim, dá panic na linha do str.format. */
+/* str.format destinations: a stack, because a write can call another
+ * str.format. The Writer keeps only the index, checked here; the text that doesn't
+ * fit is counted and, at the end, panics at the str.format's line. */
 typedef struct {
     uint8_t *ptr;
     int64_t cap, len, needed;
 } mlc_sink;
 
-/* Por thread: cada thread tem os próprios str.format em andamento. */
+/* Per thread: each thread has its own str.format calls in progress. */
 static _Thread_local mlc_sink mlc_sinks[64];
 static _Thread_local int64_t mlc_sink_depth = 0;
 
 int64_t mlc_sink_push(mlc_sl_byte *dst, const char *file, int line) {
     if (mlc_sink_depth == (int64_t)(sizeof mlc_sinks / sizeof mlc_sinks[0]))
-        mlc_panic(file, line, "str.format aninhado em mais de 64 níveis");
+        mlc_panic(file, line, "str.format nested more than 64 levels deep");
     mlc_sinks[mlc_sink_depth] = (mlc_sink){dst->ptr, dst->len, 0, 0};
     return mlc_sink_depth++;
 }
 
 void mlc_std_io_sink_put(int64_t sink, mlc_sl_byte *b, const char *file, int line) {
-    if (sink < 0 || sink >= mlc_sink_depth) mlc_panic(file, line, "Writer com um destino de str.format que não existe");
+    if (sink < 0 || sink >= mlc_sink_depth) mlc_panic(file, line, "Writer with a str.format destination that doesn't exist");
     mlc_sink *s = &mlc_sinks[sink];
     int64_t room = s->cap - s->len;
     int64_t n = b->len < room ? b->len : room;
@@ -826,19 +826,19 @@ void mlc_std_io_sink_put(int64_t sink, mlc_sl_byte *b, const char *file, int lin
     s->needed += b->len;
 }
 
-/* mlc_sink_pop_trunc é o mlc_sink_pop do log: o que não coube fica de fora,
- * sem panic. */
+/* mlc_sink_pop_trunc is the log's mlc_sink_pop: what didn't fit is left out,
+ * without a panic. */
 int64_t mlc_sink_pop_trunc(int64_t sink, const char *file, int line) {
-    if (sink != mlc_sink_depth - 1) mlc_panic(file, line, "erro interno: destinos de str.format fora de ordem");
+    if (sink != mlc_sink_depth - 1) mlc_panic(file, line, "internal error: str.format destinations out of order");
     return mlc_sinks[--mlc_sink_depth].len;
 }
 
 int64_t mlc_sink_pop(int64_t sink, const char *file, int line) {
-    if (sink != mlc_sink_depth - 1) mlc_panic(file, line, "erro interno: destinos de str.format fora de ordem");
+    if (sink != mlc_sink_depth - 1) mlc_panic(file, line, "internal error: str.format destinations out of order");
     mlc_sink s = mlc_sinks[--mlc_sink_depth];
     if (s.needed > s.cap) {
         char msg[160];
-        snprintf(msg, sizeof msg, "str.format: o texto tem %" PRId64 " bytes e o destino, %" PRId64, s.needed, s.cap);
+        snprintf(msg, sizeof msg, "str.format: the text has %" PRId64 " bytes and the destination, %" PRId64, s.needed, s.cap);
         mlc_panic(file, line, msg);
     }
     return s.len;
@@ -852,24 +852,24 @@ int64_t mlc_std_io_format_f32(mlc_sl_byte *dst, float x, const char *file, int l
 
 void mlc_shift_panic(int64_t n, int bits, const char *file, int line) {
     char msg[128];
-    snprintf(msg, sizeof msg, "deslocamento de %" PRId64 " bits num inteiro de %d (use de 0 a %d)", n, bits, bits - 1);
+    snprintf(msg, sizeof msg, "shift of %" PRId64 " bits on a %d-bit integer (use 0 to %d)", n, bits, bits - 1);
     mlc_panic(file, line, msg);
 }
 
 void mlc_null_fn(const char *file, int line) {
-    mlc_panic(file, line, "chamada de um valor fn nulo (o valor zero de um fn: a variável ou o campo não recebeu uma função)");
+    mlc_panic(file, line, "call of a null fn value (the zero value of an fn: the variable or field didn't receive a function)");
 }
 
 _Thread_local uintptr_t mlc_stack_low = 0;
 
-/* mlc_stack_init descobre a pilha da thread atual. A reserva é a mesma conta
- * do checker (checker.StackReserve): 1/8 da pilha, entre 4 KB e 32 KB. */
+/* mlc_stack_init finds the current thread's stack. The reserve is the same calculation
+ * as the checker's (checker.StackReserve): 1/8 of the stack, between 4 KB and 32 KB. */
 void mlc_stack_init(void) {
     uintptr_t low = 0, size = 0;
 #if defined(__APPLE__)
     pthread_t self = pthread_self();
     size = (uintptr_t)pthread_get_stacksize_np(self);
-    low = (uintptr_t)pthread_get_stackaddr_np(self) - size; /* o endereço é o topo */
+    low = (uintptr_t)pthread_get_stackaddr_np(self) - size; /* the address is the top */
 #elif defined(__linux__)
     pthread_attr_t attr;
     if (pthread_getattr_np(pthread_self(), &attr) == 0) {
@@ -882,7 +882,7 @@ void mlc_stack_init(void) {
         pthread_attr_destroy(&attr);
     }
 #endif
-    if (size == 0) return; /* sistema desconhecido: sem conferência */
+    if (size == 0) return; /* unknown system: unchecked */
     uintptr_t reserve = size / 8;
     if (reserve < 4096) reserve = 4096;
     if (reserve > 32768) reserve = 32768;
@@ -892,8 +892,8 @@ void mlc_stack_init(void) {
 void mlc_stack_overflow(int64_t need, const char *file, int line) {
     char msg[256];
     snprintf(msg, sizeof msg,
-             "estouro de pilha: o quadro da função (cerca de %" PRId64
-             " KB) não cabe no que resta da pilha desta thread (peça uma pilha maior no thread.spawn, ou ponha os buffers grandes no heap com alloc)",
+             "stack overflow: the function's frame (about %" PRId64
+             " KB) doesn't fit in what's left of this thread's stack (ask for a larger stack in thread.spawn, or put the large buffers on the heap with alloc)",
              (need + 1023) / 1024);
     mlc_panic(file, line, msg);
 }
@@ -919,20 +919,20 @@ void mlc_std_heap_fail(mlc_str msg, const char *file, int line) {
     mlc_std_vec_fail(msg, file, line);
 }
 
-/* std/testing. Cada teste roda num processo: o mlc test passa o índice do
- * teste como argumento, e o código de saída diz o resultado (0 ok, 1
- * verificação falhou, 2 panic, 3 vazamento). As falhas não interrompem o
- * teste; cada uma aponta a linha da verificação. */
+/* std/testing. Each test runs in a process: mlc test passes the test's
+ * index as an argument, and the exit code says the result (0 ok, 1
+ * a check failed, 2 panic, 3 leak). Failures don't interrupt the
+ * test; each one points at the check's line. */
 
 int64_t mlc_test_selected(int argc, char **argv) {
     if (argc != 2) {
-        fprintf(stderr, "este programa de teste é rodado pelo mlc test\n");
+        fprintf(stderr, "this test program is run by mlc test\n");
         exit(2);
     }
     return atoll(argv[1]);
 }
 
-/* Benchmark: "bench i n" roda o benchmark i com b.n = n. */
+/* Benchmark: "bench i n" runs benchmark i with b.n = n. */
 bool mlc_bench_selected(int argc, char **argv, int64_t *bench, int64_t *n) {
     if (argc != 4 || strcmp(argv[1], "bench") != 0) return false;
     *bench = atoll(argv[2]);
@@ -946,7 +946,7 @@ int64_t mlc_bench_now(void) {
     return (int64_t)ts.tv_sec * 1000000000 + ts.tv_nsec;
 }
 
-/* O tempo vai numa linha própria no fim, que o mlc test procura. */
+/* The time goes on a line of its own at the end, which mlc test looks for. */
 void mlc_bench_report(int64_t ns) {
     fflush(stdout);
     fprintf(stderr, "\nmlc-bench-ns %" PRId64 "\n", ns);
@@ -955,7 +955,7 @@ void mlc_bench_report(int64_t ns) {
 void mlc_test_finish(void) {
     if (mlc_test_panic_expected) {
         fflush(stdout);
-        fprintf(stderr, "o teste terminou sem o panic esperado (testing.expect_panic)\n");
+        fprintf(stderr, "the test ended without the expected panic (testing.expect_panic)\n");
         mlc_test_failures++;
     }
     if (mlc_test_failures > 0) {
@@ -975,7 +975,7 @@ static void mlc_test_fail(const char *file, int line, const char *fmt, ...) {
     mlc_test_failures++;
 }
 
-/* Escreve um texto entre aspas, com os bytes de controle escapados. */
+/* Writes a text between quotes, with the control bytes escaped. */
 static void mlc_test_quote(const uint8_t *p, int64_t n) {
     fputc('"', stderr);
     for (int64_t i = 0; i < n; i++) {
@@ -998,15 +998,15 @@ void mlc_std_testing_fail(mlc_str msg, const char *file, int line) {
 }
 
 void mlc_std_testing_eq_int(int64_t got, int64_t want, const char *file, int line) {
-    if (got != want) mlc_test_fail(file, line, "veio %" PRId64 ", esperado %" PRId64, got, want);
+    if (got != want) mlc_test_fail(file, line, "got %" PRId64 ", expected %" PRId64, got, want);
 }
 
 void mlc_std_testing_eq_uint(uint64_t got, uint64_t want, const char *file, int line) {
-    if (got != want) mlc_test_fail(file, line, "veio %" PRIu64 " (0x%" PRIx64 "), esperado %" PRIu64 " (0x%" PRIx64 ")", got, got, want, want);
+    if (got != want) mlc_test_fail(file, line, "got %" PRIu64 " (0x%" PRIx64 "), expected %" PRIu64 " (0x%" PRIx64 ")", got, got, want, want);
 }
 
 void mlc_std_testing_eq_bool(bool got, bool want, const char *file, int line) {
-    if (got != want) mlc_test_fail(file, line, "veio %s, esperado %s", got ? "true" : "false", want ? "true" : "false");
+    if (got != want) mlc_test_fail(file, line, "got %s, expected %s", got ? "true" : "false", want ? "true" : "false");
 }
 
 void mlc_std_testing_eq_float(double got, double want, const char *file, int line) {
@@ -1014,27 +1014,27 @@ void mlc_std_testing_eq_float(double got, double want, const char *file, int lin
         char a[32], b[32];
         mlc_format_float(a, sizeof a, got, 17, 0);
         mlc_format_float(b, sizeof b, want, 17, 0);
-        mlc_test_fail(file, line, "veio %s, esperado %s", a, b);
+        mlc_test_fail(file, line, "got %s, expected %s", a, b);
     }
 }
 
 void mlc_std_testing_near(double got, double want, double tol, const char *file, int line) {
-    if (!(fabs(got - want) <= tol)) { /* NaN também falha */
+    if (!(fabs(got - want) <= tol)) { /* NaN fails too */
         char a[32], b[32], t[32];
         mlc_format_float(a, sizeof a, got, 17, 0);
         mlc_format_float(b, sizeof b, want, 17, 0);
         mlc_format_float(t, sizeof t, tol, 17, 0);
-        mlc_test_fail(file, line, "veio %s, esperado %s (tolerância %s)", a, b, t);
+        mlc_test_fail(file, line, "got %s, expected %s (tolerance %s)", a, b, t);
     }
 }
 
 static void mlc_test_eq_text(const uint8_t *got, int64_t gn, const uint8_t *want, int64_t wn,
                              const char *file, int line) {
     if (gn == wn && (gn == 0 || memcmp(got, want, (size_t)gn) == 0)) return;
-    mlc_test_fail(file, line, "texto diferente");
-    fputs("    veio:     ", stderr);
+    mlc_test_fail(file, line, "different text");
+    fputs("    got:      ", stderr);
     mlc_test_quote(got, gn);
-    fputs("\n    esperado: ", stderr);
+    fputs("\n    expected: ", stderr);
     mlc_test_quote(want, wn);
     fputc('\n', stderr);
 }
@@ -1053,9 +1053,9 @@ void mlc_std_testing_expect_panic(const char *file, int line) {
     mlc_test_panic_expected = true;
 }
 
-/* std/thread. O registro da thread (contexto, resultado e o mlc_thread no
- * começo) é alocado pelo código gerado com mlc_alloc e liberado no join; a
- * pilha é do sistema (pthread), com o tamanho pedido no spawn. */
+/* std/thread. The thread's record (context, result and the mlc_thread at the
+ * start) is allocated by the generated code with mlc_alloc and freed on join; the
+ * stack is the system's (pthread), with the size asked for in spawn. */
 
 static void *mlc_thread_entry(void *p) {
     mlc_thread *t = p;
@@ -1066,25 +1066,25 @@ static void *mlc_thread_entry(void *p) {
 }
 
 void mlc_thread_start(mlc_thread *t, void (*run)(mlc_thread *), int64_t stack, const char *file, int line) {
-    if (stack < 16384) mlc_panic(file, line, "thread.spawn: a pilha precisa ter pelo menos 16 KB (thread.STACK_64KB, por exemplo)");
+    if (stack < 16384) mlc_panic(file, line, "thread.spawn: the stack must have at least 16 KB (thread.STACK_64KB, for example)");
     long page = sysconf(_SC_PAGESIZE);
     if (page <= 0) page = 4096;
-    size_t size = (size_t)((stack + page - 1) / page * page); /* o macOS exige múltiplo da página */
+    size_t size = (size_t)((stack + page - 1) / page * page); /* macOS requires a multiple of the page */
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     if (pthread_attr_setstacksize(&attr, size) != 0) {
         pthread_attr_destroy(&attr);
-        mlc_panic(file, line, "thread.spawn: tamanho de pilha recusado pelo sistema");
+        mlc_panic(file, line, "thread.spawn: stack size refused by the system");
     }
     t->run = run;
     t->done = 0;
     int err = pthread_create(&t->th, &attr, mlc_thread_entry, t);
     pthread_attr_destroy(&attr);
-    if (err != 0) mlc_panic(file, line, "thread.spawn: o sistema não criou a thread (limite de threads ou de memória)");
+    if (err != 0) mlc_panic(file, line, "thread.spawn: the system didn't create the thread (thread or memory limit)");
 }
 
 void mlc_thread_join(mlc_thread *t, const char *file, int line) {
-    if (pthread_join(t->th, NULL) != 0) mlc_panic(file, line, "erro interno: thread.join falhou");
+    if (pthread_join(t->th, NULL) != 0) mlc_panic(file, line, "internal error: thread.join failed");
 }
 
 int64_t mlc_std_thread_cpu_count(const char *file, int line) {
@@ -1098,13 +1098,13 @@ int64_t mlc_std_thread_cpu_count(const char *file, int line) {
 #endif
 }
 
-/* std/chan. Um canal é um buffer em anel de cap posições de elem bytes,
- * protegido por uma trava. send copia o valor para o anel (a posse passa ao
- * canal) e recv o copia para fora (a posse passa a quem recebe). As pontas
- * são contadas: sem Sender aberto, recv num canal vazio devolve "fechado";
- * sem Receiver aberto, send libera o valor (drop) e devolve false. O último
- * close libera o que sobrou no anel e o próprio canal. O canal e o anel são
- * alocados com mlc_alloc no chan.new, então contam como alocações. */
+/* std/chan. A channel is a ring buffer of cap slots of elem bytes,
+ * protected by a lock. send copies the value into the ring (ownership passes to the
+ * channel) and recv copies it out (ownership passes to the receiver). The ends
+ * are counted: with no Sender open, recv on an empty channel returns "closed";
+ * with no Receiver open, send frees the value (drop) and returns false. The last
+ * close frees what's left in the ring and the channel itself. The channel and the ring are
+ * allocated with mlc_alloc in chan.new, so they count as allocations. */
 
 struct mlc_chan {
     pthread_mutex_t mu;
@@ -1116,7 +1116,7 @@ struct mlc_chan {
 };
 
 mlc_chan *mlc_chan_new(int64_t cap, size_t elem, void (*drop)(void *), const char *file, int line) {
-    if (cap < 1) mlc_panic(file, line, "chan.new: a capacidade precisa ser pelo menos 1");
+    if (cap < 1) mlc_panic(file, line, "chan.new: the capacity must be at least 1");
     mlc_chan *c = mlc_alloc(sizeof *c, file, line);
     c->buf = mlc_alloc_array(cap, elem > 0 ? elem : 1, file, line);
     pthread_mutex_init(&c->mu, NULL);
@@ -1141,10 +1141,10 @@ void mlc_chan_close(mlc_chan *c, int end) {
     pthread_mutex_lock(&c->mu);
     if (end == 1) {
         c->senders--;
-        pthread_cond_broadcast(&c->not_empty); /* quem espera em recv pode ver o fim */
+        pthread_cond_broadcast(&c->not_empty); /* whoever waits in recv can see the end */
     } else {
         c->receivers--;
-        pthread_cond_broadcast(&c->not_full); /* quem espera em send desiste */
+        pthread_cond_broadcast(&c->not_full); /* whoever waits in send gives up */
     }
     bool last = c->senders == 0 && c->receivers == 0;
     pthread_mutex_unlock(&c->mu);
@@ -1164,7 +1164,7 @@ bool mlc_chan_send(mlc_chan *c, void *v) {
     while (c->count == c->cap && c->receivers > 0) pthread_cond_wait(&c->not_full, &c->mu);
     if (c->receivers == 0) {
         pthread_mutex_unlock(&c->mu);
-        if (c->drop) c->drop(v); /* ninguém mais recebe: o valor é liberado */
+        if (c->drop) c->drop(v); /* nobody receives anymore: the value is freed */
         return false;
     }
     memcpy(c->buf + (size_t)((c->head + c->count) % c->cap) * c->elem, v, c->elem);
@@ -1179,7 +1179,7 @@ bool mlc_chan_recv(mlc_chan *c, void *out) {
     while (c->count == 0 && c->senders > 0) pthread_cond_wait(&c->not_empty, &c->mu);
     if (c->count == 0) {
         pthread_mutex_unlock(&c->mu);
-        return false; /* todos os Sender fecharam e o canal esvaziou */
+        return false; /* every Sender closed and the channel is empty */
     }
     memcpy(out, c->buf + (size_t)c->head * c->elem, c->elem);
     c->head = (c->head + 1) % c->cap;
@@ -1189,10 +1189,10 @@ bool mlc_chan_recv(mlc_chan *c, void *out) {
     return true;
 }
 
-/* std/mutex. O mutex guarda o valor logo depois do cabeçalho; a trava é do
- * tipo que confere erros, então travar duas vezes na mesma thread dá panic em
- * vez de travar o programa para sempre. Os handles e os guards são contados:
- * o último a sair libera o valor (drop) e o mutex. */
+/* std/mutex. The mutex keeps the value right after the header; the lock is of
+ * the error-checking kind, so locking twice on the same thread panics instead of
+ * locking the program forever. The handles and the guards are counted:
+ * the last one to leave frees the value (drop) and the mutex. */
 
 struct mlc_mutex {
     pthread_mutex_t mu;
@@ -1230,12 +1230,12 @@ void mlc_mutex_close(mlc_mutex *m) {
 }
 
 mlc_mutex *mlc_mutex_lock(mlc_mutex *m, const char *file, int line) {
-    m->refs++; /* o guard mantém o mutex vivo */
+    m->refs++; /* the guard keeps the mutex alive */
     int err = pthread_mutex_lock(&m->mu);
     if (err != 0) {
         m->refs--;
-        mlc_panic(file, line, err == EDEADLK ? "mutex já travado por esta thread (destrave o guard antes de travar de novo)"
-                                             : "erro interno: lock falhou");
+        mlc_panic(file, line, err == EDEADLK ? "mutex already locked by this thread (unlock the guard before locking again)"
+                                             : "internal error: lock failed");
     }
     return m;
 }
@@ -1254,7 +1254,7 @@ void mlc_mutex_notify(mlc_mutex *m, bool all) {
     else pthread_cond_signal(&m->cv);
 }
 
-/* std/atomic: um inteiro (ou bool) atômico, com os handles contados. */
+/* std/atomic: an atomic integer (or bool), with the handles counted. */
 
 typedef struct mlc_atomic {
     _Atomic int64_t v;
@@ -1308,11 +1308,11 @@ void mlc_std_atomic_store_int(mlc_atomic *a, int64_t v, const char *file, int li
 int64_t mlc_std_atomic_add_int(mlc_atomic *a, int64_t n, const char *file, int line) {
     (void)file;
     (void)line;
-    /* como as contas do MLC, estouro dá panic: confere antes de trocar */
+    /* like MLC's arithmetic, overflow panics: checks before swapping */
     int64_t old = atomic_load(&a->v);
     for (;;) {
         int64_t sum;
-        if (__builtin_add_overflow(old, n, &sum)) mlc_panic(file, line, "atomic.Int.add: estouro de int");
+        if (__builtin_add_overflow(old, n, &sum)) mlc_panic(file, line, "atomic.Int.add: int overflow");
         if (atomic_compare_exchange_weak(&a->v, &old, sum)) return sum;
     }
 }
@@ -1349,14 +1349,14 @@ void mlc_std_args_fail(mlc_str msg, const char *file, int line) { mlc_std_proces
 
 void mlc_std_bytes_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
 
-/* std/net: TCP. Cada handle guarda o descritor do socket. Os erros que mudam
- * entre sistemas viram códigos do MLC (veja std/net.mlc); os outros são o
- * errno. Escrever num socket fechado do outro lado devolve erro em vez de
- * matar o programa com SIGPIPE. */
+/* std/net: TCP. Each handle keeps the socket's descriptor. The errors that change
+ * between systems become MLC codes (see std/net.mlc); the others are
+ * errno. Writing to a socket closed on the other side returns an error instead of
+ * killing the program with SIGPIPE. */
 
 typedef struct mlc_sock {
     int fd;
-    int64_t accept_ms; /* tempo máximo do accept (listener); -1: sem limite */
+    int64_t accept_ms; /* the accept's maximum time (listener); -1: no limit */
 } mlc_sock;
 
 static int64_t mlc_net_err(int e) {
@@ -1364,7 +1364,7 @@ static int64_t mlc_net_err(int e) {
     case ECONNREFUSED: return 2001; /* net.REFUSED */
     case EADDRINUSE: return 2003;   /* net.IN_USE */
     case ETIMEDOUT:
-    case EAGAIN: return 2004; /* net.TIMEOUT (SO_RCVTIMEO devolve EAGAIN) */
+    case EAGAIN: return 2004; /* net.TIMEOUT (SO_RCVTIMEO returns EAGAIN) */
     case ECONNRESET:
     case EPIPE: return 2005; /* net.RESET */
     }
@@ -1394,7 +1394,7 @@ static mlc_sock *mlc_net_wrap(int fd, const char *file, int line) {
     return s;
 }
 
-/* Resolve host:port (host vazio: todas as interfaces, para listen). */
+/* Resolves host:port (empty host: all interfaces, for listen). */
 static int mlc_net_resolve(mlc_sl_byte *host, int64_t port, bool passive, struct addrinfo **res, int64_t *err) {
     char h[256], p[16];
     if (!mlc_net_host(h, sizeof h, host) || port < 0 || port > 65535) {
@@ -1454,7 +1454,7 @@ mlc_sock *mlc_std_net_accept_raw(mlc_sock *l, int64_t *err, const char *file, in
             }
             if (r < 0) {
                 if (errno == EINTR) {
-                    *err = 2004; /* um sinal: quem chamou confere e tenta de novo */
+                    *err = 2004; /* a signal: the caller checks and tries again */
                     return NULL;
                 }
                 *err = mlc_net_err(errno);
@@ -1484,8 +1484,8 @@ int64_t mlc_std_net_port_raw(mlc_sock *l, const char *file, int line) {
     return -1;
 }
 
-/* mlc_tcp_dial abre uma conexão TCP com host:port e devolve o descritor,
- * ou -1 com o código em err (também usada pelo std/tls). */
+/* mlc_tcp_dial opens a TCP connection to host:port and returns the descriptor,
+ * or -1 with the code in err (also used by std/tls). */
 static int mlc_tcp_dial(mlc_sl_byte *host, int64_t port, int64_t *err) {
     struct addrinfo *res;
     *err = 0;
@@ -1586,8 +1586,8 @@ void mlc_std_net_close_raw(mlc_sock *s, const char *file, int line) {
 
 void mlc_std_net_close_listener(mlc_sock *s, const char *file, int line) { mlc_std_net_close_raw(s, file, line); }
 
-/* std/time: o deslocamento do fuso local (segundos a leste de UTC) no
- * instante ms. */
+/* std/time: the local time zone's offset (seconds east of UTC) at the
+ * instant ms. */
 int64_t mlc_std_time_local_offset(int64_t ms, const char *file, int line) {
     (void)file;
     (void)line;
@@ -1623,69 +1623,69 @@ void mlc_std_hmac_fail(mlc_str msg, const char *file, int line) { mlc_std_proces
 
 void mlc_std_password_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
 
-/* os.error_text: o texto de um código de erro da biblioteca. Os códigos
- * abaixo de 1000 são os do sistema (errno), com os mais comuns em português;
- * os de 1000 em diante são do MLC e valem em todos os sistemas. */
+/* os.error_text: the text of a library error code. The codes
+ * below 1000 are the system's (errno), with the most common ones written out;
+ * those from 1000 up are MLC's and apply on every system. */
 static const char *mlc_error_text(int64_t code) {
     switch (code) {
-    case 0: return "sem erro";
-    case 1000: return "não cabe no buffer";
-    case 1001: return "o diretório não está vazio";
-    case 1002: return "longo demais para o buffer";
-    case 1003: return "fim dos dados";
-    case 1004: return "diretórios aninhados demais";
-    case 2001: return "conexão recusada: ninguém escuta nessa porta";
-    case 2002: return "o nome do servidor não foi encontrado";
-    case 2003: return "a porta já está em uso";
-    case 2004: return "passou do tempo limite";
-    case 2005: return "a conexão foi fechada pelo outro lado";
-    case 3001: return "mensagem HTTP inválida";
-    case 3002: return "cabeçalho HTTP grande demais";
-    case 3003: return "esquema de URL sem suporte (só http e https)";
-    case 3101: return "URL inválida";
-    case 3201: return "linha de configuração inválida (esperado chave=valor)";
-    case 3301: return "aspas erradas num campo de CSV";
-    case 4001: return "erro de SQL";
-    case 4005: return "o banco está travado por outro processo";
-    case 4008: return "o banco foi aberto só para leitura";
-    case 4014: return "não foi possível abrir o arquivo do banco";
-    case 4019: return "restrição do banco violada (UNIQUE, NOT NULL, FOREIGN KEY ou CHECK)";
-    case 4021: return "uso errado da API do SQLite";
-    case 4900: return "a biblioteca do SQLite não foi encontrada neste sistema";
-    case 5001: return "o aperto de mão TLS falhou";
-    case 5002: return "o certificado do servidor não vale (expirado, de outro nome ou de autoridade desconhecida)";
-    case 5003: return "a biblioteca de TLS (OpenSSL) não foi encontrada neste sistema";
-    case 5004: return "erro na conexão TLS";
-    case 5005: return "o certificado ou a chave do servidor não carregaram";
-    case EPERM: return "operação não permitida";
-    case ENOENT: return "não existe";
-    case EIO: return "erro de entrada e saída";
-    case EBADF: return "descritor de arquivo inválido";
-    case ENOMEM: return "memória esgotada";
-    case EACCES: return "permissão negada";
-    case EBUSY: return "o recurso está ocupado";
-    case EEXIST: return "já existe";
-    case EXDEV: return "não dá para mover entre sistemas de arquivos diferentes";
-    case ENOTDIR: return "não é um diretório";
-    case EISDIR: return "é um diretório";
-    case EINVAL: return "argumento inválido";
+    case 0: return "no error";
+    case 1000: return "doesn't fit in the buffer";
+    case 1001: return "the directory isn't empty";
+    case 1002: return "too long for the buffer";
+    case 1003: return "end of the data";
+    case 1004: return "directories nested too deep";
+    case 2001: return "connection refused: nobody listens on that port";
+    case 2002: return "the server's name wasn't found";
+    case 2003: return "the port is already in use";
+    case 2004: return "timed out";
+    case 2005: return "the connection was closed by the other side";
+    case 3001: return "invalid HTTP message";
+    case 3002: return "HTTP header too large";
+    case 3003: return "unsupported URL scheme (only http and https)";
+    case 3101: return "invalid URL";
+    case 3201: return "invalid configuration line (expected key=value)";
+    case 3301: return "wrong quotes in a CSV field";
+    case 4001: return "SQL error";
+    case 4005: return "the database is locked by another process";
+    case 4008: return "the database was opened read-only";
+    case 4014: return "couldn't open the database file";
+    case 4019: return "database constraint violated (UNIQUE, NOT NULL, FOREIGN KEY or CHECK)";
+    case 4021: return "wrong use of the SQLite API";
+    case 4900: return "the SQLite library wasn't found on this system";
+    case 5001: return "the TLS handshake failed";
+    case 5002: return "the server's certificate isn't valid (expired, for another name or from an unknown authority)";
+    case 5003: return "the TLS library (OpenSSL) wasn't found on this system";
+    case 5004: return "error in the TLS connection";
+    case 5005: return "the server's certificate or key didn't load";
+    case EPERM: return "operation not permitted";
+    case ENOENT: return "doesn't exist";
+    case EIO: return "input/output error";
+    case EBADF: return "invalid file descriptor";
+    case ENOMEM: return "out of memory";
+    case EACCES: return "permission denied";
+    case EBUSY: return "the resource is busy";
+    case EEXIST: return "already exists";
+    case EXDEV: return "can't move between different file systems";
+    case ENOTDIR: return "not a directory";
+    case EISDIR: return "is a directory";
+    case EINVAL: return "invalid argument";
     case ENFILE:
-    case EMFILE: return "arquivos abertos demais";
-    case EFBIG: return "arquivo grande demais";
-    case ENOSPC: return "sem espaço no disco";
-    case EROFS: return "sistema de arquivos só de leitura";
-    case ENAMETOOLONG: return "nome longo demais";
-    case ELOOP: return "links simbólicos demais (provável ciclo)";
-    case EINTR: return "interrompido por um sinal";
-    case EAGAIN: return "recurso temporariamente indisponível";
-    case EPIPE: return "a outra ponta foi fechada";
-    case ENETUNREACH: return "a rede está inacessível";
-    case EHOSTUNREACH: return "o servidor está inacessível";
-    case ECONNABORTED: return "a conexão foi abortada";
-    case ENOTCONN: return "não conectado";
-    case EADDRNOTAVAIL: return "endereço não disponível nesta máquina";
+    case EMFILE: return "too many open files";
+    case EFBIG: return "file too large";
+    case ENOSPC: return "no space left on the disk";
+    case EROFS: return "read-only file system";
+    case ENAMETOOLONG: return "name too long";
+    case ELOOP: return "too many symbolic links (probably a cycle)";
+    case EINTR: return "interrupted by a signal";
+    case EAGAIN: return "resource temporarily unavailable";
+    case EPIPE: return "the other end was closed";
+    case ENETUNREACH: return "the network is unreachable";
+    case EHOSTUNREACH: return "the server is unreachable";
+    case ECONNABORTED: return "the connection was aborted";
+    case ENOTCONN: return "not connected";
+    case EADDRNOTAVAIL: return "address not available on this machine";
     }
-    if (code > 4000 && code < 4900) return "erro do SQLite (o texto vem de db.error)";
+    if (code > 4000 && code < 4900) return "SQLite error (the text comes from db.error)";
     return NULL;
 }
 
@@ -1694,19 +1694,19 @@ int64_t mlc_std_os_error_text_raw(int64_t code, mlc_sl_byte *dst, const char *fi
     const char *t = mlc_error_text(code);
     if (t == NULL) {
         if (code > 0 && code < 1000) {
-            snprintf(buf, sizeof buf, "%s (erro %" PRId64 " do sistema)", strerror((int)code), code);
+            snprintf(buf, sizeof buf, "%s (system error %" PRId64 ")", strerror((int)code), code);
         } else {
-            snprintf(buf, sizeof buf, "erro desconhecido (%" PRId64 ")", code);
+            snprintf(buf, sizeof buf, "unknown error (%" PRId64 ")", code);
         }
         t = buf;
     }
     return mlc_put_bytes(dst, t, (int64_t)strlen(t), "os.error_text", file, line);
 }
 
-/* std/signal: o tratador só marca o sinal (got) e escreve um byte num pipe,
- * para acordar quem espera em signal.wait; o que fazer fica com o programa.
- * Os códigos são os do MLC (std/signal.mlc), traduzidos aqui para os do
- * sistema (SIGUSR1 é 30 no macOS e 10 no Linux). */
+/* std/signal: the handler only marks the signal (got) and writes a byte into a pipe,
+ * to wake whoever waits in signal.wait; what to do is up to the program.
+ * The codes are MLC's (std/signal.mlc), translated here into the
+ * system's (SIGUSR1 is 30 on macOS and 10 on Linux). */
 
 static volatile sig_atomic_t mlc_sig_got[32];
 static int mlc_sig_pipe[2] = {-1, -1};
@@ -1746,7 +1746,7 @@ static int mlc_sig_check(int64_t code, const char *file, int line) {
     int sig = mlc_sig_native(code);
     if (sig == 0) {
         char msg[96];
-        snprintf(msg, sizeof msg, "signal: código de sinal desconhecido (%" PRId64 ")", code);
+        snprintf(msg, sizeof msg, "signal: unknown signal code (%" PRId64 ")", code);
         mlc_panic(file, line, msg);
     }
     return sig;
@@ -1758,7 +1758,7 @@ static void mlc_sig_set(int sig, void (*handler)(int), const char *file, int lin
     sa.sa_handler = handler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
-    if (sigaction(sig, &sa, NULL) != 0) mlc_panic(file, line, "signal: o sistema recusou o tratador");
+    if (sigaction(sig, &sa, NULL) != 0) mlc_panic(file, line, "signal: the system refused the handler");
 }
 
 void mlc_std_signal_listen(int64_t code, const char *file, int line) {
@@ -1767,7 +1767,7 @@ void mlc_std_signal_listen(int64_t code, const char *file, int line) {
     if (mlc_sig_pipe[0] < 0) {
         if (pipe(mlc_sig_pipe) != 0) {
             pthread_mutex_unlock(&mlc_sig_mu);
-            mlc_panic(file, line, "signal: não deu para criar o pipe dos sinais");
+            mlc_panic(file, line, "signal: couldn't create the signal pipe");
         }
         for (int i = 0; i < 2; i++) {
             fcntl(mlc_sig_pipe[i], F_SETFL, fcntl(mlc_sig_pipe[i], F_GETFL) | O_NONBLOCK);
@@ -1824,8 +1824,8 @@ int64_t mlc_std_signal_wait(int64_t ms, const char *file, int line) {
             int64_t left = ms - spent;
             timeout = left > INT32_MAX ? INT32_MAX : (int)left;
         }
-        if (mlc_sig_pipe[0] < 0) { /* ninguém chamou listen: só espera o tempo */
-            if (ms < 0) mlc_panic(file, line, "signal.wait sem tempo limite e sem signal.listen: esperaria para sempre");
+        if (mlc_sig_pipe[0] < 0) { /* nobody called listen: only waits for the time */
+            if (ms < 0) mlc_panic(file, line, "signal.wait without a timeout and without signal.listen: it would wait forever");
             struct timespec ts = {(time_t)(timeout / 1000), (long)(timeout % 1000) * 1000000};
             nanosleep(&ts, NULL);
             continue;
@@ -1838,9 +1838,9 @@ int64_t mlc_std_signal_wait(int64_t ms, const char *file, int line) {
     }
 }
 
-/* std/log: o logger é um handle contado (clone para outras threads, o
- * último close fecha o arquivo). Cada linha é montada inteira e escrita com
- * a trava, então linhas de threads diferentes não se misturam. */
+/* std/log: the logger is a counted handle (clone for other threads, the
+ * last close closes the file). Each line is assembled whole and written under
+ * the lock, so lines from different threads don't mix. */
 
 typedef struct mlc_log {
     pthread_mutex_t mu;
@@ -1863,7 +1863,7 @@ static mlc_log *mlc_log_make(int fd, bool owns, int64_t level, const char *file,
 }
 
 mlc_log *mlc_std_log_new_raw(int64_t fd, int64_t level, const char *file, int line) {
-    if (fd != 1 && fd != 2) mlc_panic(file, line, "log.new: o destino é log.STDOUT ou log.STDERR (para um arquivo, use log.open)");
+    if (fd != 1 && fd != 2) mlc_panic(file, line, "log.new: the destination is log.STDOUT or log.STDERR (for a file, use log.open)");
     return mlc_log_make((int)fd, false, level, file, line);
 }
 
@@ -1950,17 +1950,17 @@ void mlc_std_log_emit_raw(mlc_log *l, int64_t level, mlc_sl_byte *msg, const cha
         ssize_t w = write(l->fd, buf + done, n - done);
         if (w < 0) {
             if (errno == EINTR) continue;
-            break; /* sem onde registrar o erro do log */
+            break; /* nowhere to record the log's error */
         }
         done += (size_t)w;
     }
     pthread_mutex_unlock(&l->mu);
 }
 
-/* lg.info("...", x) e os outros níveis: o compilador escreve o formato num
- * Writer cujo destino é a linha da thread (mlc_log_begin) e entrega a linha
- * ao logger (mlc_log_end). Dois níveis bastam para um write que registre
- * algo enquanto é escrito; o que passar de LINE bytes fica de fora. */
+/* lg.info("...", x) and the other levels: the compiler writes the format into a
+ * Writer whose destination is the thread's line (mlc_log_begin) and hands the line
+ * to the logger (mlc_log_end). Two levels are enough for a write that logs
+ * something while it's written; whatever goes past LINE bytes is left out. */
 
 #define MLC_LOG_LINE 2048
 static _Thread_local uint8_t mlc_log_bufs[2][MLC_LOG_LINE];
@@ -1969,7 +1969,7 @@ static _Thread_local int mlc_log_depth = 0;
 bool mlc_log_enabled(void *l, int64_t level) { return level >= ((mlc_log *)l)->level; }
 
 int64_t mlc_log_begin(const char *file, int line) {
-    if (mlc_log_depth == 2) mlc_panic(file, line, "log: registro dentro de registro dentro de registro");
+    if (mlc_log_depth == 2) mlc_panic(file, line, "log: logging inside logging inside logging");
     mlc_sl_byte d = {mlc_log_bufs[mlc_log_depth++], MLC_LOG_LINE};
     return mlc_sink_push(&d, file, line);
 }
@@ -1980,8 +1980,8 @@ void mlc_log_end(void *l, int64_t level, int64_t sink, const char *file, int lin
     mlc_std_log_emit_raw((mlc_log *)l, level, &m, file, line);
 }
 
-/* std/sync: um grupo de threads (sem resultado), esperadas juntas. A
- * capacidade é escolhida por quem cria o grupo. */
+/* std/sync: a group of threads (without a result), waited for together. The
+ * capacity is chosen by whoever creates the group. */
 
 typedef struct mlc_group {
     int64_t cap;
@@ -1990,15 +1990,15 @@ typedef struct mlc_group {
 } mlc_group;
 
 mlc_group *mlc_std_sync_group(int64_t cap, const char *file, int line) {
-    if (cap < 0) mlc_panic(file, line, "sync.group: capacidade negativa");
+    if (cap < 0) mlc_panic(file, line, "sync.group: negative capacity");
     mlc_group *g = mlc_alloc(sizeof *g + (size_t)cap * sizeof(mlc_thread *), file, line);
     g->cap = cap;
     g->len = 0;
     return g;
 }
 
-/* reap espera as threads que já terminaram e tira-as do grupo, mantendo a
- * ordem das outras. */
+/* reap waits for the threads that already finished and takes them out of the group, keeping the
+ * others' order. */
 int64_t mlc_std_sync_reap_raw(mlc_group *g, const char *file, int line) {
     int64_t k = 0, freed = 0;
     for (int64_t i = 0; i < g->len; i++) {
@@ -2019,10 +2019,10 @@ void mlc_std_sync_add_raw(mlc_group *g, mlc_thread *t, const char *file, int lin
     if (g->cap == 0) {
         mlc_thread_join(t, file, line);
         mlc_free(t);
-        mlc_panic(file, line, "sync.Group.add: um grupo de capacidade 0 não recebe threads");
+        mlc_panic(file, line, "sync.Group.add: a group of capacity 0 takes no threads");
     }
     if (g->len == g->cap && mlc_std_sync_reap_raw(g, file, line) == 0) {
-        /* cheio e ninguém terminou: espera a mais antiga */
+        /* full and nobody finished: waits for the oldest */
         mlc_thread_join(g->threads[0], file, line);
         mlc_free(g->threads[0]);
         memmove(&g->threads[0], &g->threads[1], (size_t)(g->len - 1) * sizeof g->threads[0]);
@@ -2045,13 +2045,13 @@ void mlc_std_sync_wait_raw(mlc_group *g, const char *file, int line) {
     mlc_free(g);
 }
 
-/* std/sqlite. A biblioteca do SQLite é carregada na primeira chamada
- * (dlopen), então só quem usa o módulo precisa dela, e ninguém precisa de
- * flags de ligação. MLC_SQLITE_LIB escolhe o arquivo; sem ela, tenta os
- * nomes do macOS e do Linux. Os erros do SQLite viram 4000 + o código dele
- * (4019 é SQLITE_CONSTRAINT), para não se misturar com os do sistema. O
- * texto entra com cópia (SQLITE_TRANSIENT): o MLC só empresta durante a
- * chamada. E o texto que sai é copiado para o buffer de quem chama. */
+/* std/sqlite. The SQLite library is loaded on the first call
+ * (dlopen), so only whoever uses the module needs it, and nobody needs
+ * link flags. MLC_SQLITE_LIB picks the file; without it, it tries the
+ * macOS and Linux names. SQLite's errors become 4000 + its code
+ * (4019 is SQLITE_CONSTRAINT), so they don't mix with the system's. The
+ * text goes in with a copy (SQLITE_TRANSIENT): MLC only lends it during the
+ * call. And the text that comes out is copied into the caller's buffer. */
 
 typedef struct sqlite3 sqlite3;
 typedef struct sqlite3_stmt sqlite3_stmt;
@@ -2086,7 +2086,7 @@ static struct {
     const char *(*errmsg)(sqlite3 *);
     int (*busy_timeout)(sqlite3 *, int);
     const char *(*libversion)(void);
-    int loaded; /* 1: carregou; -1: não achou */
+    int loaded; /* 1: loaded; -1: not found */
 } mlc_sq;
 
 static pthread_once_t mlc_sq_once = PTHREAD_ONCE_INIT;
@@ -2132,7 +2132,7 @@ static void mlc_sq_load(void) {
     MLC_SQ(busy_timeout, "sqlite3_busy_timeout");
     MLC_SQ(libversion, "sqlite3_libversion");
 #undef MLC_SQ
-    *(void **)&mlc_sq.changes64 = dlsym(h, "sqlite3_changes64"); /* 3.37+: opcional */
+    *(void **)&mlc_sq.changes64 = dlsym(h, "sqlite3_changes64"); /* 3.37+: optional */
     mlc_sq.loaded = 1;
 }
 
@@ -2141,11 +2141,11 @@ static int mlc_sq_ready(void) {
     return mlc_sq.loaded == 1;
 }
 
-#define MLC_SQ_ERR(rc) (4000 + ((rc) & 0xFF)) /* o código primário, sem o estendido */
+#define MLC_SQ_ERR(rc) (4000 + ((rc) & 0xFF)) /* the primary code, without the extended one */
 #define MLC_SQ_TRANSIENT ((void (*)(void *))(intptr_t)-1)
 
-/* copia o texto C s para dst e devolve o tamanho (ou -1000 - n se não
- * coube: quem chama decide) */
+/* copies the C text s into dst and returns the length (or -1000 - n if it didn't
+ * fit: the caller decides) */
 static int64_t mlc_sq_copy(mlc_sl_byte *dst, const void *s, int64_t n) {
     if (n > dst->len) return -1000 - n;
     if (n > 0) memcpy(dst->ptr, s, (size_t)n);
@@ -2172,7 +2172,7 @@ void *mlc_std_sqlite_open_raw(mlc_sl_byte *path, int64_t flags, int64_t *err, co
         return NULL;
     }
     char name[4096];
-    if (path->len >= (int64_t)sizeof name) mlc_panic(file, line, "sqlite.open: caminho longo demais");
+    if (path->len >= (int64_t)sizeof name) mlc_panic(file, line, "sqlite.open: path too long");
     memcpy(name, path->ptr, (size_t)path->len);
     name[path->len] = 0;
     sqlite3 *db = NULL;
@@ -2182,8 +2182,8 @@ void *mlc_std_sqlite_open_raw(mlc_sl_byte *path, int64_t flags, int64_t *err, co
         if (db != NULL) mlc_sq.close_v2(db);
         return NULL;
     }
-    mlc_sq.busy_timeout(db, 5000); /* espera um lock até 5 s em vez de falhar na hora */
-    mlc_live_allocs++;             /* o handle conta como alocação: o close desconta */
+    mlc_sq.busy_timeout(db, 5000); /* waits for a lock up to 5 s instead of failing right away */
+    mlc_live_allocs++;             /* the handle counts as an allocation: close discounts it */
     *err = 0;
     return db;
 }
@@ -2197,7 +2197,7 @@ void mlc_std_sqlite_close_raw(void *db, const char *file, int line) {
 
 int64_t mlc_std_sqlite_exec_raw(void *db, mlc_sl_byte *sql, mlc_sl_byte *msg, int64_t *msg_n, const char *file, int line) {
     char *text = malloc((size_t)sql->len + 1);
-    if (text == NULL) mlc_panic(file, line, "sqlite.exec: memória esgotada");
+    if (text == NULL) mlc_panic(file, line, "sqlite.exec: out of memory");
     memcpy(text, sql->ptr, (size_t)sql->len);
     text[sql->len] = 0;
     char *err = NULL;
@@ -2228,10 +2228,10 @@ void *mlc_std_sqlite_prepare_raw(void *db, mlc_sl_byte *sql, int64_t *err, const
     (void)file;
     (void)line;
     sqlite3_stmt *st = NULL;
-    if (sql->len > 0x7FFFFFFF) mlc_panic(file, line, "sqlite.prepare: SQL longo demais");
+    if (sql->len > 0x7FFFFFFF) mlc_panic(file, line, "sqlite.prepare: SQL too long");
     int rc = mlc_sq.prepare_v2(db, (const char *)sql->ptr, (int)sql->len, &st, NULL);
     if (rc != 0 || st == NULL) {
-        *err = rc != 0 ? MLC_SQ_ERR(rc) : 4021; /* SQL vazio: SQLITE_MISUSE */
+        *err = rc != 0 ? MLC_SQ_ERR(rc) : 4021; /* empty SQL: SQLITE_MISUSE */
         if (st != NULL) mlc_sq.finalize(st);
         return NULL;
     }
@@ -2267,7 +2267,7 @@ static int mlc_sq_index(void *st, int64_t i, const char *what, const char *file,
     int n = mlc_sq.bind_parameter_count(st);
     if (i < 1 || i > n) {
         char msg[128];
-        snprintf(msg, sizeof msg, "sqlite.%s: parâmetro %" PRId64 " fora de 1..%d", what, i, n);
+        snprintf(msg, sizeof msg, "sqlite.%s: parameter %" PRId64 " out of 1..%d", what, i, n);
         mlc_panic(file, line, msg);
     }
     return (int)i;
@@ -2302,7 +2302,7 @@ static int mlc_sq_col(void *st, int64_t i, const char *file, int line) {
     int n = mlc_sq.column_count(st);
     if (i < 0 || i >= n) {
         char msg[128];
-        snprintf(msg, sizeof msg, "sqlite: coluna %" PRId64 " fora de 0..%d", i, n - 1);
+        snprintf(msg, sizeof msg, "sqlite: column %" PRId64 " out of 0..%d", i, n - 1);
         mlc_panic(file, line, msg);
     }
     return (int)i;
@@ -2328,7 +2328,7 @@ double mlc_std_sqlite_column_float_raw(void *st, int64_t i, const char *file, in
 
 int64_t mlc_std_sqlite_column_text_raw(void *st, int64_t i, mlc_sl_byte *dst, const char *file, int line) {
     int c = mlc_sq_col(st, i, file, line);
-    const unsigned char *t = mlc_sq.column_text(st, c); /* antes de column_bytes, como pede o SQLite */
+    const unsigned char *t = mlc_sq.column_text(st, c); /* before column_bytes, as SQLite asks */
     int n = mlc_sq.column_bytes(st, c);
     if (t == NULL) return 0;
     return mlc_sq_copy(dst, t, n);
@@ -2363,13 +2363,13 @@ int64_t mlc_std_sqlite_last_insert_id_raw(void *db, const char *file, int line) 
 
 void mlc_std_sqlite_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
 
-/* std/tls. A libssl (OpenSSL 3, ou 1.1) é carregada na primeira chamada,
- * como o SQLite: só quem usa precisa dela, e ninguém precisa de flags.
- * MLC_TLS_LIB escolhe o arquivo; sem ela, tenta o OpenSSL do Homebrew no
- * macOS (a /usr/lib/libssl.dylib do macOS aborta o processo de propósito,
- * e nunca é carregada) e a do sistema no Linux. O cliente confere o
- * certificado (cadeia, validade e nome do host) com as autoridades do
- * sistema, ou com o arquivo de MLC_TLS_CA; TLS 1.2 no mínimo. */
+/* std/tls. libssl (OpenSSL 3, or 1.1) is loaded on the first call,
+ * like SQLite: only whoever uses it needs it, and nobody needs flags.
+ * MLC_TLS_LIB picks the file; without it, it tries Homebrew's OpenSSL on
+ * macOS (macOS's /usr/lib/libssl.dylib aborts the process on purpose,
+ * and is never loaded) and the system's on Linux. The client checks the
+ * certificate (chain, validity and host name) against the system's
+ * authorities, or the MLC_TLS_CA file; TLS 1.2 at least. */
 
 typedef struct ssl_st SSL;
 typedef struct ssl_ctx_st SSL_CTX;
@@ -2405,11 +2405,11 @@ static struct {
     void (*err_string)(unsigned long, char *, size_t);
     void (*err_clear)(void);
     int loaded;
-    SSL_CTX *client; /* o contexto do cliente, um só para o programa */
+    SSL_CTX *client; /* the client's context, a single one for the program */
 } mlc_tl;
 
 static pthread_once_t mlc_tl_once = PTHREAD_ONCE_INIT;
-static _Thread_local char mlc_tl_msg[256]; /* a explicação do último erro desta thread */
+static _Thread_local char mlc_tl_msg[256]; /* the explanation of this thread's last error */
 
 static void mlc_tl_load(void) {
     const char *names[] = {getenv("MLC_TLS_LIB"),
@@ -2453,7 +2453,7 @@ static void mlc_tl_load(void) {
     MLC_TL(get_error, "SSL_get_error");
     MLC_TL(verify_result, "SSL_get_verify_result");
     MLC_TL(shutdown, "SSL_shutdown");
-    MLC_TL(verify_string, "X509_verify_cert_error_string"); /* da libcrypto, que a libssl carrega */
+    MLC_TL(verify_string, "X509_verify_cert_error_string"); /* from libcrypto, which libssl loads */
     MLC_TL(err_get, "ERR_get_error");
     MLC_TL(err_string, "ERR_error_string_n");
     MLC_TL(err_clear, "ERR_clear_error");
@@ -2467,7 +2467,7 @@ static int mlc_tl_ready(void) {
     return mlc_tl.loaded == 1;
 }
 
-/* os códigos de controle das macros do OpenSSL */
+/* the control codes of OpenSSL's macros */
 #define MLC_TL_CTRL_SET_MIN_PROTO 123
 #define MLC_TL_TLS1_2 0x0303
 #define MLC_TL_CTRL_SNI 55
@@ -2486,8 +2486,8 @@ static void mlc_tl_note(const char *what) {
 
 static pthread_mutex_t mlc_tl_mu = PTHREAD_MUTEX_INITIALIZER;
 
-/* o contexto do cliente: as autoridades do sistema (ou MLC_TLS_CA),
- * conferência obrigatória, TLS 1.2 no mínimo */
+/* the client's context: the system's authorities (or MLC_TLS_CA),
+ * mandatory checking, TLS 1.2 at least */
 static SSL_CTX *mlc_tl_client(void) {
     pthread_mutex_lock(&mlc_tl_mu);
     if (mlc_tl.client == NULL) {
@@ -2510,43 +2510,43 @@ typedef struct mlc_tls {
     SSL *ssl;
 } mlc_tls;
 
-/* os erros: 5001 o aperto de mão falhou, 5002 o certificado não vale,
- * 5003 sem biblioteca de TLS, 5004 erro na conexão TLS, 5005 o
- * certificado ou a chave do servidor não carregaram */
+/* the errors: 5001 the handshake failed, 5002 the certificate isn't valid,
+ * 5003 no TLS library, 5004 error in the TLS connection, 5005 the
+ * server's certificate or key didn't load */
 
 mlc_tls *mlc_std_tls_connect(mlc_sl_byte *host, int64_t port, int64_t *err, const char *file, int line) {
     if (!mlc_tl_ready()) {
-        snprintf(mlc_tl_msg, sizeof mlc_tl_msg, "a libssl (OpenSSL) não foi encontrada; instale o OpenSSL ou aponte MLC_TLS_LIB para ela");
+        snprintf(mlc_tl_msg, sizeof mlc_tl_msg, "libssl (OpenSSL) wasn't found; install OpenSSL or point MLC_TLS_LIB to it");
         *err = 5003;
         return NULL;
     }
     SSL_CTX *ctx = mlc_tl_client();
     if (ctx == NULL) {
-        mlc_tl_note("não foi possível criar o contexto TLS");
+        mlc_tl_note("couldn't create the TLS context");
         *err = 5001;
         return NULL;
     }
     char name[256];
-    if (host->len >= (int64_t)sizeof name) mlc_panic(file, line, "tls.connect: nome do host longo demais");
+    if (host->len >= (int64_t)sizeof name) mlc_panic(file, line, "tls.connect: host name too long");
     memcpy(name, host->ptr, (size_t)host->len);
     name[host->len] = 0;
     int fd = mlc_tcp_dial(host, port, err);
     if (fd < 0) {
-        snprintf(mlc_tl_msg, sizeof mlc_tl_msg, "a conexão TCP falhou");
+        snprintf(mlc_tl_msg, sizeof mlc_tl_msg, "the TCP connection failed");
         return NULL;
     }
     SSL *ssl = mlc_tl.ssl_new(ctx);
     mlc_tl.set_fd(ssl, fd);
     mlc_tl.ctrl(ssl, MLC_TL_CTRL_SNI, 0 /* TLSEXT_NAMETYPE_host_name */, name);
-    mlc_tl.set1_host(ssl, name); /* o certificado precisa ser deste nome */
+    mlc_tl.set1_host(ssl, name); /* the certificate must be for this name */
     if (mlc_tl.connect(ssl) != 1) {
         long v = mlc_tl.verify_result(ssl);
         if (v != 0) {
-            snprintf(mlc_tl_msg, sizeof mlc_tl_msg, "certificado recusado: %s", mlc_tl.verify_string(v));
+            snprintf(mlc_tl_msg, sizeof mlc_tl_msg, "certificate refused: %s", mlc_tl.verify_string(v));
             mlc_tl.err_clear();
             *err = 5002;
         } else {
-            mlc_tl_note("o aperto de mão TLS falhou");
+            mlc_tl_note("the TLS handshake failed");
             *err = 5001;
         }
         mlc_tl.ssl_free(ssl);
@@ -2560,35 +2560,35 @@ mlc_tls *mlc_std_tls_connect(mlc_sl_byte *host, int64_t port, int64_t *err, cons
     return t;
 }
 
-/* o servidor: um contexto com o certificado (a cadeia, em PEM) e a chave */
+/* the server: a context with the certificate (the chain, in PEM) and the key */
 void *mlc_std_tls_server_raw(mlc_sl_byte *cert, mlc_sl_byte *key, int64_t *err, const char *file, int line) {
     if (!mlc_tl_ready()) {
-        snprintf(mlc_tl_msg, sizeof mlc_tl_msg, "a libssl (OpenSSL) não foi encontrada; instale o OpenSSL ou aponte MLC_TLS_LIB para ela");
+        snprintf(mlc_tl_msg, sizeof mlc_tl_msg, "libssl (OpenSSL) wasn't found; install OpenSSL or point MLC_TLS_LIB to it");
         *err = 5003;
         return NULL;
     }
     char c[4096], k[4096];
-    if (!mlc_cpath(c, sizeof c, cert) || !mlc_cpath(k, sizeof k, key)) mlc_panic(file, line, "tls.new_server: caminho longo demais");
+    if (!mlc_cpath(c, sizeof c, cert) || !mlc_cpath(k, sizeof k, key)) mlc_panic(file, line, "tls.new_server: path too long");
     SSL_CTX *ctx = mlc_tl.ctx_new(mlc_tl.server_method());
     if (ctx == NULL) {
-        mlc_tl_note("não foi possível criar o contexto TLS");
+        mlc_tl_note("couldn't create the TLS context");
         *err = 5005;
         return NULL;
     }
     mlc_tl.ctx_ctrl(ctx, MLC_TL_CTRL_SET_MIN_PROTO, MLC_TL_TLS1_2, NULL);
     if (mlc_tl.ctx_use_chain(ctx, c) != 1) {
-        mlc_tl_note("o certificado não carregou");
+        mlc_tl_note("the certificate didn't load");
         mlc_tl.ctx_free(ctx);
         *err = 5005;
         return NULL;
     }
     if (mlc_tl.ctx_use_key(ctx, k, 1 /* SSL_FILETYPE_PEM */) != 1 || mlc_tl.ctx_check_key(ctx) != 1) {
-        mlc_tl_note("a chave não carregou (ou não é a do certificado)");
+        mlc_tl_note("the key didn't load (or isn't the certificate's)");
         mlc_tl.ctx_free(ctx);
         *err = 5005;
         return NULL;
     }
-    mlc_live_allocs++; /* o contexto conta como alocação: o close desconta */
+    mlc_live_allocs++; /* the context counts as an allocation: close discounts it */
     *err = 0;
     return ctx;
 }
@@ -2600,15 +2600,15 @@ void mlc_std_tls_server_close(void *ctx, const char *file, int line) {
     mlc_live_allocs--;
 }
 
-/* accept faz o aperto de mão do servidor numa conexão aceita (que passa a
- * ser do TLS: em caso de erro, ela é fechada aqui) */
+/* accept does the server handshake on an accepted connection (which now
+ * belongs to TLS: on error, it's closed here) */
 mlc_tls *mlc_std_tls_accept_raw(mlc_sock *c, void *ctx, int64_t *err, const char *file, int line) {
     int fd = c->fd;
     mlc_free(c);
     SSL *ssl = mlc_tl.ssl_new(ctx);
     mlc_tl.set_fd(ssl, fd);
     if (mlc_tl.accept(ssl) != 1) {
-        mlc_tl_note("o aperto de mão TLS falhou");
+        mlc_tl_note("the TLS handshake failed");
         mlc_tl.ssl_free(ssl);
         close(fd);
         *err = 5001;
@@ -2630,14 +2630,14 @@ int64_t mlc_std_tls_read_raw(mlc_tls *t, mlc_sl_byte *dst, const char *file, int
         int r = mlc_tl.read(t->ssl, dst->ptr, n);
         if (r > 0) return r;
         int e = mlc_tl.get_error(t->ssl, r);
-        if (e == 6 /* SSL_ERROR_ZERO_RETURN: o outro lado fechou */) return 0;
+        if (e == 6 /* SSL_ERROR_ZERO_RETURN: the other side closed */) return 0;
         if (e == 2 /* WANT_READ */ || e == 3 /* WANT_WRITE */) continue;
         if (e == 5 /* SSL_ERROR_SYSCALL */) {
             if (errno == EINTR) continue;
-            if (errno == 0) return 0; /* fechou sem o aviso do TLS */
+            if (errno == 0) return 0; /* closed without TLS's notice */
             return -mlc_net_err(errno);
         }
-        mlc_tl_note("erro na conexão TLS");
+        mlc_tl_note("error in the TLS connection");
         return -5004;
     }
 }
@@ -2658,7 +2658,7 @@ int64_t mlc_std_tls_write_raw(mlc_tls *t, mlc_sl_byte *data, const char *file, i
         if (e == 2 || e == 3) continue;
         if (e == 5 && errno == EINTR) continue;
         if (e == 5 && errno != 0) return -mlc_net_err(errno);
-        mlc_tl_note("erro na conexão TLS");
+        mlc_tl_note("error in the TLS connection");
         return -5004;
     }
     return done;
@@ -2676,7 +2676,7 @@ int64_t mlc_std_tls_timeout_raw(mlc_tls *t, int64_t ms, const char *file, int li
 void mlc_std_tls_close_raw(mlc_tls *t, const char *file, int line) {
     (void)file;
     (void)line;
-    mlc_tl.shutdown(t->ssl); /* o aviso de fim ao outro lado (sem esperar a resposta) */
+    mlc_tl.shutdown(t->ssl); /* the end notice to the other side (without waiting for the answer) */
     mlc_tl.ssl_free(t->ssl);
     close(t->fd);
     mlc_free(t);

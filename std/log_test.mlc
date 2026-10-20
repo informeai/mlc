@@ -69,7 +69,7 @@ fn test_time_prefix() {
     m := read_all(&p[:n], &buf)
     // 2026-10-19T14:03:22.123-03:00 INFO  x
     testing.eq_int(m, 29 + 1 + 6 + 2)
-    testing.check(buf[4] == '-' && buf[10] == 'T' && buf[19] == '.' && buf[29] == ' ', "formato do horário")
+    testing.check(buf[4] == '-' && buf[10] == 'T' && buf[19] == '.' && buf[29] == ' ', "time format")
     fs.remove_file(&p[:n])
 }
 

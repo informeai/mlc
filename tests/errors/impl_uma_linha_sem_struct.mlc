@@ -1,4 +1,4 @@
-// erro: a forma impl Area for int, sem bloco, só vale para structs
+// error: the form impl Area for int, without a block, only applies to non-generic structs with the methods declared; for other types, write the methods in a block { }
 interface Area {
     fn area(self &Self) int
 }

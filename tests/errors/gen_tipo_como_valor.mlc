@@ -1,4 +1,4 @@
-// erro: tipo T usado como valor (para converter: T(x))
+// error: type T used as a value (to convert: T(x))
 import "std/io"
 fn f[T any](x T) {
     io.print(T)

@@ -1,4 +1,4 @@
-// erro: {x} no formato de io.printf: use {} para um valor
+// error: {x} in the format of io.printf: use {} for a value, {:...} for a value with a spec ({:x}, {:.2}, {:>8}) or {{ to write {
 import "std/io"
 import "std/str"
 

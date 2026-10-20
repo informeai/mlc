@@ -63,22 +63,22 @@ fn is_error(s string) bool {
 }
 
 fn test_invalid_documents() {
-    testing.check(is_error(""), "vazio")
+    testing.check(is_error(""), "empty")
     testing.check(is_error("{"), "objeto aberto")
-    testing.check(is_error("[1,]"), "vírgula sobrando")
-    testing.check(is_error("[1 2]"), "falta vírgula")
+    testing.check(is_error("[1,]"), "extra comma")
+    testing.check(is_error("[1 2]"), "missing comma")
     testing.check(is_error("{\"a\" 1}"), "falta dois-pontos")
-    testing.check(is_error("{1: 2}"), "chave que não é string")
+    testing.check(is_error("{1: 2}"), "key that isn't a string")
     testing.check(is_error("[1}"), "fechamento trocado")
-    testing.check(is_error("01"), "zero à esquerda")
-    testing.check(is_error("1."), "ponto sem casas")
-    testing.check(is_error("-"), "só o sinal")
+    testing.check(is_error("01"), "leading zero")
+    testing.check(is_error("1."), "point without decimals")
+    testing.check(is_error("-"), "just the sign")
     testing.check(is_error("tru"), "literal cortado")
     testing.check(is_error("\"a\\x\""), "escape desconhecido")
-    testing.check(is_error("\"a\\u12g4\""), "\\u com letra inválida")
-    testing.check(is_error("\"sem fim"), "string sem fim")
-    testing.check(is_error("1 2"), "dois valores no topo")
-    testing.check(!is_error("[1, {\"a\": [true]}]"), "válido")
+    testing.check(is_error("\"a\\u12g4\""), "\\u with an invalid letter")
+    testing.check(is_error("\"sem fim"), "unterminated string")
+    testing.check(is_error("1 2"), "two values at the top")
+    testing.check(!is_error("[1, {\"a\": [true]}]"), "valid")
 }
 
 fn test_error_position() {
@@ -89,7 +89,7 @@ fn test_error_position() {
     r.next(&d[:k])
     match r.next(&d[:k]) {
         Error(at) => testing.eq_int(at, 4)
-        _ => testing.fail("esperado erro")
+        _ => testing.fail("expected an error")
     }
 }
 
@@ -98,7 +98,7 @@ fn test_depth_limit() {
     for i := 0; i < 65; i++ {
         d[i] = '['
     }
-    testing.check(is_error_bytes(&d[:65]), "65 níveis passam do limite")
+    testing.check(is_error_bytes(&d[:65]), "65 levels go past the limit")
 }
 
 fn is_error_bytes(s &[]byte) bool {
@@ -127,10 +127,10 @@ fn test_skip_unwanted_values() {
                 if str.eq(&s[a:b], "id") {
                     match r.next(s) {
                         Number(x, y) => str.parse_int(&s[x:y], &id)
-                        _ => testing.fail("id devia ser número")
+                        _ => testing.fail("id should be a number")
                     }
                 } else {
-                    testing.check(r.skip(s), "skip de um valor válido")
+                    testing.check(r.skip(s), "skip of a valid value")
                 }
             }
             ObjectEnd => break
@@ -180,7 +180,7 @@ fn test_build_document_with_format() {
     var out [64]byte
     m := str.format(&out, "{{\"name\": \"{:s}\", \"age\": {}}}", &esc[:n], 30)
     testing.eq_str(&out[:m], "{\"name\": \"Ana \\\"A\\\"\", \"age\": 30}")
-    testing.check(!is_error_bytes(&out[:m]), "o documento montado é válido")
+    testing.check(!is_error_bytes(&out[:m]), "the assembled document is valid")
     io.print("") // uses io (the tokens' Display)
 }
 
@@ -216,7 +216,7 @@ fn test_writer_document() {
     // what the Writer writes, the Reader reads
     var out [1024]byte
     n := tokens(&w.buf[:w.n], &out)
-    testing.check(n > 4 && str.eq(&out[n - 4:n], "End "), "lido de volta sem erro")
+    testing.check(n > 4 && str.eq(&out[n - 4:n], "End "), "read back without errors")
     w.reset()
     w.array()
     w.end()

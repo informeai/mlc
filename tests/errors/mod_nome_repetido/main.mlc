@@ -1,4 +1,4 @@
-// erro: dois imports com o mesmo nome texto ("texto" e "util/texto")
+// error: two imports with the same name texto ("texto" and "util/texto")
 import "texto"
 import "util/texto"
 fn main() {

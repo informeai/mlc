@@ -1,4 +1,4 @@
-// erro: vazamento: p ainda é dona da memória
+// error: leak: p still owns the memory (line 7) at the end of the function; free it with free(p) or pass ownership along
 struct Ponto { x int; y int }
 fn (p &Ponto) move() {
     p.x++

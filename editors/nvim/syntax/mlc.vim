@@ -1,4 +1,4 @@
-" Cores para MLC (My Lang C). O mlc lsp acrescenta as cores semânticas.
+" Colors for MLC (My Lang C). mlc lsp adds the semantic colors.
 if exists("b:current_syntax")
   finish
 endif

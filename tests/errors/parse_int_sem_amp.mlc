@@ -1,4 +1,4 @@
-// erro: argumento 2 de str.parse_int: esperado &int; para emprestar, escreva &n
+// error: argument 2 of str.parse_int: expected &int; to borrow, write &n
 import "std/str"
 fn main() {
     buf := alloc([]byte, 4)

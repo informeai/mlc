@@ -1,4 +1,4 @@
-// erro: o valor de send: esperado int, encontrado string
+// error: the value of send: expected int, found string
 import "std/chan"
 import "std/io"
 

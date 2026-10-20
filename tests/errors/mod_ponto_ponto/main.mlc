@@ -1,4 +1,4 @@
-// erro: o caminho não pode ter . nem ..
+// error: import "../fora": the path can't have . or .. (it's relative to the main file's folder)
 import "../fora"
 fn main() {
 }

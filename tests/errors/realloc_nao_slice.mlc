@@ -1,4 +1,4 @@
-// erro: realloc se aplica a slices, não a *int
+// error: realloc applies to slices, not to *int
 fn main() {
     p := alloc(1)
     p = realloc(p, 2)

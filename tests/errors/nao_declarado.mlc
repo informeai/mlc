@@ -1,4 +1,4 @@
-// erro: identificador não declarado: x
+// error: undeclared identifier: x
 import "std/io"
 fn main() {
     io.print(x)

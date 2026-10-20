@@ -1,4 +1,4 @@
-// erro: uma variante guarda ?*T, não *T (o valor zero do enum é nil): use ?*int
+// error: a variant holds ?*T, not *T (the enum's zero value is nil): use ?*int
 enum Caixa {
     Cheia(p *int)
     Vazia

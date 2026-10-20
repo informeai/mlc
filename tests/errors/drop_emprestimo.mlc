@@ -1,4 +1,4 @@
-// erro: drop recebe o dono, não um empréstimo
+// error: drop takes the owner, not a borrow (&T)
 fn f[T owned](x &T) {
     drop(x)
 }

@@ -1,4 +1,4 @@
-// erro: struct C contém a si mesma por valor (C → D → C)
+// error: struct C contains itself by value (C → D → C); that will be possible with pointers
 // Um array guarda os elementos por valor: [2]D dentro de C, com C dentro
 // de D, também é infinito.
 struct C {

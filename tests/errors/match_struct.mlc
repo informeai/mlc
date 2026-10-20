@@ -1,4 +1,4 @@
-// erro: match não se aplica a Ponto (só inteiros, bool e string)
+// error: match doesn't apply to Ponto (only integers, bool and string)
 struct Ponto { x int }
 fn main() {
     match (Ponto{}) {

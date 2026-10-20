@@ -1,4 +1,4 @@
-// erro: free(p): p.prox ainda pode ser dona de memória
+// error: free(p): p.prox may still own memory; free or move p.prox first
 struct No {
     valor int
     prox ?*No

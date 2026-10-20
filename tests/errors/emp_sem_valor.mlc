@@ -1,4 +1,4 @@
-// erro: precisa de valor inicial: um empréstimo sempre aponta para algo
+// error: var a &P needs an initial value: a borrow always points to something
 import "std/io"
 import "std/vec"
 

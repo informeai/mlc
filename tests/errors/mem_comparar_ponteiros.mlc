@@ -1,4 +1,4 @@
-// erro: ponteiros só podem ser comparados com nil
+// error: pointers can only be compared with nil
 import "std/io"
 struct Ponto { x int; y int }
 fn main() {

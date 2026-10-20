@@ -1,9 +1,9 @@
 package fuzz
 
-// Reduce encolhe um programa enquanto keep continuar valendo: tira um
-// comando de cada vez (e troca um bloco pelos comandos de dentro), até
-// nenhuma tentativa funcionar. O comando com o bug injetado nunca sai. O
-// resultado é o menor programa que ainda reproduz o achado.
+// Reduce shrinks a program while keep still holds: it removes one
+// statement at a time (and replaces a block with the statements inside), until
+// no attempt works. The statement with the injected bug never leaves. The
+// result is the smallest program that still reproduces the finding.
 func Reduce(p *Program, keep func(*Program) bool) *Program {
 	cur := p
 	for changed := true; changed; {
@@ -18,14 +18,14 @@ func Reduce(p *Program, keep func(*Program) bool) *Program {
 	return cur
 }
 
-// shrinks devolve as variações de p com um comando a menos ou um bloco
-// aberto, das maiores reduções para as menores.
+// shrinks returns the variations of p with one statement fewer or one block
+// opened, from the largest reductions to the smallest.
 func shrinks(p *Program) []*Program {
 	var out []*Program
 	var walk func(path []int, ns []*Node)
 	walk = func(path []int, ns []*Node) {
-		// sequências de comandos vizinhos (um par declaração e uso só sai
-		// junto), das maiores para as menores
+		// sequences of neighboring statements (a declaration and use pair only leaves
+		// together), from the largest to the smallest
 		for w := 4; w >= 2; w-- {
 			for i := 0; i+w <= len(ns); i++ {
 				if !anyBug(ns[i : i+w]) {
@@ -58,7 +58,7 @@ func anyBug(ns []*Node) bool {
 	return false
 }
 
-// cut copia p sem os w nós a partir de path.
+// cut copies p without the w nodes starting at path.
 func cut(p *Program, path []int, w int) *Program {
 	q := *p
 	q.Body = cutList(p.Body, path, w)
@@ -90,8 +90,8 @@ func hasBug(n *Node) bool {
 	return false
 }
 
-// edit copia p trocando o nó em path (índices alternados: posição na lista,
-// depois 0 para o corpo ou 1 para o else) pelos nós de with.
+// edit copies p replacing the node at path (alternating indices: position in the list,
+// then 0 for the body or 1 for the else) with the nodes of with.
 func edit(p *Program, path []int, with []*Node) *Program {
 	q := *p
 	q.Body = editList(p.Body, path, with)

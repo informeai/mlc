@@ -1,4 +1,4 @@
-// erro: função f precisa terminar com return
+// error: function f must end with return
 fn f() int {
     for {
         break

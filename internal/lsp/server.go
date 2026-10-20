@@ -1,14 +1,14 @@
-// Package lsp implementa o mlc lsp: um servidor Language Server Protocol,
-// via entrada e saída padrão, para editores (VS Code, Neovim...).
+// Package lsp implements mlc lsp: a Language Server Protocol server,
+// over standard input and output, for editors (VS Code, Neovim...).
 //
-// Recursos:
-//   - diagnósticos ao digitar: a cada mudança, os arquivos abertos são
-//     checados de novo (sintaxe, tipos e posse) sem gerar C, e os erros
-//     aparecem na linha;
-//   - semantic tokens: cores para palavras reservadas, tipos, funções,
-//     literais e comentários, mesmo em editores sem gramática própria;
-//   - formatação do documento pelo mlc fmt;
-//   - hover, ir para a definição e sugestões ao digitar (complete.go).
+// Features:
+//   - diagnostics as you type: on each change, the open files are
+//     checked again (syntax, types and ownership) without generating C, and the errors
+//     show up on the line;
+//   - semantic tokens: colors for keywords, types, functions,
+//     literals and comments, even in editors without their own grammar;
+//   - document formatting through mlc fmt;
+//   - hover, go to definition and completions (complete.go).
 package lsp
 
 import (
@@ -26,19 +26,19 @@ import (
 
 type server struct {
 	conn     *conn
-	docs     map[string]string          // URI → texto atual
-	lastProg map[string]*driver.Program // URI → a última análise que deu certo (para as sugestões)
+	docs     map[string]string          // URI → current text
+	lastProg map[string]*driver.Program // URI → the last analysis that succeeded (for completions)
 	shutdown bool
 }
 
-// Run atende um cliente LSP em r/w até a mensagem exit. Devolve o código de
-// saída do processo: 0 se o cliente pediu shutdown antes, 1 se não.
+// Run serves an LSP client on r/w until the exit message. Returns the process's
+// exit code: 0 if the client asked for shutdown first, 1 otherwise.
 func Run(r io.Reader, w io.Writer) int {
 	s := &server{conn: newConn(r, w), docs: map[string]string{}, lastProg: map[string]*driver.Program{}}
 	for {
 		m, err := s.conn.read()
 		if err != nil {
-			return 1 // o cliente fechou a conexão (ou mandou lixo) sem exit
+			return 1 // the client closed the connection (or sent garbage) without exit
 		}
 		if m.Method == "exit" {
 			if s.shutdown {
@@ -58,7 +58,7 @@ func (s *server) handle(m *message) {
 			"capabilities": map[string]any{
 				"textDocumentSync": map[string]any{
 					"openClose": true,
-					"change":    1, // o texto inteiro a cada mudança
+					"change":    1, // the whole text on each change
 					"save":      false,
 				},
 				"documentFormattingProvider": true,
@@ -102,7 +102,7 @@ func (s *server) handle(m *message) {
 	case "textDocument/formatting":
 		var p docParams
 		if json.Unmarshal(m.Params, &p) != nil {
-			s.conn.replyError(m.ID, codeInvalidParams, "parâmetros inválidos")
+			s.conn.replyError(m.ID, codeInvalidParams, "invalid parameters")
 			return
 		}
 		s.formatting(m, p.TextDocument.URI)
@@ -115,7 +115,7 @@ func (s *server) handle(m *message) {
 	case "textDocument/semanticTokens/full":
 		var p docParams
 		if json.Unmarshal(m.Params, &p) != nil {
-			s.conn.replyError(m.ID, codeInvalidParams, "parâmetros inválidos")
+			s.conn.replyError(m.ID, codeInvalidParams, "invalid parameters")
 			return
 		}
 		text, ok := s.docs[p.TextDocument.URI]
@@ -126,12 +126,12 @@ func (s *server) handle(m *message) {
 		s.conn.reply(m.ID, map[string]any{"data": semanticTokens([]byte(text))})
 	default:
 		if isRequest {
-			s.conn.replyError(m.ID, codeMethodNotFound, "método não suportado: "+m.Method)
+			s.conn.replyError(m.ID, codeMethodNotFound, "method not supported: "+m.Method)
 		}
 	}
 }
 
-// uriPath converte file:///a/b.mlc em /a/b.mlc.
+// uriPath converts file:///a/b.mlc into /a/b.mlc.
 func uriPath(uri string) string {
 	u, err := url.Parse(uri)
 	if err != nil || u.Scheme != "file" {
@@ -140,8 +140,8 @@ func uriPath(uri string) string {
 	return filepath.Clean(filepath.FromSlash(u.Path))
 }
 
-// loader lê os arquivos do programa, com o texto ainda não salvo dos
-// documentos abertos no lugar do que está no disco.
+// loader reads the program's files, with the not-yet-saved text of the
+// open documents instead of what's on the disk.
 func (s *server) loader() driver.Loader {
 	overlay := map[string][]byte{}
 	for uri, text := range s.docs {
@@ -152,7 +152,7 @@ func (s *server) loader() driver.Loader {
 	return driver.Overlay(overlay)
 }
 
-// navigate prepara a navegação no documento e converte a posição do cursor.
+// navigate prepares navigation in the document and converts the cursor position.
 func (s *server) navigate(params json.RawMessage) (*navigator, int, bool) {
 	var p struct {
 		TextDocument docID    `json:"textDocument"`
@@ -221,8 +221,8 @@ func (s *server) definition(m *message) {
 	s.conn.reply(m.ID, map[string]any{"uri": uri, "range": lspRange{Start: start, End: start}})
 }
 
-// diagnoseAll checa de novo todos os documentos abertos (uma mudança num
-// módulo pode criar ou resolver erros em quem o importa) e publica os erros.
+// diagnoseAll checks every open document again (a change in a
+// module can create or fix errors in whoever imports it) and publishes the errors.
 func (s *server) diagnoseAll() {
 	read := s.loader()
 	uris := make([]string, 0, len(s.docs))
@@ -252,7 +252,7 @@ func (s *server) diagnoseAll() {
 
 func (s *server) publish(uri string, diags []diagnostic) {
 	if diags == nil {
-		diags = []diagnostic{} // lista vazia limpa os erros antigos no editor
+		diags = []diagnostic{} // an empty list clears the old errors in the editor
 	}
 	s.conn.notify("textDocument/publishDiagnostics", map[string]any{"uri": uri, "diagnostics": diags})
 }
@@ -265,7 +265,7 @@ func (s *server) formatting(m *message, uri string) {
 	}
 	out, errs := format.Source(uriPath(uri), []byte(text))
 	if len(errs) > 0 {
-		// com erro de sintaxe não há formatação; o erro já está nos diagnósticos
+		// with a syntax error there's no formatting; the error is already in the diagnostics
 		s.conn.reply(m.ID, []textEdit{})
 		return
 	}
@@ -277,12 +277,12 @@ func (s *server) formatting(m *message, uri string) {
 	s.conn.reply(m.ID, []textEdit{{Range: lspRange{End: lines.end([]byte(text))}, NewText: string(out)}})
 }
 
-// ---------- posições ----------
+// ---------- positions ----------
 //
-// O compilador conta colunas em bytes, a partir de 1; o LSP conta em
-// unidades UTF-16, a partir de 0.
+// The compiler counts columns in bytes, starting at 1; the LSP counts in
+// UTF-16 units, starting at 0.
 
-type lineIndex []int // deslocamento do começo de cada linha
+type lineIndex []int // offset of the start of each line
 
 func newLineIndex(src []byte) lineIndex {
 	idx := lineIndex{0}
@@ -294,7 +294,7 @@ func newLineIndex(src []byte) lineIndex {
 	return idx
 }
 
-// offset devolve o deslocamento em bytes da posição p do compilador.
+// offset returns the byte offset of the compiler position p.
 func (l lineIndex) offset(src []byte, p token.Pos) int {
 	if p.Line < 1 {
 		return 0
@@ -305,7 +305,7 @@ func (l lineIndex) offset(src []byte, p token.Pos) int {
 	return min(l[p.Line-1]+max(p.Col-1, 0), len(src))
 }
 
-// position converte um deslocamento em bytes numa posição do LSP.
+// position converts a byte offset into an LSP position.
 func (l lineIndex) position(src []byte, off int) position {
 	line := sort.Search(len(l), func(i int) bool { return l[i] > off }) - 1
 	return position{Line: line, Character: utf16Len(src[l[line]:off])}
@@ -313,8 +313,8 @@ func (l lineIndex) position(src []byte, off int) position {
 
 func (l lineIndex) end(src []byte) position { return l.position(src, len(src)) }
 
-// offsetOf converte uma posição do LSP (coluna em UTF-16) num deslocamento
-// em bytes.
+// offsetOf converts an LSP position (column in UTF-16) into a byte
+// offset.
 func (l lineIndex) offsetOf(src []byte, p position) int {
 	if p.Line < 0 {
 		return 0
@@ -335,8 +335,8 @@ func (l lineIndex) offsetOf(src []byte, p position) int {
 	return off
 }
 
-// errorRange marca, a partir da posição do erro, a palavra ou o símbolo que
-// está ali (pelo menos um caractere, sem passar do fim da linha).
+// errorRange marks, starting at the error's position, the word or symbol that
+// is there (at least one character, without going past the end of the line).
 func (l lineIndex) errorRange(src []byte, p token.Pos) lspRange {
 	start := l.offset(src, p)
 	end := start

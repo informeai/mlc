@@ -112,7 +112,7 @@ pub fn (a &Arena) reserve(n int) {
 // commit turns the n bytes after used (already written) into a piece.
 pub fn (a &Arena) commit(n int) Span {
     if n < 0 || a.used + n > len(a.buf) {
-        fail("arena.commit: o pedaço passa do que foi reservado")
+        fail("arena.commit: the piece goes past what was reserved")
     }
     s := Span{at: a.used, n: n, gen: a.gen}
     a.used += n
@@ -130,7 +130,7 @@ pub fn (a &Arena) grow(need int) {
     }
     if a.limit > 0 && size > a.limit {
         if need > a.limit {
-            fail("arena: passou do limite de new_fixed")
+            fail("arena: went past the new_fixed limit")
         }
         size = a.limit
     }
@@ -148,10 +148,10 @@ pub fn (a &Arena) reset() {
 // larger than this one). Use it before reading the buffer directly.
 pub fn (a &Arena) check(s Span) {
     if s.gen != a.gen {
-        fail("arena: pedaço usado depois de um reset (ele não vale mais)")
+        fail("arena: piece used after a reset (it's no longer valid)")
     }
     if s.at < 0 || s.n < 0 || s.at + s.n > a.used {
-        fail("arena: pedaço fora da arena")
+        fail("arena: piece outside the arena")
     }
 }
 
@@ -165,7 +165,7 @@ pub fn (a &Arena) len(s Span) int {
 pub fn (a &Arena) text(s Span, dst &[]byte) int {
     a.check(s)
     if s.n > len(dst) {
-        fail("arena.text: o destino é pequeno demais")
+        fail("arena.text: the destination is too small")
     }
     for i := 0; i < s.n; i++ {
         dst[i] = a.buf[s.at + i]
@@ -191,7 +191,7 @@ pub fn (a &Arena) eq(sp Span, s string) bool {
 pub fn (a &Arena) get(s Span, i int) byte {
     a.check(s)
     if i < 0 || i >= s.n {
-        fail("arena.get: índice fora do pedaço")
+        fail("arena.get: index outside the piece")
     }
     return a.buf[s.at + i]
 }
@@ -200,7 +200,7 @@ pub fn (a &Arena) get(s Span, i int) byte {
 pub fn (a &Arena) set(s Span, i int, b byte) {
     a.check(s)
     if i < 0 || i >= s.n {
-        fail("arena.set: índice fora do pedaço")
+        fail("arena.set: index outside the piece")
     }
     a.buf[s.at + i] = b
 }

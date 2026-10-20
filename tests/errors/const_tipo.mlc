@@ -1,4 +1,4 @@
-// erro: constante N: esperado string, encontrado constante inteira
+// error: constant N: expected string, found integer constant
 const N string = 1
 fn main() {
 }

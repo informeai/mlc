@@ -1,4 +1,4 @@
-// erro: alloc(A) zera a memória, mas A.b é um ponteiro *T e não pode ser nil
+// error: alloc(A) zeroes the memory, but A.b is a *T pointer and can't be nil; use alloc(A{...}) with every field
 struct B { x int }
 struct A { b *B }
 fn main() {

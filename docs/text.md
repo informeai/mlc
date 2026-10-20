@@ -63,7 +63,7 @@ io.write_line(&buf[:k])
 
 The `parse_*` functions read the whole text (with no surrounding spaces: trim first with `text.trim_start` and `text.trim_end`) and return `false`, without a panic, for invalid text or for a number that doesn't fit the type.
 
-The writing functions panic if the text doesn't fit in `dst`, with a message like `str.copy: o texto (3 bytes) não cabe no destino (2 bytes)` ("the text (3 bytes) doesn't fit in the destination (2 bytes)").
+The writing functions panic if the text doesn't fit in `dst`, with a message like `str.copy: the text (3 bytes) doesn't fit in the destination (2 bytes)`.
 
 ## Formatting into a buffer: `str.format`
 

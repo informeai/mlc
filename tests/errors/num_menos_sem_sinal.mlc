@@ -1,4 +1,4 @@
-// erro: operador - não se aplica a uint32, que não tem sinal
+// error: operator - doesn't apply to uint32, which is unsigned
 import "std/io"
 fn main() {
     var u uint32 = 5

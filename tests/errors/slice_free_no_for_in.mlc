@@ -1,4 +1,4 @@
-// erro: s pode já ter sido liberada ou movida (linha 6), dependendo do caminho
+// error: s may have already been freed or moved (line 6), depending on the path
 import "std/io"
 fn main() {
     s := alloc([]int, 3)

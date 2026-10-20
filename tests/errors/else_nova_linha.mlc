@@ -1,4 +1,4 @@
-// erro: else precisa ficar na mesma linha do '}' que fecha o if
+// error: else must be on the same line as the '}' that closes the if
 fn main() {
     if true {
     }

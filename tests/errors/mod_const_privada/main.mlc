@@ -1,4 +1,4 @@
-// erro: geometria.MAX não é pública (declare com pub const)
+// error: geometria.MAX isn't public (declare it with pub const)
 import "std/io"
 import "geometria"
 fn main() {

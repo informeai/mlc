@@ -40,7 +40,7 @@ pub fn cmd(name string) Cmd {
 // arguments), it panics.
 pub fn (c &Cmd) arg(s string) {
     if c.n + len(s) + 1 > len(c.buf) || c.count == 255 {
-        fail("process: os argumentos não cabem no Cmd (8 KB, 255 argumentos)")
+        fail("process: the arguments don't fit in the Cmd (8 KB, 255 arguments)")
     }
     for i := 0; i < len(s); i++ {
         c.buf[c.n] = s[i]
@@ -54,7 +54,7 @@ pub fn (c &Cmd) arg(s string) {
 // arg_bytes appends an argument that's in a buffer.
 pub fn (c &Cmd) arg_bytes(b &[]byte) {
     if c.n + len(b) + 1 > len(c.buf) || c.count == 255 {
-        fail("process: os argumentos não cabem no Cmd (8 KB, 255 argumentos)")
+        fail("process: the arguments don't fit in the Cmd (8 KB, 255 arguments)")
     }
     for i := 0; i < len(b); i++ {
         c.buf[c.n] = b[i]

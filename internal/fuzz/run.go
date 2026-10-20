@@ -15,50 +15,50 @@ import (
 	"mlc/internal/driver"
 )
 
-// Outcome é o veredito sobre um mutante.
+// Outcome is the verdict on a mutant.
 type Outcome int
 
 const (
-	Rejected Outcome = iota // o verificador recusou: certo
-	Benign                  // aceito, e roda limpo: a mutação não criou bug ali
-	Hole                    // aceito, e roda com erro: buraco no verificador
+	Rejected Outcome = iota // the checker refused: correct
+	Benign                  // accepted, and runs clean: the mutation didn't create a bug there
+	Hole                    // accepted, and runs with an error: a hole in the checker
 )
 
 func (o Outcome) String() string {
 	switch o {
 	case Rejected:
-		return "recusado"
+		return "rejected"
 	case Benign:
-		return "aceito sem bug"
+		return "accepted without a bug"
 	}
-	return "BURACO"
+	return "HOLE"
 }
 
-// Result é o veredito e o porquê (o erro do verificador, ou o que o
-// oráculo achou).
+// Result is the verdict and the why (the checker's error, or what the
+// oracle found).
 type Result struct {
 	Mutant
 	Outcome Outcome
 	Detail  string
 }
 
-// Target é um programa aceito pelo verificador, base das mutações.
+// Target is a program accepted by the checker, the base of the mutations.
 type Target struct {
-	Path  string // o arquivo, para ler e para o relatório
-	Name  string // o nome com que é compilado (as mensagens não dependem da pasta)
+	Path  string // the file, for reading and for the report
+	Name  string // the name it's compiled with (the messages don't depend on the folder)
 	Read  driver.Loader
 	Opts  driver.Options
-	Test  bool     // arquivo _test.mlc: roda cada teste
-	Args  []string // os argumentos do programa (x.args)
-	Stdin []byte   // a entrada padrão (x.in)
+	Test  bool     // a _test.mlc file: runs each test
+	Args  []string // the program's arguments (x.args)
+	Stdin []byte   // standard input (x.in)
 }
 
-// Timeout limita cada execução: um mutante que trava (um unlock apagado, um
-// canal que nunca fecha) é um buraco.
+// Timeout limits each run: a mutant that hangs (a deleted unlock, a
+// channel that never closes) is a hole.
 var Timeout = 20 * time.Second
 
-// Mutate gera os mutantes do alvo e dá o veredito de cada um. work é uma
-// pasta temporária para os executáveis.
+// Mutate generates the target's mutants and gives the verdict on each one. work is a
+// temporary folder for the executables.
 func (t *Target) Mutate(work string) ([]Result, error) {
 	src, err := os.ReadFile(t.Path)
 	if err != nil {
@@ -66,7 +66,7 @@ func (t *Target) Mutate(work string) ([]Result, error) {
 	}
 	f, info, err := driver.Check(t.Name, src, t.Read, t.Opts)
 	if err != nil {
-		return nil, fmt.Errorf("%s: o original não passa no verificador: %v", t.Path, err)
+		return nil, fmt.Errorf("%s: the original doesn't pass the checker: %v", t.Path, err)
 	}
 	var out []Result
 	for i, m := range Mutants(src, f, info) {
@@ -75,7 +75,7 @@ func (t *Target) Mutate(work string) ([]Result, error) {
 	return out, nil
 }
 
-// judge decide um mutante: o verificador primeiro, o oráculo se ele aceitar.
+// judge decides a mutant: the checker first, the oracle if it accepts.
 func (t *Target) judge(m Mutant, exe string) Result {
 	r := Result{Mutant: m}
 	if _, _, err := driver.Check(t.Name, m.Src, t.Read, t.Opts); err != nil {
@@ -84,11 +84,11 @@ func (t *Target) judge(m Mutant, exe string) Result {
 	}
 	opts := t.Opts
 	opts.Sanitize = "address"
-	var runs [][]string // os argumentos de cada execução
+	var runs [][]string // the arguments of each run
 	if t.Test {
 		prog, err := driver.BuildTest(t.Name, m.Src, exe, t.Read, opts)
 		if err != nil {
-			r.Outcome, r.Detail = Hole, "aceito, mas o C não compila: "+firstLine(err.Error())
+			r.Outcome, r.Detail = Hole, "accepted, but the C doesn't compile: "+firstLine(err.Error())
 			return r
 		}
 		for i := range prog.Tests {
@@ -96,7 +96,7 @@ func (t *Target) judge(m Mutant, exe string) Result {
 		}
 	} else {
 		if err := driver.BuildOpts(t.Name, m.Src, exe, t.Read, opts); err != nil {
-			r.Outcome, r.Detail = Hole, "aceito, mas o C não compila: "+firstLine(err.Error())
+			r.Outcome, r.Detail = Hole, "accepted, but the C doesn't compile: "+firstLine(err.Error())
 			return r
 		}
 		runs = [][]string{t.Args}
@@ -111,9 +111,9 @@ func (t *Target) judge(m Mutant, exe string) Result {
 	return r
 }
 
-// oracle roda o executável e diz o que deu errado ("" se nada). Um panic
-// (código 2) ou um teste que falha (1) é comportamento seguro: a mutação
-// mudou o resultado, mas sem corromper memória.
+// oracle runs the executable and says what went wrong ("" if nothing). A panic
+// (code 2) or a failing test (1) is safe behavior: the mutation
+// changed the result, but without corrupting memory.
 func (t *Target) oracle(exe string, args []string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
@@ -123,16 +123,16 @@ func (t *Target) oracle(exe string, args []string) string {
 	if t.Stdin != nil {
 		cmd.Stdin = bytes.NewReader(t.Stdin)
 	}
-	cmd.Env = append(os.Environ(), "ASAN_OPTIONS=detect_leaks=0") // vazamento: o contador do runtime
+	cmd.Env = append(os.Environ(), "ASAN_OPTIONS=detect_leaks=0") // leak: the runtime's counter
 	err := cmd.Run()
 	text := out.String()
-	for _, sig := range []string{"AddressSanitizer", "UndefinedBehaviorSanitizer", "runtime error:", "erro interno"} {
+	for _, sig := range []string{"AddressSanitizer", "UndefinedBehaviorSanitizer", "runtime error:", "internal error"} {
 		if i := strings.Index(text, sig); i >= 0 {
 			return strings.TrimSpace(firstLine(text[i:]))
 		}
 	}
 	if ctx.Err() != nil {
-		return fmt.Sprintf("travou (mais de %v)", Timeout)
+		return fmt.Sprintf("hung (more than %v)", Timeout)
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
@@ -140,9 +140,9 @@ func (t *Target) oracle(exe string, args []string) string {
 		case 1, 2:
 			return ""
 		case 3:
-			return "sobrou alocação no fim"
+			return "allocation left at the end"
 		default:
-			return fmt.Sprintf("terminou com %v", exitErr)
+			return fmt.Sprintf("ended with %v", exitErr)
 		}
 	}
 	if err != nil {

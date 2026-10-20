@@ -1,7 +1,7 @@
 {
   "name": "mlc",
   "displayName": "MLC (My Lang C)",
-  "description": "Cores, erros ao digitar, formatação, hover, ir para a definição e sugestões para a linguagem MLC, via mlc lsp",
+  "description": "Colors, errors as you type, formatting, hover, go to definition and completions for the MLC language, via mlc lsp",
   "version": "0.1.0",
   "publisher": "mlc-lang",
   "license": "UNLICENSED",
@@ -27,7 +27,7 @@
         "mlc.path": {
           "type": "string",
           "default": "mlc",
-          "description": "Caminho do executável mlc (precisa ter o comando lsp)."
+          "description": "Path of the mlc executable (it must have the lsp command)."
         }
       }
     },

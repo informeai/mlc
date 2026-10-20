@@ -39,12 +39,12 @@ Everything that comes with the language is here, including input and output (`st
   | 4001–4899, 4900 | `sqlite`: 4000 + SQLite's code (`ERROR` 4001, `BUSY` 4005, `CONSTRAINT` 4019...), `UNAVAILABLE` 4900 |
   | 5001–5005 | `tls`: `HANDSHAKE`, `BAD_CERT`, `UNAVAILABLE`, `BROKEN`, `SERVER_FILES` |
 
-  `os.error_text(code, &msg)` writes the text of any of them (in Portuguese, for now):
+  `os.error_text(code, &msg)` writes the text of any of them:
 
   ```
   Err(code) => {
       var msg [160]byte                  // always enough
-      k := os.error_text(code, &msg)     // "não existe", "fim dos dados", "conexão recusada: ..."
+      k := os.error_text(code, &msg)     // "doesn't exist", "end of the data", "connection refused: ..."
       io.eprintf("error: {:s}\n", &msg[:k])
   }
   ```
@@ -524,7 +524,7 @@ count.free()                              // frees each key and the map
 | `cwd(dst) Result[int, int]` | copies the current directory |
 | `chdir(path) Result[int, int]` | changes the current directory |
 | `exit(code int)` | ends the program |
-| `error_text(code int, dst) int` | writes the text (in Portuguese) of any library error code; a `[160]byte` is always enough |
+| `error_text(code int, dst) int` | writes the text of any library error code; a `[160]byte` is always enough |
 | `NOT_FOUND` (2), `TOO_LONG` (1002) | error codes: doesn't exist; doesn't fit in `dst` |
 
 ### `std/args`
@@ -1006,7 +1006,7 @@ err := 0
 c := tls.connect_str("api.example.com", 443, &err)
 if c == nil {
     var why [256]byte
-    n := tls.last_error(&why)     // "certificado recusado: certificate has expired"
+    n := tls.last_error(&why)     // "certificate refused: certificate has expired"
     return
 }
 c.write(&request)

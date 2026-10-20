@@ -1,4 +1,4 @@
-// erro: tipo Ponto usado como valor
+// error: type Ponto used as a value (to create a value: Ponto{...}; in the header of if, for or match, in parentheses)
 import "std/io"
 struct Ponto { x int }
 fn main() {

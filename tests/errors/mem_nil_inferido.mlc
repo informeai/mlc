@@ -1,4 +1,4 @@
-// erro: não dá para deduzir o tipo de nil
+// error: can't infer the type of nil: declare it with var x ?*T = nil
 fn main() {
     x := nil
 }

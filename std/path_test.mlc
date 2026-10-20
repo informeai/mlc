@@ -76,10 +76,10 @@ fn test_base_dir_ext() {
 fn test_is_abs() {
     var b [8]byte
     n := str.copy(&b, "/x")
-    testing.check(path.is_abs(&b[:n]), "/x é absoluto")
+    testing.check(path.is_abs(&b[:n]), "/x is absolute")
     n = str.copy(&b, "x/y")
-    testing.check(!path.is_abs(&b[:n]), "x/y é relativo")
-    testing.check(!path.is_abs(&b[:0]), "vazio é relativo")
+    testing.check(!path.is_abs(&b[:n]), "x/y is relative")
+    testing.check(!path.is_abs(&b[:0]), "empty is relative")
 }
 
 fn test_small_destination() {

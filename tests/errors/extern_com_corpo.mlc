@@ -1,4 +1,4 @@
-// erro: extern fn não tem corpo
+// error: extern fn has no body: the implementation lives in the C runtime
 extern fn f() int {
     return 1
 }

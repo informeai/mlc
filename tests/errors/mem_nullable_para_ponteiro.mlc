@@ -1,4 +1,4 @@
-// erro: q pode ser nil aqui, mas o argumento 1 de destroi espera *Ponto; verifique com if q != nil antes
+// error: q may be nil here, but o argumento 1 of destroi expects *Ponto; check with if q != nil first
 struct Ponto { x int; y int }
 fn destroi(p *Ponto) {
     free(p)

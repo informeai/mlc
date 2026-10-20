@@ -725,7 +725,7 @@ pub fn (b &Builder) header_int(name string, value int) {
 
 fn (b &Builder) name(name string) {
     if b.n == 0 {
-        fail("http.Builder: comece com response ou request")
+        fail("http.Builder: start with response or request")
     }
     if len(name) == len("Content-Length") && fold_eq_str(name, "Content-Length") {
         b.has_length = true
@@ -786,7 +786,7 @@ pub fn (b &Builder) start[S ref + Stream](c &S, length int) result.Result[int, i
 
 fn (b &Builder) end_head() {
     if b.n == 0 {
-        fail("http.Builder: comece com response ou request")
+        fail("http.Builder: start with response or request")
     }
     b.n += str.copy(&b.buf[b.n:], "\r\n")
 }
@@ -1085,7 +1085,7 @@ pub fn match_path(pattern string, path &[]byte, p &Params) bool {
             end_br++
         }
         if end_br == len(pattern) || p.count == MAX_PARAMS {
-            fail("http.match_path: padrão inválido (falta } ou há {nome} demais)")
+            fail("http.match_path: invalid pattern (missing } or too many {name})")
         }
         rest := end_br - i > 4 && pattern[end_br - 3] == '.' && pattern[end_br - 2] == '.' && pattern[end_br - 1] == '.'
         name_end := end_br
@@ -1147,7 +1147,7 @@ pub struct Router[S ref + Stream, C any] {
 // added.
 pub fn (r &Router[S, C]) handle(method string, pattern string, h fn(&S, &Message, &Params, &C)) {
     if r.n == MAX_ROUTES {
-        fail("http.Router: rotas demais (o máximo é 64)")
+        fail("http.Router: too many routes (the maximum is 64)")
     }
     r.routes[r.n] = Route[S, C]{method: method, pattern: pattern, h: h}
     r.n++
@@ -1176,10 +1176,10 @@ pub fn (r &Router[S, C]) dispatch(c &S, m &Message, ctx &C) {
         return
     }
     if path_found {
-        respond_str(c, 405, "text/plain", "método não permitido\n")
+        respond_str(c, 405, "text/plain", "method not allowed\n")
         return
     }
-    respond_str(c, 404, "text/plain", "não encontrado\n")
+    respond_str(c, 404, "text/plain", "not found\n")
 }
 
 // serve_conn serves a connection until it closes: reads each request, calls the
@@ -1194,9 +1194,9 @@ pub fn serve_conn[S ref + Stream, C any](c &S, r &Router[S, C], ctx &C) {
             Ok(_) => {}
             Err(code) => {
                 if code == HEAD_TOO_BIG {
-                    respond_str(c, 431, "text/plain", "cabeçalho grande demais\n")
+                    respond_str(c, 431, "text/plain", "header too large\n")
                 } else if code == BAD_MESSAGE {
-                    respond_str(c, 400, "text/plain", "pedido inválido\n")
+                    respond_str(c, 400, "text/plain", "bad request\n")
                 }
                 return
             }

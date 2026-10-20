@@ -1,4 +1,4 @@
-// erro: variante Vazio repetida (já aparece na linha 8)
+// error: repeated variant Vazio (already appears on line 8)
 enum Forma {
     Circulo(raio float64)
     Vazio

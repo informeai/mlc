@@ -1,4 +1,4 @@
-// erro: os elementos de []?*Item são donos e não podem ser copiados: use for x in drain(s)
+// error: the elements of []?*Item are owners and can't be copied: use for x in drain(s) to empty the slice
 struct Item { peso int }
 fn main() {
     s := alloc([]?*Item, 2)

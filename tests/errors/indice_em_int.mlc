@@ -1,4 +1,4 @@
-// erro: valor do tipo int não pode ser indexado
+// error: a value of type int can't be indexed
 import "std/io"
 fn main() {
     n := 5

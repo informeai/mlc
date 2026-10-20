@@ -1,4 +1,4 @@
-// erro: o receptor precisa nomear os 1 parâmetro(s) de tipo de Vetor, como Vetor[T]
+// error: the receiver must name the 1 type parameter(s) of Vetor, like Vetor[T]
 struct Vetor[T any] { itens []T }
 fn (v &Vetor) tamanho() int {
     return 0

@@ -1,4 +1,4 @@
-// erro: vazamento: m pode ter um handle, e f escreveria outro por cima
+// error: leak: m may hold a handle, and f would write another over it; close the old one first
 extern "C" type Msg
 extern "C" fn f(p ?&int, s ?&[]int, m ?&?*Msg) int32
 extern "C" fn done(m *Msg)

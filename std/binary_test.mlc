@@ -70,7 +70,7 @@ fn test_floats() {
     testing.check(binary.f32_be(&b) == 1.5, "f32_be")
     binary.put_f32_le(&b, -2.25)
     testing.check(binary.f32_le(&b) == -2.25, "f32_le")
-    testing.check(math.float64_bits(0.0) == 0, "bits de 0.0")
+    testing.check(math.float64_bits(0.0) == 0, "bits of 0.0")
     testing.check(math.float64_from_bits(0x7FF0_0000_0000_0000) > 1e308, "+Inf")
 }
 
@@ -79,9 +79,9 @@ fn test_offsets() {
     binary.put_u32_be(&b, 7)
     binary.put_u16_le(&b[4:], 0xABCD)
     binary.put_f32_be(&b[6:], 3.0)
-    testing.check(binary.u32_be(&b) == 7, "começo")
-    testing.check(binary.u16_le(&b[4:]) == 0xABCD, "no meio")
-    testing.check(binary.f32_be(&b[6:]) == 3.0, "depois")
+    testing.check(binary.u32_be(&b) == 7, "start")
+    testing.check(binary.u16_le(&b[4:]) == 0xABCD, "middle")
+    testing.check(binary.f32_be(&b[6:]) == 3.0, "after")
 }
 
 fn uv(v uint64, want string) {

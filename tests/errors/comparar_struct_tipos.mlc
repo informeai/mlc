@@ -1,4 +1,4 @@
-// erro: comparação entre tipos diferentes: A e B
+// error: comparison between different types: A and B
 import "std/io"
 struct A { x int }
 struct B { x int }

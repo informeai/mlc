@@ -1,4 +1,4 @@
-// erro: vazamento: o ponteiro dono devolvido aqui é descartado
+// error: leak: the owning pointer returned here is discarded; store it in a variable
 struct Item { peso int }
 fn main() {
     s := alloc([]?*Item, 2)

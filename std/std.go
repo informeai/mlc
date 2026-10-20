@@ -1,5 +1,5 @@
-// Package std embute a biblioteca padrão do MLC (arquivos .mlc) no binário do
-// compilador. "import \"std/math\"" lê math.mlc daqui.
+// Package std embeds MLC's standard library (.mlc files) in the compiler's
+// binary. "import \"std/math\"" reads math.mlc from here.
 package std
 
 import "embed"

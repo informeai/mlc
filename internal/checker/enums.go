@@ -7,25 +7,25 @@ import (
 	"mlc/internal/token"
 )
 
-// Enums com dados
+// Enums with data
 //
-//	enum Forma {
-//	    Circulo(raio float64)
-//	    Vazio
+//	enum Shape {
+//	    Circle(radius float64)
+//	    Empty
 //	}
 //
-// Um valor de enum é uma das variantes, com os dados dela. Constrói-se com o
-// nome do enum na frente (Forma.Circulo(2.0), Forma.Vazio) e desmonta-se com
-// match, que precisa cobrir todas as variantes:
+// An enum value is one of the variants, with its data. It's built with the
+// enum's name in front (Shape.Circle(2.0), Shape.Empty) and taken apart with
+// match, which must cover every variant:
 //
 //	match f {
-//	    Circulo(r) => ...
-//	    Vazio => ...
+//	    Circle(r) => ...
+//	    Empty => ...
 //	}
 //
-// Enums podem ser genéricos (enum Resultado[T any] { Ok(valor T); Erro(codigo
-// int) }). Nesta versão os dados das variantes não podem ser donos, então um
-// enum é um valor comum: copiável e imprimível.
+// Enums can be generic (enum Result[T any] { Ok(value T); Err(code
+// int) }). Variants with owning data make the enum an owner (see Resource); otherwise an
+// enum is an ordinary value: copyable and printable.
 
 type Enum struct {
 	Name     string
@@ -41,9 +41,9 @@ type Enum struct {
 	instances map[string]*Enum
 	mod       *module
 
-	// Resource: alguma variante guarda donos (Err(msg []byte)). O enum vira
-	// um dono por valor: atribuir, passar ou devolver move, e o verificador
-	// cobra que ele seja consumido (match, free ou move).
+	// Resource: some variant holds owners (Err(msg []byte)). The enum becomes
+	// an owner by value: assigning, passing or returning moves, and the checker
+	// requires it to be consumed (match, free or move).
 	Resource bool
 }
 
@@ -65,16 +65,16 @@ func (e *Enum) Variant(name string) *Variant {
 	return nil
 }
 
-// collectEnumNames registra os enums antes das structs, que podem ter campos
-// de tipo enum.
+// collectEnumNames registers the enums before the structs, which can have fields
+// of an enum type.
 func (c *checker) collectEnumNames(f *ast.File) {
 	for _, d := range f.Enums {
 		switch {
 		case predeclared[d.Name]:
-			c.errorf(d.P, "o nome %q é reservado", d.Name)
+			c.errorf(d.P, "the name %q is reserved", d.Name)
 			continue
 		case c.mod.enums[d.Name] != nil:
-			c.errorf(d.P, "enum %s já declarado na linha %d", d.Name, c.mod.enums[d.Name].Decl.P.Line)
+			c.errorf(d.P, "enum %s already declared on line %d", d.Name, c.mod.enums[d.Name].Decl.P.Line)
 			continue
 		}
 		en := &Enum{
@@ -89,8 +89,8 @@ func (c *checker) collectEnumNames(f *ast.File) {
 	}
 }
 
-// collectEnumVariants resolve as variantes dos enums não genéricos, depois
-// das structs.
+// collectEnumVariants resolves the variants of the non-generic enums, after
+// the structs.
 func (c *checker) collectEnumVariants(f *ast.File) {
 	for _, d := range f.Enums {
 		en := c.mod.enums[d.Name]
@@ -98,7 +98,7 @@ func (c *checker) collectEnumVariants(f *ast.File) {
 			continue
 		}
 		if c.mod.structs[d.Name] != nil {
-			c.errorf(d.P, "o nome %s já é usado por uma struct", d.Name)
+			c.errorf(d.P, "the name %s is already used by a struct", d.Name)
 			continue
 		}
 		if en.Params == nil {
@@ -108,13 +108,13 @@ func (c *checker) collectEnumVariants(f *ast.File) {
 	}
 }
 
-// variants resolve as variantes de en (com os parâmetros de tipo já ligados,
-// numa instância).
+// variants resolves the variants of en (with the type parameters already bound,
+// in an instance).
 func (c *checker) variants(en *Enum) {
 	seen := map[string]bool{}
 	for i, vd := range en.Decl.Variants {
 		if seen[vd.Name] {
-			c.errorf(vd.P, "variante %s repetida em %s", vd.Name, en.Name)
+			c.errorf(vd.P, "repeated variant %s in %s", vd.Name, en.Name)
 			continue
 		}
 		seen[vd.Name] = true
@@ -122,18 +122,18 @@ func (c *checker) variants(en *Enum) {
 		fseen := map[string]bool{}
 		for _, fd := range vd.Fields {
 			if fseen[fd.Name] {
-				c.errorf(fd.P, "campo %s repetido em %s", fd.Name, vd.Name)
+				c.errorf(fd.P, "repeated field %s in %s", fd.Name, vd.Name)
 			}
 			fseen[fd.Name] = true
 			t := c.resolveType(fd.Type, ctxField)
 			switch tt := t.(type) {
 			case *Borrow:
-				c.errorf(fd.P, "uma variante não pode guardar empréstimo (%s é %s)", fd.Name, t)
+				c.errorf(fd.P, "a variant can't hold a borrow (%s is %s)", fd.Name, t)
 				t = Invalid
 			case *Pointer:
-				// o valor zero do enum é a primeira variante zerada: *T não tem zero
+				// the enum's zero value is the first variant zeroed: *T has no zero
 				if !tt.Nullable {
-					c.errorf(fd.P, "uma variante guarda ?*T, não *T (o valor zero do enum é nil): use ?%s", t)
+					c.errorf(fd.P, "a variant holds ?*T, not *T (the enum's zero value is nil): use ?%s", t)
 					t = Invalid
 				} else if ok, why := ownedPointee(tt.Elem); !ok {
 					c.errorf(fd.P, "%s: %s", fd.Name, why)
@@ -150,23 +150,23 @@ func (c *checker) variants(en *Enum) {
 				}
 			default:
 				if isResource(t) {
-					c.errorf(fd.P, "uma struct com donos só existe atrás de ponteiro: use ?*%s", t)
+					c.errorf(fd.P, "a struct with owners only exists behind a pointer: use ?*%s", t)
 					t = Invalid
 				}
 			}
 			if IsOwner(t) {
-				en.Resource = true // a variante guarda um dono
+				en.Resource = true // the variant holds an owner
 			}
 			v.Fields = append(v.Fields, &Field{Name: fd.Name, Type: t})
 		}
 		en.Variants = append(en.Variants, v)
 	}
 	if len(en.Variants) == 0 {
-		c.errorf(en.Decl.P, "o enum %s precisa de pelo menos uma variante", en.Name)
+		c.errorf(en.Decl.P, "the enum %s needs at least one variant", en.Name)
 	}
 }
 
-// instEnum devolve a instância de um enum genérico.
+// instEnum returns the instance of a generic enum.
 func (c *checker) instEnum(en *Enum, args []Type, pos token.Pos) Type {
 	if !c.checkTypeArgs(en.Name, en.Params, args, pos) {
 		return Invalid
@@ -187,14 +187,14 @@ func (c *checker) instEnum(en *Enum, args []Type, pos token.Pos) Type {
 	return inst
 }
 
-// resolveEnum resolve o tipo escrito t, que nomeia o enum en.
+// resolveEnum resolves the written type t, which names the enum en.
 func (c *checker) resolveEnum(en *Enum, t *ast.TypeExpr) Type {
 	switch {
 	case en.Params != nil && len(t.Args) == 0:
-		c.errorf(t.P, "%s é genérico: escreva os argumentos de tipo, como %s[int]", en.Name, en.Name)
+		c.errorf(t.P, "%s is generic: write the type arguments, like %s[int]", en.Name, en.Name)
 		return Invalid
 	case en.Params == nil && len(t.Args) > 0:
-		c.errorf(t.P, "%s não é genérico", en.Name)
+		c.errorf(t.P, "%s isn't generic", en.Name)
 		return Invalid
 	case en.Params != nil:
 		var args []Type
@@ -206,8 +206,8 @@ func (c *checker) resolveEnum(en *Enum, t *ast.TypeExpr) Type {
 	return en
 }
 
-// enumNamed devolve o enum escrito em x (Forma, Resultado[int], geo.Forma),
-// se x nomear um. Um enum genérico sem argumentos volta como a declaração.
+// enumNamed returns the enum written in x (Shape, Result[int], geo.Shape),
+// if x names one. A generic enum without arguments comes back as the declaration.
 func (c *checker) enumNamed(x ast.Expr) *Enum {
 	switch x := x.(type) {
 	case *ast.Ident:
@@ -218,7 +218,7 @@ func (c *checker) enumNamed(x ast.Expr) *Enum {
 		if m := c.userModule(x.X); m != nil {
 			if en := m.enums[x.Sel]; en != nil {
 				if !en.Pub {
-					c.errorf(x.SelPos, "%s.%s não é público (declare com pub enum)", m.name, x.Sel)
+					c.errorf(x.SelPos, "%s.%s isn't public (declare it with pub enum)", m.name, x.Sel)
 				}
 				return en
 			}
@@ -239,14 +239,14 @@ func (c *checker) enumNamed(x ast.Expr) *Enum {
 	return nil
 }
 
-// enumCtor checa Forma.Circulo(args) (call não nil) ou Forma.Vazio.
+// enumCtor checks Shape.Circle(args) (call not nil) or Shape.Empty.
 func (c *checker) enumCtor(node ast.Expr, call *ast.CallExpr, en *Enum, sel *ast.SelectorExpr) Type {
 	var args []ast.Expr
 	if call != nil {
 		args = call.Args
 	}
 	if en.Params != nil {
-		// genérico sem argumentos de tipo: do contexto ou dos argumentos
+		// generic without type arguments: from the context or from the arguments
 		en = c.inferEnum(node, en, sel, args)
 		if en == nil {
 			for _, a := range args {
@@ -257,7 +257,7 @@ func (c *checker) enumCtor(node ast.Expr, call *ast.CallExpr, en *Enum, sel *ast
 	}
 	v := en.Variant(sel.Sel)
 	if v == nil {
-		c.errorf(sel.SelPos, "%s não tem variante %s", en.Name, sel.Sel)
+		c.errorf(sel.SelPos, "%s has no variant %s", en.Name, sel.Sel)
 		for _, a := range args {
 			c.value(a)
 		}
@@ -265,14 +265,14 @@ func (c *checker) enumCtor(node ast.Expr, call *ast.CallExpr, en *Enum, sel *ast
 	}
 	switch {
 	case call == nil && len(v.Fields) > 0:
-		c.errorf(sel.SelPos, "%s.%s tem %d campo(s): escreva %s.%s(...)", en.Name, v.Name, len(v.Fields), en.Name, v.Name)
+		c.errorf(sel.SelPos, "%s.%s has %d field(s): write %s.%s(...)", en.Name, v.Name, len(v.Fields), en.Name, v.Name)
 		return Invalid
 	case call != nil && len(args) != len(v.Fields):
-		c.errorf(call.Lparen, "%s.%s espera %d valor(es), recebeu %d", en.Name, v.Name, len(v.Fields), len(args))
+		c.errorf(call.Lparen, "%s.%s expects %d value(s), got %d", en.Name, v.Name, len(v.Fields), len(args))
 	}
 	for i, a := range args {
 		if i < len(v.Fields) {
-			c.valueAs(a, v.Fields[i].Type, fmt.Sprintf("campo %s de %s", v.Fields[i].Name, v.Name))
+			c.valueAs(a, v.Fields[i].Type, fmt.Sprintf("field %s of %s", v.Fields[i].Name, v.Name))
 		} else {
 			c.value(a)
 		}
@@ -281,9 +281,9 @@ func (c *checker) enumCtor(node ast.Expr, call *ast.CallExpr, en *Enum, sel *ast
 	return en
 }
 
-// inferEnum acha a instância de um enum genérico usado sem argumentos de
-// tipo: pelo tipo esperado (return Resultado.Ok(5) numa função que devolve
-// Resultado[int]) ou pelos valores da variante.
+// inferEnum finds the instance of a generic enum used without type
+// arguments: by the expected type (return Result.Ok(5) in a function that returns
+// Result[int]) or by the variant's values.
 func (c *checker) inferEnum(node ast.Expr, en *Enum, sel *ast.SelectorExpr, args []ast.Expr) *Enum {
 	if want, ok := c.expected.(*Enum); ok && c.expectedFor == node && want.Origin == en {
 		return want
@@ -298,7 +298,7 @@ func (c *checker) inferEnum(node ast.Expr, en *Enum, sel *ast.SelectorExpr, args
 	}
 	v := abs.Variant(sel.Sel)
 	if v == nil {
-		c.errorf(sel.SelPos, "%s não tem variante %s", en.Name, sel.Sel)
+		c.errorf(sel.SelPos, "%s has no variant %s", en.Name, sel.Sel)
 		return nil
 	}
 	set := map[*TypeVar]bool{}
@@ -321,7 +321,7 @@ func (c *checker) inferEnum(node ast.Expr, en *Enum, sel *ast.SelectorExpr, args
 	for _, t := range vars {
 		b := bound[t.(*TypeVar)]
 		if b == nil {
-			c.errorf(sel.SelPos, "não foi possível deduzir %s em %s.%s: escreva %s[int].%s(...)", t, en.Name, sel.Sel, en.Name, sel.Sel)
+			c.errorf(sel.SelPos, "couldn't infer %s in %s.%s: write %s[int].%s(...)", t, en.Name, sel.Sel, en.Name, sel.Sel)
 			return nil
 		}
 		targs = append(targs, b)
@@ -330,16 +330,16 @@ func (c *checker) inferEnum(node ast.Expr, en *Enum, sel *ast.SelectorExpr, args
 	return inst
 }
 
-// checkEnumMatch checa um match sobre enum: cada braço nomeia variantes, e as
-// de dados dão nome aos campos (Circulo(r)).
+// checkEnumMatch checks a match on an enum: each arm names variants, and the
+// ones with data name the fields (Circle(r)).
 func (c *checker) checkEnumMatch(s *ast.MatchStmt, en *Enum) {
 	seen := map[string]token.Pos{}
 	var wildcard *ast.Pattern
 	unreachable := false
-	// Um enum dono é consumido pelo match quando o sujeito é uma variável dona
-	// ou um valor temporário: os campos donos saem para os nomes do padrão.
-	// Senão (*e, um campo, um empréstimo), o match só lê, e os campos donos
-	// vêm emprestados.
+	// An owning enum is consumed by the match when the subject is an owning variable
+	// or a temporary value: the owning fields go out to the pattern's names.
+	// Otherwise (*e, a field, a borrow), the match only reads, and the owning fields
+	// come borrowed.
 	mode := matchCopy
 	if IsOwner(en) {
 		mode = matchBorrow
@@ -350,14 +350,14 @@ func (c *checker) checkEnumMatch(s *ast.MatchStmt, en *Enum) {
 	}
 	for _, arm := range s.Arms {
 		if wildcard != nil && !unreachable {
-			c.errorf(arm.P, "braço depois de _ nunca é executado")
+			c.errorf(arm.P, "an arm after _ is never executed")
 			unreachable = true
 		}
 		c.pushScope()
 		for _, p := range arm.Patterns {
 			if p.Wildcard {
 				if len(arm.Patterns) > 1 {
-					c.errorf(p.P, "_ precisa estar sozinho no braço")
+					c.errorf(p.P, "_ must be alone in the arm")
 				}
 				wildcard = p
 				continue
@@ -368,16 +368,16 @@ func (c *checker) checkEnumMatch(s *ast.MatchStmt, en *Enum) {
 		c.popScope()
 	}
 	if wildcard != nil && mode == matchTake {
-		// o _ consumiria variantes sem dar nome aos donos delas
+		// the _ would consume variants without naming their owners
 		for _, v := range en.Variants {
 			if _, ok := seen[v.Name]; !ok && variantOwns(v) {
-				c.errorf(wildcard.P, "o braço _ tiraria a variante %s, que guarda donos, sem liberá-los: trate %s num braço próprio", v.Name, v.Name)
+				c.errorf(wildcard.P, "the _ arm would take out the variant %s, which holds owners, without freeing them: handle %s in its own arm", v.Name, v.Name)
 			}
 		}
 	}
 	switch {
 	case wildcard != nil && len(seen) == len(en.Variants):
-		c.errorf(wildcard.P, "braço _ nunca é executado: todas as variantes de %s já foram cobertas", en.Name)
+		c.errorf(wildcard.P, "the _ arm is never executed: every variant of %s is already covered", en.Name)
 	case wildcard == nil:
 		var missing []string
 		for _, v := range en.Variants {
@@ -386,20 +386,20 @@ func (c *checker) checkEnumMatch(s *ast.MatchStmt, en *Enum) {
 			}
 		}
 		if len(missing) > 0 {
-			c.errorf(s.P, "match sobre %s precisa cobrir todas as variantes (faltam: %s) ou ter um braço _", en.Name, joinNames(missing))
+			c.errorf(s.P, "a match on %s must cover every variant (missing: %s) or have a _ arm", en.Name, joinNames(missing))
 		}
 	}
 }
 
-// modos de um match sobre enum
+// modes of a match on an enum
 const (
-	matchCopy   = iota // enum sem donos: os campos são copiados
-	matchTake          // enum dono consumido: os campos donos saem para os nomes
-	matchBorrow        // enum dono só lido: os campos donos vêm emprestados
+	matchCopy   = iota // enum without owners: the fields are copied
+	matchTake          // owning enum consumed: the owning fields go out to the names
+	matchBorrow        // owning enum only read: the owning fields come borrowed
 )
 
-// consumableSubject diz se o sujeito de um match pode ser consumido: uma
-// variável dona inteira ou um valor temporário (chamada, construtor).
+// consumableSubject says whether a match's subject can be consumed: a
+// whole owning variable or a temporary value (a call, a constructor).
 func (c *checker) consumableSubject(e ast.Expr) bool {
 	switch e := e.(type) {
 	case *ast.Ident:
@@ -408,7 +408,7 @@ func (c *checker) consumableSubject(e ast.Expr) bool {
 	case *ast.CallExpr:
 		return true
 	case *ast.SelectorExpr:
-		_, ctor := c.info.EnumCtors[e] // Forma.Vazio
+		_, ctor := c.info.EnumCtors[e] // Shape.Empty
 		return ctor
 	}
 	return false
@@ -431,26 +431,26 @@ func (c *checker) variantPattern(p *ast.Pattern, en *Enum, armSize int, seen map
 	default:
 		id, ok := p.Lit.(*ast.Ident)
 		if !ok {
-			c.errorf(p.P, "num match sobre %s, os padrões são variantes: Circulo(r), Vazio", en.Name)
+			c.errorf(p.P, "in a match on %s, the patterns are variants: Circle(r), Empty", en.Name)
 			return
 		}
 		name, pos = id.Name, id.P
 	}
 	v := en.Variant(name)
 	if v == nil {
-		c.errorf(pos, "%s não tem variante %s", en.Name, name)
+		c.errorf(pos, "%s has no variant %s", en.Name, name)
 		return
 	}
 	switch {
 	case p.Variant == nil && len(v.Fields) > 0:
-		c.errorf(pos, "%s tem %d campo(s): escreva %s(...) dando um nome a cada um (ou _)", name, len(v.Fields), name)
+		c.errorf(pos, "%s has %d field(s): write %s(...) giving each one a name (or _)", name, len(v.Fields), name)
 	case p.Variant != nil && len(p.Binds) != len(v.Fields):
-		c.errorf(pos, "%s tem %d campo(s), o padrão nomeia %d", name, len(v.Fields), len(p.Binds))
+		c.errorf(pos, "%s has %d field(s), the pattern names %d", name, len(v.Fields), len(p.Binds))
 	case p.Variant != nil && armSize > 1:
-		c.errorf(pos, "uma variante com campos nomeados precisa estar sozinha no braço")
+		c.errorf(pos, "a variant with named fields must be alone in the arm")
 	}
 	if prev, dup := seen[name]; dup {
-		c.errorf(pos, "variante %s repetida (já aparece na linha %d)", name, prev.Line)
+		c.errorf(pos, "repeated variant %s (already appears on line %d)", name, prev.Line)
 		return
 	}
 	seen[name] = pos
@@ -458,7 +458,7 @@ func (c *checker) variantPattern(p *ast.Pattern, en *Enum, armSize int, seen map
 	var locals []*Local
 	for i, b := range p.Binds {
 		if i < len(v.Fields) && b.Name == "_" && mode == matchTake && IsOwner(v.Fields[i].Type) {
-			c.errorf(b.P, "o campo %s de %s é dono: dê um nome a ele (para liberar ou mover), em vez de _", v.Fields[i].Name, v.Name)
+			c.errorf(b.P, "the field %s of %s is an owner: give it a name (to free or move it), instead of _", v.Fields[i].Name, v.Name)
 		}
 		if b.Name == "_" || i >= len(v.Fields) {
 			locals = append(locals, nil)
@@ -466,7 +466,7 @@ func (c *checker) variantPattern(p *ast.Pattern, en *Enum, armSize int, seen map
 		}
 		ft := v.Fields[i].Type
 		if mode == matchBorrow && IsOwner(ft) {
-			// o match só lê: o campo dono vem emprestado
+			// the match only reads: the owning field comes borrowed
 			l := c.declare(b.Name, b.P, c.borrowOf(ft), false)
 			if root, _ := c.placeRoot(subject); root != nil {
 				c.info.BorrowSrc[l] = root

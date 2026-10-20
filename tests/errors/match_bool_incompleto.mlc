@@ -1,4 +1,4 @@
-// erro: match sobre bool precisa cobrir true e false ou ter um braço _
+// error: a match on bool must cover true and false or have a _ arm
 fn main() {
     match true {
         true => {}

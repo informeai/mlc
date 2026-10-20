@@ -1,1 +1,1 @@
-panic: deslocamento.mlc:5: deslocamento de 64 bits num inteiro de 64 (use de 0 a 63)
+panic: deslocamento.mlc:5: shift of 64 bits on a 64-bit integer (use 0 to 63)

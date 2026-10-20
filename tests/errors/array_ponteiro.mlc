@@ -1,4 +1,4 @@
-// erro: ponteiro para array não é suportado
+// error: pointer to array isn't supported: use the array directly ([N]T), or alloc([]T, n) for heap memory
 fn f(p *[3]int) {
 }
 fn main() {

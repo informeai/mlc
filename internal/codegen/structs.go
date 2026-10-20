@@ -8,10 +8,10 @@ import (
 	"mlc/internal/checker"
 )
 
-// Structs viram "struct mlc_st_<Nome>" com campos f_<nome>. O prefixo evita
-// colisão com palavras reservadas do C (um campo pode se chamar default).
-// Para cada struct também é gerada mlc_eq_<Nome> (==), em ordem de
-// dependência: uma struct só usa as já definidas.
+// Structs become "struct mlc_st_<Name>" with fields f_<name>. The prefix avoids
+// collisions with C keywords (a field can be called default).
+// For each struct, mlc_eq_<Name> (==) is also generated, in
+// dependency order: a struct only uses the ones already defined.
 
 func structCType(s *checker.Struct) string { return "mlc_st_" + s.CName }
 
@@ -28,11 +28,11 @@ func (g *gen) structs() {
 	if len(g.info.Structs)+len(g.info.Arrays)+len(g.info.Enums) > 0 {
 		g.raw("\n")
 	}
-	// Os slices vêm antes das structs e dos arrays: uma struct pode ter campo
-	// slice, e o slice só precisa do nome (typedef) do tipo dos elementos.
+	// Slices come before structs and arrays: a struct can have a slice
+	// field, and the slice only needs the name (typedef) of the element type.
 	g.sliceTypedefs()
-	// Structs e arrays guardam uns aos outros por valor: cada um é definido
-	// depois dos que ele contém.
+	// Structs and arrays hold each other by value: each one is defined
+	// after the ones it contains.
 	done := map[checker.Type]bool{}
 	for _, s := range g.info.Structs {
 		g.valueType(s, done)
@@ -45,8 +45,8 @@ func (g *gen) structs() {
 	}
 }
 
-// valueType define a struct ou o array t (e antes, os que t contém por valor),
-// com as funções de igualdade e impressão.
+// valueType defines the struct or array t (and before it, the ones t contains by value),
+// with the equality and printing functions.
 func (g *gen) valueType(t checker.Type, done map[checker.Type]bool) {
 	if done[t] {
 		return
@@ -59,7 +59,7 @@ func (g *gen) valueType(t checker.Type, done map[checker.Type]bool) {
 				g.valueType(f.Type, done)
 			}
 		}
-		if !t.Extern { // tipo de C opaco: só o typedef, sem corpo
+		if !t.Extern { // opaque C type: only the typedef, no body
 			g.structDef(t)
 		}
 	case *checker.Array:
@@ -87,12 +87,12 @@ func (g *gen) structDef(s *checker.Struct) {
 		g.raw("    %s f_%s;\n", cType(f.Type), f.Name)
 	}
 	if len(s.Fields) == 0 {
-		// Struct vazia não é C padrão: um campo de preenchimento mantém
-		// o tipo válido e "{0}" como valor zero.
+		// An empty struct isn't standard C: a padding field keeps
+		// the type valid and "{0}" as the zero value.
 		g.raw("    char mlc_empty;\n")
 	}
 	g.raw("};\n\n")
-	if !s.Resource { // struct com ponteiros donos não é comparada
+	if !s.Resource { // a struct with owning pointers isn't compared
 		g.structEq(s)
 	}
 }
@@ -111,7 +111,7 @@ func (g *gen) structEq(s *checker.Struct) {
 	g.raw("static bool mlc_eq_%s(%s a, %s b) {\n    return %s;\n}\n\n", s.CName, t, t, body)
 }
 
-// eqExpr compara dois valores do tipo t em C.
+// eqExpr compares two values of type t in C.
 func eqExpr(t checker.Type, a, b string) string {
 	if en, ok := t.(*checker.Enum); ok {
 		return fmt.Sprintf("mlc_eq_%s(%s, %s)", mangle(en), a, b)

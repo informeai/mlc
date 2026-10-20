@@ -1,4 +1,4 @@
-// erro: impl auto cmp.Ord for S: o campo f (fn(int) int) não implementa cmp.Ord
+// error: impl auto cmp.Ord for S: the field f (fn(int) int) doesn't implement cmp.Ord
 import "std/cmp"
 
 struct S {

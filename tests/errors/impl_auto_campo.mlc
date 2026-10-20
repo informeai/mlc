@@ -1,4 +1,4 @@
-// erro: o campo c (Cor) não implementa io.Display
+// error: impl auto io.Display for Pixel: the field c (Cor) doesn't implement io.Display
 import "std/io"
 
 struct Cor {

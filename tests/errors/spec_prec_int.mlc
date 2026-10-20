@@ -1,4 +1,4 @@
-// erro: {:.N} (casas decimais) só vale para float64 e float32, e o valor é int
+// error: {:.N} (decimal places) only applies to float64 and float32, and the value is int
 import "std/io"
 import "std/str"
 

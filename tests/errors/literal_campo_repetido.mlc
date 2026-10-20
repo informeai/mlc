@@ -1,4 +1,4 @@
-// erro: campo x repetido no literal
+// error: repeated field x in the literal
 import "std/io"
 struct Ponto { x int; y int }
 fn main() {

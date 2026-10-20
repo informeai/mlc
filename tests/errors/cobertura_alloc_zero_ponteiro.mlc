@@ -1,4 +1,4 @@
-// erro: zera a memória, mas
+// error: alloc(Par) zeroes the memory, but Par.a is a *T pointer and can't be nil; use alloc(Par{...}) with every field
 // Cobertura do verificador (fase 5): regra de posse que nenhum teste disparava.
 struct Box {
     v int

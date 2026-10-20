@@ -1,4 +1,4 @@
-// erro: Forma.Circulo tem 1 campo(s): escreva Forma.Circulo(...)
+// error: Forma.Circulo has 1 field(s): write Forma.Circulo(...)
 enum Forma {
     Circulo(raio float64)
     Vazio

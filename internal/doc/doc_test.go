@@ -25,7 +25,7 @@ func contains(t *testing.T, out string, want ...string) {
 	t.Helper()
 	for _, w := range want {
 		if !strings.Contains(out, w) {
-			t.Errorf("faltou %q em:\n%s", w, out)
+			t.Errorf("missing %q in:\n%s", w, out)
 		}
 	}
 }
@@ -35,12 +35,12 @@ func TestStdModule(t *testing.T) {
 	contains(t, out,
 		`import "std/http"`,
 		"    HTTP/1.1 over any Stream",
-		"\nConstantes\n", "const TOO_BIG = 1000",
-		"\nTipos\n", "  struct Message\n", "      fn (m &Message) read_body[S ref + Stream](c &S, dst &[]byte) result.Result[int, int]",
-		"\nFunções\n", "  fn respond_str[S ref + Stream](c &S, status int, content_type string, body string) result.Result[int, int]",
+		"\nConstants\n", "const TOO_BIG = 1000",
+		"\nTypes\n", "  struct Message\n", "      fn (m &Message) read_body[S ref + Stream](c &S, dst &[]byte) result.Result[int, int]",
+		"\nFunctions\n", "  fn respond_str[S ref + Stream](c &S, status int, content_type string, body string) result.Result[int, int]",
 		"impl Stream for net.Conn")
 	if strings.Contains(out, "pub ") || strings.Contains(out, "fn end_head") {
-		t.Errorf("mostrou pub ou um método que não é pub:\n%s", out)
+		t.Errorf("showed pub or a method that isn't pub:\n%s", out)
 	}
 	if render(t, nil, false, "std/http") != out {
 		t.Error("std/http e http deviam dar o mesmo")
@@ -49,7 +49,7 @@ func TestStdModule(t *testing.T) {
 
 func TestSymbols(t *testing.T) {
 	contains(t, render(t, nil, false, "http.Message"),
-		"struct Message {\n    buf [8192]byte", "    Message is a received request", "\nMétodos\n",
+		"struct Message {\n    buf [8192]byte", "    Message is a received request", "\nMethods\n",
 		"  fn (m &Message) keep_alive() bool\n      keep_alive")
 	contains(t, render(t, nil, false, "http.Message.read_body"),
 		"fn (m &Message) read_body", "    read_body reads up to len(dst) bytes")
@@ -57,7 +57,7 @@ func TestSymbols(t *testing.T) {
 	contains(t, render(t, nil, false, "http.respond"), "fn respond[S ref + Stream]", "    respond sends")
 	contains(t, render(t, nil, false, "http.Stream"), "interface Stream {", "fn write(self &Self")
 	contains(t, render(t, nil, false, "result.Result"), "enum Result[T owned, E owned] {", "Ok(value T)")
-	contains(t, render(t, nil, false, "io.write"), "fn write(s &[]byte)") // extern fn: sem o extern
+	contains(t, render(t, nil, false, "io.write"), "fn write(s &[]byte)") // extern fn: without the extern
 }
 
 func TestBuiltins(t *testing.T) {
@@ -66,7 +66,7 @@ func TestBuiltins(t *testing.T) {
 	out := render(t, nil, false, "thread.spawn")
 	contains(t, out, "thread.spawn(f fn(C) R", "is moved to the thread")
 	if strings.Contains(out, "**") {
-		t.Errorf("o negrito do markdown devia sair:\n%s", out)
+		t.Errorf("the markdown bold should go away:\n%s", out)
 	}
 	contains(t, render(t, nil, false, "log.Logger.info"), `lg.info("...", a, ...)`)
 }
@@ -102,14 +102,14 @@ fn interna(dst &[]byte, s string) int {
 	out := render(t, dirs, false, "util/texto")
 	contains(t, out, `import "util/texto"`, "    Texto do projeto.", "  struct Nome\n      fn (x &Nome) set(s string)", "  fn grita(")
 	if strings.Contains(out, "interna") {
-		t.Errorf("mostrou uma função que não é pub:\n%s", out)
+		t.Errorf("showed a function that isn't pub:\n%s", out)
 	}
 	contains(t, render(t, dirs, false, "util/texto.grita"), "    grita escreve s em dst.")
 	if _, err := Lookup([]string{"util/texto.interna"}, dirs, false); err == nil {
-		t.Error("interna não é pub e devia dar erro")
+		t.Error("interna isn't pub and should give an error")
 	}
 	contains(t, render(t, dirs, true, "util/texto.interna"), "    interna não é pub.")
-	// um arquivo sem nada pub (um programa) mostra tudo
+	// a file with nothing pub (a program) shows everything
 	main := filepath.Join(dir, "app.mlc")
 	os.WriteFile(main, []byte("// soma dois números.\nfn soma(a int, b int) int {\n    return a + b\n}\n\nfn main() {\n}\n"), 0o644)
 	contains(t, render(t, nil, false, main), "fn soma(a int, b int) int", "fn main()")
@@ -121,20 +121,20 @@ func TestErrors(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"nada"}, `módulo "nada" não encontrado`},
-		{[]string{"std/nada"}, `a biblioteca padrão não tem o módulo "std/nada"`},
-		{[]string{"http.nada"}, `std/http não tem "nada"`},
-		{[]string{"http.Message", "x"}, "uso: mlc doc"},
+		{[]string{"nada"}, `module "nada" not found`},
+		{[]string{"std/nada"}, `the standard library has no module "std/nada"`},
+		{[]string{"http.nada"}, `std/http has no "nada"`},
+		{[]string{"http.Message", "x"}, "usage: mlc doc"},
 	} {
 		_, err := Lookup(c.args, nil, false)
 		if err == nil || !strings.Contains(err.Error(), c.want) {
-			t.Errorf("mlc doc %v: erro %v, queria %q", c.args, err, c.want)
+			t.Errorf("mlc doc %v: error %v, wanted %q", c.args, err, c.want)
 		}
 	}
 }
 
-// Todo módulo da biblioteca padrão tem descrição, e toda função, tipo e
-// método pub tem comentário: é o que o mlc doc mostra.
+// Every standard library module has a description, and every pub function, type and
+// method has a comment: it's what mlc doc shows.
 func TestStdDocumented(t *testing.T) {
 	entries, _ := fs.ReadDir(std.FS, ".")
 	for _, e := range entries {
@@ -148,7 +148,7 @@ func TestStdDocumented(t *testing.T) {
 			t.Fatal(err)
 		}
 		if len(Header(text)) == 0 {
-			t.Errorf("%s: sem descrição no começo do arquivo", name)
+			t.Errorf("%s: no description at the top of the file", name)
 		}
 		for _, d := range m.File.Funcs {
 			if d.Pub && len(commentAt(text, d.P.Line)) == 0 {
@@ -157,7 +157,7 @@ func TestStdDocumented(t *testing.T) {
 		}
 		for _, d := range m.File.Structs {
 			if d.Pub && len(commentAt(text, d.P.Line)) == 0 {
-				t.Errorf("%s:%d: struct %s sem comentário", name, d.P.Line, d.Name)
+				t.Errorf("%s:%d: struct %s without a comment", name, d.P.Line, d.Name)
 			}
 		}
 	}
@@ -169,7 +169,7 @@ func TestIndex(t *testing.T) {
 	contains(t, b.String(), "  http       HTTP/1.1", "  vec        Growing vector.", "mlc doc builtin")
 	for _, l := range strings.Split(b.String(), "\n") {
 		if n := len([]rune(l)); n > 80 {
-			t.Errorf("linha com %d colunas: %s", n, l)
+			t.Errorf("line with %d columns: %s", n, l)
 		}
 	}
 }

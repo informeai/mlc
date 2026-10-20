@@ -1,4 +1,4 @@
-// erro: não é possível converter string em int
+// error: can't convert string to int
 import "std/io"
 fn main() {
     io.print(int("42"))

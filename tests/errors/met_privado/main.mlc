@@ -1,4 +1,4 @@
-// erro: o método forma.Q.segredo não é público (declare com pub fn)
+// error: the method forma.Q.segredo isn't public (declare it with pub fn)
 import "forma"
 fn main() {
     q := forma.Q{n: 1}

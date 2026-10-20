@@ -1,4 +1,4 @@
-// erro: str.format precisa do destino e do formato
+// error: str.format needs the destination and the format: str.format(&buf, "x = {}", x)
 import "std/io"
 import "std/str"
 

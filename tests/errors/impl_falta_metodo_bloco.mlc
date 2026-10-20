@@ -1,4 +1,4 @@
-// erro: int não implementa Area: falta o método area
+// error: int doesn't implement Area: the method area is missing
 interface Area {
     fn area(self &Self) int
 }

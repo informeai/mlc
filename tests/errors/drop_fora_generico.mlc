@@ -1,4 +1,4 @@
-// erro: drop só existe em código genérico, para um T owned; fora dele, use free
+// error: drop only exists in generic code, for an owned T; outside it, use free
 fn main() {
     p := alloc(1)
     drop(p)

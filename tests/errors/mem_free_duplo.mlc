@@ -1,4 +1,4 @@
-// erro: p liberada duas vezes: já foi liberada ou movida (linha 5)
+// error: p freed twice: it was already freed or moved (line 5)
 struct Ponto { x int; y int }
 fn main() {
     p := alloc(Ponto)

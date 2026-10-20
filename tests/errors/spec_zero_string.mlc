@@ -1,4 +1,4 @@
-// erro: {:0N} (zeros à esquerda) só vale para números, e o valor é string
+// error: {:0N} (leading zeros) only applies to numbers, and the value is string
 import "std/io"
 import "std/str"
 

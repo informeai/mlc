@@ -8,11 +8,11 @@ fn test_index_contains_count() {
     a := [6]int{4, 8, 15, 16, 23, 8}
     x := 8
     testing.eq_int(slices.index(&a, &x), 1)
-    testing.check(slices.contains(&a, &x), "contém 8")
+    testing.check(slices.contains(&a, &x), "contains 8")
     testing.eq_int(slices.count(&a, &x), 2)
     x = 42
     testing.eq_int(slices.index(&a, &x), -1)
-    testing.check(!slices.contains(&a, &x), "não contém 42")
+    testing.check(!slices.contains(&a, &x), "doesn't contain 42")
     testing.eq_int(slices.index(&a[:0], &x), -1)
 }
 
@@ -114,7 +114,7 @@ fn test_dedup() {
     n := slices.dedup(&a)
     testing.eq_int(n, 4)
     want := [4]int{1, 2, 3, 4}
-    testing.check(slices.equal(&a[:n], &want), "únicos no começo")
+    testing.check(slices.equal(&a[:n], &want), "unique ones at the start")
     testing.eq_int(slices.dedup(&a[:0]), 0)
 }
 

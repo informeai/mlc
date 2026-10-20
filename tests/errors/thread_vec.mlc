@@ -1,4 +1,4 @@
-// erro: uma thread precisa de thread.join, e drop não sabe esperar por ela
+// error: ?*thread.Thread doesn't satisfy owned, required by T in vec.new (a thread needs thread.join, and drop doesn't know how to wait for it)
 import "std/io"
 import "std/thread"
 import "std/vec"

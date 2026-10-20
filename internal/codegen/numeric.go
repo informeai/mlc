@@ -12,13 +12,13 @@ import (
 	"mlc/internal/token"
 )
 
-// Números no C gerado
+// Numbers in the generated C
 //
-// Cada tipo inteiro tem suas operações checadas no runtime (mlc_add_i32,
-// mlc_div_u64, ...), que dão panic em estouro e divisão por zero.
-// Decimais usam as operações do C direto: em ponto flutuante, estouro vira
-// infinito e divisão por zero dá infinito ou NaN, sem comportamento
-// indefinido.
+// Each integer type has its operations checked in the runtime (mlc_add_i32,
+// mlc_div_u64, ...), which panic on overflow and division by zero.
+// Reals use C's operations directly: in floating point, overflow becomes
+// infinity and division by zero gives infinity or NaN, without undefined
+// behavior.
 
 var numericC = map[checker.Type]string{
 	checker.Int8: "int8_t", checker.Int16: "int16_t", checker.Int32: "int32_t", checker.Int: "int64_t",
@@ -26,7 +26,7 @@ var numericC = map[checker.Type]string{
 	checker.Float32: "float", checker.Float64: "double",
 }
 
-// suffix nomeia o tipo nas funções do runtime: i8, i32, u64...
+// suffix names the type in the runtime's functions: i8, i32, u64...
 var suffix = map[checker.Type]string{
 	checker.Int8: "i8", checker.Int16: "i16", checker.Int32: "i32", checker.Int: "i64",
 	checker.Byte: "u8", checker.Uint16: "u16", checker.Uint32: "u32", checker.Uint64: "u64",
@@ -37,21 +37,21 @@ var opNames = map[token.Kind]string{
 	token.ADD: "add", token.SUB: "sub", token.MUL: "mul", token.QUO: "div", token.REM: "mod",
 }
 
-// typeOf devolve o tipo final de e (uma constante sem tipo vira int ou float64).
+// typeOf returns e's final type (an untyped constant becomes int or float64).
 func (g *gen) typeOf(e ast.Expr) checker.Type {
 	return checker.DefaultType(g.info.Types[e])
 }
 
-// intOps são os operadores só de inteiros: bits, deslocamentos e as contas
-// que dão a volta.
+// intOps are the integer-only operators: bits, shifts and the wrapping
+// arithmetic.
 var intOps = map[token.Kind]string{
 	token.AMP: "&", token.OR: "|", token.XOR: "^",
 	token.SHL: "shl", token.SHR: "shr",
 	token.ADD_WRAP: "addw", token.SUB_WRAP: "subw", token.MUL_WRAP: "mulw",
 }
 
-// binop escreve a operação binária op (aritmética ou de inteiros) entre a e
-// b, do tipo t.
+// binop writes the binary operation op (arithmetic or integer) between a and
+// b, of type t.
 func binop(op token.Kind, t checker.Type, a, b string) string {
 	switch op {
 	case token.AMP, token.OR, token.XOR:
@@ -64,7 +64,7 @@ func binop(op token.Kind, t checker.Type, a, b string) string {
 	return arith(op, t, a, b)
 }
 
-// arith escreve a operação op entre a e b, do tipo t.
+// arith writes the operation op between a and b, of type t.
 func arith(op token.Kind, t checker.Type, a, b string) string {
 	if checker.IsFloat(t) {
 		return fmt.Sprintf("(%s %s %s)", a, op, b)
@@ -79,7 +79,7 @@ func neg(t checker.Type, x string) string {
 	return fmt.Sprintf("mlc_neg_%s(%s, __FILE__, __LINE__)", suffix[t], x)
 }
 
-// constant escreve o valor constante v como literal C do tipo t.
+// constant writes the constant value v as a C literal of type t.
 func constant(v any, t checker.Type) string {
 	switch v := v.(type) {
 	case bool:
@@ -98,7 +98,7 @@ func constant(v any, t checker.Type) string {
 		}
 		return intLit(v, t)
 	}
-	panic(fmt.Sprintf("codegen: constante de tipo inesperado %T", v))
+	panic(fmt.Sprintf("codegen: constant of unexpected type %T", v))
 }
 
 func intLit(v *big.Int, t checker.Type) string {
@@ -111,7 +111,7 @@ func intLit(v *big.Int, t checker.Type) string {
 	}
 	var lit string
 	if v.Cmp(big.NewInt(math.MinInt64)) == 0 {
-		lit = "INT64_MIN" // -9223372036854775808 não é um literal válido em C
+		lit = "INT64_MIN" // -9223372036854775808 isn't a valid literal in C
 	} else {
 		lit = "INT64_C(" + v.String() + ")"
 	}
@@ -123,7 +123,7 @@ func intLit(v *big.Int, t checker.Type) string {
 
 func floatLit(f float64, t checker.Type) string {
 	s := strconv.FormatFloat(f, 'g', -1, 64)
-	if !strings.ContainsAny(s, ".eEn") { // "n": Inf e NaN não chegam aqui, mas por garantia
+	if !strings.ContainsAny(s, ".eEn") { // "n": Inf and NaN don't get here, but just in case
 		s += ".0"
 	}
 	if t == checker.Float32 {
@@ -132,8 +132,8 @@ func floatLit(f float64, t checker.Type) string {
 	return s
 }
 
-// convert traduz as conversões entre números. Alargar é só um cast; o que
-// pode não caber passa por uma checagem do runtime, que dá panic.
+// convert translates the conversions between numbers. Widening is just a cast; what
+// may not fit goes through a runtime check, which panics.
 func (g *gen) convert(e *ast.CallExpr, callee checker.Callee) string {
 	x := g.expr(e.Args[0])
 	from, to := g.typeOf(e.Args[0]), callee.Elem
@@ -143,23 +143,23 @@ func (g *gen) convert(e *ast.CallExpr, callee checker.Callee) string {
 		return x
 	case checker.IsFloat(to) && checker.IsFloat(from):
 		if to == checker.Float32 {
-			return "mlc_f64_to_f32(" + x + ")" // estouro vira infinito, sem comportamento indefinido
+			return "mlc_f64_to_f32(" + x + ")" // overflow becomes infinity, without undefined behavior
 		}
 		return cast(x)
 	case checker.IsFloat(to):
-		return cast(x) // inteiro para decimal: sempre definido
+		return cast(x) // integer to real: always defined
 	case checker.IsFloat(from):
 		lo, hi := floatBounds(to)
 		return cast(fmt.Sprintf("mlc_conv_f((double)(%s), %s, %s, %q, __FILE__, __LINE__)", x, lo, hi, to.String()))
 	}
-	// inteiro para inteiro
+	// integer to integer
 	lo, hi := checker.IntRange(to)
 	flo, fhi := checker.IntRange(from)
 	if lo.Cmp(flo) <= 0 && hi.Cmp(fhi) >= 0 {
-		return cast(x) // todo valor de from cabe em to
+		return cast(x) // every value of from fits in to
 	}
 	if checker.IsSigned(from) {
-		// o valor cabe em int64: checa contra a faixa de to (cortada em int64)
+		// the value fits in int64: checks against to's range (cut to int64)
 		maxI64 := big.NewInt(math.MaxInt64)
 		if hi.Cmp(maxI64) > 0 {
 			hi = maxI64
@@ -171,15 +171,15 @@ func (g *gen) convert(e *ast.CallExpr, callee checker.Callee) string {
 		x, intLit(hi, checker.Uint64), to.String()))
 }
 
-// floatBounds dá os limites exclusivos para converter decimal no inteiro t:
-// o valor, truncado, cabe em t se lo < x < hi.
+// floatBounds gives the exclusive bounds for converting a real to the integer t:
+// the value, truncated, fits in t if lo < x < hi.
 func floatBounds(t checker.Type) (string, string) {
 	bits := checker.IntBits(t)
 	var lo, hi float64
 	if checker.IsSigned(t) {
 		hi = math.Ldexp(1, bits-1)
 		lo = -hi - 1
-		if lo == -hi { // -2^63 - 1 não existe em double: usa o anterior
+		if lo == -hi { // -2^63 - 1 doesn't exist in double: uses the previous one
 			lo = math.Nextafter(-hi, math.Inf(-1))
 		}
 	} else {

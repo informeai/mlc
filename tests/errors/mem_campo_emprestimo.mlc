@@ -1,4 +1,4 @@
-// erro: um empréstimo (&T) não pode ser guardado em campos, slices ou arrays
+// error: a borrow (&T) can't be stored in fields, slices or arrays: only in parameters, variables and return values
 struct No {
     valor int
     prox &No

@@ -1,4 +1,4 @@
-// erro: vazamento: o ponteiro dono devolvido aqui é descartado
+// error: leak: the owning pointer returned here is discarded; store it in a variable
 fn main() {
     s := alloc([]int, 1)
     realloc(s, 2)

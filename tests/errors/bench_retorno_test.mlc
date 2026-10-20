@@ -1,4 +1,4 @@
-// erro: o benchmark bench_x recebe b &testing.B e não retorna valor
+// error: the benchmark bench_x takes b &testing.B and returns no value: fn bench_x(b &testing.B)
 import "std/testing"
 
 fn bench_x(b &testing.B) int {

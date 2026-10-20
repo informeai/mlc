@@ -1,4 +1,4 @@
-// erro: replace recebe um elemento emprestado: replace(&s[i]...)
+// error: replace takes a borrowed element: replace(&s[i]...)
 // Achado pelo fuzz de robustez: um operador que não é & antes de s[i]
 // derrubava o compilador.
 fn main() {

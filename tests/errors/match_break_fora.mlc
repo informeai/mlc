@@ -1,4 +1,4 @@
-// erro: break fora de um for
+// error: break outside a for
 fn main() {
     match 1 {
         1 => break

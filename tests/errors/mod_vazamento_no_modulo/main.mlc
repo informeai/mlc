@@ -1,4 +1,4 @@
-// erro: lista.mlc:4:1: vazamento: n ainda é dona da memória
+// error: leak: n still owns the memory (line 2) at the end of the function; free it with free(n) or pass ownership along
 import "lista"
 fn main() {
     lista.faz()

@@ -12,15 +12,15 @@ import (
 	"mlc/internal/driver"
 )
 
-// metaResult junta as divergências de uma rodada.
+// metaResult gathers the divergences of one round.
 type metaResult struct {
 	programs, variants int
-	byKind             map[string]int      // divergências por transformação
-	known              int                 // divergências em programas com empréstimo (o caso conhecido)
-	unexpected         []string            // divergências sem empréstimo: inesperadas
-	holes              []string            // a versão transformada é aceita e o modelo diz insegura
-	modelDiff          []string            // o modelo deu vereditos diferentes: bug no modelo ou na transformação
-	examples           map[string][]string // exemplos das divergências conhecidas, por transformação
+	byKind             map[string]int      // divergences per transformation
+	known              int                 // divergences in programs with a borrow (the known case)
+	unexpected         []string            // divergences without a borrow: unexpected
+	holes              []string            // the transformed version is accepted and the model says unsafe
+	modelDiff          []string            // the model gave different verdicts: a bug in the model or in the transformation
+	examples           map[string][]string // examples of the known divergences, per transformation
 }
 
 func checkVerdict(ss []*Stmt) (accepted, typeErr bool) {
@@ -31,8 +31,8 @@ func checkVerdict(ss []*Stmt) (accepted, typeErr bool) {
 	return false, !ownershipError.MatchString(err.Error())
 }
 
-// metamorphic compara cada programa até o tamanho max com as versões
-// transformadas.
+// metamorphic compares each program up to size max with the
+// transformed versions.
 func metamorphic(max int) *metaResult {
 	r := &metaResult{byKind: map[string]int{}, examples: map[string][]string{}}
 	var mu sync.Mutex
@@ -72,10 +72,10 @@ func metamorphic(max int) *metaResult {
 							if hasRef(ss) && !vterr {
 								r.known++
 								if len(r.examples[v.Kind]) < 3 {
-									r.examples[v.Kind] = append(r.examples[v.Kind], fmt.Sprintf("original aceito: %v\n%s--- %s:\n%s", acc, render(full, 1), v.Kind, render(vf, 1)))
+									r.examples[v.Kind] = append(r.examples[v.Kind], fmt.Sprintf("original accepted: %v\n%s--- %s:\n%s", acc, render(full, 1), v.Kind, render(vf, 1)))
 								}
 							} else {
-								r.unexpected = append(r.unexpected, fmt.Sprintf("%s (original aceito: %v, erro de tipo: %v):\n%s---\n%s", v.Kind, acc, vterr, render(full, 1), render(vf, 1)))
+								r.unexpected = append(r.unexpected, fmt.Sprintf("%s (original accepted: %v, type error: %v):\n%s---\n%s", v.Kind, acc, vterr, render(full, 1), render(vf, 1)))
 							}
 						})
 					}
@@ -98,11 +98,11 @@ func metamorphic(max int) *metaResult {
 	return r
 }
 
-// A cada go test: os programas até o tamanho 3 e as versões transformadas.
-// O modelo precisa dar o mesmo veredito para as duas (a transformação não
-// muda a segurança), o verificador não pode aceitar uma versão insegura, e
-// ele só pode mudar de veredito em programas com empréstimo (o caso
-// conhecido do empréstimo que vale até o último uso no texto).
+// On every go test: the programs up to size 3 and the transformed versions.
+// The model must give the same verdict for both (the transformation doesn't
+// change safety), the checker can't accept an unsafe version, and
+// it can only change its verdict in programs with a borrow (the
+// known case of the borrow that lasts until its last textual use).
 func TestMetamorphic(t *testing.T) {
 	max := 3
 	if s := os.Getenv("MLC_META"); s != "" {
@@ -110,20 +110,20 @@ func TestMetamorphic(t *testing.T) {
 	}
 	r := metamorphic(max)
 	for _, d := range r.modelDiff {
-		t.Errorf("o modelo mudou de veredito com a transformação %s", d)
+		t.Errorf("the model changed its verdict with the transformation %s", d)
 	}
 	for _, h := range r.holes {
-		t.Errorf("o verificador aceitou uma versão insegura (%s)", h)
+		t.Errorf("the checker accepted an unsafe version (%s)", h)
 	}
 	for _, u := range r.unexpected {
-		t.Errorf("o verificador mudou de veredito sem empréstimo no programa: %s", u)
+		t.Errorf("the checker changed its verdict without a borrow in the program: %s", u)
 	}
 	var kinds []string
 	for k := range r.byKind {
 		kinds = append(kinds, k)
 	}
 	sort.Strings(kinds)
-	t.Logf("até o tamanho %d: %d programas, %d versões, %d divergências conhecidas (empréstimo), por transformação: %v", max, r.programs, r.variants, r.known, r.byKind)
+	t.Logf("up to size %d: %d programs, %d versions, %d known divergences (borrow), per transformation: %v", max, r.programs, r.variants, r.known, r.byKind)
 	if os.Getenv("MLC_META") != "" {
 		for _, k := range kinds {
 			for _, ex := range r.examples[k] {

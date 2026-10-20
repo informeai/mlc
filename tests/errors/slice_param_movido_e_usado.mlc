@@ -1,4 +1,4 @@
-// erro: s já foi liberada ou movida (linha 8)
+// error: s was already freed or moved (line 8)
 import "std/io"
 fn consome(s []int) {
     free(s)

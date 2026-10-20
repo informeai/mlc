@@ -1,4 +1,4 @@
-// erro: vazamento: p ainda é dona da memória (linha 5) no continue
+// error: leak: p still owns the memory (line 5) at the continue; free it with free(p) or pass ownership along
 struct Ponto { x int; y int }
 fn main() {
     for i := 0; i < 3; i++ {

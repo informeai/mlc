@@ -1,4 +1,4 @@
-// erro: geometria.mlc:2:12: return: esperado int, encontrado bool
+// error: return: expected int, found bool
 import "geometria"
 fn main() {
 }

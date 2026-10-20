@@ -6,19 +6,19 @@ import "std/thread"
 fn test_send_recv_same_thread() {
     rx := chan.new[int](4)
     tx := rx.sender()
-    testing.check(tx.send(1), "send com receptor aberto")
-    testing.check(tx.send(2), "send com receptor aberto")
+    testing.check(tx.send(1), "send with an open receiver")
+    testing.check(tx.send(2), "send with an open receiver")
     match rx.recv() {
         Got(n) => testing.eq_int(n, 1) // arrival order is sending order
-        Closed => testing.fail("fechado cedo demais")
+        Closed => testing.fail("closed too early")
     }
     match rx.recv() {
         Got(n) => testing.eq_int(n, 2)
-        Closed => testing.fail("fechado cedo demais")
+        Closed => testing.fail("closed too early")
     }
     tx.close()
     match rx.recv() {
-        Got(_) => testing.fail("não havia mais valores")
+        Got(_) => testing.fail("there were no more values")
         Closed => {}
     }
     rx.close()
@@ -27,7 +27,7 @@ fn test_send_recv_same_thread() {
 fn test_closed_without_senders() {
     rx := chan.new[int](1)
     match rx.recv() {
-        Got(_) => testing.fail("sem Sender, recv devolve Closed")
+        Got(_) => testing.fail("without a Sender, recv returns Closed")
         Closed => {}
     }
     rx.close()
@@ -37,7 +37,7 @@ fn test_send_without_receiver() {
     rx := chan.new[[]byte](2)
     tx := rx.sender()
     rx.close()
-    testing.check(!tx.send(alloc([]byte, 8)), "sem Receiver, send devolve false (e libera o valor)")
+    testing.check(!tx.send(alloc([]byte, 8)), "without a Receiver, send returns false (and frees the value)")
     tx.close()
 }
 
@@ -128,7 +128,7 @@ fn test_owned_messages() {
             testing.eq_str(&m, "abc")
             free(m)
         }
-        Closed => testing.fail("a mensagem não chegou")
+        Closed => testing.fail("the message didn't arrive")
     }
     rx.close()
 }

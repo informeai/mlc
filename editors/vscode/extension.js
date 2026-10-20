@@ -1,6 +1,6 @@
-// Extensão do VS Code para o MLC: inicia o `mlc lsp` e liga o editor a ele.
-// As cores básicas vêm da gramática TextMate (syntaxes/); os erros ao digitar,
-// as cores semânticas e a formatação vêm do servidor.
+// VS Code extension for MLC: starts `mlc lsp` and connects the editor to it.
+// The basic colors come from the TextMate grammar (syntaxes/); the errors as you type,
+// the semantic colors and the formatting come from the server.
 const vscode = require("vscode");
 const { LanguageClient } = require("vscode-languageclient/node");
 
@@ -16,7 +16,7 @@ function activate(context) {
   );
   client.start().catch((err) => {
     vscode.window.showErrorMessage(
-      `MLC: não foi possível iniciar "${command} lsp" (${err.message}). Ajuste a configuração mlc.path.`
+      `MLC: couldn't start "${command} lsp" (${err.message}). Adjust the mlc.path setting.`
     );
   });
   context.subscriptions.push({ dispose: () => client && client.stop() });

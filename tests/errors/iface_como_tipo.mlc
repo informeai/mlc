@@ -1,4 +1,4 @@
-// erro: Area é uma interface: nesta versão, interfaces só servem de restrição de genérico
+// error: Area is an interface: in this version, interfaces only serve as generic constraints, like fn f[T Area](x &T)
 interface Area {
     fn area(self &Self) int
 }

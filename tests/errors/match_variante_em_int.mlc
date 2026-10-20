@@ -1,4 +1,4 @@
-// erro: padrão de variante em match sobre int
+// error: variant pattern in a match on int
 fn main() {
     a := 1
     match a {

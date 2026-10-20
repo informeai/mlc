@@ -1,4 +1,4 @@
-// erro: p já foi liberada ou movida
+// error: p was already freed or moved (line 17)
 import "std/io"
 
 struct No {

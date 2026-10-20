@@ -1,4 +1,4 @@
-// erro: slices não podem ser comparados com ==
+// error: slices can't be compared with ==; compare the elements
 import "std/io"
 fn main() {
     a := alloc([]int, 1)

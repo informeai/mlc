@@ -1,4 +1,4 @@
-// erro: a já foi liberada ou movida
+// error: a was already freed or moved (line 20)
 import "std/io"
 import "std/thread"
 import "std/vec"

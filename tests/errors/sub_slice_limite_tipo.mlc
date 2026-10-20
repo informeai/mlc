@@ -1,4 +1,4 @@
-// erro: o índice precisa ser int, encontrado string
+// error: the index must be int, found string
 fn f(s &[]int) {
 }
 fn main() {

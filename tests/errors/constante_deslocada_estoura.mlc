@@ -1,4 +1,4 @@
-// erro: estouro de inteiro na constante: constante 256 não cabe em byte
+// error: integer overflow in the constant: constant 256 doesn't fit in byte (0 to 255)
 fn main() {
     const C = byte(0x80) << 1
 }

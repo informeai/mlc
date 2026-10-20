@@ -42,7 +42,7 @@ fn test_echo() {
         return
     }
     port := l.port()
-    testing.check(port > 0, "o sistema escolheu uma porta")
+    testing.check(port > 0, "the system picked a port")
     t := thread.spawn(echo_once, l, thread.STACK_64KB)
     c := net.connect(&h[:hn], port, &err)
     if c == nil {
@@ -87,7 +87,7 @@ fn test_refused() {
     port := l.port()
     l.close() // nobody listens on that port anymore
     c := net.connect(&h[:hn], port, &err)
-    testing.check(c == nil, "sem servidor, connect falha")
+    testing.check(c == nil, "without a server, connect fails")
     testing.eq_int(err, net.REFUSED)
     if c != nil {
         c.close()
@@ -104,7 +104,7 @@ fn test_port_in_use() {
         return
     }
     b := net.listen(&h[:hn], a.port(), &err)
-    testing.check(b == nil, "a porta já está em uso")
+    testing.check(b == nil, "the port is already in use")
     testing.eq_int(err, net.IN_USE)
     if b != nil {
         b.close()
@@ -117,7 +117,7 @@ fn test_no_host() {
     hn := str.copy(&h, "host-que-nao-existe.invalid")
     err := 0
     c := net.connect(&h[:hn], 80, &err)
-    testing.check(c == nil, "nome inexistente")
+    testing.check(c == nil, "nonexistent name")
     testing.eq_int(err, net.NO_HOST)
     if c != nil {
         c.close()
@@ -152,7 +152,7 @@ fn test_timeout() {
         c.set_timeout(50)
         var buf [8]byte
         match c.read(&buf) {
-            Ok(_) => testing.fail("o servidor não manda nada")
+            Ok(_) => testing.fail("the server sends nothing")
             Err(code) => testing.eq_int(code, net.TIMEOUT)
         }
         c.close()
@@ -195,7 +195,7 @@ fn test_write_after_peer_closed() {
                 }
             }
         }
-        testing.check(failed, "escrever numa conexão fechada falha")
+        testing.check(failed, "writing to a closed connection fails")
         c.close()
     }
 }
@@ -212,7 +212,7 @@ fn test_accept_timeout() {
     l.set_timeout(30)
     c := l.accept(&err)
     if c != nil {
-        testing.fail("ninguém conectou")
+        testing.fail("nobody connected")
         c.close()
     }
     testing.eq_int(err, net.TIMEOUT)

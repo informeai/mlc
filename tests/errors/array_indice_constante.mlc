@@ -1,4 +1,4 @@
-// erro: índice 3 fora dos limites de [3]int (0 a 2)
+// error: index 3 out of bounds of [3]int (0 to 2)
 import "std/io"
 fn main() {
     a := [3]int{1, 2, 3}

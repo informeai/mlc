@@ -1,1 +1,1 @@
-panic: estouro_int8.mlc:4: estouro de int8 na soma
+panic: estouro_int8.mlc:4: overflow of int8 in addition

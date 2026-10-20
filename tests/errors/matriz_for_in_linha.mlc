@@ -1,4 +1,4 @@
-// erro: for in percorre uma variável ou campo
+// error: for in walks a variable or field: store the slice in a variable first
 import "std/io"
 fn main() {
     m := alloc([][]int, 2)

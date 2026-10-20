@@ -1,4 +1,4 @@
-// erro: operador * não se aplica a float64 e int (converta um dos lados: float64(x) ou int(x))
+// error: operator * doesn't apply to float64 and int (convert one of the sides: float64(x) or int(x))
 import "std/io"
 fn main() {
     f := 2.5

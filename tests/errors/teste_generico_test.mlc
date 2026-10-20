@@ -1,4 +1,4 @@
-// erro: o teste test_a não pode ser genérico
+// error: the test test_a can't be generic
 fn test_a[T any]() {
 }
 

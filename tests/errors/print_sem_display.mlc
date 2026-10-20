@@ -1,4 +1,4 @@
-// erro: Q não implementa io.Display: declare impl auto io.Display for Q
+// error: Q doesn't implement io.Display: declare impl auto io.Display for Q (or write the write method)
 import "std/io"
 
 struct Q {

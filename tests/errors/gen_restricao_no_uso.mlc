@@ -1,4 +1,4 @@
-// erro: string não atende ordered, exigida por T em maior
+// error: string doesn't satisfy ordered, required by T in maior
 import "std/io"
 fn maior[T ordered](a T, b T) T {
     if a > b {

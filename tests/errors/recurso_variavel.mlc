@@ -1,4 +1,4 @@
-// erro: No contém ponteiros donos e só pode ser usada através de um ponteiro
+// error: No contains owning pointers and can only be used through a pointer: use *No, ?*No or &No
 struct No {
     valor int
     prox ?*No

@@ -6,14 +6,14 @@ import (
 	"mlc/internal/ast"
 )
 
-// collectConsts avalia as constantes do topo na ordem do arquivo. Uma
-// constante só pode usar as declaradas antes dela.
+// collectConsts evaluates the top-level constants in file order. A
+// constant can only use the ones declared before it.
 func (c *checker) collectConsts(f *ast.File) {
 	for _, d := range f.Consts {
 		c.mod.pendingConsts[d.Name] = true
 	}
 	c.scope = c.mod.global
-	c.cnames = map[string]int{} // constantes não geram nome no C, mas declare conta os nomes
+	c.cnames = map[string]int{} // constants don't produce a C name, but declare counts the names
 	for _, d := range f.Consts {
 		delete(c.mod.pendingConsts, d.Name)
 		c.constDecl(d)
@@ -21,55 +21,55 @@ func (c *checker) collectConsts(f *ast.File) {
 	c.scope = nil
 }
 
-// constDecl avalia uma constante e a declara no escopo atual. O valor é
-// calculado na compilação (numeric.go): estouro e divisão por zero são erros.
-// Sem tipo escrito, a constante continua sem tipo (const N = 5 serve para
-// int8 e para uint64); com tipo, o valor precisa caber nele.
+// constDecl evaluates a constant and declares it in the current scope. The value is
+// computed at compile time (numeric.go): overflow and division by zero are errors.
+// Without a written type, the constant stays untyped (const N = 5 works for
+// int8 and for uint64); with a type, the value must fit in it.
 func (c *checker) constDecl(d *ast.ConstDecl) {
 	if hasCall(d.Value) {
-		c.errorf(d.Value.Pos(), "o valor de uma const precisa ser uma expressão constante: chamadas de função são avaliadas durante a execução")
+		c.errorf(d.Value.Pos(), "a const's value must be a constant expression: function calls are evaluated at run time")
 		c.declare(d.Name, d.P, Invalid, false).Used = true
 		return
 	}
 	t := c.value(d.Value)
 	v, isConst := c.info.Values[d.Value]
 	if t != Invalid && !isConst {
-		c.errorf(d.Value.Pos(), "o valor de uma const precisa ser uma expressão constante (literais, outras constantes e operadores)")
+		c.errorf(d.Value.Pos(), "a const's value must be a constant expression (literals, other constants and operators)")
 		t = Invalid
 	}
 	switch {
 	case d.Type != nil:
 		want := c.resolveType(d.Type, ctxVar)
 		if want != Invalid && !isNumeric(want) && want != Bool && want != String {
-			c.errorf(d.Type.P, "constantes só podem ser números, bool ou string")
+			c.errorf(d.Type.P, "constants can only be numbers, bool or string")
 			want = Invalid
 		}
 		if t != Invalid && want != Invalid {
 			if isUntyped(t) {
 				if !c.convertUntyped(d.Value, want) {
-					c.errorf(d.Value.Pos(), "constante %s: esperado %s, encontrado %s", d.Name, want, t)
+					c.errorf(d.Value.Pos(), "constant %s: expected %s, found %s", d.Name, want, t)
 				}
 			} else {
-				c.assignable(t, want, d.Value.Pos(), "constante "+d.Name)
+				c.assignable(t, want, d.Value.Pos(), "constant "+d.Name)
 			}
 		}
 		t = want
 		v = c.info.Values[d.Value]
 	case t == UntypedInt:
-		// sem tipo, mas precisa caber em algum inteiro de 64 bits
+		// untyped, but it must fit in some 64-bit integer
 		if b, ok := v.(*big.Int); ok && (b.Cmp(minInt64) < 0 || b.Cmp(maxUint64) > 0) {
-			c.errorf(d.Value.Pos(), "constante %s grande demais: não cabe em 64 bits", b)
+			c.errorf(d.Value.Pos(), "constant %s too large: doesn't fit in 64 bits", b)
 			t = Invalid
 		}
 	case t != Invalid && !isNumeric(t) && !isUntyped(t) && t != Bool && t != String:
-		c.errorf(d.Value.Pos(), "constantes só podem ser números, bool ou string")
+		c.errorf(d.Value.Pos(), "constants can only be numbers, bool or string")
 		t = Invalid
 	}
 	l := c.declare(d.Name, d.P, t, false)
 	l.IsConst = true
 	l.Const = v
 	l.Pub = d.Pub
-	l.Used = true // constante não usada não é erro
+	l.Used = true // an unused constant isn't an error
 }
 
 var (
@@ -77,8 +77,8 @@ var (
 	_, maxUint64 = IntRange(Uint64)
 )
 
-// hasCall diz se avaliar e chama alguma função. Conversões (int32(5)) não
-// contam: converter uma constante dá uma constante.
+// hasCall says whether evaluating e calls some function. Conversions (int32(5)) don't
+// count: converting a constant gives a constant.
 func hasCall(e ast.Expr) bool {
 	switch e := e.(type) {
 	case *ast.CallExpr:

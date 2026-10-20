@@ -1,4 +1,4 @@
-// erro: e já foi liberada ou movida (linha 19)
+// error: e was already freed or moved (line 19)
 // Achado pela mutação (make mutate): &e de um enum com donos não conferia
 // se e já tinha sido liberado.
 enum E {

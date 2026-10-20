@@ -1,4 +1,4 @@
-// erro: feche com g.wait()
+// error: leak: g (sync.Group, line 9) may still be open at the end of the function; close it with g.wait()
 import "std/sync"
 import "std/thread"
 

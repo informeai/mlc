@@ -48,7 +48,7 @@ fn test_simple_and_quoted() {
     r := csv.new[Text]()
     var f [64]byte
     want_record(&r, &src, 3)
-    testing.check(r.is(0, "nome") && r.is(2, "obs"), "cabeçalho")
+    testing.check(r.is(0, "nome") && r.is(2, "obs"), "header")
     want_record(&r, &src, 3)
     n := r.field(0, &f)
     testing.eq_str(&f[:n], "café")
@@ -78,7 +78,7 @@ fn test_semicolon_and_no_final_newline() {
     r := csv.new[Text]()
     r.sep = ';'
     want_record(&r, &src, 3)
-    testing.check(r.is(2, "3,5"), "vírgula decimal fica no texto")
+    testing.check(r.is(2, "3,5"), "a decimal comma stays in the text")
     want_record(&r, &src, 3)
     testing.check(r.is(1, "y;z"), "separador entre aspas")
     v := 0.0
@@ -96,13 +96,13 @@ fn test_bad_quotes() {
     src2 := text("a,\"x\"y\n", 64)
     r2 := csv.new[Text]()
     match r2.next(&src2) {
-        Ok(_) => testing.fail("texto depois da aspa")
+        Ok(_) => testing.fail("text after the quote")
         Err(code) => testing.eq_int(code, csv.BAD_QUOTE)
     }
     src3 := text("a,b\"c\n", 64)
     r3 := csv.new[Text]()
     match r3.next(&src3) {
-        Ok(_) => testing.fail("aspa no meio")
+        Ok(_) => testing.fail("quote in the middle")
         Err(code) => testing.eq_int(code, csv.BAD_QUOTE)
     }
 }

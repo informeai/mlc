@@ -1,1 +1,1 @@
-panic: realloc_encolhe_donos.mlc:5: realloc de slice de donos só pode crescer (de 3 para 1); tire os elementos com take ou drain antes
+panic: realloc_encolhe_donos.mlc:5: realloc of a slice of owners can only grow (from 3 to 1); take the elements out with take or drain first

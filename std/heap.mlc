@@ -65,7 +65,7 @@ pub fn (h &Heap[T]) push(x T) {
 // its ownership.
 pub fn (h &Heap[T]) pop() T {
     if h.count == 0 {
-        fail("heap.pop: heap vazio")
+        fail("heap.pop: empty heap")
     }
     h.count--
     h.swap(0, h.count)
@@ -80,7 +80,7 @@ pub fn (h &Heap[T]) pop() T {
 // takes its place.
 pub fn (h &Heap[T]) replace_top(x T) T {
     if h.count == 0 {
-        fail("heap.replace_top: heap vazio")
+        fail("heap.replace_top: empty heap")
     }
     old := replace(&h.items[0], x)
     h.down(0)
@@ -91,7 +91,7 @@ pub fn (h &Heap[T]) replace_top(x T) T {
 // used, the heap stays frozen.
 pub fn (h &Heap[T]) peek() &T {
     if h.count == 0 {
-        fail("heap.peek: heap vazio")
+        fail("heap.peek: empty heap")
     }
     return &h.items[0]
 }

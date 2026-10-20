@@ -1,4 +1,4 @@
-// erro: não dá para devolver um sub-slice
+// error: a sub-slice or an array viewed as a slice can't be returned: the view is created on the spot and vanishes at the end of the function
 fn sub(s &[]int) &[]int {
     return &s[1:2]
 }

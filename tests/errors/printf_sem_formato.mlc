@@ -1,4 +1,4 @@
-// erro: io.printf precisa de um formato
+// error: io.printf needs a format: io.printf("x = {}\n", x)
 import "std/io"
 
 fn main() {

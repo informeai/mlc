@@ -1,4 +1,4 @@
-// erro: valor do tipo *Ponto nunca é nil
+// error: a value of type *Ponto is never nil
 import "std/io"
 struct Ponto { x int; y int }
 fn main() {

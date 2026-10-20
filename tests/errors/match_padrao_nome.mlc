@@ -1,4 +1,4 @@
-// erro: x não é constante: padrão precisa ser um literal, uma constante ou _
+// error: x isn't a constant: a pattern must be a literal, a constant or _
 fn main() {
     x := 1
     match 1 {

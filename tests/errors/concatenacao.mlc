@@ -1,4 +1,4 @@
-// erro: concatenação de strings exige alocação explícita
+// error: string concatenation requires explicit allocation: build the text in a buffer (see docs/text.md)
 import "std/io"
 fn main() {
     io.print("a" + "b")

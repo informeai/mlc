@@ -1,4 +1,4 @@
-// erro: {:.2s} no formato de str.format: {:s} só aceita largura e alinhamento
+// error: {:.2s} in the format of str.format: {:s} only accepts width and alignment: {:s}, {:<10s}
 import "std/io"
 import "std/str"
 

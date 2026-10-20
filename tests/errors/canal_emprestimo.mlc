@@ -1,4 +1,4 @@
-// erro: um canal não leva empréstimos
+// error: a channel doesn't carry borrows: values pass from one thread to another by ownership
 import "std/chan"
 import "std/io"
 

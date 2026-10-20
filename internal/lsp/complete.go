@@ -16,21 +16,21 @@ import (
 	"mlc/std"
 )
 
-// Sugestões ao digitar (textDocument/completion)
+// Completions as you type (textDocument/completion)
 //
-// O contexto vem do texto antes do cursor:
+// The context comes from the text before the cursor:
 //
-//	io.pr|        os membros públicos do módulo io
-//	conta.sa|     os campos e métodos do tipo de conta
-//	import "std/v|  os módulos
-//	tot|          o que é visível ali: variáveis, funções, tipos, módulos,
-//	              funções embutidas e palavras reservadas
+//	io.pr|        the io module's public members
+//	account.ba|   the fields and methods of account's type
+//	import "std/v|  the modules
+//	tot|          what's visible there: variables, functions, types, modules,
+//	              built-in functions and keywords
 //
-// Os tipos vêm da análise do programa. Enquanto se digita, o texto quase
-// sempre está incompleto (io. sem nada depois); então a análise é tentada
-// com o texto atual, depois com um nome provisório no lugar do cursor,
-// depois com a linha do cursor em branco e, por fim, a última que deu certo
-// para o documento é usada.
+// The types come from the program's analysis. While typing, the text is almost
+// always incomplete (io. with nothing after it); so the analysis is tried
+// with the current text, then with a placeholder name at the cursor,
+// then with the cursor's line blank and, at last, the last one that succeeded
+// for the document is used.
 
 type completionItem struct {
 	Label         string  `json:"label"`
@@ -45,7 +45,7 @@ type markup struct {
 	Value string `json:"value"`
 }
 
-// CompletionItemKind do LSP.
+// The LSP's CompletionItemKind.
 const (
 	kindMethod     = 2
 	kindFunction   = 3
@@ -60,17 +60,17 @@ const (
 	kindStruct     = 22
 )
 
-// placeholder é o nome posto no lugar do cursor quando o texto atual não
-// passa pelo parser (io. sem nada depois).
+// placeholder is the name put at the cursor when the current text doesn't
+// get through the parser (io. with nothing after it).
 const placeholder = "mlc_completion"
 
-// cctx é o contexto do cursor, lido do texto.
+// cctx is the cursor's context, read from the text.
 type cctx struct {
-	prefix     string   // o pedaço de nome já digitado
-	chain      []string // antes do '.': conta.dono. dá [conta dono]; nil sem '.'
-	member     bool     // depois de um '.'
-	inImport   bool     // dentro do caminho de um import
-	importPath string   // o caminho digitado até o cursor (std/v)
+	prefix     string   // the piece of name already typed
+	chain      []string // before the '.': account.owner. gives [account owner]; nil without '.'
+	member     bool     // after a '.'
+	inImport   bool     // inside an import's path
+	importPath string   // the path typed up to the cursor (std/v)
 }
 
 func completionContext(src []byte, off int) cctx {
@@ -92,7 +92,7 @@ func completionContext(src []byte, off int) cctx {
 		return ctx
 	}
 	ctx.member = true
-	// a cadeia de nomes antes do '.': a.b.c.
+	// the chain of names before the '.': a.b.c.
 	end := start - 1
 	for {
 		w := end
@@ -100,7 +100,7 @@ func completionContext(src []byte, off int) cctx {
 			w--
 		}
 		if w == end {
-			ctx.chain = nil // )., ]. ou nada: o tipo não é lido pelo texto
+			ctx.chain = nil // )., ]. or nothing: the type isn't read from the text
 			return ctx
 		}
 		ctx.chain = append([]string{string(src[w:end])}, ctx.chain...)
@@ -118,7 +118,7 @@ func (s *server) completion(m *message) {
 		Position     position `json:"position"`
 	}
 	if json.Unmarshal(m.Params, &p) != nil {
-		s.conn.replyError(m.ID, codeInvalidParams, "parâmetros inválidos")
+		s.conn.replyError(m.ID, codeInvalidParams, "invalid parameters")
 		return
 	}
 	text, ok := s.docs[p.TextDocument.URI]
@@ -138,8 +138,8 @@ func (s *server) completion(m *message) {
 	s.conn.reply(m.ID, map[string]any{"isIncomplete": false, "items": items})
 }
 
-// analyzeForCompletion analisa o programa do documento, tolerando o texto
-// incompleto de quem está digitando.
+// analyzeForCompletion analyzes the document's program, tolerating the
+// incomplete text of whoever is typing.
 func (s *server) analyzeForCompletion(uri, path string, src []byte, off int, read driver.Loader) *driver.Program {
 	if prog := driver.Analyze(path, read); prog != nil {
 		s.lastProg[uri] = prog
@@ -153,13 +153,13 @@ func (s *server) analyzeForCompletion(uri, path string, src []byte, off int, rea
 			return read(name)
 		}
 	}
-	// um nome provisório no cursor: io. vira io.mlc_completion
+	// a placeholder name at the cursor: io. becomes io.mlc_completion
 	patched := append(append(append([]byte{}, src[:off]...), placeholder...), src[off:]...)
 	if prog := driver.Analyze(path, with(patched)); prog != nil {
 		s.lastProg[uri] = prog
 		return prog
 	}
-	// a linha do cursor em branco (do mesmo tamanho, para as posições não mudarem)
+	// the cursor's line blank (of the same length, so the positions don't change)
 	blank := append([]byte{}, src...)
 	for i := off - 1; i >= 0 && blank[i] != '\n'; i-- {
 		blank[i] = ' '
@@ -174,7 +174,7 @@ func (s *server) analyzeForCompletion(uri, path string, src []byte, off int, rea
 	return s.lastProg[uri]
 }
 
-// complete monta as sugestões. prog pode ser nil (nada analisado ainda).
+// complete builds the completions. prog can be nil (nothing analyzed yet).
 func complete(prog *driver.Program, read driver.Loader, src []byte, off int, ctx cctx) []completionItem {
 	if ctx.inImport {
 		return importItems(prog, ctx.importPath)
@@ -213,8 +213,8 @@ func complete(prog *driver.Program, read driver.Loader, src []byte, off int, ctx
 	return filterItems(dedupe(items), ctx.prefix)
 }
 
-// filterItems deixa os itens que começam com o que já foi digitado, sem
-// diferenciar maiúsculas (como os editores filtram).
+// filterItems keeps the items that start with what was already typed,
+// case-insensitively (as editors filter).
 func filterItems(items []completionItem, prefix string) []completionItem {
 	if prefix == "" {
 		return items
@@ -248,10 +248,10 @@ func doc(text string) *markup {
 	return &markup{Kind: "markdown", Value: text}
 }
 
-// ---------- módulos ----------
+// ---------- modules ----------
 
-// importItems sugere os módulos da biblioteca padrão e os .mlc da pasta do
-// programa. O editor troca só o pedaço depois da última '/'.
+// importItems suggests the standard library's modules and the .mlc files of the
+// program's folder. The editor replaces only the piece after the last '/'.
 func importItems(prog *driver.Program, typed string) []completionItem {
 	var paths []string
 	entries, _ := fs.ReadDir(std.FS, ".")
@@ -282,8 +282,8 @@ func importItems(prog *driver.Program, typed string) []completionItem {
 	return items
 }
 
-// moduleBuiltins são as funções e tipos embutidos no compilador, que não
-// estão declarados no arquivo do módulo.
+// moduleBuiltins are the functions and types built into the compiler, which aren't
+// declared in the module's file.
 var moduleBuiltins = map[string][]struct {
 	name, doc string
 	kind      int
@@ -295,7 +295,7 @@ var moduleBuiltins = map[string][]struct {
 	"std/mutex":  {{"new", "mutex.new", kindFunction}, {"Mutex", "Mutex", kindStruct}, {"Guard", "Guard", kindStruct}},
 }
 
-// moduleItems sugere o que o módulo exporta.
+// moduleItems suggests what the module exports.
 func moduleItems(n *navigator, mod *checker.Source) []completionItem {
 	text := n.fileText(mod.File)
 	var items []completionItem
@@ -335,7 +335,7 @@ func moduleItems(n *navigator, mod *checker.Source) []completionItem {
 	return items
 }
 
-// topLevelItems sugere as declarações do próprio arquivo.
+// topLevelItems suggests the file's own declarations.
 func topLevelItems(n *navigator) []completionItem {
 	text := n.text
 	var items []completionItem
@@ -386,9 +386,9 @@ func keywordItems() []completionItem {
 	return items
 }
 
-// ---------- membros de um tipo ----------
+// ---------- members of a type ----------
 
-// memberItems sugere os campos e métodos de um valor do tipo t.
+// memberItems suggests the fields and methods of a value of type t.
 func memberItems(n *navigator, t checker.Type) []completionItem {
 	switch u := t.(type) {
 	case *checker.Borrow:
@@ -410,7 +410,7 @@ func memberItems(n *navigator, t checker.Type) []completionItem {
 	return dedupe(items)
 }
 
-// specialMembers são os métodos embutidos de threads, canais, mutex e do
+// specialMembers are the built-in methods of threads, channels, mutexes and
 // io.Writer (printf).
 func specialMembers(s *checker.Struct) []completionItem {
 	var names []string
@@ -438,8 +438,8 @@ func specialMembers(s *checker.Struct) []completionItem {
 	return items
 }
 
-// declaredMethods lê os métodos da struct no arquivo dela (os de structs
-// genéricas também, pela declaração).
+// declaredMethods reads the struct's methods from its file (those of generic
+// structs too, by the declaration).
 func declaredMethods(n *navigator, s *checker.Struct) []completionItem {
 	base := s
 	if s.Origin != nil {
@@ -476,7 +476,7 @@ func declaredMethods(n *navigator, s *checker.Struct) []completionItem {
 	return items
 }
 
-// implMethods sugere os métodos que vêm de um impl (cmp, eq, hash, write).
+// implMethods suggests the methods that come from an impl (cmp, eq, hash, write).
 func implMethods(n *navigator, t checker.Type) []completionItem {
 	var items []completionItem
 	for _, im := range n.prog.Info.Impls {
@@ -491,8 +491,8 @@ func implMethods(n *navigator, t checker.Type) []completionItem {
 	return items
 }
 
-// implFor diz se um impl do tipo it vale para valores do tipo t (o mesmo
-// tipo, a mesma struct genérica, ou um impl genérico de []T para um slice).
+// implFor says whether an impl of the type it applies to values of type t (the same
+// type, the same generic struct, or a generic impl of []T for a slice).
 func implFor(it, t checker.Type) bool {
 	if it == t {
 		return true
@@ -510,16 +510,16 @@ func implFor(it, t checker.Type) bool {
 	return false
 }
 
-// ---------- o que é visível no cursor ----------
+// ---------- what's visible at the cursor ----------
 
-// scope encontra as variáveis visíveis no cursor, na função que o contém.
+// scope finds the variables visible at the cursor, in the function that contains it.
 type scope struct {
 	n      *navigator
 	lines  lineIndex
 	off    int
 	fn     *ast.FuncDecl
 	blocks []*ast.Block
-	locals []*checker.Local // as visíveis, a última declaração de cada nome por último
+	locals []*checker.Local // the visible ones, the last declaration of each name last
 }
 
 func newScope(n *navigator, src []byte, off int) *scope {
@@ -539,7 +539,7 @@ func newScope(n *navigator, src []byte, off int) *scope {
 	})
 	info := n.prog.Info
 	var found []*checker.Local
-	// os parâmetros (e o receptor): pela função checada, ou pelos usos
+	// the parameters (and the receiver): from the checked function, or from the uses
 	for _, f := range info.Funcs {
 		if f.Decl == sc.fn {
 			found = append(found, f.Params...)
@@ -595,8 +595,8 @@ func (sc *scope) inside(p int) bool {
 	return sc.at(sc.fn.Body.P) <= p && p <= sc.at(sc.fn.Body.End)
 }
 
-// visibleFrom diz se uma declaração em p ainda vale no cursor: o bloco mais
-// interno que a contém também contém o cursor.
+// visibleFrom says whether a declaration at p still applies at the cursor: the innermost
+// block that contains it also contains the cursor.
 func (sc *scope) visibleFrom(p int) bool {
 	var inner *ast.Block
 	for _, b := range sc.blocks {
@@ -609,7 +609,7 @@ func (sc *scope) visibleFrom(p int) bool {
 	return inner == nil || (sc.at(inner.P) <= sc.off && sc.off <= sc.at(inner.End))
 }
 
-// local devolve a variável visível com esse nome (a declarada por último).
+// local returns the visible variable with that name (the one declared last).
 func (sc *scope) local(name string) *checker.Local {
 	for i := len(sc.locals) - 1; i >= 0; i-- {
 		if sc.locals[i].Name == name {
@@ -619,7 +619,7 @@ func (sc *scope) local(name string) *checker.Local {
 	return nil
 }
 
-// chainType devolve o tipo de a.b.c, com a uma variável visível.
+// chainType returns the type of a.b.c, with a a visible variable.
 func (sc *scope) chainType(chain []string) checker.Type {
 	l := sc.local(chain[0])
 	if l == nil {
@@ -660,14 +660,14 @@ func (sc *scope) items() []completionItem {
 	return items
 }
 
-// variantItems sugere as variantes do enum de um match que contém o cursor.
+// variantItems suggests the enum variants of a match that contains the cursor.
 func (sc *scope) variantItems() []completionItem {
 	if sc.fn == nil {
 		return nil
 	}
 	var items []completionItem
-	// o match não guarda onde o } dele fica: ele vai até o próximo comando do
-	// bloco (ou até o fim do bloco)
+	// the match doesn't keep where its } is: it goes until the block's next
+	// statement (or until the end of the block)
 	walkNodes(sc.fn.Body, func(x any) {
 		b, ok := x.(*ast.Block)
 		if !ok {
@@ -690,7 +690,7 @@ func (sc *scope) variantItems() []completionItem {
 	return dedupe(items)
 }
 
-// enumVariants sugere as variantes do enum sobre o qual o match é feito.
+// enumVariants suggests the variants of the enum the match is on.
 func (sc *scope) enumVariants(m *ast.MatchStmt) []completionItem {
 	t := sc.n.prog.Info.Types[m.Subject]
 	if b, ok := t.(*checker.Borrow); ok {
@@ -715,7 +715,7 @@ func (sc *scope) enumVariants(m *ast.MatchStmt) []completionItem {
 	return items
 }
 
-// walkNodes visita os nós da AST a partir de root.
+// walkNodes visits the AST's nodes starting at root.
 func walkNodes(root any, f func(any)) {
 	var walk func(v reflect.Value)
 	walk = func(v reflect.Value) {
@@ -739,8 +739,8 @@ func walkNodes(root any, f func(any)) {
 	walk(reflect.ValueOf(root))
 }
 
-// maxPosOf devolve a maior posição dentro de um nó (onde ele termina, mais
-// ou menos).
+// maxPosOf returns the largest position inside a node (where it ends, more
+// or less).
 func maxPosOf(root any) token.Pos {
 	var best token.Pos
 	walkNodes(root, func(x any) {

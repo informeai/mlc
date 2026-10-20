@@ -1,4 +1,4 @@
-// erro: uma struct com donos só existe atrás de ponteiro
+// error: a struct with owners only exists behind a pointer: use ?*Par
 // Cobertura do verificador (fase 5): regra de posse que nenhum teste disparava.
 struct Box {
     v int

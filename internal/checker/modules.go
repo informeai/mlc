@@ -9,31 +9,31 @@ import (
 	"mlc/std"
 )
 
-// Arquivos (módulos)
+// Files (modules)
 //
-// Cada arquivo .mlc é um módulo. "import \"geometria\"" dá acesso às
-// declarações públicas (pub) de geometria.mlc: geometria.area(p),
-// geometria.Ponto{...}, geometria.PI. O que não é pub fica privado ao arquivo.
-// A biblioteca padrão (import "std/io") também é feita de arquivos .mlc,
-// embutidos no compilador.
+// Each .mlc file is a module. "import \"geometry\"" gives access to the
+// public (pub) declarations of geometry.mlc: geometry.area(p),
+// geometry.Point{...}, geometry.PI. What isn't pub stays private to the file.
+// The standard library (import "std/io") is also made of .mlc files,
+// built into the compiler.
 
 type module struct {
-	name   string // nome usado para qualificar (geometria); "" no principal
-	path   string // caminho do import (util/texto); "" no principal
+	name   string // name used to qualify (geometry); "" in the main file
+	path   string // import path (util/text); "" in the main file
 	file   string
-	prefix string // prefixo dos nomes no C, para não colidir entre arquivos
-	std    bool   // arquivo da biblioteca padrão
-	test   bool   // arquivo de teste (só o principal)
+	prefix string // prefix of the names in C, so they don't collide between files
+	std    bool   // a standard library file
+	test   bool   // a test file (only the main one)
 
-	uses     map[string]*module // arquivos importados, pelo nome
+	uses     map[string]*module // imported files, by name
 	funcs    map[string]*Func
-	generics map[string]*Func // funções genéricas (só a definição; as instâncias são criadas no uso)
+	generics map[string]*Func // generic functions (only the definition; the instances are created on use)
 	structs  map[string]*Struct
 	enums    map[string]*Enum
 	ifaces   map[string]*Interface
-	global   *scope // constantes do topo; pai do escopo de cada função
+	global   *scope // top-level constants; parent of each function's scope
 
-	pendingConsts map[string]bool // constantes do topo ainda não avaliadas
+	pendingConsts map[string]bool // top-level constants not evaluated yet
 }
 
 func (c *checker) newModule(src Source, i int) *module {
@@ -56,11 +56,11 @@ func (c *checker) newModule(src Source, i int) *module {
 	return m
 }
 
-// entry diz se o módulo em checagem é o arquivo principal.
+// entry says whether the module being checked is the main file.
 func (c *checker) entry() bool { return c.mod.path == "" }
 
-// qualify devolve o nome de uma declaração como quem importa o vê:
-// geometria.Ponto. No arquivo principal, só o nome.
+// qualify returns a declaration's name as the importer sees it:
+// geometry.Point. In the main file, just the name.
 func (c *checker) qualify(name string) string {
 	if c.mod.name == "" {
 		return name
@@ -72,24 +72,24 @@ func (c *checker) collectImports(f *ast.File) {
 	for _, imp := range f.Imports {
 		m := c.modules[imp.Path]
 		if m == nil {
-			c.errorf(imp.P, "módulo desconhecido %q: o arquivo não foi carregado", imp.Path)
+			c.errorf(imp.P, "unknown module %q: the file wasn't loaded", imp.Path)
 			continue
 		}
 		switch {
 		case c.mod.uses[m.name] == m:
-			c.errorf(imp.P, "módulo %q importado duas vezes", imp.Path)
+			c.errorf(imp.P, "module %q imported twice", imp.Path)
 		case predeclared[m.name]:
-			c.errorf(imp.P, "o arquivo %s.mlc não pode ser importado: %q é um nome reservado", imp.Path, m.name)
+			c.errorf(imp.P, "the file %s.mlc can't be imported: %q is a reserved name", imp.Path, m.name)
 		case c.mod.uses[m.name] != nil:
-			c.errorf(imp.P, "dois imports com o mesmo nome %s (%q e %q)", m.name, c.mod.uses[m.name].path, imp.Path)
+			c.errorf(imp.P, "two imports with the same name %s (%q and %q)", m.name, c.mod.uses[m.name].path, imp.Path)
 		default:
 			c.mod.uses[m.name] = m
 		}
 	}
 }
 
-// userModule devolve o arquivo importado com o nome de e, se e é um nome de
-// módulo que nenhuma variável esconde.
+// userModule returns the imported file with e's name, if e is a module
+// name no variable hides.
 func (c *checker) userModule(e ast.Expr) *module {
 	id, ok := e.(*ast.Ident)
 	if !ok || c.scope.lookup(id.Name) != nil {
@@ -98,33 +98,33 @@ func (c *checker) userModule(e ast.Expr) *module {
 	return c.mod.uses[id.Name]
 }
 
-// moduleStruct procura a struct pública name no arquivo importado mod.
+// moduleStruct looks for the public struct name in the imported file mod.
 func (c *checker) moduleStruct(modName string, name string, pos token.Pos) Type {
 	m := c.mod.uses[modName]
 	if m == nil {
-		c.errorf(pos, "módulo %s não foi importado", modName)
+		c.errorf(pos, "module %s wasn't imported", modName)
 		return Invalid
 	}
 	s := m.structs[name]
 	switch {
 	case s == nil:
-		c.errorf(pos, "%s.%s não existe", modName, name)
+		c.errorf(pos, "%s.%s doesn't exist", modName, name)
 		return Invalid
 	case !s.Pub:
-		c.errorf(pos, "%s.%s não é pública (declare com pub struct)", modName, name)
+		c.errorf(pos, "%s.%s isn't public (declare it with pub struct)", modName, name)
 		return Invalid
 	}
 	return s
 }
 
-// moduleCall checa geometria.area(...).
+// moduleCall checks geometry.area(...).
 func (c *checker) moduleCall(e *ast.CallExpr, m *module, sel *ast.SelectorExpr) Type {
 	fn := m.funcs[sel.Sel]
 	switch {
 	case fn == nil:
-		c.errorf(sel.SelPos, "%s.%s não existe", m.name, sel.Sel)
+		c.errorf(sel.SelPos, "%s.%s doesn't exist", m.name, sel.Sel)
 	case !fn.Pub:
-		c.errorf(sel.SelPos, "%s.%s não é pública (declare com pub fn)", m.name, sel.Sel)
+		c.errorf(sel.SelPos, "%s.%s isn't public (declare it with pub fn)", m.name, sel.Sel)
 	default:
 		return c.userCall(e, fn)
 	}
@@ -132,30 +132,30 @@ func (c *checker) moduleCall(e *ast.CallExpr, m *module, sel *ast.SelectorExpr) 
 	return Invalid
 }
 
-// moduleConst checa geometria.PI usado como valor.
+// moduleConst checks geometry.PI used as a value.
 func (c *checker) moduleConst(e *ast.SelectorExpr, m *module) Type {
 	l := m.global.names[e.Sel]
 	switch {
 	case ioBuiltin(m, e.Sel) != "" || threadBuiltin(m, e.Sel) != "":
-		c.errorf(e.SelPos, "%s.%s só pode ser usado como chamada", m.name, e.Sel)
+		c.errorf(e.SelPos, "%s.%s can only be used as a call", m.name, e.Sel)
 	case l != nil && !l.Pub:
-		c.errorf(e.SelPos, "%s.%s não é pública (declare com pub const)", m.name, e.Sel)
+		c.errorf(e.SelPos, "%s.%s isn't public (declare it with pub const)", m.name, e.Sel)
 	case l != nil:
 		c.info.Values[e] = l.Const
 		return l.Type
 	case m.funcs[e.Sel] != nil && !m.funcs[e.Sel].Pub:
-		c.errorf(e.SelPos, "%s.%s não é pública (declare com pub fn)", m.name, e.Sel)
+		c.errorf(e.SelPos, "%s.%s isn't public (declare it with pub fn)", m.name, e.Sel)
 	case m.funcs[e.Sel] != nil:
 		return c.funcRef(e, m.funcs[e.Sel])
 	case m.structs[e.Sel] != nil:
-		c.errorf(e.SelPos, "tipo %s.%s usado como valor (para criar um valor: %s.%s{...})", m.name, e.Sel, m.name, e.Sel)
+		c.errorf(e.SelPos, "type %s.%s used as a value (to create a value: %s.%s{...})", m.name, e.Sel, m.name, e.Sel)
 	default:
-		c.errorf(e.SelPos, "%s.%s não existe", m.name, e.Sel)
+		c.errorf(e.SelPos, "%s.%s doesn't exist", m.name, e.Sel)
 	}
 	return Invalid
 }
 
-// StdModule diz se name é um módulo da biblioteca padrão (std/name).
+// StdModule says whether name is a standard library module (std/name).
 func StdModule(name string) bool {
 	_, err := std.FS.ReadFile(name + ".mlc")
 	return err == nil

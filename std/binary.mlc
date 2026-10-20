@@ -23,7 +23,7 @@ extern fn fail(msg string)
 
 fn need(b &[]byte, n int) {
     if len(b) < n {
-        fail("binary: o slice é curto demais para o valor")
+        fail("binary: the slice is too short for the value")
     }
 }
 

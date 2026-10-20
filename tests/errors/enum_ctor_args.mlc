@@ -1,4 +1,4 @@
-// erro: Forma.Circulo espera 1 valor(es), recebeu 2
+// error: Forma.Circulo expects 1 value(s), got 2
 enum Forma {
     Circulo(raio float64)
     Vazio

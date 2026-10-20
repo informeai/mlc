@@ -1,4 +1,4 @@
-// erro: vazamento: p ainda é dona da memória (linha 6) no break
+// error: leak: p still owns the memory (line 6) at the break; free it with free(p) or pass ownership along
 import "std/io"
 struct Ponto { x int; y int }
 fn main() {

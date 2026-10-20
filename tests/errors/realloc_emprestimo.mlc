@@ -1,4 +1,4 @@
-// erro: realloc precisa do dono do slice: um empréstimo (&[]int) não pode ser realocado
+// error: realloc needs the slice's owner: a borrow (&[]int) can't be reallocated
 fn f(s &[]int) {
     s2 := realloc(s, 4)
     free(s2)

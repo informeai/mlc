@@ -1,4 +1,4 @@
-// erro: um guard é da thread que travou o mutex: não pode ficar em campos nem em slices
+// error: a guard belongs to the thread that locked the mutex: it can't be in fields or slices (which can go to another thread)
 import "std/atomic"
 import "std/io"
 import "std/mutex"

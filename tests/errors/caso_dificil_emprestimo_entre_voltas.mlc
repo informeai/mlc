@@ -1,4 +1,4 @@
-// erro: x está emprestada a r
+// error: x is borrowed by r (line 34) until line 40: use r, or finish using r first
 // Caso difícil (fase 5 do plano de verificação): empréstimo feito antes do laço, origem liberada e refeita numa volta e o empréstimo usado na seguinte.
 struct Box {
     v int

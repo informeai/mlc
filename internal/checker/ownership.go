@@ -7,31 +7,31 @@ import (
 	"mlc/internal/token"
 )
 
-// Verificador de posse (docs/memory.md)
+// Ownership checker (docs/memory.md)
 //
-// Roda depois da checagem de tipos, uma vez por função. Acompanha o estado de
-// cada caminho dono: uma variável (p) ou um campo ponteiro alcançado a partir
-// dela (p.prox, p.prox.prox, l.cabeca). Estados possíveis:
+// Runs after type checking, once per function. It follows the state of
+// each owning path: a variable (p) or a pointer field reached from
+// it (p.next, p.next.next, l.head). Possible states:
 //
-//	sLive: é dona de memória e precisa liberá-la ou passá-la adiante
-//	sNull: vale nil (só ?*T)
-//	sDead: foi liberada ou movida; não pode ser usada
+//	sLive: owns memory and must free it or pass it along
+//	sNull: is nil (only ?*T)
+//	sDead: was freed or moved; can't be used
 //
-// e um quarto bit, sOpaque, que diz o que se sabe dos campos do objeto
-// apontado: sem ele, o objeto saiu de alloc(T) e seus campos ponteiro valem
-// nil; com ele, o objeto veio de fora (parâmetro, função) e cada campo pode
-// ser dono ou nil.
+// and a fourth bit, sOpaque, which says what's known about the fields of the pointed-to
+// object: without it, the object came out of alloc(T) and its pointer fields are
+// nil; with it, the object came from outside (a parameter, a function) and each field can
+// be an owner or nil.
 //
-// Onde dois caminhos se juntam, os estados se unem. É erro: usar o que pode
-// estar sDead; usar o conteúdo do que pode ser nil; liberar duas vezes;
-// sobrescrever o que pode estar sLive; sair do escopo de uma variável que pode
-// estar sLive (vazamento); liberar um objeto cujos campos ainda podem ser donos.
+// Where two paths join, the states are merged. It's an error to: use what may
+// be sDead; use the pointee of what may be nil; free twice;
+// overwrite what may be sLive; leave the scope of a variable that may
+// be sLive (a leak); free an object whose fields may still be owners.
 //
-// Laços: o corpo é analisado até o estado do começo da volta estabilizar
-// (ponto fixo), com os erros silenciados; depois, uma última passada com o
-// estado estável reporta os erros. Assim a segunda volta em diante também é
-// verificada: liberar dentro do laço o que veio de fora vira free duplo, e
-// alocar sem liberar vira sobrescrita.
+// Loops: the body is analyzed until the state at the start of the iteration stabilizes
+// (fixed point), with errors muted; then, one last pass with the
+// stable state reports the errors. That way the second iteration onward is also
+// checked: freeing inside the loop what came from outside becomes a double free, and
+// allocating without freeing becomes an overwrite.
 
 type ownState uint8
 
@@ -44,10 +44,10 @@ const (
 	sObligation = sLive | sNull | sDead
 )
 
-// closerOf devolve o nome do método que consome um handle da biblioteca
-// padrão (receptor *T, sem outros parâmetros): close, ou wait no sync.Group.
-// hasFreeMethod diz se t é *S com S tendo um método free que consome o
-// ponteiro (fn (x *S) free()).
+// closerOf returns the name of the method that consumes a standard library
+// handle (a *T receiver, without other parameters): close, or wait in sync.Group.
+// hasFreeMethod says whether t is *S with S having a free method that consumes the
+// pointer (fn (x *S) free()).
 func hasFreeMethod(t Type) bool {
 	p, ok := t.(*Pointer)
 	if !ok {
@@ -77,8 +77,8 @@ func closerOf(s *Struct) string {
 	return "close"
 }
 
-// pathKey identifica um caminho: a variável raiz e os campos a partir dela
-// ("" para a própria variável, "prox.prox" para p.prox.prox).
+// pathKey identifies a path: the root variable and the fields from it
+// ("" for the variable itself, "next.next" for p.next.next).
 type pathKey struct {
 	root   *Local
 	fields string
@@ -101,7 +101,7 @@ func (k pathKey) parent() pathKey {
 	return pathKey{k.root, k.fields[:i]}
 }
 
-// under diz se k fica estritamente abaixo de p.
+// under says whether k is strictly below p.
 func (k pathKey) under(p pathKey) bool {
 	if k.root != p.root || k.fields == p.fields {
 		return false
@@ -109,7 +109,7 @@ func (k pathKey) under(p pathKey) bool {
 	return p.fields == "" || strings.HasPrefix(k.fields, p.fields+".")
 }
 
-// rel devolve os campos de k relativos a p (k precisa estar abaixo de p).
+// rel returns k's fields relative to p (k must be below p).
 func (k pathKey) rel(p pathKey) string {
 	if p.fields == "" {
 		return k.fields
@@ -134,7 +134,7 @@ func elemOf(t Type) Type {
 	return t
 }
 
-// pathType devolve o tipo do caminho k.
+// pathType returns the type of the path k.
 func pathType(k pathKey) Type {
 	t := k.root.Type
 	if k.fields == "" {
@@ -146,9 +146,9 @@ func pathType(k pathKey) Type {
 	return t
 }
 
-// objectOf devolve o caminho do objeto que contém o campo k: o prefixo
-// ponteiro mais próximo (structs guardadas por valor fazem parte do mesmo
-// objeto).
+// objectOf returns the path of the object that contains the field k: the nearest
+// pointer prefix (structs kept by value are part of the same
+// object).
 func objectOf(k pathKey) pathKey {
 	p := k.parent()
 	for !p.isRoot() && !isPointerType(pathType(p)) {
@@ -157,8 +157,8 @@ func objectOf(k pathKey) pathKey {
 	return p
 }
 
-// ownerFields lista os campos donos de um objeto do tipo t, inclusive os de
-// structs guardadas por valor ("prox", "no.prox").
+// ownerFields lists the owning fields of an object of type t, including those of
+// structs kept by value ("next", "node.next").
 func ownerFields(t Type, prefix string) []string {
 	s, ok := t.(*Struct)
 	if !ok {
@@ -176,8 +176,8 @@ func ownerFields(t Type, prefix string) []string {
 	return out
 }
 
-// ownFlow é o estado de cada caminho num ponto do código. nil significa
-// ponto inalcançável (depois de return, break ou continue).
+// ownFlow is the state of each path at a point of the code. nil means
+// an unreachable point (after return, break or continue).
 type ownFlow map[pathKey]ownState
 
 func (f ownFlow) clone() ownFlow {
@@ -196,8 +196,8 @@ func (f ownFlow) has(root *Local) bool {
 	return ok
 }
 
-// get devolve o estado de k, deduzindo o de campos que não foram tocados a
-// partir do objeto que os contém.
+// get returns k's state, deducing that of fields that weren't touched from
+// the object that contains them.
 func (f ownFlow) get(k pathKey) ownState {
 	if v, ok := f[k]; ok {
 		return v
@@ -210,7 +210,7 @@ func (f ownFlow) get(k pathKey) ownState {
 		return 0
 	}
 	if obj&sOpaque == 0 {
-		return sNull // objeto saído de alloc(T): campos ponteiro zerados
+		return sNull // object out of alloc(T): pointer fields zeroed
 	}
 	if p, ok := pathType(k).(*Pointer); ok && !p.Nullable {
 		return sLive | sOpaque
@@ -218,8 +218,8 @@ func (f ownFlow) get(k pathKey) ownState {
 	return sLive | sNull | sOpaque
 }
 
-// merge junta dois caminhos de execução. Ficam os caminhos cuja variável
-// raiz existe nos dois lados: as outras foram declaradas num escopo que fechou.
+// merge joins two execution paths. The paths whose root variable exists on
+// both sides stay: the others were declared in a scope that closed.
 func merge(a, b ownFlow) ownFlow {
 	if a == nil {
 		return b.clone()
@@ -238,8 +238,8 @@ func merge(a, b ownFlow) ownFlow {
 	return m
 }
 
-// ownValue é um valor dono em trânsito: o estado dele e o dos campos que
-// vêm junto (relativos ao valor), para instalar no destino.
+// ownValue is an owning value in transit: its state and that of the fields that
+// come along (relative to the value), to install at the destination.
 type ownValue struct {
 	st   ownState
 	sub  map[string]ownState
@@ -248,8 +248,8 @@ type ownValue struct {
 
 type ownLoop struct {
 	stmt      *ast.ForStmt
-	exits     []ownFlow // estados nos break
-	continues []ownFlow // estados nos continue, já depois do pós
+	exits     []ownFlow // states at the breaks
+	continues []ownFlow // states at the continues, already after the post statement
 	depth     int
 }
 
@@ -259,13 +259,13 @@ type ownChecker struct {
 	st       ownFlow
 	scopes   [][]*Local
 	loops    []*ownLoop
-	borrows  []*Local              // parâmetros &T
-	origin   map[pathKey]token.Pos // onde o caminho recebeu a memória atual
-	gone     map[pathKey]token.Pos // onde o caminho foi liberado ou movido
-	drains   []pathKey             // slices sendo esvaziados por for in drain(s)
-	pending  *[]pendingMove        // moves dos argumentos da chamada em avaliação
-	reported map[pathKey]bool      // erros de uso já reportados
-	muted    int                   // maior que zero: erros silenciados (laço estabilizando)
+	borrows  []*Local              // &T parameters
+	origin   map[pathKey]token.Pos // where the path received the current memory
+	gone     map[pathKey]token.Pos // where the path was freed or moved
+	drains   []pathKey             // slices being emptied by for in drain(s)
+	pending  *[]pendingMove        // moves of the arguments of the call being evaluated
+	reported map[pathKey]bool      // use errors already reported
+	muted    int                   // greater than zero: errors muted (loop stabilizing)
 }
 
 func (c *checker) checkOwnership(fn *Func) {
@@ -284,12 +284,12 @@ func (c *checker) checkOwnership(fn *Func) {
 			}
 			o.declare(p, ownValue{st: s}, p.Pos)
 		case *Slice:
-			// Um slice recebido é dono: precisa ser liberado ou passado
-			// adiante. sOpaque: se os elementos são donos, podem ter memória.
+			// A received slice is an owner: it must be freed or passed
+			// along. sOpaque: if the elements are owners, they may have memory.
 			o.declare(p, ownValue{st: sLive | sOpaque}, p.Pos)
 		case *Borrow:
-			// Um empréstimo nunca é nil nem liberado aqui; o que interessa
-			// são os campos do objeto emprestado.
+			// A borrow is never nil nor freed here; what matters
+			// are the fields of the borrowed object.
 			o.st[pathKey{p, ""}] = sLive | sOpaque
 			o.borrows = append(o.borrows, p)
 		}
@@ -300,7 +300,7 @@ func (c *checker) checkOwnership(fn *Func) {
 	if o.st != nil {
 		o.borrowsComplete(fn.Decl.Body.End)
 	}
-	o.pop(fn.Decl.Body.End, "no fim da função")
+	o.pop(fn.Decl.Body.End, "at the end of the function")
 }
 
 func (o *ownChecker) push() { o.scopes = append(o.scopes, nil) }
@@ -325,7 +325,7 @@ func (o *ownChecker) declare(l *Local, v ownValue, pos token.Pos) {
 	o.scopes[len(o.scopes)-1] = append(o.scopes[len(o.scopes)-1], l)
 }
 
-// install coloca o valor v no caminho k, com os campos que vêm junto.
+// install puts the value v at the path k, with the fields that come along.
 func (o *ownChecker) install(k pathKey, v ownValue) {
 	o.dropUnder(k)
 	o.st[k] = v.st
@@ -337,7 +337,7 @@ func (o *ownChecker) install(k pathKey, v ownValue) {
 	}
 }
 
-// extract tira de k o valor dono e os campos rastreados abaixo dele.
+// extract takes the owning value and the fields tracked below it out of k.
 func (o *ownChecker) extract(k pathKey) ownValue {
 	v := ownValue{st: o.st.get(k), sub: map[string]ownState{}, gone: map[string]token.Pos{}}
 	for p, s := range o.st {
@@ -365,7 +365,7 @@ func (o *ownChecker) kill(k pathKey, pos token.Pos) {
 	o.gone[k] = pos
 }
 
-// leaks reporta as variáveis de ls que ainda podem ter memória ao sair por pos.
+// leaks reports the variables of ls that may still have memory when leaving through pos.
 func (o *ownChecker) leaks(ls []*Local, pos token.Pos, where string) {
 	if o.st == nil {
 		return
@@ -382,24 +382,24 @@ func (o *ownChecker) leaks(ls []*Local, pos token.Pos, where string) {
 		}
 		if p, ok := l.Type.(*Pointer); ok && isExternStruct(p.Elem) {
 			if isThread(p) {
-				o.errorf(pos, "vazamento: a thread %s (linha %d) pode não ter sido esperada %s; passe-a a thread.join",
+				o.errorf(pos, "leak: the thread %s (line %d) may not have been waited for %s; pass it to thread.join",
 					l.Name, o.origin[k].Line, where)
 			} else if isGuard(p) {
-				o.errorf(pos, "vazamento: o guard %s (linha %d) pode ainda estar travado %s; destrave com %s.unlock()",
+				o.errorf(pos, "leak: the guard %s (line %d) may still be locked %s; unlock it with %s.unlock()",
 					l.Name, o.origin[k].Line, where, l.Name)
 			} else if isMutexType(p) {
-				o.errorf(pos, "vazamento: o mutex %s (linha %d) pode ainda estar aberto %s; feche com %s.close()",
+				o.errorf(pos, "leak: the mutex %s (line %d) may still be open %s; close it with %s.close()",
 					l.Name, o.origin[k].Line, where, l.Name)
 			} else if st := p.Elem.(*Struct); st.mod != nil && st.mod.std && st.ChanEnd == 0 {
-				// handle da biblioteca padrão (atomic.Int): fecha com close(),
-				// ou com o método que o consome (sync.Group: wait())
-				o.errorf(pos, "vazamento: %s (%s, linha %d) pode ainda estar aberto %s; feche com %s.%s()",
+				// a standard library handle (atomic.Int): closes with close(),
+				// or with the method that consumes it (sync.Group: wait())
+				o.errorf(pos, "leak: %s (%s, line %d) may still be open %s; close it with %s.%s()",
 					l.Name, st.Name, o.origin[k].Line, where, l.Name, closerOf(st))
 			} else if isChanEnd(p) {
-				o.errorf(pos, "vazamento: a ponta de canal %s (linha %d) pode ainda estar aberta %s; feche com %s.close()",
+				o.errorf(pos, "leak: the channel end %s (line %d) may still be open %s; close it with %s.close()",
 					l.Name, o.origin[k].Line, where, l.Name)
 			} else {
-				o.errorf(pos, "vazamento: o handle de C %s (linha %d) pode ainda estar aberto %s; passe-o à função de C que o fecha",
+				o.errorf(pos, "leak: the C handle %s (line %d) may still be open %s; pass it to the C function that closes it",
 					l.Name, o.origin[k].Line, where)
 			}
 			if o.muted == 0 {
@@ -410,16 +410,16 @@ func (o *ownChecker) leaks(ls []*Local, pos token.Pos, where string) {
 		if s == sLive {
 			how := "free(" + l.Name + ")"
 			if hasFreeMethod(l.Type) {
-				how = l.Name + ".free()" // vec, map, arena...: o free libera também o que está dentro
+				how = l.Name + ".free()" // vec, map, arena...: free also frees what's inside
 			}
-			o.errorf(pos, "vazamento: %s ainda é dona da memória (linha %d) %s; libere com %s ou passe a posse adiante",
+			o.errorf(pos, "leak: %s still owns the memory (line %d) %s; free it with %s or pass ownership along",
 				l.Name, o.origin[k].Line, where, how)
 		} else {
-			o.errorf(pos, "vazamento: %s pode ainda ser dona da memória (linha %d) %s, dependendo do caminho",
+			o.errorf(pos, "leak: %s may still own the memory (line %d) %s, depending on the path",
 				l.Name, o.origin[k].Line, where)
 		}
 		if o.muted == 0 {
-			o.st[k] = sDead // evita repetir o erro adiante
+			o.st[k] = sDead // avoids repeating the error further on
 		}
 	}
 }
@@ -430,14 +430,14 @@ func (o *ownChecker) leaksFrom(depth int, pos token.Pos, where string) {
 	}
 }
 
-// borrowsComplete exige que nenhum campo de objeto emprestado fique sem
-// valor ao sair da função: quem emprestou espera o objeto inteiro de volta.
-// borrowedFieldsBack confere, no fim do escopo de uma variável emprestada,
-// que os campos movidos para fora através dela voltaram.
+// borrowsComplete requires that no field of a borrowed object is left without a
+// value when leaving the function: the lender expects the whole object back.
+// borrowedFieldsBack checks, at the end of a borrowed variable's scope,
+// that the fields moved out through it came back.
 func (o *ownChecker) borrowedFieldsBack(l *Local, pos token.Pos) {
 	for k := range o.st {
 		if k.root == l && !k.isRoot() && o.st.get(k)&sDead != 0 {
-			o.errorf(pos, "%s foi movida para fora do empréstimo (linha %d) e precisa receber um valor antes do fim do escopo de %s",
+			o.errorf(pos, "%s was moved out of the borrow (line %d) and must receive a value before the end of the scope of %s",
 				k, o.gone[k].Line, l.Name)
 			if o.muted == 0 {
 				o.st[k] = sNull
@@ -446,8 +446,8 @@ func (o *ownChecker) borrowedFieldsBack(l *Local, pos token.Pos) {
 	}
 }
 
-// borrowValue avalia o valor de x := <empréstimo>: &lugar confere o lugar
-// (como um argumento emprestado); o resto é lido.
+// borrowValue evaluates the value of x := <borrow>: &place checks the place
+// (like a borrowed argument); the rest is read.
 func (o *ownChecker) borrowValue(e ast.Expr) {
 	if u, ok := e.(*ast.UnaryExpr); ok && u.Op == token.AMP {
 		if obj, ok := o.borrowArg(e); ok {
@@ -462,7 +462,7 @@ func (o *ownChecker) borrowsComplete(pos token.Pos) {
 	for k := range o.st {
 		for _, b := range o.borrows {
 			if k.root == b && !k.isRoot() && o.st.get(k)&sDead != 0 {
-				o.errorf(pos, "%s foi movida para fora do empréstimo (linha %d) e precisa receber um valor antes de sair da função",
+				o.errorf(pos, "%s was moved out of the borrow (line %d) and must receive a value before leaving the function",
 					k, o.gone[k].Line)
 				if o.muted == 0 {
 					o.st[k] = sNull
@@ -472,11 +472,11 @@ func (o *ownChecker) borrowsComplete(pos token.Pos) {
 	}
 }
 
-// ---------- Comandos ----------
+// ---------- Statements ----------
 
 func (o *ownChecker) stmt(s ast.Stmt) {
 	if o.st == nil {
-		return // código inalcançável
+		return // unreachable code
 	}
 	info := o.c.info
 	switch s := s.(type) {
@@ -485,12 +485,12 @@ func (o *ownChecker) stmt(s ast.Stmt) {
 		for _, st := range s.Stmts {
 			o.stmt(st)
 		}
-		o.pop(s.End, "no fim do bloco")
+		o.pop(s.End, "at the end of the block")
 	case *ast.VarDecl:
 		l := info.Decls[s]
 		if isBorrow(l.Type) {
-			// x := v.at(0): como um parâmetro &T, nunca nil nem liberado; os
-			// campos donos podem sair e voltar antes do fim do escopo
+			// x := v.at(0): like a &T parameter, never nil nor freed; the
+			// owning fields can leave and come back before the end of the scope
 			if s.Value != nil {
 				o.borrowValue(s.Value)
 			}
@@ -506,13 +506,13 @@ func (o *ownChecker) stmt(s ast.Stmt) {
 		}
 		v, pos := ownValue{st: sNull}, s.P
 		if s.Value != nil {
-			v, pos = o.consume(s.Value, l.Type, "a declaração de "+s.Name), s.Value.Pos()
+			v, pos = o.consume(s.Value, l.Type, "the declaration of "+s.Name), s.Value.Pos()
 		}
 		o.declare(l, v, pos)
 	case *ast.ConstDecl:
 	case *ast.AssignStmt:
 		if ix, isIndex := s.Lhs.(*ast.IndexExpr); isIndex && IsOwner(info.Types[s.Lhs]) {
-			o.errorf(ix.Lbrack, "um elemento dono não pode ser sobrescrito direto (o valor antigo vazaria): use velho := replace(&s[i], v)")
+			o.errorf(ix.Lbrack, "an owning element can't be overwritten directly (the old value would leak): use old := replace(&s[i], v)")
 			o.consume(s.Rhs, nil, "")
 			o.target(s.Lhs)
 			return
@@ -523,7 +523,7 @@ func (o *ownChecker) stmt(s ast.Stmt) {
 				return
 			}
 		}
-		// O lado direito vem antes: em p.x = f(p), f pode liberar p.
+		// The right side comes first: in p.x = f(p), f can free p.
 		o.read(s.Rhs)
 		o.target(s.Lhs)
 	case *ast.IncDecStmt:
@@ -531,18 +531,18 @@ func (o *ownChecker) stmt(s ast.Stmt) {
 	case *ast.ExprStmt:
 		o.read(s.X)
 		if IsOwner(info.Types[s.X]) {
-			o.errorf(s.X.Pos(), "vazamento: o ponteiro dono devolvido aqui é descartado; guarde em uma variável")
+			o.errorf(s.X.Pos(), "leak: the owning pointer returned here is discarded; store it in a variable")
 		}
 	case *ast.ReturnStmt:
 		if s.Value != nil {
 			if t := info.Types[s.Value]; IsOwner(t) || t == NilType {
-				o.consume(s.Value, o.fn.Result, "o retorno de "+o.fn.Name)
+				o.consume(s.Value, o.fn.Result, "the return value of "+o.fn.Name)
 			} else {
 				o.read(s.Value)
 			}
 		}
 		o.borrowsComplete(s.P)
-		o.leaksFrom(0, s.P, "no return")
+		o.leaksFrom(0, s.P, "at the return")
 		o.st = nil
 	case *ast.IfStmt:
 		o.read(s.Cond)
@@ -561,7 +561,7 @@ func (o *ownChecker) stmt(s ast.Stmt) {
 		o.forStmt(s)
 	case *ast.MatchStmt:
 		if info.MatchTakes[s] {
-			o.consume(s.Subject, nil, "o match") // os campos donos saem para os nomes
+			o.consume(s.Subject, nil, "o match") // the owning fields go out to the names
 		} else {
 			o.read(s.Subject)
 		}
@@ -575,11 +575,11 @@ func (o *ownChecker) stmt(s ast.Stmt) {
 					switch {
 					case l == nil:
 					case isBorrow(l.Type):
-						// campo emprestado (match que só lê): como x := v.at(0)
+						// a borrowed field (a match that only reads): like x := v.at(0)
 						o.st[pathKey{l, ""}] = sLive | sOpaque
 						o.scopes[len(o.scopes)-1] = append(o.scopes[len(o.scopes)-1], l)
 					case IsOwner(l.Type):
-						// campo tirado (match que consome): precisa ser liberado ou movido
+						// a taken field (a match that consumes): it must be freed or moved
 						st := sLive | sOpaque
 						if pt, ok := l.Type.(*Pointer); ok && pt.Nullable {
 							st |= sNull
@@ -589,15 +589,15 @@ func (o *ownChecker) stmt(s ast.Stmt) {
 				}
 			}
 			o.stmt(arm.Body)
-			o.pop(arm.Body.Pos(), "no fim do braço do match")
+			o.pop(arm.Body.Pos(), "at the end of the match arm")
 			out = merge(out, o.st)
 		}
 		o.st = out
 	case *ast.BranchStmt:
 		loop := o.loops[len(o.loops)-1]
-		where := "no break"
+		where := "at the break"
 		if s.Tok == token.CONTINUE {
-			where = "no continue"
+			where = "at the continue"
 		}
 		o.leaksFrom(loop.depth, s.P, where)
 		if s.Tok == token.BREAK {
@@ -610,26 +610,26 @@ func (o *ownChecker) stmt(s ast.Stmt) {
 		}
 		o.st = nil
 	default:
-		panic("ownership: comando desconhecido")
+		panic("ownership: unknown statement")
 	}
 }
 
-// assignOwner trata "k = valor" com k uma variável ou campo dono.
+// assignOwner handles "k = value" with k an owning variable or field.
 func (o *ownChecker) assignOwner(k pathKey, s *ast.AssignStmt) {
-	v := o.consume(s.Rhs, pathType(k), "a atribuição a "+k.String())
+	v := o.consume(s.Rhs, pathType(k), "the assignment to "+k.String())
 	if !k.isRoot() {
-		o.reach(k, s.Lhs.Pos()) // o objeto que recebe o campo precisa existir
+		o.reach(k, s.Lhs.Pos()) // the object that receives the field must exist
 	}
 	if cur := o.st.get(k); cur&sLive != 0 {
 		maybe := ""
 		if cur&sObligation != sLive {
-			maybe = " (em algum caminho)"
+			maybe = " (on some path)"
 		}
 		line := o.origin[k].Line
 		if line == 0 {
-			o.errorf(s.OpPos, "vazamento: %s pode ser dona de memória%s e seria sobrescrita; libere ou mova o valor antigo antes", k, maybe)
+			o.errorf(s.OpPos, "leak: %s may own memory%s and would be overwritten; free or move the old value first", k, maybe)
 		} else {
-			o.errorf(s.OpPos, "vazamento: %s ainda é dona da memória (linha %d)%s e seria sobrescrita; libere ou passe a posse antes",
+			o.errorf(s.OpPos, "leak: %s still owns the memory (line %d)%s and would be overwritten; free it or pass ownership first",
 				k, line, maybe)
 		}
 	}
@@ -638,15 +638,15 @@ func (o *ownChecker) assignOwner(k pathKey, s *ast.AssignStmt) {
 }
 
 func (o *ownChecker) forStmt(s *ast.ForStmt) {
-	o.push() // escopo do init
+	o.push() // the init's scope
 	if s.Init != nil {
 		o.stmt(s.Init)
 	}
 	loop := &ownLoop{stmt: s, depth: len(o.scopes)}
 	o.loops = append(o.loops, loop)
 
-	// Ponto fixo: junta o estado do fim da volta ao do começo até parar de
-	// mudar. Os estados só crescem e o número de caminhos é finito.
+	// Fixed point: joins the state at the end of the iteration to the one at the start until it stops
+	// changing. The states only grow and the number of paths is finite.
 	entry := o.st
 	for i := 0; i < 100; i++ {
 		o.muted++
@@ -658,22 +658,22 @@ func (o *ownChecker) forStmt(s *ast.ForStmt) {
 		}
 		entry = next
 	}
-	o.loopBody(s, loop, entry) // passada final, com erros
+	o.loopBody(s, loop, entry) // final pass, with errors
 	o.loops = o.loops[:len(o.loops)-1]
 
 	var out ownFlow
 	switch {
 	case s.Cond != nil:
-		o.st = entry.clone() // a condição ficou falsa
+		o.st = entry.clone() // the condition became false
 		o.read(s.Cond)
 		o.apply(o.facts(s.Cond, false))
 		out = o.st
 	case s.Iter != nil:
-		o.st = entry.clone() // os elementos acabaram
+		o.st = entry.clone() // the elements ran out
 		iter := o.iterOf(s)
 		o.sliceAccess(iter)
 		if k, ok := o.pathOf(iter); ok && o.c.info.Drains[s] != nil && o.st.get(k) != 0 {
-			// drain completo: todos os elementos saíram do slice
+			// a complete drain: every element left the slice
 			o.st[k] = o.st.get(k) &^ sOpaque
 		}
 		out = o.st
@@ -682,11 +682,11 @@ func (o *ownChecker) forStmt(s *ast.ForStmt) {
 		out = merge(out, ex)
 	}
 	o.st = out
-	o.pop(s.Body.End, "no fim do for")
+	o.pop(s.Body.End, "at the end of the for")
 }
 
-// loopBody analisa uma volta a partir de entry e devolve o estado com que a
-// próxima volta começa (fim do corpo e continues, depois do pós).
+// loopBody analyzes an iteration from entry and returns the state the
+// next iteration starts with (the end of the body and the continues, after the post statement).
 func (o *ownChecker) loopBody(s *ast.ForStmt, loop *ownLoop, entry ownFlow) ownFlow {
 	loop.exits, loop.continues = nil, nil
 	o.st = entry.clone()
@@ -695,7 +695,7 @@ func (o *ownChecker) loopBody(s *ast.ForStmt, loop *ownLoop, entry ownFlow) ownF
 		o.apply(o.facts(s.Cond, true))
 	}
 	if s.Iter != nil {
-		o.sliceAccess(o.iterOf(s)) // cada volta lê o slice de novo
+		o.sliceAccess(o.iterOf(s)) // each iteration reads the slice again
 	}
 	if drained := o.c.info.Drains[s]; drained != nil && o.st != nil {
 		o.drainBody(s, drained)
@@ -712,7 +712,7 @@ func (o *ownChecker) loopBody(s *ast.ForStmt, loop *ownLoop, entry ownFlow) ownF
 	return back
 }
 
-// sameFlow compara dois estados, incluindo os campos deduzidos.
+// sameFlow compares two states, including the deduced fields.
 func sameFlow(a, b ownFlow) bool {
 	if (a == nil) != (b == nil) {
 		return false
@@ -733,15 +733,15 @@ func (o *ownChecker) errorf(pos token.Pos, format string, args ...any) {
 	}
 }
 
-// ---------- Condições sobre nil ----------
+// ---------- Conditions on nil ----------
 
 type nilFact struct {
 	k      pathKey
 	notNil bool
 }
 
-// facts devolve o que a condição, sendo truth, garante sobre caminhos ?*T:
-// "p != nil", "p.prox == nil", combinados com &&, || e !.
+// facts returns what the condition, being truth, guarantees about ?*T paths:
+// "p != nil", "p.next == nil", combined with &&, || and !.
 func (o *ownChecker) facts(cond ast.Expr, truth bool) []nilFact {
 	switch e := cond.(type) {
 	case *ast.BinaryExpr:
@@ -790,10 +790,10 @@ func (o *ownChecker) apply(fs []nilFact) {
 	}
 }
 
-// ---------- Caminhos e usos ----------
+// ---------- Paths and uses ----------
 
-// pathOf reconhece expressões que são caminhos: uma variável dona ou
-// empréstimo, seguida de campos.
+// pathOf recognizes expressions that are paths: an owning or borrowed variable,
+// followed by fields.
 func (o *ownChecker) pathOf(e ast.Expr) (pathKey, bool) {
 	switch e := e.(type) {
 	case *ast.Ident:
@@ -809,8 +809,8 @@ func (o *ownChecker) pathOf(e ast.Expr) (pathKey, bool) {
 	return pathKey{}, false
 }
 
-// check reporta o uso de k se ele pode estar liberado, ou, se deref, se pode
-// ser nil.
+// check reports the use of k if it may be freed, or, if deref, if it may
+// be nil.
 func (o *ownChecker) check(k pathKey, pos token.Pos, deref bool) {
 	if o.reported[k] {
 		return
@@ -820,18 +820,18 @@ func (o *ownChecker) check(k pathKey, pos token.Pos, deref bool) {
 	case s&sDead != 0:
 		o.markReported(k)
 		if s&sObligation == sDead {
-			o.errorf(pos, "%s já foi liberada ou movida (linha %d)", k, o.gone[k].Line)
+			o.errorf(pos, "%s was already freed or moved (line %d)", k, o.gone[k].Line)
 		} else {
-			o.errorf(pos, "%s pode já ter sido liberada ou movida (linha %d), dependendo do caminho", k, o.gone[k].Line)
+			o.errorf(pos, "%s may have already been freed or moved (line %d), depending on the path", k, o.gone[k].Line)
 		}
 	case deref && s&sNull != 0 && !isBorrow(pathType(k)) && !isSlice(pathType(k)):
-		// (um slice vazio pode ser indexado: a checagem de limites resolve)
+		// (an empty slice can be indexed: the bounds check handles it)
 		o.markReported(k)
-		o.errorf(pos, "%s pode ser nil aqui: verifique com if %s != nil antes de usar o conteúdo", k, k)
+		o.errorf(pos, "%s may be nil here: check with if %s != nil before using the pointee", k, k)
 	}
 }
 
-// reach checa os ponteiros que precisam ser seguidos para chegar a k.
+// reach checks the pointers that must be followed to get to k.
 func (o *ownChecker) reach(k pathKey, pos token.Pos) {
 	if k.isRoot() {
 		return
@@ -845,13 +845,13 @@ func (o *ownChecker) reach(k pathKey, pos token.Pos) {
 	}
 }
 
-// deref checa que o conteúdo de e (um ponteiro ou empréstimo) pode ser usado.
+// deref checks that the pointee of e (a pointer or borrow) can be used.
 func (o *ownChecker) deref(e ast.Expr) {
 	k, ok := o.pathOf(e)
 	if ix, isIndex := e.(*ast.IndexExpr); !ok && isIndex && IsOwner(o.c.info.Types[e]) {
-		// O índice só é conhecido em tempo de execução: o verificador não
-		// sabe se s[i] é nil. O elemento precisa sair do slice para ser usado.
-		o.errorf(ix.Lbrack, "s[i] pode ser nil e não pode ser usado direto: tire com take(&s[i]) e devolva com replace(&s[i], v)")
+		// The index is only known at run time: the checker doesn't
+		// know whether s[i] is nil. The element must leave the slice to be used.
+		o.errorf(ix.Lbrack, "s[i] may be nil and can't be used directly: take it out with take(&s[i]) and put it back with replace(&s[i], v)")
 		o.read(e)
 		return
 	}
@@ -864,18 +864,18 @@ func (o *ownChecker) deref(e ast.Expr) {
 	o.check(k, e.Pos(), true)
 }
 
-// complete exige que nenhum campo rastreado abaixo de k esteja liberado:
-// um objeto só sai inteiro (movido, emprestado, devolvido).
+// complete requires that no field tracked below k is freed:
+// an object only leaves whole (moved, borrowed, returned).
 func (o *ownChecker) complete(k pathKey, pos token.Pos, verb string) {
 	for p := range o.st {
 		if p.under(k) && o.st.get(p)&sDead != 0 && !o.reported[p] {
 			o.markReported(p)
-			o.errorf(pos, "%s não pode ser %s: %s foi movida para fora (linha %d) e não recebeu valor novo", k, verb, p, o.gone[p].Line)
+			o.errorf(pos, "%s can't be %s: %s was moved out (line %d) and didn't receive a new value", k, verb, p, o.gone[p].Line)
 		}
 	}
 }
 
-// read avalia uma expressão em que caminhos donos são só usados.
+// read evaluates an expression in which owning paths are only used.
 func (o *ownChecker) read(e ast.Expr) {
 	switch e := e.(type) {
 	case *ast.Ident:
@@ -903,7 +903,7 @@ func (o *ownChecker) read(e ast.Expr) {
 			o.read(e.Y)
 			return
 		}
-		// Curto-circuito: o lado direito só roda se o esquerdo deixou.
+		// Short-circuit: the right side only runs if the left one allowed it.
 		skipped := o.st.clone()
 		o.apply(o.facts(e.X, e.Op == token.LAND))
 		o.read(e.Y)
@@ -920,15 +920,15 @@ func (o *ownChecker) read(e ast.Expr) {
 	}
 }
 
-// lostTemporary reporta *f() ou f().campo com f devolvendo um dono.
+// lostTemporary reports *f() or f().field with f returning an owner.
 func (o *ownChecker) lostTemporary(base ast.Expr) {
-	// Só chamadas produzem donos temporários; s[i] e p.campo são lugares.
+	// Only calls produce temporary owners; s[i] and p.field are places.
 	if _, isCall := base.(*ast.CallExpr); isCall && IsOwner(o.c.info.Types[base]) {
-		o.errorf(base.Pos(), "vazamento: o ponteiro dono temporário é perdido aqui; guarde em uma variável primeiro")
+		o.errorf(base.Pos(), "leak: the temporary owning pointer is lost here; store it in a variable first")
 	}
 }
 
-// target avalia o lado esquerdo de uma atribuição que não é um caminho dono.
+// target evaluates the left side of an assignment that isn't an owning path.
 func (o *ownChecker) target(e ast.Expr) {
 	switch e := e.(type) {
 	case *ast.IndexExpr:
@@ -945,8 +945,8 @@ func (o *ownChecker) target(e ast.Expr) {
 	}
 }
 
-// consume avalia uma expressão cujo valor dono vai para um lugar do tipo
-// dest (variável, campo, retorno, parâmetro *T).
+// consume evaluates an expression whose owning value goes to a place of type
+// dest (a variable, field, return value, *T parameter).
 func (o *ownChecker) consume(e ast.Expr, dest Type, what string) ownValue {
 	var v ownValue
 	switch {
@@ -956,17 +956,17 @@ func (o *ownChecker) consume(e ast.Expr, dest Type, what string) ownValue {
 		if k, ok := o.pathOf(e); ok && IsOwner(pathType(k)) {
 			o.reach(k, e.Pos())
 			o.check(k, e.Pos(), false)
-			o.complete(k, e.Pos(), "movida")
+			o.complete(k, e.Pos(), "moved")
 			v = o.extract(k)
 			v.st &^= sDead
 			o.move(k, e.Pos())
 			if p, ok := dest.(*Pointer); ok && !p.Nullable && v.st&sNull != 0 {
-				o.errorf(e.Pos(), "%s pode ser nil aqui, mas %s espera %s; verifique com if %s != nil antes", k, what, dest, k)
+				o.errorf(e.Pos(), "%s may be nil here, but %s expects %s; check with if %s != nil first", k, what, dest, k)
 			}
 			return v
 		}
 		if ix, isIndex := e.(*ast.IndexExpr); isIndex {
-			o.errorf(ix.Lbrack, "um elemento dono não pode ser copiado nem movido direto: use take(&s[i]) (deixa vazio no lugar)")
+			o.errorf(ix.Lbrack, "an owning element can't be copied or moved directly: use take(&s[i]) (leaves an empty slot)")
 			o.read(e)
 			return ownValue{st: sLive | sNull | sOpaque}
 		}
@@ -974,7 +974,7 @@ func (o *ownChecker) consume(e ast.Expr, dest Type, what string) ownValue {
 			return o.allocValue(call)
 		}
 		if call, ok := e.(*ast.CallExpr); ok && o.c.info.Calls[call].Builtin == Realloc {
-			// realloc mantém os elementos: o slice novo herda o que se sabe deles
+			// realloc keeps the elements: the new slice inherits what's known about them
 			var old ownValue
 			o.deferMoves(func() {
 				old = o.consume(call.Args[0], o.c.info.Calls[call].Elem, "realloc")
@@ -989,19 +989,19 @@ func (o *ownChecker) consume(e ast.Expr, dest Type, what string) ownValue {
 		}
 	}
 	if p, ok := dest.(*Pointer); ok && !p.Nullable && v.st&sNull != 0 {
-		o.errorf(e.Pos(), "o valor pode ser nil aqui, mas %s espera %s", what, dest)
+		o.errorf(e.Pos(), "the value may be nil here, but %s expects %s", what, dest)
 	}
 	return v
 }
 
-// allocValue trata alloc(T) (campos nil) e alloc(T{...}) (campos do literal).
+// allocValue handles alloc(T) (nil fields) and alloc(T{...}) (the literal's fields).
 func (o *ownChecker) allocValue(call *ast.CallExpr) ownValue {
 	callee := o.c.info.Calls[call]
 	if callee.Zero {
 		return ownValue{st: sLive}
 	}
 	if callee.Slice {
-		o.read(call.Args[1]) // o tamanho
+		o.read(call.Args[1]) // the size
 		return ownValue{st: sLive}
 	}
 	if lit, ok := call.Args[0].(*ast.CompositeLit); ok {
@@ -1013,15 +1013,15 @@ func (o *ownChecker) allocValue(call *ast.CallExpr) ownValue {
 	return ownValue{st: sLive}
 }
 
-// literalFields avalia os campos de um literal dentro de alloc, guardando o
-// estado dos campos donos em sub. Campos omitidos (literal vazio) valem nil.
+// literalFields evaluates the fields of a literal inside alloc, keeping the
+// state of the owning fields in sub. Omitted fields (an empty literal) are nil.
 func (o *ownChecker) literalFields(lit *ast.CompositeLit, prefix string, sub map[string]ownState) {
 	s := o.c.info.Types[lit].(*Struct)
 	for _, fi := range lit.Fields {
 		f := s.Field(fi.Name)
 		switch inner, isLit := fi.Value.(*ast.CompositeLit); {
 		case IsOwner(f.Type):
-			v := o.consume(fi.Value, f.Type, "o campo "+f.Name)
+			v := o.consume(fi.Value, f.Type, "the field "+f.Name)
 			sub[prefix+f.Name] = v.st
 			for rel, st := range v.sub {
 				sub[prefix+f.Name+"."+rel] = st
@@ -1040,7 +1040,7 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 		o.deferMoves(func() {
 			for i, a := range e.Args {
 				if i < len(v.Fields) && IsOwner(v.Fields[i].Type) {
-					o.consume(a, v.Fields[i].Type, "a variante "+v.Name) // o dono vai para o enum
+					o.consume(a, v.Fields[i].Type, "a variante "+v.Name) // the owner goes into the enum
 				} else {
 					o.read(a)
 				}
@@ -1055,9 +1055,9 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 	case Drop:
 		switch t := o.c.info.Types[e.Args[0]]; {
 		case deepDrop(t):
-			o.consume(e.Args[0], nil, "drop") // a função de drop libera o interior
+			o.consume(e.Args[0], nil, "drop") // the drop function frees the inside
 		case IsOwner(t):
-			o.free(e.Args[0]) // drop de um dono simples é free
+			o.free(e.Args[0]) // drop of a simple owner is free
 		default:
 			o.read(e.Args[0])
 		}
@@ -1066,7 +1066,7 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 		o.allocValue(e)
 		return
 	case Realloc:
-		// o slice antigo é consumido; o resultado é um dono novo
+		// the old slice is consumed; the result is a new owner
 		o.deferMoves(func() {
 			o.consume(e.Args[0], callee.Elem, "realloc")
 			o.read(e.Args[1])
@@ -1083,7 +1083,7 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 		o.deferMoves(func() {
 			o.read(e.Args[0])
 			if IsOwner(plan.Ctx) {
-				o.consume(e.Args[1], plan.Ctx, "o contexto de thread.spawn") // vai para a thread
+				o.consume(e.Args[1], plan.Ctx, "the context of thread.spawn") // goes to the thread
 			} else {
 				o.read(e.Args[1])
 			}
@@ -1108,25 +1108,25 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 			o.formatAlias(plan)
 		}
 		if plan := o.c.info.Prints[e]; plan != nil && plan.Recv != nil {
-			o.read(plan.Recv) // o Writer de w.printf
+			o.read(plan.Recv) // the Writer of w.printf
 		}
 		return
 	}
 
 	if callee.Indirect {
-		o.read(e.Fun) // a variável ou o campo com o valor fn
+		o.read(e.Fun) // the variable or the field with the fn value
 	}
-	// Numa mesma chamada, um objeto não pode ser emprestado e movido.
+	// In the same call, an object can't be borrowed and moved.
 	borrowedRoots := map[*Local]bool{}
-	var touched []pathKey // objetos emprestados: a função pode mudar os campos
-	var outs []pathKey    // &h de parâmetros &?*X: recebem um handle depois da chamada
+	var touched []pathKey // borrowed objects: the function can change the fields
+	var outs []pathKey    // &h of &?*X parameters: they receive a handle after the call
 	o.deferMoves(func() { o.userArgs(e, callee, borrowedRoots, &touched, &outs) })
 	for _, k := range outs {
 		o.install(k, ownValue{st: sLive | sNull})
 		o.origin[k] = e.Lparen
 	}
-	// Depois da chamada, os campos dos objetos emprestados podem ter mudado
-	// (a função manteve o objeto inteiro, mas não se sabe como).
+	// After the call, the fields of the borrowed objects may have changed
+	// (the function kept the object whole, but there's no knowing how).
 	for _, obj := range touched {
 		if o.st.get(obj) != 0 {
 			o.dropUnder(obj)
@@ -1135,11 +1135,11 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 	}
 }
 
-// userArgs avalia os argumentos de uma chamada de função do usuário, da
-// esquerda para a direita. Os moves só valem depois de todos (deferMoves).
+// userArgs evaluates the arguments of a user function call, left
+// to right. The moves only apply after all of them (deferMoves).
 func (o *ownChecker) userArgs(e *ast.CallExpr, callee Callee, borrowedRoots map[*Local]bool, touched *[]pathKey, outs *[]pathKey) {
-	for i, a := range o.c.info.CallArgs(e) { // num método, o receptor vem primeiro
-		context := "o argumento " + itoa(i+1) + " de " + callee.Func.Name
+	for i, a := range o.c.info.CallArgs(e) { // in a method, the receiver comes first
+		context := "o argumento " + itoa(i+1) + " of " + callee.Func.Name
 		pt := callee.Func.Params[i].Type
 		switch {
 		case isOutHandle(pt):
@@ -1155,9 +1155,9 @@ func (o *ownChecker) userArgs(e *ast.CallExpr, callee Callee, borrowedRoots map[
 					*touched = append(*touched, obj)
 				}
 			}
-		case IsOwner(pt): // *T, ?*T e []T: a função recebe a posse
+		case IsOwner(pt): // *T, ?*T and []T: the function takes ownership
 			if k, ok := o.pathOf(a); ok && borrowedRoots[k.root] {
-				o.errorf(a.Pos(), "%s é emprestada e movida na mesma chamada", k.root.Name)
+				o.errorf(a.Pos(), "%s is borrowed and moved in the same call", k.root.Name)
 				o.kill(k, a.Pos())
 				continue
 			}
@@ -1165,7 +1165,7 @@ func (o *ownChecker) userArgs(e *ast.CallExpr, callee Callee, borrowedRoots map[
 		case isBorrow(pt):
 			if obj, ok := o.borrowArg(a); ok {
 				if o.movingRoot(obj.root) {
-					o.errorf(a.Pos(), "%s é emprestada e movida na mesma chamada", obj.root.Name)
+					o.errorf(a.Pos(), "%s is borrowed and moved in the same call", obj.root.Name)
 				}
 				borrowedRoots[obj.root] = true
 				*touched = append(*touched, obj)
@@ -1176,22 +1176,22 @@ func (o *ownChecker) userArgs(e *ast.CallExpr, callee Callee, borrowedRoots map[
 	}
 }
 
-// borrowArg checa um argumento passado a um parâmetro &T e devolve o objeto
-// emprestado, se ele é rastreado.
+// borrowArg checks an argument passed to a &T parameter and returns the borrowed
+// object, if it's tracked.
 func (o *ownChecker) borrowArg(a ast.Expr) (pathKey, bool) {
 	u, ok := a.(*ast.UnaryExpr)
 	if !ok || u.Op != token.AMP {
-		// empréstimo recebido, repassado
+		// a received borrow, passed along
 		k, ok := o.pathOf(a)
 		if ok {
-			o.complete(k, a.Pos(), "emprestada")
+			o.complete(k, a.Pos(), "borrowed")
 			o.notDraining(k, a.Pos())
 		}
 		o.read(a)
 		return k, ok
 	}
 	if sl, isSub := u.X.(*ast.SliceExpr); isSub {
-		// &s[a:b] empresta parte do slice: conta como emprestar o slice
+		// &s[a:b] borrows part of the slice: it counts as borrowing the slice
 		o.sliceAccess(sl.X)
 		for _, b := range []ast.Expr{sl.Low, sl.High} {
 			if b != nil {
@@ -1201,9 +1201,9 @@ func (o *ownChecker) borrowArg(a ast.Expr) (pathKey, bool) {
 		return o.pathOf(sl.X)
 	}
 	if ix, isIndex := u.X.(*ast.IndexExpr); isIndex {
-		// &s[i] empresta um elemento: conta como emprestar o slice
+		// &s[i] borrows an element: it counts as borrowing the slice
 		if _, isPtr := o.c.info.Types[ix].(*Pointer); isPtr {
-			o.errorf(ix.Lbrack, "s[i] pode ser nil e não pode ser emprestado direto: tire com take(&s[i]) e devolva com replace(&s[i], v)")
+			o.errorf(ix.Lbrack, "s[i] may be nil and can't be borrowed directly: take it out with take(&s[i]) and put it back with replace(&s[i], v)")
 		}
 		o.sliceAccess(ix.X)
 		o.read(ix.Index)
@@ -1211,37 +1211,37 @@ func (o *ownChecker) borrowArg(a ast.Expr) (pathKey, bool) {
 	}
 	k, ok := o.pathOf(u.X)
 	if !ok {
-		o.read(u.X) // struct local: não tem campos donos
+		o.read(u.X) // a local struct: it has no owning fields
 		return pathKey{}, false
 	}
 	var obj pathKey
 	if isPointerType(pathType(k)) || IsOwner(pathType(k)) {
-		// &p empresta o objeto apontado por p; &s, o slice s; &e, o enum
-		// com donos e (nenhum deles pode ter sido liberado ou movido)
+		// &p borrows the object pointed to by p; &s, the slice s; &e, the enum
+		// with owners e (none of them can have been freed or moved)
 		o.reach(k, u.X.Pos())
 		o.check(k, u.X.Pos(), true)
 		obj = k
 	} else {
-		// &p.no empresta uma struct guardada dentro do objeto de p
+		// &p.node borrows a struct kept inside p's object
 		o.reach(k, u.X.Pos())
 		obj = objectOf(k)
 	}
 	o.notDraining(obj, u.X.Pos())
-	o.complete(obj, u.X.Pos(), "emprestada")
+	o.complete(obj, u.X.Pos(), "borrowed")
 	return obj, true
 }
 
-// free trata free(x): x não pode estar liberada, e nenhum campo dono do
-// objeto pode ainda ter memória.
+// free handles free(x): x can't be freed, and no owning field of the
+// object can still have memory.
 func (o *ownChecker) free(arg ast.Expr) {
 	k, ok := o.pathOf(arg)
 	if !ok || !IsOwner(pathType(k)) {
 		v := o.consume(arg, nil, "free")
 		if v.st&sOpaque != 0 && isOwnerSlice(o.c.info.Types[arg]) {
-			o.errorf(arg.Pos(), "free de um slice temporário cujos elementos podem ser donos: guarde em uma variável e esvazie com for x in drain(s)")
+			o.errorf(arg.Pos(), "free of a temporary slice whose elements may be owners: store it in a variable and empty it with for x in drain(s)")
 		}
 		if v.st&sOpaque != 0 && len(ownerFields(elemOf(o.c.info.Types[arg]), "")) > 0 {
-			o.errorf(arg.Pos(), "free de um objeto temporário com campos donos: guarde em uma variável e libere os campos antes")
+			o.errorf(arg.Pos(), "free of a temporary object with owning fields: store it in a variable and free the fields first")
 		}
 		return
 	}
@@ -1249,20 +1249,20 @@ func (o *ownChecker) free(arg ast.Expr) {
 	if s := o.st.get(k); s&sDead != 0 {
 		maybe := ""
 		if s&sObligation != sDead {
-			maybe = " em algum caminho"
+			maybe = " on some path"
 		}
-		o.errorf(arg.Pos(), "%s liberada duas vezes: já foi liberada ou movida%s (linha %d)", k, maybe, o.gone[k].Line)
+		o.errorf(arg.Pos(), "%s freed twice: it was already freed or moved%s (line %d)", k, maybe, o.gone[k].Line)
 		o.kill(k, arg.Pos())
 		return
 	}
 	if s := o.st.get(k); s&sLive != 0 && s&sOpaque != 0 && isOwnerSlice(pathType(k)) {
-		o.errorf(arg.Pos(), "free(%s): os elementos de %s podem ainda ser donos de memória; esvazie antes com for x in drain(%s)", k, k, k)
+		o.errorf(arg.Pos(), "free(%s): the elements of %s may still own memory; empty it first with for x in drain(%s)", k, k, k)
 	}
 	if o.st.get(k)&sLive != 0 {
 		for _, rel := range ownerFields(elemOf(pathType(k)), "") {
 			fk := k.child(rel)
 			if fs := o.st.get(fk); fs&sLive != 0 {
-				o.errorf(arg.Pos(), "free(%s): %s ainda pode ser dona de memória; libere ou mova %s antes", k, fk, fk)
+				o.errorf(arg.Pos(), "free(%s): %s may still own memory; free or move %s first", k, fk, fk)
 			}
 		}
 	}
@@ -1276,16 +1276,16 @@ func itoa(n int) string {
 	return itoa(n/10) + string(rune('0'+n%10))
 }
 
-// markReported evita repetir o erro de k, mas só fora do ponto fixo de um
-// laço: lá os erros estão silenciados e precisam aparecer na passada final.
+// markReported avoids repeating k's error, but only outside a loop's
+// fixed point: there the errors are muted and must show up in the final pass.
 func (o *ownChecker) markReported(k pathKey) {
 	if o.muted == 0 {
 		o.reported[k] = true
 	}
 }
 
-// sliceAccess checa o slice usado em s[i], len(s) ou for x in s: ele não
-// pode estar liberado. Vazio pode: a checagem de limites resolve.
+// sliceAccess checks the slice used in s[i], len(s) or for x in s: it can't
+// be freed. Empty is fine: the bounds check handles it.
 func (o *ownChecker) sliceAccess(e ast.Expr) {
 	k, ok := o.pathOf(e)
 	if !ok {
@@ -1294,7 +1294,7 @@ func (o *ownChecker) sliceAccess(e ast.Expr) {
 		return
 	}
 	if t := pathType(k); !IsOwner(t) && !isBorrow(t) {
-		// array guardado num campo: é um valor, só o caminho até ele importa
+		// an array kept in a field: it's a value, only the path to it matters
 		o.reach(k, e.Pos())
 		return
 	}
@@ -1307,7 +1307,7 @@ func isOwnerSlice(t Type) bool {
 	return ok && IsOwner(e)
 }
 
-// iterOf devolve o slice percorrido por um for in: s, em "for x in s" ou em
+// iterOf returns the slice walked by a for in: s, in "for x in s" or in
 // "for x in drain(s)".
 func (o *ownChecker) iterOf(s *ast.ForStmt) ast.Expr {
 	if d := o.c.info.Drains[s]; d != nil {
@@ -1316,8 +1316,8 @@ func (o *ownChecker) iterOf(s *ast.ForStmt) ast.Expr {
 	return s.Iter
 }
 
-// drainBody analisa uma volta de "for x in drain(s)": x recebe o elemento,
-// que sai do slice, e precisa ser liberado ou movido antes do fim da volta.
+// drainBody analyzes an iteration of "for x in drain(s)": x receives the element,
+// which leaves the slice, and must be freed or moved before the end of the iteration.
 func (o *ownChecker) drainBody(s *ast.ForStmt, drained ast.Expr) {
 	k, ok := o.pathOf(drained)
 	if ok {
@@ -1325,30 +1325,30 @@ func (o *ownChecker) drainBody(s *ast.ForStmt, drained ast.Expr) {
 	}
 	o.push()
 	if l := o.c.info.ForVars[s]; l != nil && IsOwner(l.Type) {
-		// o elemento tirado é dono (num genérico, T pode ser int: aí não há posse)
+		// the taken element is an owner (in a generic, T can be int: then there's no ownership)
 		o.declare(l, ownValue{st: sLive | sNull | sOpaque}, s.Var.P)
 	}
 	o.stmt(s.Body)
-	o.pop(s.Body.End, "no fim da volta do for (o elemento tirado por drain)")
+	o.pop(s.Body.End, "at the end of the for iteration (the element taken out by drain)")
 	if ok {
 		o.drains = o.drains[:len(o.drains)-1]
 	}
 }
 
-// notDraining recusa emprestar ou pôr elementos num slice que um
-// for in drain está esvaziando: os elementos já tirados voltariam.
+// notDraining refuses to borrow or put elements into a slice that a
+// for in drain is emptying: the elements already taken would come back.
 func (o *ownChecker) notDraining(k pathKey, pos token.Pos) {
 	for _, d := range o.drains {
 		if d == k {
-			o.errorf(pos, "%s está sendo esvaziada por um for in drain(%s) e não pode ser emprestada nem receber elementos", k, k)
+			o.errorf(pos, "%s is being emptied by a for in drain(%s) and can't be borrowed or receive elements", k, k)
 			return
 		}
 	}
 }
 
-// takeReplace trata take(&s[i]) e replace(&s[i], v). O elemento antigo sai
-// como um dono comum. Pôr um dono com replace faz o slice voltar a "pode ter
-// elementos donos".
+// takeReplace handles take(&s[i]) and replace(&s[i], v). The old element leaves
+// as an ordinary owner. Putting an owner with replace makes the slice go back to "may have
+// owning elements".
 func (o *ownChecker) takeReplace(e *ast.CallExpr, callee Callee) {
 	ix := e.Args[0].(*ast.UnaryExpr).X.(*ast.IndexExpr)
 	o.sliceAccess(ix.X)
@@ -1356,7 +1356,7 @@ func (o *ownChecker) takeReplace(e *ast.CallExpr, callee Callee) {
 	if callee.Builtin != Replace {
 		return
 	}
-	v := o.consume(e.Args[1], callee.Elem, "o valor de replace")
+	v := o.consume(e.Args[1], callee.Elem, "the value of replace")
 	if k, ok := o.pathOf(ix.X); ok {
 		o.notDraining(k, ix.X.Pos())
 		if s := o.st.get(k); s != 0 && v.st&sLive != 0 {
@@ -1365,15 +1365,15 @@ func (o *ownChecker) takeReplace(e *ast.CallExpr, callee Callee) {
 	}
 }
 
-// pendingMove é um move feito por um argumento: só vale quando a chamada
-// acontece, depois de todos os argumentos. Assim f(s, len(s)) lê s antes de
-// passá-la adiante, como no C gerado.
+// pendingMove is a move made by an argument: it only applies when the call
+// happens, after all the arguments. So f(s, len(s)) reads s before
+// passing it along, as in the generated C.
 type pendingMove struct {
 	k   pathKey
 	pos token.Pos
 }
 
-// deferMoves avalia f guardando os moves para o fim.
+// deferMoves evaluates f keeping the moves for the end.
 func (o *ownChecker) deferMoves(f func()) {
 	saved := o.pending
 	var list []pendingMove
@@ -1385,8 +1385,8 @@ func (o *ownChecker) deferMoves(f func()) {
 	}
 }
 
-// move tira a posse de k: na hora, ou no fim dos argumentos da chamada em
-// avaliação. Mover a mesma coisa duas vezes na chamada é erro.
+// move takes ownership away from k: right away, or at the end of the arguments of the call being
+// evaluated. Moving the same thing twice in the call is an error.
 func (o *ownChecker) move(k pathKey, pos token.Pos) {
 	if o.pending == nil {
 		o.kill(k, pos)
@@ -1394,14 +1394,14 @@ func (o *ownChecker) move(k pathKey, pos token.Pos) {
 	}
 	for _, m := range *o.pending {
 		if m.k == k || k.under(m.k) || m.k.under(k) {
-			o.errorf(pos, "%s é movida duas vezes na mesma chamada", k)
+			o.errorf(pos, "%s is moved twice in the same call", k)
 			return
 		}
 	}
 	*o.pending = append(*o.pending, pendingMove{k, pos})
 }
 
-// movingRoot diz se algum argumento já avaliado da chamada move algo de root.
+// movingRoot says whether some already evaluated argument of the call moves something from root.
 func (o *ownChecker) movingRoot(root *Local) bool {
 	if o.pending == nil {
 		return false
@@ -1414,9 +1414,9 @@ func (o *ownChecker) movingRoot(root *Local) bool {
 	return false
 }
 
-// formatAlias recusa str.format(&b, "{}", b): o texto de b seria lido
-// enquanto b é sobrescrito. Valores copiados inteiros (números, structs sem
-// slices) já foram calculados antes da escrita e não contam.
+// formatAlias refuses str.format(&b, "{}", b): b's text would be read
+// while b is overwritten. Values copied whole (numbers, structs without
+// slices) were already computed before the write and don't count.
 func (o *ownChecker) formatAlias(plan *PrintPlan) {
 	dst := rootLocal(o.c, plan.Dst)
 	if dst == nil {
@@ -1426,13 +1426,13 @@ func (o *ownChecker) formatAlias(plan *PrintPlan) {
 		switch plan.ArgTypes[i].(type) {
 		case *Slice, *Borrow:
 			if rootLocal(o.c, a) == dst {
-				o.errorf(a.Pos(), "%s é o destino de str.format e também um valor do formato: o texto seria lido enquanto é sobrescrito", dst.Name)
+				o.errorf(a.Pos(), "%s is the destination of str.format and also a value of the format: the text would be read while it's overwritten", dst.Name)
 			}
 		}
 	}
 }
 
-// rootLocal devolve a variável de onde e sai (b em &b[2:], p.nome, *x), ou nil.
+// rootLocal returns the variable e comes out of (b in &b[2:], p.name, *x), or nil.
 func rootLocal(c *checker, e ast.Expr) *Local {
 	for {
 		switch x := e.(type) {
@@ -1452,9 +1452,9 @@ func rootLocal(c *checker, e ast.Expr) *Local {
 	}
 }
 
-// outArg checa &h passado a um parâmetro &?*X: h não pode ter um handle
-// (a função de C escreveria outro por cima), e recebe o novo depois da
-// chamada (outs).
+// outArg checks &h passed to a &?*X parameter: h can't hold a handle
+// (the C function would write another over it), and it receives the new one after the
+// call (outs).
 func (o *ownChecker) outArg(a ast.Expr, fn string, borrowedRoots map[*Local]bool, outs *[]pathKey) {
 	u, ok := a.(*ast.UnaryExpr)
 	if !ok {
@@ -1468,21 +1468,21 @@ func (o *ownChecker) outArg(a ast.Expr, fn string, borrowedRoots map[*Local]bool
 		o.reach(k, u.X.Pos())
 	}
 	if o.st.get(k)&sLive != 0 {
-		o.errorf(a.Pos(), "vazamento: %s pode ter um handle, e %s escreveria outro por cima; feche o antigo antes", k, fn)
+		o.errorf(a.Pos(), "leak: %s may hold a handle, and %s would write another over it; close the old one first", k, fn)
 	}
 	for _, prev := range *outs {
 		if prev == k {
-			o.errorf(a.Pos(), "%s recebe dois handles na mesma chamada", k)
+			o.errorf(a.Pos(), "%s receives two handles in the same call", k)
 		}
 	}
 	if borrowedRoots[k.root] || o.movingRoot(k.root) {
-		o.errorf(a.Pos(), "%s é usada de duas formas na mesma chamada", k.root.Name)
+		o.errorf(a.Pos(), "%s is used in two ways in the same call", k.root.Name)
 	}
 	*outs = append(*outs, k)
 }
 
-// chanOp trata chan.new e os métodos das pontas: close consome a ponta; send
-// move o valor para o canal; os outros só usam a ponta.
+// chanOp handles chan.new and the ends' methods: close consumes the end; send
+// moves the value into the channel; the others only use the end.
 func (o *ownChecker) chanOp(e *ast.CallExpr) {
 	plan := o.c.info.Chans[e]
 	if plan.Op == "new" {
@@ -1493,7 +1493,7 @@ func (o *ownChecker) chanOp(e *ast.CallExpr) {
 	if plan.Op == "close" {
 		end := o.c.info.Types[recv]
 		if b, ok := end.(*Borrow); ok {
-			o.errorf(recv.Pos(), "close precisa da ponta de canal (a posse), e %s é um empréstimo (%s)", exprName(recv), b)
+			o.errorf(recv.Pos(), "close needs the channel end (ownership), and %s is a borrow (%s)", exprName(recv), b)
 			return
 		}
 		o.consume(recv, o.c.pointerTo(structBehind(end), false), "close")
@@ -1503,7 +1503,7 @@ func (o *ownChecker) chanOp(e *ast.CallExpr) {
 		o.read(recv)
 		if plan.Op == "send" {
 			if IsOwner(plan.Elem) {
-				o.consume(e.Args[0], plan.Elem, "o valor de send") // vai para o canal
+				o.consume(e.Args[0], plan.Elem, "the value of send") // goes into the channel
 			} else {
 				o.read(e.Args[0])
 			}
@@ -1511,13 +1511,13 @@ func (o *ownChecker) chanOp(e *ast.CallExpr) {
 	})
 }
 
-// mutexOp trata mutex.new e os métodos de Mutex e Guard: close e unlock
-// consomem; new move o valor para dentro do mutex; os outros só usam.
+// mutexOp handles mutex.new and the methods of Mutex and Guard: close and unlock
+// consume; new moves the value inside the mutex; the others only use.
 func (o *ownChecker) mutexOp(e *ast.CallExpr) {
 	plan := o.c.info.Mutexes[e]
 	if plan.Op == "new" {
 		if IsOwner(plan.Elem) {
-			o.consume(e.Args[0], plan.Elem, "o valor de mutex.new") // vai para dentro do mutex
+			o.consume(e.Args[0], plan.Elem, "the value of mutex.new") // goes inside the mutex
 		} else {
 			o.read(e.Args[0])
 		}
@@ -1527,7 +1527,7 @@ func (o *ownChecker) mutexOp(e *ast.CallExpr) {
 	if plan.Op == "close" || plan.Op == "unlock" {
 		t := o.c.info.Types[recv]
 		if b, ok := t.(*Borrow); ok {
-			o.errorf(recv.Pos(), "%s precisa do dono, e %s é um empréstimo (%s)", plan.Op, exprName(recv), b)
+			o.errorf(recv.Pos(), "%s needs the owner, and %s is a borrow (%s)", plan.Op, exprName(recv), b)
 			return
 		}
 		o.consume(recv, o.c.pointerTo(structBehind(t), false), plan.Op)

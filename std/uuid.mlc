@@ -68,7 +68,7 @@ pub fn (u &UUID) ms() int {
 // returns how many bytes it wrote.
 pub fn (u &UUID) text(dst &[]byte) int {
     if len(dst) < TEXT_LEN {
-        fail("uuid.text: o destino precisa de 36 bytes")
+        fail("uuid.text: the destination needs 36 bytes")
     }
     digits := "0123456789abcdef"
     k := 0

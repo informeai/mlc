@@ -1,1 +1,1 @@
-panic: put_int_nao_cabe.mlc:5: str.put_int: o texto (6 bytes) não cabe no destino (3 bytes)
+panic: put_int_nao_cabe.mlc:5: str.put_int: the text (6 bytes) doesn't fit in the destination (3 bytes)

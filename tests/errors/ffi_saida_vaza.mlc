@@ -1,4 +1,4 @@
-// erro: vazamento: o handle de C h
+// error: leak: the C handle h (line 10) may still be open at the end of the function; pass it to the C function that closes it
 extern "C" type H
 extern "C" type G
 extern "C" fn h_open(n int32, out &?*H) int32

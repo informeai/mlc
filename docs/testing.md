@@ -33,13 +33,11 @@ make test-std                  # the standard library tests
 ```
 
 ```
---- FALHOU: test_push (0.00s)
-    std/vec_test.mlc:8: veio 2, esperado 1
-FALHOU	std/vec_test.mlc	1 de 2 testes falharam	0.31s
-ok	std/map_test.mlc	7 testes	0.28s
+--- FAILED: test_push (0.00s)
+    std/vec_test.mlc:8: got 2, expected 1
+FAIL	std/vec_test.mlc	1 of 2 tests failed	0.31s
+ok	std/map_test.mlc	7 tests	0.28s
 ```
-
-(The tool's messages are still in Portuguese: `FALHOU` is "failed", `veio ... esperado ...` is "got ... want ...".)
 
 ## Rules
 
@@ -76,9 +74,9 @@ For structs, enums and everything else, use `check(a == b, "...")` or a `match`.
 | Result | When |
 |---|---|
 | `ok` | it finished without failures (or with the panic asked for by `expect_panic`) |
-| `FALHOU` (failed) | a check failed, or the expected panic didn't happen |
+| `FAILED` | a check failed, or the expected panic didn't happen |
 | `PANIC` | a panic the test didn't expect; shows the line of the panic |
-| `VAZAMENTO` (leak) | memory was left over at the end of the process. This shouldn't happen, because the ownership checker prevents it; if it does, it's a bug in `mlc` |
+| `LEAK` | memory was left over at the end of the process. This shouldn't happen, because the ownership checker prevents it; if it does, it's a bug in `mlc` |
 
 `mlc test` exits with code 1 if any test fails or any file doesn't compile.
 
@@ -104,8 +102,8 @@ mlc test -benchtime 2000 -bench . std   # measure each one for 2 s (the default 
 ```
 
 ```
-ok	std/sort_test.mlc	7 testes	0.30s
-bench_sort_1000	        6730 vezes	       33049.3 ns/op
+ok	std/sort_test.mlc	7 tests	0.30s
+bench_sort_1000	        6730 times	       33049.3 ns/op
 ```
 
 - `mlc test -bench` runs the benchmark with `b.n` = 1, then a larger `n`, until the measurement passes the requested time. It's the same method as `go test -bench`.

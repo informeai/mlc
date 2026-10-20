@@ -1,4 +1,4 @@
-// erro: dois devolve &P e recebe mais de um empréstimo
+// error: dois returns &P and takes more than one borrow: there's no way to know which one the result comes from (take only one, or make a method with a & receiver)
 import "std/io"
 import "std/vec"
 

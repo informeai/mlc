@@ -1,4 +1,4 @@
-// Comando mlc: compilador da linguagem MLC (My Lang C).
+// Command mlc: compiler for the MLC language (My Lang C).
 package main
 
 import (
@@ -21,36 +21,36 @@ import (
 	"mlc/internal/token"
 )
 
-const usage = `mlc — compilador da linguagem MLC (My Lang C)
+const usage = `mlc — compiler for the MLC language (My Lang C)
 
-Uso:
-  mlc build [-o saida] [-emit-c] [-I dir] [-L dir] [-cflags "..."] [-ldflags "..."] [-sanitize address|thread] arquivo.mlc
-                                               compila para um executável
-  mlc run [-I dir] [-L dir] [-cflags "..."] [-ldflags "..."] arquivo.mlc [argumentos]
-                                               compila e executa
-      -I: pasta onde procurar os imports (além da do arquivo, de lib/ e de MLC_PATH)
-      -L: pasta onde procurar as bibliotecas de C de link "nome"
-      -cflags "...": flags a mais para compilar o C (-O3, -march=native, -fsanitize=address)
-      -ldflags "...": flags a mais para ligar (-framework Cocoa, -Wl,-rpath,/opt/lib)
-      -sanitize address|thread: roda sob AddressSanitizer + UndefinedBehaviorSanitizer,
-          ou sob ThreadSanitizer (uso depois de free, free duplo, data race...)
-      (também valem as variáveis CC, CFLAGS e LDFLAGS; as opções vêm depois e ganham)
-  mlc test [-v] [-run texto] [-bench texto] [-I dir] [-L dir] [-cflags "..."] [-ldflags "..."] [arquivos ou pastas]
-                                               roda os testes dos arquivos *_test.mlc
-                                               (padrão: a pasta atual e as de dentro)
-      -v: mostra cada teste e a saída dele, mesmo quando passa
-      -run: só os testes cujo nome contém o texto
-      -bench texto: mede também os benchmarks (fn bench_*(b &testing.B)); . para todos
-      -benchtime ms: quanto tempo medir cada benchmark (padrão 500)
-  mlc fmt [-l] [arquivos ou pastas]            formata no lugar (padrão: a pasta atual)
-  mlc fmt -                                    formata a entrada padrão na saída padrão
-  mlc doc [-I dir] [-all] [módulo[.símbolo]] [símbolo]
-                                               mostra a documentação no terminal
-      sem argumentos: os módulos da biblioteca padrão
+Usage:
+  mlc build [-o out] [-emit-c] [-I dir] [-L dir] [-cflags "..."] [-ldflags "..."] [-sanitize address|thread] file.mlc
+                                               compiles to an executable
+  mlc run [-I dir] [-L dir] [-cflags "..."] [-ldflags "..."] file.mlc [arguments]
+                                               compiles and runs
+      -I: folder where to look for imports (besides the file's, lib/ and MLC_PATH)
+      -L: folder where to look for the C libraries of link "name"
+      -cflags "...": extra flags for compiling the C (-O3, -march=native, -fsanitize=address)
+      -ldflags "...": extra flags for linking (-framework Cocoa, -Wl,-rpath,/opt/lib)
+      -sanitize address|thread: runs under AddressSanitizer + UndefinedBehaviorSanitizer,
+          or under ThreadSanitizer (use after free, double free, data race...)
+      (the variables CC, CFLAGS and LDFLAGS also apply; the options come after and win)
+  mlc test [-v] [-run text] [-bench text] [-I dir] [-L dir] [-cflags "..."] [-ldflags "..."] [files or folders]
+                                               runs the tests of the *_test.mlc files
+                                               (default: the current folder and the ones inside)
+      -v: shows each test and its output, even when it passes
+      -run: only the tests whose name contains the text
+      -bench text: also measures the benchmarks (fn bench_*(b &testing.B)); . for all
+      -benchtime ms: how long to measure each benchmark (default 500)
+  mlc fmt [-l] [files or folders]              formats in place (default: the current folder)
+  mlc fmt -                                    formats standard input to standard output
+  mlc doc [-I dir] [-all] [module[.symbol]] [symbol]
+                                               shows the documentation in the terminal
+      no arguments: the standard library's modules
       mlc doc http · mlc doc http.Message · mlc doc http.Message.read_body
-      mlc doc util/texto (biblioteca sua, procurada como o import) · mlc doc alloc
-      -all: mostra também o que não é pub
-  mlc lsp                                      servidor de linguagem (LSP) para editores
+      mlc doc util/text (a library of yours, looked up like the import) · mlc doc alloc
+      -all: also shows what isn't pub
+  mlc lsp                                      language server (LSP) for editors
 `
 
 func main() {
@@ -74,33 +74,33 @@ func main() {
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:
-		fmt.Fprintf(os.Stderr, "mlc: comando desconhecido %q\n\n%s", os.Args[1], usage)
+		fmt.Fprintf(os.Stderr, "mlc: unknown command %q\n\n%s", os.Args[1], usage)
 		os.Exit(2)
 	}
 }
 
 func readSource(path string) ([]byte, error) {
 	if filepath.Ext(path) != ".mlc" {
-		return nil, fmt.Errorf("%s: o arquivo precisa ter a extensão .mlc", path)
+		return nil, fmt.Errorf("%s: the file must have the .mlc extension", path)
 	}
 	return os.ReadFile(path)
 }
 
-// readProgram é readSource para build e run: um _test.mlc é rodado com mlc test.
+// readProgram is readSource for build and run: a _test.mlc is run with mlc test.
 func readProgram(path string) ([]byte, error) {
 	if driver.IsTestFile(path) {
-		return nil, fmt.Errorf("%s: arquivo de teste; rode com mlc test %s", path, path)
+		return nil, fmt.Errorf("%s: test file; run it with mlc test %s", path, path)
 	}
 	return readSource(path)
 }
 
 func build(args []string) int {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
-	out := fs.String("o", "", "caminho do executável (padrão: nome do arquivo sem .mlc)")
-	emitC := fs.Bool("emit-c", false, "imprime o C gerado em vez de compilar")
+	out := fs.String("o", "", "path of the executable (default: the file's name without .mlc)")
+	emitC := fs.Bool("emit-c", false, "prints the generated C instead of compiling")
 	var libDirs, importDirs dirList
-	fs.Var(&libDirs, "L", "pasta onde procurar as bibliotecas de C (pode repetir)")
-	fs.Var(&importDirs, "I", "pasta onde procurar os imports (pode repetir)")
+	fs.Var(&libDirs, "L", "folder where to look for C libraries (can repeat)")
+	fs.Var(&importDirs, "I", "folder where to look for imports (can repeat)")
 	cflags, ldflags, sanitize := ccFlags(fs)
 	fs.Parse(args)
 	opts := driver.Options{LibDirs: libDirs, ImportDirs: importDirs, CFlags: driver.SplitFlags(*cflags), LDFlags: driver.SplitFlags(*ldflags), Sanitize: *sanitize}
@@ -138,10 +138,10 @@ func build(args []string) int {
 func run(args []string) int {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	var libDirs, importDirs dirList
-	fs.Var(&libDirs, "L", "pasta onde procurar as bibliotecas de C (pode repetir)")
-	fs.Var(&importDirs, "I", "pasta onde procurar os imports (pode repetir)")
+	fs.Var(&libDirs, "L", "folder where to look for C libraries (can repeat)")
+	fs.Var(&importDirs, "I", "folder where to look for imports (can repeat)")
 	cflags, ldflags, sanitize := ccFlags(fs)
-	fs.Parse(args) // para no primeiro argumento que não é opção: o arquivo
+	fs.Parse(args) // stops at the first argument that isn't an option: the file
 	args = fs.Args()
 	if len(args) < 1 {
 		fmt.Fprint(os.Stderr, usage)
@@ -179,17 +179,17 @@ func run(args []string) int {
 	return 0
 }
 
-// testCmd compila cada arquivo _test.mlc num programa de teste e roda cada
-// teste num processo separado. Devolve 1 se algum falhar.
+// testCmd compiles each _test.mlc file into a test program and runs each
+// test in a separate process. Returns 1 if any fails.
 func testCmd(args []string) int {
 	fs := flag.NewFlagSet("test", flag.ExitOnError)
-	verbose := fs.Bool("v", false, "mostra cada teste e a saída dele")
-	only := fs.String("run", "", "só os testes cujo nome contém o texto")
-	bench := fs.String("bench", "", "roda também os benchmarks cujo nome contém o texto (. para todos)")
-	benchTime := fs.Int("benchtime", 500, "quanto tempo (ms) cada benchmark é medido, no mínimo")
+	verbose := fs.Bool("v", false, "shows each test and its output")
+	only := fs.String("run", "", "only the tests whose name contains the text")
+	bench := fs.String("bench", "", "also runs the benchmarks whose name contains the text (. for all)")
+	benchTime := fs.Int("benchtime", 500, "how long (ms) each benchmark is measured, at least")
 	var libDirs, importDirs dirList
-	fs.Var(&libDirs, "L", "pasta onde procurar as bibliotecas de C (pode repetir)")
-	fs.Var(&importDirs, "I", "pasta onde procurar os imports (pode repetir)")
+	fs.Var(&libDirs, "L", "folder where to look for C libraries (can repeat)")
+	fs.Var(&importDirs, "I", "folder where to look for imports (can repeat)")
 	cflags, ldflags, sanitize := ccFlags(fs)
 	fs.Parse(args)
 	opts := driver.Options{LibDirs: libDirs, ImportDirs: importDirs, CFlags: driver.SplitFlags(*cflags), LDFlags: driver.SplitFlags(*ldflags), Sanitize: *sanitize}
@@ -217,7 +217,7 @@ func testCmd(args []string) int {
 		})
 	}
 	if len(files) == 0 {
-		fmt.Fprintln(os.Stderr, "mlc test: nenhum arquivo *_test.mlc encontrado")
+		fmt.Fprintln(os.Stderr, "mlc test: no *_test.mlc file found")
 		return 1
 	}
 	dir, err := os.MkdirTemp("", "mlc-test-")
@@ -236,15 +236,15 @@ func testCmd(args []string) int {
 	return status
 }
 
-// benchConfig diz quais benchmarks rodar (filter vazio: nenhum; ".": todos)
-// e por quanto tempo medir cada um.
+// benchConfig says which benchmarks to run (empty filter: none; ".": all)
+// and for how long to measure each one.
 type benchConfig struct {
 	filter string
 	target time.Duration
 }
 
-// testFile roda os testes de um arquivo (e os benchmarks, com -bench) e diz
-// se todos passaram.
+// testFile runs a file's tests (and the benchmarks, with -bench) and says
+// whether they all passed.
 func testFile(file, exe, only string, verbose bool, bc benchConfig, opts driver.Options) bool {
 	src, err := readSource(file)
 	if err == nil {
@@ -259,7 +259,7 @@ func testFile(file, exe, only string, verbose bool, bc benchConfig, opts driver.
 		}
 	}
 	fmt.Fprintln(os.Stderr, err)
-	fmt.Printf("FALHOU\t%s\t(não compilou)\n", file)
+	fmt.Printf("FAIL\t%s\t(didn't compile)\n", file)
 	return false
 }
 
@@ -298,19 +298,19 @@ func runTests(file, exe string, names []string, only string, verbose bool) bool 
 	elapsed := time.Since(start).Seconds()
 	switch {
 	case failed > 0:
-		fmt.Printf("FALHOU\t%s\t%d de %s falharam\t%.2fs\n", file, failed, plural(ran, "teste", "testes"), elapsed)
+		fmt.Printf("FAIL\t%s\t%d of %s failed\t%.2fs\n", file, failed, plural(ran, "test", "tests"), elapsed)
 		return false
 	case ran == 0:
-		fmt.Printf("ok\t%s\tnenhum teste com %q\n", file, only)
+		fmt.Printf("ok\t%s\tno test matching %q\n", file, only)
 	default:
-		fmt.Printf("ok\t%s\t%s\t%.2fs\n", file, plural(ran, "teste", "testes"), elapsed)
+		fmt.Printf("ok\t%s\t%s\t%.2fs\n", file, plural(ran, "test", "tests"), elapsed)
 	}
 	return true
 }
 
-// runBenches mede os benchmarks: cada um roda com b.n = 1, 2, ... (num
-// processo por rodada, com o tempo medido dentro do programa) até a medida
-// passar de bc.target, como o go test -bench.
+// runBenches measures the benchmarks: each one runs with b.n = 1, 2, ... (one
+// process per round, with the time measured inside the program) until the measurement
+// passes bc.target, like go test -bench.
 func runBenches(file, exe string, names []string, bc benchConfig) bool {
 	ran := 0
 	for i, name := range names {
@@ -328,16 +328,16 @@ func runBenches(file, exe string, names []string, bc benchConfig) bool {
 						fmt.Print("    ", line)
 					}
 				}
-				fmt.Printf("FALHOU\t%s\n", file)
+				fmt.Printf("FAIL\t%s\n", file)
 				return false
 			}
 			if time.Duration(r.Ns) >= bc.target || n >= 1_000_000_000 {
-				fmt.Printf("%s\t%12d vezes\t%14.1f ns/op\n", name, n, float64(r.Ns)/float64(n))
+				fmt.Printf("%s\t%12d times\t%14.1f ns/op\n", name, n, float64(r.Ns)/float64(n))
 				break
 			}
 			next := n * 100
 			if r.Ns > 0 {
-				// prevê o n que chega ao tempo, com folga, sem saltar mais que 100x
+				// predicts the n that reaches the time, with a margin, without jumping more than 100x
 				next = int(float64(n) * float64(bc.target) / float64(r.Ns) * 1.2)
 				next = min(max(next, n+1), n*100)
 			}
@@ -345,18 +345,18 @@ func runBenches(file, exe string, names []string, bc benchConfig) bool {
 		}
 	}
 	if ran == 0 {
-		fmt.Printf("ok\t%s\tnenhum benchmark com %q\n", file, bc.filter)
+		fmt.Printf("ok\t%s\tno benchmark matching %q\n", file, bc.filter)
 	}
 	return true
 }
 
-// docCmd mostra a documentação de um módulo, de um símbolo dele ou de um
-// embutido, tirada dos comentários // acima de cada declaração.
+// docCmd shows the documentation of a module, of one of its symbols or of a
+// built-in, taken from the // comments above each declaration.
 func docCmd(args []string) int {
 	fs := flag.NewFlagSet("doc", flag.ExitOnError)
-	all := fs.Bool("all", false, "mostra também o que não é pub")
+	all := fs.Bool("all", false, "also shows what isn't pub")
 	var importDirs dirList
-	fs.Var(&importDirs, "I", "pasta onde procurar os imports (pode repetir)")
+	fs.Var(&importDirs, "I", "folder where to look for imports (can repeat)")
 	fs.Parse(args)
 	switch {
 	case fs.NArg() == 0:
@@ -375,10 +375,10 @@ func docCmd(args []string) int {
 	return 0
 }
 
-// fmtCmd formata arquivos .mlc no lugar. Com -l, só lista os que mudariam.
+// fmtCmd formats .mlc files in place. With -l, it only lists the ones that would change.
 func fmtCmd(args []string) int {
 	fs := flag.NewFlagSet("fmt", flag.ExitOnError)
-	list := fs.Bool("l", false, "só lista os arquivos cuja formatação é diferente, sem alterá-los")
+	list := fs.Bool("l", false, "only lists the files whose formatting differs, without changing them")
 	fs.Parse(args)
 	paths := fs.Args()
 	if len(paths) == 1 && paths[0] == "-" {
@@ -451,16 +451,16 @@ func printErrors(errs []token.Error) {
 	}
 }
 
-// ccFlags registra -cflags e -ldflags: flags a mais para o compilador C,
-// depois das do mlc e das variáveis CFLAGS e LDFLAGS.
+// ccFlags registers -cflags and -ldflags: extra flags for the C compiler,
+// after mlc's and the variables CFLAGS and LDFLAGS.
 func ccFlags(fs *flag.FlagSet) (cflags, ldflags, sanitize *string) {
-	cflags = fs.String("cflags", "", "flags a mais para compilar o C (separadas por espaço), depois das do mlc e de CFLAGS")
-	ldflags = fs.String("ldflags", "", "flags a mais para ligar o programa (separadas por espaço), depois de LDFLAGS")
-	sanitize = fs.String("sanitize", "", "compila com sanitizers: address (AddressSanitizer e UndefinedBehaviorSanitizer) ou thread (ThreadSanitizer)")
+	cflags = fs.String("cflags", "", "extra flags for compiling the C (separated by spaces), after mlc's and CFLAGS")
+	ldflags = fs.String("ldflags", "", "extra flags for linking the program (separated by spaces), after LDFLAGS")
+	sanitize = fs.String("sanitize", "", "compiles with sanitizers: address (AddressSanitizer and UndefinedBehaviorSanitizer) or thread (ThreadSanitizer)")
 	return
 }
 
-// dirList junta os -L repetidos.
+// dirList gathers the repeated -L.
 type dirList []string
 
 func (d *dirList) String() string { return strings.Join(*d, ",") }

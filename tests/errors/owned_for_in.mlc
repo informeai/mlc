@@ -1,4 +1,4 @@
-// erro: são donos e não podem ser copiados: use for x in drain(s)
+// error: the elements of &[]T are owners and can't be copied: use for x in drain(s) to empty the slice
 fn conta[T owned](s &[]T) int {
     n := 0
     for x in s {

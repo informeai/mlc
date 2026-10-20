@@ -1,4 +1,4 @@
-// erro: pick devolve &Box e recebe mais de um empréstimo: não dá para saber de qual o resultado vem (receba só um, ou faça um método com receptor &)
+// error: pick returns &Box and takes more than one borrow: there's no way to know which one the result comes from (take only one, or make a method with a & receiver)
 // Caso difícil (fase 5 do plano de verificação): função que devolve um de dois empréstimos (não dá para saber de qual vem).
 struct Box {
     v int

@@ -1,4 +1,4 @@
-// erro: argumento 1 de f: esperado &[]int, encontrado &[]bool
+// error: argument 1 of f: expected &[]int, found &[]bool
 fn f(s &[]int) {
 }
 fn main() {

@@ -1,4 +1,4 @@
-// erro: módulo geometria usado como valor
+// error: module geometria used as a value
 import "std/io"
 import "geometria"
 fn main() {

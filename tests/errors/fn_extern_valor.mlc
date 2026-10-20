@@ -1,4 +1,4 @@
-// erro: extern fn não pode ser usada como valor
+// error: an extern fn can't be used as a value; wrap it in an ordinary fn
 import "std/io"
 
 fn main() {

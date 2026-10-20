@@ -264,12 +264,10 @@ Arrays and structs with arrays live on the stack, and the stack is also memory w
 - **At compile time**, the checker estimates each function's stack: the frame (parameters, local variables and the large values C keeps in temporaries) plus the largest stack among the functions it calls directly. A `thread.spawn` with a constant size, `main` and the tests are checked against the stack they'll have, minus a reserve (1/8 of the stack, between 4 KB and 32 KB) for what C uses besides the variables and for the panic:
 
   ```text
-  a thread de work precisa de cerca de 489 KB de pilha, e thread.spawn pede 64 KB
-  (o maior peso é a variável body [500000]byte (489 KB) em fill): ponha o buffer
-  no heap com alloc([]byte, 500000), ou peça uma pilha maior (thread.STACK_1MB)
+  the thread of work needs about 489 KB of stack, and thread.spawn asks for 64 KB
+  (the heaviest is the variable body [500000]byte (489 KB) in fill): put the buffer
+  on the heap with alloc([]byte, 500000), or ask for a larger stack (thread.STACK_1MB)
   ```
-
-  ("work's thread needs about 489 KB of stack, and thread.spawn asks for 64 KB (the heaviest is the variable body [500000]byte (489 KB) in fill): put the buffer on the heap with alloc([]byte, 500000), or ask for a larger stack (thread.STACK_1MB)")
 
 - **At run time**, every function with an estimated frame of 2 KB or more gets an entry that checks, before the frame exists, whether it fits in what's left of the thread's stack. If it doesn't, it panics pointing at the function. This covers what compile time can't reach: recursion (the depth depends on the data), calls through `fn` values and a computed stack size. Functions with small frames pay nothing: an overflow from them always lands on the guard page.
 

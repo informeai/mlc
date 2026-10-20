@@ -70,9 +70,9 @@ fn test_verify_and_equal() {
     hmac.sha256(&key[:k], &body[:n], &mac)
     testing.check(hmac.verify(&key[:k], &body[:n], &mac), "assinatura certa")
     mac[31] ^= 1
-    testing.check(!hmac.verify(&key[:k], &body[:n], &mac), "um bit trocado")
+    testing.check(!hmac.verify(&key[:k], &body[:n], &mac), "one flipped bit")
     testing.check(!hmac.verify(&key[:k], &body[:n], &mac[:16]), "tamanho errado")
-    testing.check(hmac.equal(&body[:0], &key[:0]), "vazios são iguais")
+    testing.check(hmac.equal(&body[:0], &key[:0]), "empty ones are equal")
 }
 
 fn pbkdf2_hex(password string, salt string, iterations int, size int) [128]byte {

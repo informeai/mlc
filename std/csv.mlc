@@ -275,7 +275,7 @@ pub fn (w &Writer) add(s &[]byte) {
 pub fn (w &Writer) add_str(s string) {
     var b [1024]byte
     if len(s) > len(b) {
-        fail("csv.Writer.add_str: texto maior que 1 KB; use add com um buffer seu")
+        fail("csv.Writer.add_str: text larger than 1 KB; use add with a buffer of yours")
     }
     n := str.copy(&b, s)
     w.add(&b[:n])
@@ -312,7 +312,7 @@ pub fn (w &Writer) reset() {
 
 fn (w &Writer) put(c byte) {
     if w.n == len(w.buf) {
-        fail("csv.Writer: o buffer de 16 KB encheu; escreva e chame reset antes")
+        fail("csv.Writer: the 16 KB buffer is full; write it out and call reset first")
     }
     w.buf[w.n] = c
     w.n++

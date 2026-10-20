@@ -1,4 +1,4 @@
-// erro: campo x repetido em Ponto
+// error: repeated field x in Ponto
 struct Ponto { x int; x int }
 fn main() {
 }

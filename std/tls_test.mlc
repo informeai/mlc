@@ -140,7 +140,7 @@ fn test_round_trip() {
     port := 0
     t := start(&dir[:dn], &port)
     if t == nil {
-        testing.fail("o servidor não subiu")
+        testing.fail("the server didn't start")
         fs.remove_all(&dir[:dn])
         return
     }
@@ -175,17 +175,17 @@ fn test_untrusted_rejected() {
     port := 0
     t := start(&dir[:dn], &port)
     if t == nil {
-        testing.fail("o servidor não subiu")
+        testing.fail("the server didn't start")
         fs.remove_all(&dir[:dn])
         return
     }
     err := 0
     c := tls.connect_str("localhost", port, &err)
-    testing.check(c == nil, "recusado")
+    testing.check(c == nil, "refused")
     testing.eq_int(err, tls.BAD_CERT)
     var why [256]byte
     n := tls.last_error(&why)
-    testing.check(n > 0, "com a explicação")
+    testing.check(n > 0, "with the explanation")
     if c != nil {
         c.close()
     }
@@ -207,13 +207,13 @@ fn test_wrong_name_rejected() {
     port := 0
     t := start(&dir[:dn], &port)
     if t == nil {
-        testing.fail("o servidor não subiu")
+        testing.fail("the server didn't start")
         fs.remove_all(&dir[:dn])
         return
     }
     err := 0
     c := tls.connect_str("127.0.0.1", port, &err)
-    testing.check(c == nil, "recusado")
+    testing.check(c == nil, "refused")
     testing.eq_int(err, tls.BAD_CERT)
     if c != nil {
         c.close()
@@ -228,7 +228,7 @@ fn test_server_files_missing() {
     }
     err := 0
     srv := tls.new_server_str("/nao/existe.pem", "/nao/existe.pem", &err)
-    testing.check(srv == nil, "sem arquivos")
+    testing.check(srv == nil, "without files")
     testing.eq_int(err, tls.SERVER_FILES)
     if srv != nil {
         srv.close()
@@ -294,7 +294,7 @@ fn test_https_router_and_client() {
     hn := str.copy(&h, "127.0.0.1")
     l := net.listen(&h[:hn], 0, &err)
     if srv == nil || l == nil {
-        testing.fail("o servidor não subiu")
+        testing.fail("the server didn't start")
         if srv != nil {
             srv.close()
         }

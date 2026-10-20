@@ -1,4 +1,4 @@
-// erro: esse tipo não pode passar por um canal (*T não tem valor zero
+// error: that type can't go through a channel (*T has no zero value and collections need empty slots: use ?*P)
 import "std/chan"
 import "std/io"
 

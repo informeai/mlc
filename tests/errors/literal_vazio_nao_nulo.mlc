@@ -1,4 +1,4 @@
-// erro: campo b não inicializado
+// error: field b not initialized (list every field, or use A{} for the zero value)
 struct B { x int }
 struct A { b *B; n int }
 fn main() {

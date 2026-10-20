@@ -4,40 +4,40 @@ import (
 	"mlc/internal/ast"
 )
 
-// Canais (std/chan)
+// Channels (std/chan)
 //
-//	rx := chan.new[[]byte](16)   // aloca o canal (16 posições) e devolve a ponta que recebe
-//	tx := rx.sender()            // uma ponta que envia, ligada ao mesmo canal
-//	tx.send(msg)                 // msg é movida para o canal (bloqueia se cheio)
-//	match rx.recv() {            // bloqueia até chegar algo ou o canal fechar
-//	    Got(m) => ...            // a posse chega aqui
-//	    Closed => ...            // todos os Sender fecharam e o canal esvaziou
+//	rx := chan.new[[]byte](16)   // allocates the channel (16 slots) and returns the receiving end
+//	tx := rx.sender()            // an end that sends, tied to the same channel
+//	tx.send(msg)                 // msg is moved into the channel (blocks if full)
+//	match rx.recv() {            // blocks until something arrives or the channel closes
+//	    Got(m) => ...            // ownership arrives here
+//	    Closed => ...            // every Sender closed and the channel is empty
 //	}
 //	tx.close()
 //	rx.close()
 //
-// chan.new e os métodos das pontas são embutidos no compilador; o canal em
-// si (buffer em anel, trava, contagem de pontas) fica no runtime. Cada ponta
-// (*chan.Sender[T], *chan.Receiver[T]) é um dono, como um handle: precisa de
-// close(), não aceita free nem alloc. O runtime conta as pontas, e o último
-// close libera o canal (com drop no que sobrou nele). Um send sem nenhum
-// Receiver aberto libera o valor (drop) e devolve false.
+// chan.new and the ends' methods are built into the compiler; the channel
+// itself (ring buffer, lock, end count) lives in the runtime. Each end
+// (*chan.Sender[T], *chan.Receiver[T]) is an owner, like a handle: it needs a
+// close(), and doesn't accept free or alloc. The runtime counts the ends, and the last
+// close frees the channel (with drop on whatever was left in it). A send with no
+// Receiver open frees the value (drop) and returns false.
 
-// Pontas de canal (Struct.ChanEnd).
+// Channel ends (Struct.ChanEnd).
 const (
 	ChanSender   = 1
 	ChanReceiver = 2
 )
 
-// ChanPlan é o que o gerador precisa para uma operação de canal.
+// ChanPlan is what the generator needs for a channel operation.
 type ChanPlan struct {
 	Op   string // new, send, recv, sender, clone, close
 	Elem Type
-	End  int  // a ponta do receptor (nos métodos)
-	Recv Type // recv: o enum chan.Recv[T]
+	End  int  // the receiver's end (in methods)
+	Recv Type // recv: the chan.Recv[T] enum
 }
 
-// chanEnd devolve o tipo da ponta (Sender ou Receiver) de um canal de elem.
+// chanEnd returns the type of a channel end (Sender or Receiver) for elem.
 func (c *checker) chanEnd(end int, elem Type) *Struct {
 	key := chanKey{end, elem}
 	if s, ok := c.chans[key]; ok {
@@ -66,10 +66,10 @@ func isChanEnd(t Type) bool {
 	return ok && s.ChanEnd != 0
 }
 
-// chanTypeExpr resolve chan.Sender[T] e chan.Receiver[T] escritos no código.
+// chanTypeExpr resolves chan.Sender[T] and chan.Receiver[T] written in the code.
 func (c *checker) chanTypeExpr(t *ast.TypeExpr) Type {
 	if len(t.Args) != 1 {
-		c.errorf(t.P, "chan.%s recebe o tipo dos valores: chan.%s[int]", t.Name, t.Name)
+		c.errorf(t.P, "chan.%s takes the type of the values: chan.%s[int]", t.Name, t.Name)
 		return Invalid
 	}
 	elem := c.resolveType(t.Args[0], ctxVar)
@@ -87,29 +87,29 @@ func (c *checker) chanTypeExpr(t *ast.TypeExpr) Type {
 	return c.chanEnd(end, elem)
 }
 
-// chanElemOK explica por que valores de t não podem passar por um canal.
+// chanElemOK explains why values of t can't go through a channel.
 func (c *checker) chanElemOK(t Type) string {
 	if isBorrow(t) {
-		return "um canal não leva empréstimos: os valores passam de uma thread para outra por posse"
+		return "a channel doesn't carry borrows: values pass from one thread to another by ownership"
 	}
 	if ok, why := ownedOK(t); !ok {
 		if why == "" {
-			return "esse tipo não pode passar por um canal"
+			return "that type can't go through a channel"
 		}
-		return "esse tipo não pode passar por um canal (" + why + ")"
+		return "that type can't go through a channel (" + why + ")"
 	}
 	return ""
 }
 
-// chanNew checa chan.new[T](cap).
+// chanNew checks chan.new[T](cap).
 func (c *checker) chanNew(e *ast.CallExpr, targs []ast.Expr) Type {
 	if len(targs) != 1 || len(e.Args) != 1 {
-		c.errorf(e.Lparen, "chan.new recebe o tipo dos valores e a capacidade: chan.new[int](16)")
+		c.errorf(e.Lparen, "chan.new takes the type of the values and the capacity: chan.new[int](16)")
 		c.checkArgs(e)
 		return Invalid
 	}
 	elem := c.resolveType(typeExprOf(targs[0]), ctxVar)
-	c.valueAs(e.Args[0], Int, "a capacidade de chan.new")
+	c.valueAs(e.Args[0], Int, "the capacity of chan.new")
 	if elem == Invalid {
 		return Invalid
 	}
@@ -119,14 +119,14 @@ func (c *checker) chanNew(e *ast.CallExpr, targs []ast.Expr) Type {
 	}
 	c.recvEnum(elem, targs[0])
 	if IsOwner(elem) {
-		c.dropPlan(elem, targs[0].Pos()) // o runtime libera o que sobrar no canal
+		c.dropPlan(elem, targs[0].Pos()) // the runtime frees whatever is left in the channel
 	}
 	c.info.Chans[e] = &ChanPlan{Op: "new", Elem: elem}
 	c.info.Calls[e] = Callee{Builtin: ChanOp}
 	return c.pointerTo(c.chanEnd(ChanReceiver, elem), false)
 }
 
-// recvEnum devolve chan.Recv[elem], o resultado de recv.
+// recvEnum returns chan.Recv[elem], the result of recv.
 func (c *checker) recvEnum(elem Type, pos ast.Expr) *Enum {
 	m := c.modules["std/chan"]
 	en := m.enums["Recv"]
@@ -134,7 +134,7 @@ func (c *checker) recvEnum(elem Type, pos ast.Expr) *Enum {
 	return inst
 }
 
-// chanMethod checa os métodos de uma ponta de canal.
+// chanMethod checks the methods of a channel end.
 func (c *checker) chanMethod(e *ast.CallExpr, sel *ast.SelectorExpr, t Type, s *Struct) Type {
 	if isBorrow(t) {
 		t = c.pointerTo(s, false)
@@ -155,17 +155,17 @@ func (c *checker) chanMethod(e *ast.CallExpr, sel *ast.SelectorExpr, t Type, s *
 	case sel.Sel == "close":
 		result = Void
 	default:
-		c.errorf(sel.SelPos, "%s não tem método %s (Sender: send, clone, close; Receiver: recv, sender, clone, close)", s.Name, sel.Sel)
+		c.errorf(sel.SelPos, "%s has no method %s (Sender: send, clone, close; Receiver: recv, sender, clone, close)", s.Name, sel.Sel)
 		c.checkArgs(e)
 		return Invalid
 	}
 	if len(e.Args) != nargs {
-		c.errorf(e.Lparen, "%s.%s espera %d argumento(s), recebeu %d", s.Name, sel.Sel, nargs, len(e.Args))
+		c.errorf(e.Lparen, "%s.%s expects %d argument(s), got %d", s.Name, sel.Sel, nargs, len(e.Args))
 		c.checkArgs(e)
 		return Invalid
 	}
 	if nargs == 1 {
-		c.valueAs(e.Args[0], s.ChanElem, "o valor de send")
+		c.valueAs(e.Args[0], s.ChanElem, "the value of send")
 	}
 	c.info.Chans[e] = plan
 	c.info.Calls[e] = Callee{Builtin: ChanOp}

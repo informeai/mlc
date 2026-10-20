@@ -1,4 +1,4 @@
-// erro: p.prox já foi liberada ou movida (linha 10)
+// error: p.prox was already freed or moved (line 10)
 import "std/io"
 struct No {
     valor int

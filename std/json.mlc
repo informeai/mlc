@@ -521,10 +521,10 @@ pub fn (w &Writer) array() {
 // end closes the object or array opened last.
 pub fn (w &Writer) end() {
     if w.depth == 0 {
-        fail("json.Writer.end: não há objeto nem array aberto")
+        fail("json.Writer.end: there's no open object or array")
     }
     if w.after_key {
-        fail("json.Writer.end: a última key ficou sem valor")
+        fail("json.Writer.end: the last key was left without a value")
     }
     w.depth--
     if w.kind[w.depth] == 'o' {
@@ -538,7 +538,7 @@ pub fn (w &Writer) end() {
 pub fn (w &Writer) key(name string) {
     var b [256]byte
     if len(name) > len(b) {
-        fail("json.Writer.key: chave maior que 256 bytes; use key_bytes")
+        fail("json.Writer.key: key longer than 256 bytes; use key_bytes")
     }
     n := str.copy(&b, name)
     w.key_bytes(&b[:n])
@@ -547,10 +547,10 @@ pub fn (w &Writer) key(name string) {
 // key_bytes is key with the key built at run time.
 pub fn (w &Writer) key_bytes(name &[]byte) {
     if w.depth == 0 || w.kind[w.depth - 1] != 'o' {
-        fail("json.Writer.key: key só existe dentro de um objeto")
+        fail("json.Writer.key: key only exists inside an object")
     }
     if w.after_key {
-        fail("json.Writer.key: a key anterior ficou sem valor")
+        fail("json.Writer.key: the previous key was left without a value")
     }
     if w.count[w.depth - 1] > 0 {
         w.put(',')
@@ -565,7 +565,7 @@ pub fn (w &Writer) key_bytes(name &[]byte) {
 pub fn (w &Writer) str(s string) {
     var b [1024]byte
     if len(s) > len(b) {
-        fail("json.Writer.str: texto maior que 1 KB; use text")
+        fail("json.Writer.str: text larger than 1 KB; use text")
     }
     n := str.copy(&b, s)
     w.text(&b[:n])
@@ -662,7 +662,7 @@ pub fn (w &Writer) field_null(key string) {
 fn (w &Writer) before() {
     if w.depth == 0 {
         if w.roots > 0 {
-            fail("json.Writer: o documento já tem um valor na raiz (use reset para começar outro)")
+            fail("json.Writer: the document already has a value at the root (use reset to start another)")
         }
         w.roots++
         return
@@ -670,7 +670,7 @@ fn (w &Writer) before() {
     d := w.depth - 1
     if w.kind[d] == 'o' {
         if !w.after_key {
-            fail("json.Writer: dentro de um objeto, cada valor precisa de uma key antes")
+            fail("json.Writer: inside an object, each value needs a key first")
         }
         w.after_key = false
         return
@@ -684,7 +684,7 @@ fn (w &Writer) before() {
 fn (w &Writer) open(kind byte, c byte) {
     w.before()
     if w.depth == MAX_DEPTH {
-        fail("json.Writer: aninhamento demais (o máximo é 32)")
+        fail("json.Writer: too much nesting (the maximum is 32)")
     }
     w.kind[w.depth] = kind
     w.count[w.depth] = 0

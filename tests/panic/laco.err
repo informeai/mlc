@@ -1,1 +1,1 @@
-panic: laco.mlc:6: estouro de inteiro na multiplicação
+panic: laco.mlc:6: overflow of int in multiplication

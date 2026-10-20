@@ -1,4 +1,4 @@
-// erro: vazamento: o handle de C f (linha 10) pode ainda estar aberto no fim da função; passe-o à função de C que o fecha
+// error: leak: the C handle f (line 10) may still be open at the end of the function; pass it to the C function that closes it
 import "std/io"
 
 extern "C" type FILE

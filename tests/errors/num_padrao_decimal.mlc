@@ -1,4 +1,4 @@
-// erro: match não se aplica a float64
+// error: match doesn't apply to float64 (only integers, bool and string)
 fn main() {
     f := 1.5
     match f {

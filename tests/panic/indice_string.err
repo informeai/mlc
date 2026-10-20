@@ -1,1 +1,1 @@
-panic: indice_string.mlc:5: índice 5 fora dos limites (tamanho 3)
+panic: indice_string.mlc:5: index 5 out of bounds (length 3)

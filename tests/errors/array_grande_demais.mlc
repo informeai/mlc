@@ -1,4 +1,4 @@
-// erro: array grande demais (8000000 bytes; o limite é 1048576, para não estourar a pilha): use alloc([]int, 1000000)
+// error: array too large (8000000 bytes; the limit is 1048576, so the stack doesn't overflow): use alloc([]int, 1000000)
 fn main() {
     var a [1000000]int
 }

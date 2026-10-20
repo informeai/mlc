@@ -1,4 +1,4 @@
-// erro: argumento 1 de soma: esperado &Ponto; para emprestar, escreva &p
+// error: argument 1 of soma: expected &Ponto; to borrow, write &p
 struct Ponto { x int; y int }
 fn soma(p &Ponto) int {
     return p.x + p.y

@@ -1,4 +1,4 @@
-// erro: vec.Vec[[]byte].get exige T any ([]byte é dono, e o método copia): use os métodos que movem a posse, como take ou put
+// error: vec.Vec[[]byte].get requires T any ([]byte is an owner, and the method copies): use the methods that move ownership, like take or put
 import "std/vec"
 
 fn main() {

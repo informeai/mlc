@@ -1,4 +1,4 @@
-// erro: vazamento: p ainda é dona da memória (linha 3) no fim da função
+// error: leak: p still owns the memory (line 3) at the end of the function; free it with free(p) or pass ownership along
 struct Ponto { x int; y int }
 fn f(p *Ponto) {
 }

@@ -1,4 +1,4 @@
-// erro: a quantidade de bits de << precisa ser um inteiro, não float64
+// error: the number of bits of << must be an integer, not float64
 fn main() {
     var f float64 = 2.0
     x := 1 << f

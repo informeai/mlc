@@ -1,4 +1,4 @@
-// erro: o primeiro parâmetro de Area.a precisa ser self &Self
+// error: the first parameter of Area.a must be self &Self (in this version the receiver is always borrowed)
 // Achado pelo fuzz de robustez: um método de interface sem self derrubava
 // o compilador ao conferir um impl.
 interface Area {

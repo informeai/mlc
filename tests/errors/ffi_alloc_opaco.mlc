@@ -1,4 +1,4 @@
-// erro: FILE é um tipo de C opaco: os valores vêm de funções de C, não de alloc
+// error: FILE is an opaque C type: the values come from C functions, not from alloc
 extern "C" type FILE
 
 extern "C" fn fopen(caminho string, modo string) ?*FILE

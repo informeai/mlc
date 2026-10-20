@@ -1,4 +1,4 @@
-// erro: s é emprestada e movida na mesma chamada
+// error: s is borrowed and moved in the same call
 fn f(a &[]int, b []int) {
     free(b)
 }

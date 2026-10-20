@@ -1,4 +1,4 @@
-// erro: uma struct emprestada ao C só pode ter campos numéricos ou bool
+// error: parameter p of usa (&P): a struct lent to C can only have numeric or bool fields
 struct P {
     nome []byte
 }

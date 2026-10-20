@@ -1,4 +1,4 @@
-// erro: um arquivo de teste não declara fn main
+// error: a test file doesn't declare fn main: mlc test generates the main that runs the tests
 import "std/testing"
 
 fn test_a() {

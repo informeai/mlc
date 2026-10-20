@@ -1,4 +1,4 @@
-// erro: str.concat não existe
+// error: str.concat doesn't exist
 import "std/str"
 fn main() {
     str.concat("a", "b")

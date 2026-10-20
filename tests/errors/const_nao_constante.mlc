@@ -1,4 +1,4 @@
-// erro: o valor de uma const precisa ser uma expressão constante
+// error: a const's value must be a constant expression: function calls are evaluated at run time
 fn f() int {
     return 1
 }

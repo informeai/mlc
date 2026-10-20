@@ -68,7 +68,7 @@ pub fn (b &Buf) push_int(n int) {
 // truncate shortens the text to n bytes (n <= len).
 pub fn (b &Buf) truncate(n int) {
     if n < 0 || n > b.len {
-        fail("bytes.Buf.truncate: tamanho fora do texto")
+        fail("bytes.Buf.truncate: length outside the text")
     }
     b.len = n
 }

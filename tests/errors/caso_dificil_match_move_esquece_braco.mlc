@@ -1,4 +1,4 @@
-// erro: vazamento: b pode ainda ser dona da memória
+// error: leak: b may still own the memory (line 37) at the end of the match arm, depending on the path
 // Caso difícil (fase 5 do plano de verificação): um caminho do braço do match esquece o dado.
 struct Box {
     v int

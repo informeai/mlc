@@ -1,4 +1,4 @@
-// erro: s está sendo esvaziada por um for in drain(s) e não pode ser emprestada nem receber elementos
+// error: s is being emptied by a for in drain(s) and can't be borrowed or receive elements
 struct Item { peso int }
 fn main() {
     s := alloc([]?*Item, 2)

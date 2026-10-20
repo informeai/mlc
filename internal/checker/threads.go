@@ -6,29 +6,29 @@ import (
 
 // Threads (std/thread)
 //
-//	t := thread.spawn(soma, metade, thread.STACK_64KB)   // metade é movida para a thread
-//	r := thread.join(t)                                  // o resultado volta por posse
+//	t := thread.spawn(sum, half, thread.STACK_64KB)      // half is moved to the thread
+//	r := thread.join(t)                                  // the result comes back by ownership
 //
-// spawn e join são embutidas no compilador, como io.print: spawn recebe a
-// função da thread (fn(C) ou fn(C) R, sem closure), o contexto (movido) e o
-// tamanho da pilha em bytes, e devolve um *thread.Thread[R] (*thread.Thread
-// quando a função não devolve nada). O handle se comporta como um handle de
-// C: não aceita free nem alloc, não vai para um Vec genérico, e o verificador
-// cobra que ele seja passado a thread.join, que espera a thread terminar,
-// devolve o resultado e libera o registro. Assim nenhuma thread fica solta.
+// spawn and join are built into the compiler, like io.print: spawn takes the
+// thread's function (fn(C) or fn(C) R, no closure), the context (moved) and the
+// stack size in bytes, and returns a *thread.Thread[R] (*thread.Thread
+// when the function returns nothing). The handle behaves like a C
+// handle: it doesn't accept free or alloc, doesn't go into a generic Vec, and the checker
+// requires that it be passed to thread.join, which waits for the thread to finish,
+// returns the result and frees the record. This way no thread is left loose.
 //
-// Dados só atravessam por movimento (o contexto entra, o resultado sai):
-// a função da thread não recebe empréstimos, e não há variáveis globais
-// mutáveis, então não há como duas threads mexerem na mesma memória.
+// Data only crosses by move (the context goes in, the result comes out):
+// the thread's function doesn't take borrows, and there are no mutable global
+// variables, so there's no way for two threads to touch the same memory.
 
-// SpawnPlan é o que o gerador precisa para um thread.spawn.
+// SpawnPlan is what the generator needs for a thread.spawn.
 type SpawnPlan struct {
 	Fn     *FuncType
 	Ctx    Type
-	Result Type // Void se a função não devolve nada
+	Result Type // Void if the function returns nothing
 }
 
-// threadBuiltin diz se m.sel é thread.spawn ou thread.join.
+// threadBuiltin says whether m.sel is thread.spawn or thread.join.
 func threadBuiltin(m *module, sel string) string {
 	if m.std && m.path == "std/thread" && (sel == "spawn" || sel == "join") {
 		return sel
@@ -36,8 +36,8 @@ func threadBuiltin(m *module, sel string) string {
 	return ""
 }
 
-// threadType devolve o handle thread.Thread[R] (thread.Thread com R Void).
-// Todas as instâncias são o mesmo tipo no C (mlc_thread, do runtime).
+// threadType returns the handle thread.Thread[R] (thread.Thread with R Void).
+// Every instance is the same type in C (mlc_thread, from the runtime).
 func (c *checker) threadType(r Type) *Struct {
 	if s, ok := c.threads[r]; ok {
 		return s
@@ -52,7 +52,7 @@ func (c *checker) threadType(r Type) *Struct {
 	return s
 }
 
-// threadTypeExpr resolve thread.Thread e thread.Thread[R] escritos no código.
+// threadTypeExpr resolves thread.Thread and thread.Thread[R] written in the code.
 func (c *checker) threadTypeExpr(t *ast.TypeExpr) Type {
 	switch len(t.Args) {
 	case 0:
@@ -63,12 +63,12 @@ func (c *checker) threadTypeExpr(t *ast.TypeExpr) Type {
 			return Invalid
 		}
 		if isBorrow(r) {
-			c.errorf(t.P, "uma thread não devolve empréstimos")
+			c.errorf(t.P, "a thread doesn't return borrows")
 			return Invalid
 		}
 		return c.threadType(r)
 	}
-	c.errorf(t.P, "thread.Thread recebe um tipo, o do resultado: thread.Thread[int] (ou thread.Thread, sem resultado)")
+	c.errorf(t.P, "thread.Thread takes one type, the result's: thread.Thread[int] (or thread.Thread, without a result)")
 	return Invalid
 }
 
@@ -80,17 +80,17 @@ func isThread(t Type) bool {
 	return ok && s.ThreadResult != nil
 }
 
-// threadSpawn checa thread.spawn(f, ctx, stack).
+// threadSpawn checks thread.spawn(f, ctx, stack).
 func (c *checker) threadSpawn(e *ast.CallExpr) Type {
 	if len(e.Args) != 3 {
-		c.errorf(e.Lparen, "thread.spawn recebe a função da thread, o contexto e o tamanho da pilha: thread.spawn(f, ctx, thread.STACK_64KB)")
+		c.errorf(e.Lparen, "thread.spawn takes the thread's function, the context and the stack size: thread.spawn(f, ctx, thread.STACK_64KB)")
 		c.checkArgs(e)
 		return Invalid
 	}
 	ft, ok := c.value(e.Args[0]).(*FuncType)
 	if !ok || len(ft.Params) != 1 {
 		if c.info.Types[e.Args[0]] != Invalid {
-			c.errorf(e.Args[0].Pos(), "a função da thread recebe um parâmetro, o contexto (fn(C) ou fn(C) R); para levar várias coisas, junte-as numa struct")
+			c.errorf(e.Args[0].Pos(), "the thread's function takes one parameter, the context (fn(C) or fn(C) R); to carry several things, gather them in a struct")
 		}
 		c.value(e.Args[1])
 		c.value(e.Args[2])
@@ -99,30 +99,30 @@ func (c *checker) threadSpawn(e *ast.CallExpr) Type {
 	ctx := ft.Params[0]
 	switch {
 	case isBorrow(ctx):
-		c.errorf(e.Args[0].Pos(), "a função da thread não pode receber um empréstimo (%s): o contexto é movido para a thread, que passa a ser dona dele", ctx)
+		c.errorf(e.Args[0].Pos(), "the thread's function can't take a borrow (%s): the context is moved to the thread, which becomes its owner", ctx)
 		ctx = Invalid
 	case isBorrow(ft.Result):
-		c.errorf(e.Args[0].Pos(), "a função da thread não pode devolver um empréstimo (%s)", ft.Result)
+		c.errorf(e.Args[0].Pos(), "the thread's function can't return a borrow (%s)", ft.Result)
 	case isGuard(ctx) || isGuard(ft.Result):
-		c.errorf(e.Args[0].Pos(), "um guard não pode ir para outra thread: ele precisa ser destravado na thread que travou o mutex")
+		c.errorf(e.Args[0].Pos(), "a guard can't go to another thread: it must be unlocked on the thread that locked the mutex")
 		ctx = Invalid
 	}
 	if ctx == Invalid {
 		c.value(e.Args[1])
 	} else {
-		c.valueAs(e.Args[1], ctx, "o contexto de thread.spawn")
+		c.valueAs(e.Args[1], ctx, "the context of thread.spawn")
 	}
-	c.valueAs(e.Args[2], Int, "o tamanho da pilha de thread.spawn")
+	c.valueAs(e.Args[2], Int, "the stack size of thread.spawn")
 	c.spawnSites = append(c.spawnSites, spawnSite{e, c.mod})
 	c.info.Spawns[e] = &SpawnPlan{Fn: ft, Ctx: ctx, Result: ft.Result}
 	c.info.Calls[e] = Callee{Builtin: ThreadSpawn}
 	return c.pointerTo(c.threadType(ft.Result), false)
 }
 
-// threadJoin checa thread.join(t).
+// threadJoin checks thread.join(t).
 func (c *checker) threadJoin(e *ast.CallExpr) Type {
 	if len(e.Args) != 1 {
-		c.errorf(e.Lparen, "thread.join recebe o handle da thread: thread.join(t)")
+		c.errorf(e.Lparen, "thread.join takes the thread's handle: thread.join(t)")
 		c.checkArgs(e)
 		return Invalid
 	}
@@ -131,7 +131,7 @@ func (c *checker) threadJoin(e *ast.CallExpr) Type {
 		return Invalid
 	}
 	if !isThread(t) || isBorrow(t) {
-		c.errorf(e.Args[0].Pos(), "thread.join recebe o handle devolvido por thread.spawn (*thread.Thread), e o valor é %s", t)
+		c.errorf(e.Args[0].Pos(), "thread.join takes the handle returned by thread.spawn (*thread.Thread), and the value is %s", t)
 		return Invalid
 	}
 	c.info.Calls[e] = Callee{Builtin: ThreadJoin}

@@ -1,4 +1,4 @@
-// Package driver encadeia as fases do compilador e chama o compilador C.
+// Package driver chains the compiler's phases and calls the C compiler.
 package driver
 
 import (
@@ -16,7 +16,7 @@ import (
 	"mlc/rt"
 )
 
-// Errors é a lista de erros de compilação de um arquivo.
+// Errors is the list of compile errors of a file.
 type Errors []token.Error
 
 func (e Errors) Error() string {
@@ -27,26 +27,26 @@ func (e Errors) Error() string {
 	return strings.Join(lines, "\n")
 }
 
-// Compile traduz o programa cujo arquivo principal é file para C. Os imports
-// são lidos do disco, relativos à pasta de file.
+// Compile translates the program whose main file is file into C. The imports
+// are read from the disk, relative to file's folder.
 func Compile(file string, src []byte) (string, error) {
 	return CompileWith(file, src, os.ReadFile)
 }
 
-// CompileWith é Compile com outra forma de ler os arquivos importados.
+// CompileWith is Compile with another way of reading the imported files.
 func CompileWith(file string, src []byte, read Loader) (string, error) {
 	csrc, _, err := compile(file, src, read, Options{})
 	return csrc, err
 }
 
-// CompileOpts é CompileWith com opções (as pastas de -I).
+// CompileOpts is CompileWith with options (the -I folders).
 func CompileOpts(file string, src []byte, read Loader, opts Options) (string, error) {
 	csrc, _, err := compile(file, src, read, opts)
 	return csrc, err
 }
 
-// compile traduz o programa para C e devolve também as bibliotecas de C
-// pedidas com link "nome".
+// compile translates the program into C and also returns the C libraries
+// asked for with link "name".
 func compile(file string, src []byte, read Loader, opts Options) (string, []string, error) {
 	csrc, info, err := compileInfo(file, src, read, opts)
 	if err != nil {
@@ -55,8 +55,8 @@ func compile(file string, src []byte, read Loader, opts Options) (string, []stri
 	return csrc, info.Links, nil
 }
 
-// compileInfo é compile devolvendo o resultado da checagem. Um arquivo
-// _test.mlc vira um programa de teste (veja BuildTest).
+// compileInfo is compile returning the check's result. A
+// _test.mlc file becomes a test program (see BuildTest).
 func compileInfo(file string, src []byte, read Loader, opts Options) (string, *checker.Info, error) {
 	srcs, errs := load(file, src, read, opts.ImportDirs...)
 	if len(errs) > 0 {
@@ -70,8 +70,8 @@ func compileInfo(file string, src []byte, read Loader, opts Options) (string, *c
 	return codegen.Generate(file, srcs[len(srcs)-1].AST, info), info, nil
 }
 
-// Check checa o programa (sintaxe, tipos e posse) sem gerar C, e devolve a
-// AST do arquivo principal e o resultado do checker.
+// Check checks the program (syntax, types and ownership) without generating C, and returns the
+// main file's AST and the checker's result.
 func Check(file string, src []byte, read Loader, opts Options) (*ast.File, *checker.Info, error) {
 	srcs, errs := load(file, src, read, opts.ImportDirs...)
 	if len(errs) > 0 {
@@ -85,30 +85,30 @@ func Check(file string, src []byte, read Loader, opts Options) (*ast.File, *chec
 	return srcs[len(srcs)-1].AST, info, nil
 }
 
-// IsTestFile diz se file é um arquivo de teste (nome_test.mlc): em vez de
-// main, ele declara funções fn test_*(), que o mlc test roda.
+// IsTestFile says whether file is a test file (name_test.mlc): instead of
+// main, it declares fn test_*() functions, which mlc test runs.
 func IsTestFile(file string) bool {
 	return strings.HasSuffix(filepath.Base(file), "_test.mlc")
 }
 
-// extraCFlags é acrescentado à linha do compilador C. Os testes usam
-// -Werror: aviso no C gerado é bug do mlc.
+// extraCFlags is added to the C compiler's line. The tests use
+// -Werror: a warning in the generated C is an mlc bug.
 var extraCFlags []string
 
-// Options ajusta a construção do executável.
+// Options adjusts the building of the executable.
 type Options struct {
-	LibDirs    []string // -L: pastas onde procurar as bibliotecas de C de link "nome"
-	ImportDirs []string // -I: pastas onde procurar os imports (além de lib/ e MLC_PATH)
-	CFlags     []string // -cflags: flags a mais para a compilação do C (depois das do ambiente, CFLAGS)
-	LDFlags    []string // -ldflags: flags a mais para a ligação (depois das do ambiente, LDFLAGS)
-	Sanitize   string   // -sanitize: "address" (ASan + UBSan) ou "thread" (TSan); "" sem sanitizers
+	LibDirs    []string // -L: folders where to look for the C libraries of link "name"
+	ImportDirs []string // -I: folders where to look for imports (besides lib/ and MLC_PATH)
+	CFlags     []string // -cflags: extra flags for compiling the C (after the environment's, CFLAGS)
+	LDFlags    []string // -ldflags: extra flags for linking (after the environment's, LDFLAGS)
+	Sanitize   string   // -sanitize: "address" (ASan + UBSan) or "thread" (TSan); "" without sanitizers
 }
 
-// SanitizeFlags devolve as flags de compilação e de ligação de um sanitizer:
-// address liga o AddressSanitizer (uso depois de free, free duplo, acesso
-// fora dos limites) e o UndefinedBehaviorSanitizer (comportamento indefinido
-// do C, que encerra o programa em vez de só avisar); thread liga o
-// ThreadSanitizer (data races). Os dois não podem ir juntos.
+// SanitizeFlags returns a sanitizer's compile and link flags:
+// address turns on AddressSanitizer (use after free, double free, out-of-bounds
+// access) and UndefinedBehaviorSanitizer (C undefined behavior,
+// which ends the program instead of just warning); thread turns on
+// ThreadSanitizer (data races). The two can't go together.
 func SanitizeFlags(kind string) (cflags, ldflags []string, err error) {
 	switch kind {
 	case "":
@@ -119,48 +119,48 @@ func SanitizeFlags(kind string) (cflags, ldflags []string, err error) {
 	case "thread":
 		return []string{"-fsanitize=thread", "-g"}, []string{"-fsanitize=thread"}, nil
 	}
-	return nil, nil, fmt.Errorf("-sanitize %q: use address (AddressSanitizer e UndefinedBehaviorSanitizer) ou thread (ThreadSanitizer)", kind)
+	return nil, nil, fmt.Errorf("-sanitize %q: use address (AddressSanitizer and UndefinedBehaviorSanitizer) or thread (ThreadSanitizer)", kind)
 }
 
-// SplitFlags separa uma lista de flags escrita como texto ("-O3
-// -march=native") pelos espaços. Não há aspas: uma flag com espaço dentro
-// não cabe aqui.
+// SplitFlags splits a list of flags written as text ("-O3
+// -march=native") by spaces. There are no quotes: a flag with a space inside
+// doesn't fit here.
 func SplitFlags(s string) []string {
 	return strings.Fields(s)
 }
 
-// Build compila src até um executável em out. O compilador C é o da
-// variável CC, ou cc. As flags do C são as do mlc, depois as das variáveis
-// CFLAGS e LDFLAGS, depois as de Options (que, por virem por último, ganham
-// numa contradição, como -O3 depois do -O2 do mlc).
+// Build compiles src into an executable at out. The C compiler is the one in the
+// CC variable, or cc. The C flags are mlc's, then those of the variables
+// CFLAGS and LDFLAGS, then those of Options (which, since they come last, win
+// in a contradiction, like -O3 after mlc's -O2).
 func Build(file string, src []byte, out string) error {
 	return BuildWith(file, src, out, os.ReadFile)
 }
 
-// BuildWith é Build com outra forma de ler os arquivos importados.
+// BuildWith is Build with another way of reading the imported files.
 func BuildWith(file string, src []byte, out string, read Loader) error {
 	return BuildOpts(file, src, out, read, Options{})
 }
 
-// LinkError é uma falha ao ligar o programa: uma biblioteca de C (link
-// "nome") ou um símbolo (extern "C" fn) que não foi encontrado. É erro do
-// programa, não do mlc.
+// LinkError is a failure linking the program: a C library (link
+// "name") or a symbol (extern "C" fn) that wasn't found. It's an error of the
+// program, not of mlc.
 type LinkError struct {
 	Output string
-	Flags  string // as flags de ligação de quem compila (LDFLAGS e -ldflags), se houver
+	Flags  string // the link flags of whoever compiles (LDFLAGS and -ldflags), if any
 }
 
 func (e *LinkError) Error() string {
-	msg := "não foi possível ligar o programa: uma biblioteca de C (link \"...\") ou uma função de C (extern \"C\" fn) não foi encontrada"
+	msg := "couldn't link the program: a C library (link \"...\") or a C function (extern \"C\" fn) wasn't found"
 	if e.Flags != "" {
-		msg += ", ou uma das flags de ligação (" + e.Flags + ") não vale nesse compilador"
+		msg += ", or one of the link flags (" + e.Flags + ") isn't valid for this compiler"
 	}
 	return msg + "\n" + e.Output
 }
 
-// BuildOpts é BuildWith com opções. O C é compilado em duas etapas: a
-// compilação (uma falha aí é bug do mlc, porque o checker aceitou o
-// programa) e a ligação com as bibliotecas (uma falha aí é do programa).
+// BuildOpts is BuildWith with options. The C is compiled in two steps:
+// compilation (a failure there is an mlc bug, because the checker accepted the
+// program) and linking with the libraries (a failure there is the program's).
 func BuildOpts(file string, src []byte, out string, read Loader, opts Options) error {
 	csrc, info, err := compileInfo(file, src, read, opts)
 	if err != nil {
@@ -169,20 +169,20 @@ func BuildOpts(file string, src []byte, out string, read Loader, opts Options) e
 	return buildC(csrc, info.Links, out, opts)
 }
 
-// TestProgram são os nomes dos testes e dos benchmarks de um programa de
-// teste, na ordem do código.
+// TestProgram is the names of the tests and benchmarks of a test
+// program, in code order.
 type TestProgram struct {
 	Tests   []string
 	Benches []string
 }
 
-// BuildTest compila o arquivo de teste file até um executável em out. O
-// executável roda o teste de índice i com o argumento i (veja RunTest) e o
-// benchmark i com "bench i n" (veja RunBench).
+// BuildTest compiles the test file file into an executable at out. The
+// executable runs the test of index i with the argument i (see RunTest) and the
+// benchmark i with "bench i n" (see RunBench).
 func BuildTest(file string, src []byte, out string, read Loader, opts Options) (TestProgram, error) {
 	var p TestProgram
 	if !IsTestFile(file) {
-		return p, fmt.Errorf("%s: um arquivo de teste termina em _test.mlc", file)
+		return p, fmt.Errorf("%s: a test file ends in _test.mlc", file)
 	}
 	csrc, info, err := compileInfo(file, src, read, opts)
 	if err != nil {
@@ -200,7 +200,7 @@ func BuildTest(file string, src []byte, out string, read Loader, opts Options) (
 	return p, nil
 }
 
-// buildC compila e liga o C gerado com o runtime.
+// buildC compiles and links the generated C with the runtime.
 func buildC(csrc string, links []string, out string, opts Options) error {
 
 	dir, err := os.MkdirTemp("", "mlc-build-")
@@ -224,7 +224,7 @@ func buildC(csrc string, links []string, out string, opts Options) error {
 	if cc == "" {
 		cc = "cc"
 	}
-	// as flags de quem compila: do ambiente, depois da linha de comando
+	// the flags of whoever compiles: from the environment, then from the command line
 	userC := append(SplitFlags(os.Getenv("CFLAGS")), opts.CFlags...)
 	userLD := append(SplitFlags(os.Getenv("LDFLAGS")), opts.LDFlags...)
 	sanC, sanLD, err := SanitizeFlags(opts.Sanitize)
@@ -242,18 +242,18 @@ func buildC(csrc string, links []string, out string, opts Options) error {
 		output, err := exec.Command(cc, args...).CombinedOutput()
 		if err != nil {
 			if len(userC) > 0 {
-				// com flags de quem compila, a falha pode ser delas
-				return fmt.Errorf("o compilador C (%s) recusou a compilação com as flags %q (de CFLAGS e -cflags): confira se elas existem nesse compilador; sem elas, seria um erro interno do mlc\n%s", cc, strings.Join(userC, " "), output)
+				// with the compiler user's flags, the failure may be theirs
+				return fmt.Errorf("the C compiler (%s) refused the compilation with the flags %q (from CFLAGS and -cflags): check that they exist in this compiler; without them, it would be an internal mlc error\n%s", cc, strings.Join(userC, " "), output)
 			}
-			// Se o checker aceitou o programa, o C gerado deveria compilar:
-			// uma falha aqui é bug do mlc, não do programa do usuário.
-			return fmt.Errorf("erro interno: %s rejeitou o código gerado: %v\n%s", cc, err, output)
+			// If the checker accepted the program, the generated C should compile:
+			// a failure here is an mlc bug, not a bug in the user's program.
+			return fmt.Errorf("internal error: %s rejected the generated code: %v\n%s", cc, err, output)
 		}
 		if len(output) > 0 {
 			if len(userC) > 0 {
-				fmt.Fprintf(os.Stderr, "mlc: aviso do compilador C (com as flags %q):\n%s", strings.Join(userC, " "), output)
+				fmt.Fprintf(os.Stderr, "mlc: C compiler warning (with the flags %q):\n%s", strings.Join(userC, " "), output)
 			} else {
-				fmt.Fprintf(os.Stderr, "mlc: aviso do compilador C (provável bug do mlc):\n%s", output)
+				fmt.Fprintf(os.Stderr, "mlc: C compiler warning (probably an mlc bug):\n%s", output)
 			}
 		}
 		objs = append(objs, obj)
@@ -266,9 +266,9 @@ func buildC(csrc string, links []string, out string, opts Options) error {
 	for _, l := range links {
 		args = append(args, "-l"+l)
 	}
-	args = append(args, "-lm") // libm, para std/math
+	args = append(args, "-lm") // libm, for std/math
 	if runtime.GOOS == "linux" {
-		args = append(args, "-ldl") // dlopen, para std/sqlite (glibc antiga)
+		args = append(args, "-ldl") // dlopen, for std/sqlite (old glibc)
 	}
 	if output, err := exec.Command(cc, args...).CombinedOutput(); err != nil {
 		return &LinkError{Output: string(output), Flags: strings.Join(userLD, " ")}

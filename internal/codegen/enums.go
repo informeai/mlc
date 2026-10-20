@@ -8,9 +8,9 @@ import (
 	"mlc/internal/checker"
 )
 
-// Enums viram "struct { int32_t tag; union { struct {...} v_Variante; ... } u; }":
-// tag diz qual variante o valor é, e a union guarda os campos dela. O valor
-// zero é a primeira variante com os campos zerados.
+// Enums become "struct { int32_t tag; union { struct {...} v_Variant; ... } u; }":
+// tag says which variant the value is, and the union holds its fields. The zero
+// value is the first variant with zeroed fields.
 
 func enumCType(e *checker.Enum) string { return "mlc_en_" + e.CName }
 
@@ -37,9 +37,9 @@ func (g *gen) enumDef(e *checker.Enum) {
 	g.raw("    } u;\n};\n\n")
 
 	if e.Resource {
-		return // enum que guarda donos não é comparado com ==
+		return // an enum that holds owners isn't compared with ==
 	}
-	// igualdade: mesma variante e mesmos campos
+	// equality: same variant and same fields
 	g.raw("static bool mlc_eq_%s(%s x, %s y) {\n    if (x.tag != y.tag) return false;\n    switch (x.tag) {\n", mangle(e), t, t)
 	for _, v := range e.Variants {
 		if len(v.Fields) == 0 {
@@ -55,7 +55,7 @@ func (g *gen) enumDef(e *checker.Enum) {
 	g.raw("    }\n    return true;\n}\n\n")
 }
 
-// enumCtor traduz Forma.Circulo(r) ou Forma.Vazio.
+// enumCtor translates Shape.Circle(r) or Shape.Empty.
 func (g *gen) enumCtor(e ast.Expr, v *checker.Variant) string {
 	t := enumCType(g.info.Types[e].(*checker.Enum))
 	call, ok := e.(*ast.CallExpr)
@@ -70,13 +70,13 @@ func (g *gen) enumCtor(e ast.Expr, v *checker.Variant) string {
 	return sequence(pre, fmt.Sprintf("((%s){.tag = %d, .u.v_%s = {%s}})", t, v.Tag, v.Name, strings.Join(inits, ", ")))
 }
 
-// matchEnum traduz um match sobre enum: switch na tag; num braço com dados,
-// cada nome recebe uma cópia do campo.
+// matchEnum translates a match on an enum: a switch on the tag; in an arm with data,
+// each name gets a copy of the field.
 func (g *gen) matchEnum(s *ast.MatchStmt) {
 	subject := g.expr(s.Subject)
 	st := g.typeOf(s.Subject)
 	if b, ok := st.(*checker.Borrow); ok {
-		st, subject = b.Elem, "(*"+subject+")" // match e, com e &Enum
+		st, subject = b.Elem, "(*"+subject+")" // match e, with e &Enum
 	}
 	en := st.(*checker.Enum)
 	tmp := g.newName("mlc_subject")
@@ -106,8 +106,8 @@ func (g *gen) matchEnum(s *ast.MatchStmt) {
 			}
 		}
 		if i == len(s.Arms)-1 && !hasWildcard {
-			// o checker garante que todas as variantes estão cobertas: sem
-			// default, o C acharia que a função pode terminar sem return
+			// the checker guarantees every variant is covered: without
+			// default, C would think the function can end without a return
 			labels = append(labels, "default:")
 		}
 		g.line("%s {", strings.Join(labels, " "))
@@ -121,7 +121,7 @@ func (g *gen) matchEnum(s *ast.MatchStmt) {
 				field := fmt.Sprintf("%s.u.v_%s.f_%s", tmp, v.Name, v.Fields[i].Name)
 				switch {
 				case g.info.BindBorrows[l] && isPointer(v.Fields[i].Type):
-					// campo ?*X emprestado como &X: o objeto apontado (nil dá panic)
+					// a ?*X field borrowed as &X: the pointed-to object (nil panics)
 					g.line("%s %s = MLC_NONNULL(%s);", cType(l.Type), l.CName, field)
 				case g.info.BindBorrows[l]:
 					g.line("%s %s = &%s;", cType(l.Type), l.CName, field)
@@ -143,8 +143,8 @@ func (g *gen) matchEnum(s *ast.MatchStmt) {
 	g.line("}")
 }
 
-// isValueType diz se t é guardado por valor e precisa estar definido antes de
-// quem o contém: struct, array ou enum.
+// isValueType says whether t is stored by value and must be defined before
+// what contains it: struct, array or enum.
 func isValueType(t checker.Type) bool {
 	return isStruct(t) || isArray(t) || isEnum(t)
 }

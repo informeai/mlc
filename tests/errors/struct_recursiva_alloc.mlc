@@ -1,4 +1,4 @@
-// erro: struct A contém a si mesma por valor (A → A)
+// error: struct A contains itself by value (A → A); that will be possible with pointers
 // Achado pelo fuzz de robustez: o alloc de uma struct que contém a si
 // mesma derrubava o compilador (recursão infinita).
 struct A {

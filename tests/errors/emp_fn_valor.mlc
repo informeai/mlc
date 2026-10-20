@@ -1,4 +1,4 @@
-// erro: devolve um empréstimo e não pode ser usada como valor
+// error: pega returns a borrow and can't be used as a value in this version
 import "std/io"
 import "std/vec"
 

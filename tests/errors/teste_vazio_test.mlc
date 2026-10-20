@@ -1,4 +1,4 @@
-// erro: arquivo de teste sem testes
+// error: test file without tests: declare functions fn test_name() (or fn bench_name(b &testing.B))
 fn ajuda() int {
     return 1
 }

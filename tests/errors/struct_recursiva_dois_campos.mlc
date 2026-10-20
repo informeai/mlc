@@ -1,4 +1,4 @@
-// erro: struct T contém a si mesma por valor (T → T)
+// error: struct T contains itself by value (T → T); that will be possible with pointers
 // Achado pelo fuzz de robustez: com dois campos fechando o ciclo, o
 // tamanho de [2]T entrava em recursão infinita.
 struct T {

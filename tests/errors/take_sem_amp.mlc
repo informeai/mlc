@@ -1,4 +1,4 @@
-// erro: take recebe um elemento emprestado: take(&s[i]...)
+// error: take takes a borrowed element: take(&s[i]...)
 struct Item { peso int }
 fn main() {
     s := alloc([]?*Item, 2)

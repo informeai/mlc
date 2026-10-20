@@ -176,7 +176,7 @@ fn test_file() {
                 count++
                 v := 0
                 if !str.parse_int(&buf[:m], &v) {
-                    testing.fail("linha sem número")
+                    testing.fail("line without a number")
                 }
                 sum += v
             }
@@ -238,7 +238,7 @@ fn test_conn() {
         Err(code) => testing.eq_int(code, 0)
     }
     match br.read_line(&c, &buf) {
-        Ok(_) => testing.fail("a conexão foi fechada")
+        Ok(_) => testing.fail("the connection was closed")
         Err(code) => testing.eq_int(code, io.EOF)
     }
     c.close()

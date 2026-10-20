@@ -1,4 +1,4 @@
-// erro: um sub-slice só pode ser emprestado como argumento de chamada: f(&s[a:b])
+// error: a sub-slice can only be borrowed as a call argument: f(&s[a:b])
 fn main() {
     s := alloc([]int, 3)
     t := s[0:2]

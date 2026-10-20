@@ -1,4 +1,4 @@
-// erro: P não implementa hash.Hash, exigida por K em map.new (declare impl hash.Hash for P)
+// error: P doesn't implement hash.Hash, required by K in map.new (declare impl hash.Hash for P)
 import "std/map"
 
 struct P {

@@ -1,4 +1,4 @@
-// erro: libere com a.free()
+// error: leak: a still owns the memory (line 6) at the end of the function; free it with a.free() or pass ownership along
 // A arena é um dono: o verificador cobra o free.
 import "std/arena"
 

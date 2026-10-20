@@ -9,16 +9,16 @@ import (
 	"time"
 )
 
-// TestStatus é o resultado de um teste, tirado do código de saída do
-// processo que o rodou (veja mlc_test_finish no runtime).
+// TestStatus is a test's result, taken from the exit code of the
+// process that ran it (see mlc_test_finish in the runtime).
 type TestStatus int
 
 const (
-	Passed   TestStatus = iota // terminou sem falhas
-	Failed                     // uma verificação falhou
-	Panicked                   // panic que o teste não esperava
-	Leaked                     // sobrou alocação (erro interno do mlc)
-	Crashed                    // outro código de saída ou sinal
+	Passed   TestStatus = iota // finished without failures
+	Failed                     // a check failed
+	Panicked                   // a panic the test didn't expect
+	Leaked                     // allocation left over (an internal mlc error)
+	Crashed                    // another exit code or a signal
 )
 
 func (s TestStatus) String() string {
@@ -26,25 +26,25 @@ func (s TestStatus) String() string {
 	case Passed:
 		return "ok"
 	case Failed:
-		return "falhou"
+		return "failed"
 	case Panicked:
 		return "panic"
 	case Leaked:
-		return "vazamento"
+		return "leak"
 	}
-	return "terminou de forma anormal"
+	return "ended abnormally"
 }
 
-// TestResult é o resultado de rodar um teste.
+// TestResult is the result of running a test.
 type TestResult struct {
 	Name    string
 	Status  TestStatus
-	Output  []byte // saída padrão e de erro, juntas, na ordem em que saíram
+	Output  []byte // standard output and error, together, in the order they came out
 	Elapsed time.Duration
 }
 
-// RunTest roda o teste de índice i do executável exe (feito por BuildTest)
-// num processo só dele.
+// RunTest runs the test of index i of the executable exe (made by BuildTest)
+// in a process of its own.
 func RunTest(exe string, i int, name string) TestResult {
 	var out bytes.Buffer
 	cmd := exec.Command(exe, strconv.Itoa(i))
@@ -74,16 +74,16 @@ func RunTest(exe string, i int, name string) TestResult {
 	return r
 }
 
-// BenchResult é uma rodada de um benchmark: b.n repetições em Ns
-// nanossegundos (medidos dentro do programa, sem o tempo de iniciar o
-// processo).
+// BenchResult is one round of a benchmark: b.n repetitions in Ns
+// nanoseconds (measured inside the program, without the time to start the
+// process).
 type BenchResult struct {
 	Status TestStatus
 	Ns     int64
-	Output []byte // a saída do benchmark, sem a linha do tempo
+	Output []byte // the benchmark's output, without the time line
 }
 
-// RunBench roda o benchmark de índice i do executável exe com b.n = n.
+// RunBench runs the benchmark of index i of the executable exe with b.n = n.
 func RunBench(exe string, i, n int) BenchResult {
 	var out bytes.Buffer
 	cmd := exec.Command(exe, "bench", strconv.Itoa(i), strconv.Itoa(n))

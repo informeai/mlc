@@ -58,21 +58,21 @@ fn test_parse_int() {
     b := alloc([]byte, 24)
     v := 0
     n := str.copy(&b, "-42")
-    testing.check(str.parse_int(&b[:n], &v), "-42 é válido")
+    testing.check(str.parse_int(&b[:n], &v), "-42 is valid")
     testing.eq_int(v, -42)
     n = str.copy(&b, "+7")
-    testing.check(str.parse_int(&b[:n], &v), "+7 é válido")
+    testing.check(str.parse_int(&b[:n], &v), "+7 is valid")
     testing.eq_int(v, 7)
     n = str.copy(&b, "-9223372036854775808")
-    testing.check(str.parse_int(&b[:n], &v), "o menor int é válido")
+    testing.check(str.parse_int(&b[:n], &v), "the smallest int is valid")
     testing.eq_int(v, -9223372036854775807 - 1)
     n = str.copy(&b, "9223372036854775808")
     testing.check(!str.parse_int(&b[:n], &v), "estoura int")
     n = str.copy(&b, "12a")
-    testing.check(!str.parse_int(&b[:n], &v), "12a é inválido")
-    testing.check(!str.parse_int(&b[:0], &v), "vazio é inválido")
+    testing.check(!str.parse_int(&b[:n], &v), "12a is invalid")
+    testing.check(!str.parse_int(&b[:0], &v), "empty is invalid")
     n = str.copy(&b, "-")
-    testing.check(!str.parse_int(&b[:n], &v), "só o sinal é inválido")
+    testing.check(!str.parse_int(&b[:n], &v), "just the sign is invalid")
     free(b)
 }
 
@@ -80,10 +80,10 @@ fn test_parse_float() {
     b := alloc([]byte, 16)
     x := 0.0
     n := str.copy(&b, "-2.5e3")
-    testing.check(str.parse_float(&b[:n], &x), "-2.5e3 é válido")
+    testing.check(str.parse_float(&b[:n], &x), "-2.5e3 is valid")
     testing.eq_float(x, -2500.0)
     n = str.copy(&b, "1.5x")
-    testing.check(!str.parse_float(&b[:n], &x), "1.5x é inválido")
+    testing.check(!str.parse_float(&b[:n], &x), "1.5x is invalid")
     free(b)
 }
 
@@ -169,9 +169,9 @@ fn test_parse_uint() {
     uint_of("18446744073709551616", &ok)
     testing.check(!ok, "estoura")
     uint_of("-1", &ok)
-    testing.check(!ok, "sem sinal")
+    testing.check(!ok, "unsigned")
     uint_of("", &ok)
-    testing.check(!ok, "vazio")
+    testing.check(!ok, "empty")
     uint_of("12a", &ok)
     testing.check(!ok, "letra")
 }
@@ -190,9 +190,9 @@ fn test_parse_int_base() {
     testing.check(ok, "ff")
     testing.eq_int(int_base("FF", 16, &ok), 255)
     testing.eq_int(int_base("0xff", 16, &ok), 255) // prefix accepted with its own base
-    testing.check(ok, "0xff com base 16")
+    testing.check(ok, "0xff with base 16")
     testing.eq_int(int_base("-0x1F", 0, &ok), -31) // base 0: the prefix chooses
-    testing.check(ok, "-0x1F com base 0")
+    testing.check(ok, "-0x1F with base 0")
     testing.eq_int(int_base("0b1010", 0, &ok), 10)
     testing.eq_int(int_base("0o17", 0, &ok), 15)
     testing.eq_int(int_base("123", 0, &ok), 123) // base 0 without a prefix: decimal
@@ -200,29 +200,29 @@ fn test_parse_int_base() {
     testing.check(ok, "base 36")
     testing.eq_int(int_base("1010", 2, &ok), 10)
     int_base("102", 2, &ok)
-    testing.check(!ok, "2 não é dígito binário")
+    testing.check(!ok, "2 isn't a binary digit")
     int_base("0x10", 10, &ok)
-    testing.check(!ok, "0x com base 10")
+    testing.check(!ok, "0x with base 10")
     int_base("ff", 37, &ok)
-    testing.check(!ok, "base fora de 2 a 36")
+    testing.check(!ok, "base outside 2 to 36")
     int_base("0x", 0, &ok)
-    testing.check(!ok, "só o prefixo")
+    testing.check(!ok, "just the prefix")
 }
 
 fn test_parse_int_base_limits() {
     ok := false
     testing.eq_int(int_base("7fffffffffffffff", 16, &ok), 9223372036854775807)
-    testing.check(ok, "o maior int em hex")
+    testing.check(ok, "the largest int in hex")
     testing.eq_int(int_base("-8000000000000000", 16, &ok), -9223372036854775807 - 1)
-    testing.check(ok, "o menor int em hex")
+    testing.check(ok, "the smallest int in hex")
     int_base("8000000000000000", 16, &ok)
     testing.check(!ok, "o maior int + 1 estoura")
     testing.eq_int(int_base("-1000000000000000000000000000000000000000000000000000000000000000", 2, &ok), -9223372036854775807 - 1)
-    testing.check(ok, "o menor int em binário")
+    testing.check(ok, "the smallest int in binary")
     int_base("-1000000000000000000000000000000000000000000000000000000000000001", 2, &ok)
     testing.check(!ok, "o menor int - 1 estoura")
     testing.eq_int(int_base("-9223372036854775808", 10, &ok), -9223372036854775807 - 1)
-    testing.check(ok, "o menor int em decimal")
+    testing.check(ok, "the smallest int in decimal")
 }
 
 fn test_parse_bool() {
@@ -233,9 +233,9 @@ fn test_parse_bool() {
     n = str.copy(&b, "false")
     testing.check(str.parse_bool(&b[:n], &v) && !v, "false")
     n = str.copy(&b, "True")
-    testing.check(!str.parse_bool(&b[:n], &v), "só minúsculas")
+    testing.check(!str.parse_bool(&b[:n], &v), "lowercase only")
     n = str.copy(&b, "1")
-    testing.check(!str.parse_bool(&b[:n], &v), "1 não é bool")
+    testing.check(!str.parse_bool(&b[:n], &v), "1 isn't a bool")
 }
 
 fn copy(dst &[]byte, s string) int {

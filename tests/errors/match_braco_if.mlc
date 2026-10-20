@@ -1,4 +1,4 @@
-// erro: o braço do match aceita um comando simples, um bloco, break, continue ou return
+// error: a match arm accepts a simple statement, a block, break, continue or return (use { } for more)
 fn main() {
     match 1 {
         1 => if true {}

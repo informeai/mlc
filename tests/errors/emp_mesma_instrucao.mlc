@@ -1,4 +1,4 @@
-// erro: v aparece de novo na instrução em que v.at empresta parte dela
+// error: v appears again in the statement where v.at borrows part of it: use the borrow in a statement of its own (x := ...)
 import "std/io"
 import "std/vec"
 

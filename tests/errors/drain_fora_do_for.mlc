@@ -1,4 +1,4 @@
-// erro: drain só pode ser usado em for x in drain(s)
+// error: drain can only be used in for x in drain(s)
 fn main() {
     s := alloc([]int, 2)
     drain(s)

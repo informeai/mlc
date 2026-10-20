@@ -24,10 +24,10 @@ fn test_count_and_valid() {
     var b [16]byte
     n := str.copy(&b, "maçã")
     testing.eq_int(utf8.count(&b[:n]), 4)
-    testing.check(utf8.valid(&b[:n]), "válido")
-    testing.check(!utf8.valid(&b[:n - 1]), "cortado no meio de um caractere")
+    testing.check(utf8.valid(&b[:n]), "valid")
+    testing.check(!utf8.valid(&b[:n - 1]), "cut in the middle of a character")
     b[0] = 0xFF
-    testing.check(!utf8.valid(&b[:n]), "byte inválido")
+    testing.check(!utf8.valid(&b[:n]), "invalid byte")
     testing.eq_int(utf8.count(&b[:n]), 4) // the invalid one counts as one
 }
 

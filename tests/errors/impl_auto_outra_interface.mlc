@@ -1,4 +1,4 @@
-// erro: impl auto só existe para io.Display
+// error: impl auto only exists for io.Display, cmp.Eq, cmp.Ord and hash.Hash
 interface Area {
     fn area(self &Self) int
 }

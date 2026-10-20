@@ -1,4 +1,4 @@
-// erro: free(s): os elementos de s podem ainda ser donos de memória; esvazie antes com for x in drain(s)
+// error: free(s): the elements of s may still own memory; empty it first with for x in drain(s)
 // Caso difícil (fase 5 do plano de verificação): CONSERVADOR: o laço tira todos os elementos com take, mas o verificador não sabe que todos saíram; o jeito certo é for x in drain(s).
 struct Box {
     v int

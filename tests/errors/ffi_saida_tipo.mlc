@@ -1,4 +1,4 @@
-// erro: argumento 2 de h_open: esperado &?*H, encontrado &?*G
+// error: argument 2 of h_open: expected &?*H, found &?*G (declare var h ?*H = nil)
 extern "C" type H
 extern "C" type G
 extern "C" fn h_open(n int32, out &?*H) int32

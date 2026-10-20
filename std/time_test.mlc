@@ -3,7 +3,7 @@ import "std/testing"
 import "std/time"
 
 fn test_clocks() {
-    testing.check(time.now_ms() > 1_600_000_000_000, "now_ms é depois de 2020")
+    testing.check(time.now_ms() > 1_600_000_000_000, "now_ms is after 2020")
     a := time.mono_ns()
     time.sleep_ms(5)
     b := time.mono_ns()
@@ -39,9 +39,9 @@ fn test_leap_years() {
     var buf [32]byte
     n := str.copy(&buf, "2024-02-29T12:00:00Z")
     ms := 0
-    testing.check(time.parse_iso(&buf[:n], &ms), "29 de fevereiro de 2024 existe")
+    testing.check(time.parse_iso(&buf[:n], &ms), "February 29, 2024 exists")
     n = str.copy(&buf, "2023-02-29T12:00:00Z")
-    testing.check(!time.parse_iso(&buf[:n], &ms), "29 de fevereiro de 2023 não existe")
+    testing.check(!time.parse_iso(&buf[:n], &ms), "February 29, 2023 doesn't exist")
 }
 
 fn test_iso_round_trip() {
@@ -50,13 +50,13 @@ fn test_iso_round_trip() {
     n := time.iso(&buf, &d)
     testing.eq_str(&buf[:n], "2023-11-14T22:13:20.123Z")
     ms := 0
-    testing.check(time.parse_iso(&buf[:n], &ms), "lê de volta")
+    testing.check(time.parse_iso(&buf[:n], &ms), "reads back")
     testing.eq_int(ms, 1_700_000_000_123)
     d.offset_min = -180
     d.ms = 0
     n = time.iso(&buf, &d)
     testing.eq_str(&buf[:n], "2023-11-14T22:13:20-03:00")
-    testing.check(time.parse_iso(&buf[:n], &ms), "com fuso")
+    testing.check(time.parse_iso(&buf[:n], &ms), "with a time zone")
     testing.eq_int(ms, 1_700_000_000_000 + 3 * 3600000) // 22:13 at -03:00 is 01:13 UTC
 }
 
@@ -64,17 +64,17 @@ fn test_parse_iso_forms() {
     var buf [32]byte
     ms := 0
     n := str.copy(&buf, "2000-01-01")
-    testing.check(time.parse_iso(&buf[:n], &ms), "só a data")
+    testing.check(time.parse_iso(&buf[:n], &ms), "just the date")
     testing.eq_int(ms, 946684800000)
     n = str.copy(&buf, "2000-01-01 00:00:01")
-    testing.check(time.parse_iso(&buf[:n], &ms), "com espaço")
+    testing.check(time.parse_iso(&buf[:n], &ms), "with a space")
     testing.eq_int(ms, 946684801000)
     n = str.copy(&buf, "2000-13-01")
-    testing.check(!time.parse_iso(&buf[:n], &ms), "mês 13")
+    testing.check(!time.parse_iso(&buf[:n], &ms), "month 13")
     n = str.copy(&buf, "2000-01-01T25:00:00Z")
     testing.check(!time.parse_iso(&buf[:n], &ms), "hora 25")
     n = str.copy(&buf, "ontem")
-    testing.check(!time.parse_iso(&buf[:n], &ms), "texto qualquer")
+    testing.check(!time.parse_iso(&buf[:n], &ms), "arbitrary text")
 }
 
 fn test_to_ms_and_local() {

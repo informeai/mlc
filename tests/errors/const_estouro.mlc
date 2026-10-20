@@ -1,4 +1,4 @@
-// erro: constante 9223372036854775808 não cabe em int
+// error: constant 9223372036854775808 doesn't fit in int (-9223372036854775808 to 9223372036854775807)
 const N int = 9223372036854775807 + 1
 fn main() {
 }

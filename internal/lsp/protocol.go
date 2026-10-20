@@ -11,8 +11,8 @@ import (
 	"sync"
 )
 
-// Transporte do LSP: mensagens JSON-RPC 2.0, cada uma precedida de um
-// cabeçalho "Content-Length: N" e de uma linha em branco.
+// LSP transport: JSON-RPC 2.0 messages, each one preceded by a
+// "Content-Length: N" header and a blank line.
 
 type message struct {
 	JSONRPC string           `json:"jsonrpc"`
@@ -51,7 +51,7 @@ func (c *conn) read() (*message, error) {
 	}
 	n, err := strconv.Atoi(strings.TrimSpace(header.Get("Content-Length")))
 	if err != nil {
-		return nil, fmt.Errorf("Content-Length inválido: %v", err)
+		return nil, fmt.Errorf("invalid Content-Length: %v", err)
 	}
 	body := make([]byte, n)
 	if _, err := io.ReadFull(c.r.R, body); err != nil {
@@ -59,7 +59,7 @@ func (c *conn) read() (*message, error) {
 	}
 	var m message
 	if err := json.Unmarshal(body, &m); err != nil {
-		return nil, fmt.Errorf("mensagem inválida: %v", err)
+		return nil, fmt.Errorf("invalid message: %v", err)
 	}
 	return &m, nil
 }
@@ -81,7 +81,7 @@ func (c *conn) write(m *message) error {
 
 func (c *conn) reply(id *json.RawMessage, result any) error {
 	if result == nil {
-		// "result": null precisa aparecer na resposta
+		// "result": null must appear in the response
 		raw := json.RawMessage("null")
 		return c.write(&message{ID: id, Result: &raw})
 	}
@@ -100,7 +100,7 @@ func (c *conn) notify(method string, params any) error {
 	return c.write(&message{Method: method, Params: raw})
 }
 
-// ---------- tipos do protocolo usados aqui ----------
+// ---------- protocol types used here ----------
 
 type position struct {
 	Line      int `json:"line"`
@@ -114,7 +114,7 @@ type lspRange struct {
 
 type diagnostic struct {
 	Range    lspRange `json:"range"`
-	Severity int      `json:"severity"` // 1: erro
+	Severity int      `json:"severity"` // 1: error
 	Source   string   `json:"source"`
 	Message  string   `json:"message"`
 }

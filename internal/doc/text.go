@@ -1,6 +1,6 @@
-// Package doc extrai a documentação de um módulo .mlc: os comentários // logo
-// acima de cada declaração e o do começo do arquivo, como no Go. É usado pelo
-// mlc doc (no terminal) e pelo LSP (no editor).
+// Package doc extracts the documentation of a .mlc module: the // comments right
+// above each declaration and the one at the top of the file, as in Go. It's used by
+// mlc doc (in the terminal) and by the LSP (in the editor).
 package doc
 
 import (
@@ -9,8 +9,8 @@ import (
 	"mlc/internal/token"
 )
 
-// Comment devolve as linhas do comentário // logo acima da linha de p, sem
-// as barras. Uma linha em branco ou de código encerra o comentário.
+// Comment returns the lines of the // comment right above p's line, without
+// the slashes. A blank line or a code line ends the comment.
 func Comment(text []byte, p token.Pos) []string {
 	lines := strings.Split(string(text), "\n")
 	var doc []string
@@ -24,7 +24,7 @@ func Comment(text []byte, p token.Pos) []string {
 	return doc
 }
 
-// Header devolve o comentário do começo do arquivo: a descrição do módulo.
+// Header returns the comment at the top of the file: the module's description.
 func Header(text []byte) []string {
 	var doc []string
 	for _, l := range strings.Split(string(text), "\n") {
@@ -42,7 +42,7 @@ func uncomment(l string) string {
 	return strings.TrimPrefix(l, " ")
 }
 
-// StripComment tira um comentário // do fim da linha (fora de strings).
+// StripComment removes a // comment from the end of the line (outside strings).
 func StripComment(l string) string {
 	inStr := false
 	for i := 0; i+1 < len(l); i++ {
@@ -56,8 +56,8 @@ func StripComment(l string) string {
 	return l
 }
 
-// Signature devolve o cabeçalho de uma função: da linha da declaração até
-// antes do '{' do corpo (juntando as linhas de parâmetros quebrados).
+// Signature returns a function's header: from the declaration's line until
+// before the body's '{' (joining the lines of wrapped parameters).
 func Signature(text []byte, p token.Pos) string {
 	lines := strings.Split(string(text), "\n")
 	var parts []string
@@ -69,15 +69,15 @@ func Signature(text []byte, p token.Pos) string {
 		}
 		parts = append(parts, l)
 		if !strings.HasSuffix(l, ",") && !strings.HasSuffix(l, "(") {
-			break // extern fn: sem corpo
+			break // extern fn: no body
 		}
 	}
 	return strings.Join(parts, " ")
 }
 
-// Block devolve o texto de uma declaração com corpo entre chaves (struct,
-// enum, interface), da linha de p até a chave que fecha, como está no
-// arquivo (com os comentários dos campos).
+// Block returns the text of a declaration with a body between braces (struct,
+// enum, interface), from p's line to the closing brace, as it is in the
+// file (with the fields' comments).
 func Block(text []byte, p token.Pos) string {
 	lines := strings.Split(string(text), "\n")
 	var code []string
@@ -93,7 +93,7 @@ func Block(text []byte, p token.Pos) string {
 	return strings.Join(code, "\n")
 }
 
-// Line devolve a linha de p sem espaços nas pontas e sem comentário.
+// Line returns p's line without surrounding spaces and without a comment.
 func Line(text []byte, p token.Pos) string {
 	lines := strings.Split(string(text), "\n")
 	if p.Line < 1 || p.Line > len(lines) {

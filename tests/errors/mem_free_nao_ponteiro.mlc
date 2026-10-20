@@ -1,4 +1,4 @@
-// erro: free espera um ponteiro dono, encontrado constante inteira
+// error: free expects an owning pointer, found integer constant
 fn main() {
     free(1)
 }

@@ -1,4 +1,4 @@
-// erro: ponteiro para slice não é suportado
+// error: pointer to slice isn't supported: the slice already owns the memory (use []T, or &[]T to borrow)
 fn f(p *[]int) {
 }
 fn main() {

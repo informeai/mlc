@@ -1,4 +1,4 @@
-// erro: faltam dígitos depois de "0x"
+// error: malformed number: digits missing after "0x"
 fn main() {
     x := 0x
 }

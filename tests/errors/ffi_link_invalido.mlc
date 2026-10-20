@@ -1,4 +1,4 @@
-// erro: escreva só o nome da biblioteca, como link "sqlite3"
+// error: link "-o /tmp/x": write only the library's name, like link "sqlite3" (for -lsqlite3)
 link "-o /tmp/x"
 
 fn main() {

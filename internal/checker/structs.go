@@ -7,48 +7,48 @@ import (
 	"mlc/internal/token"
 )
 
-// Struct é um tipo struct declarado pelo usuário.
+// Struct is a struct type declared by the user.
 type Struct struct {
 	Name    string
 	Methods map[string]*Func
-	CName   string // nome no C, sem o prefixo mlc_st_
+	CName   string // name in C, without the mlc_st_ prefix
 	File    string
 	Pub     bool
 	Fields  []*Field
 	Decl    *ast.StructDecl
 
-	// Resource: a struct contém ponteiros donos (direto ou numa struct
-	// guardada por valor). Valores dela só existem atrás de um ponteiro:
-	// copiar duplicaria os donos.
+	// Resource: the struct contains owning pointers (directly or in a struct
+	// kept by value). Its values only exist behind a pointer:
+	// copying would duplicate the owners.
 	Resource bool
 
-	// Extern: extern "C" type, um tipo opaco de C (sem campos), que só
-	// existe atrás de ponteiro, como handle
+	// Extern: extern "C" type, an opaque C type (without fields), which only
+	// exists behind a pointer, as a handle
 	Extern bool
 
-	// ThreadResult: num thread.Thread[R], o tipo do resultado (Void se não
-	// tem); nil nas outras structs
+	// ThreadResult: in a thread.Thread[R], the result's type (Void if it
+	// has none); nil in the other structs
 	ThreadResult Type
 
-	// ChanEnd: num chan.Sender[T] ou chan.Receiver[T], qual ponta é
-	// (ChanSender, ChanReceiver), e ChanElem o tipo dos valores; 0 nas outras
+	// ChanEnd: in a chan.Sender[T] or chan.Receiver[T], which end it is
+	// (ChanSender, ChanReceiver), and ChanElem the values' type; 0 in the others
 	ChanEnd  int
 	ChanElem Type
 
-	// MutexKind: num mutex.Mutex[T] ou mutex.Guard[T], qual dos dois é
-	// (MutexHandle, MutexGuard), e MutexElem o tipo do valor; 0 nas outras
+	// MutexKind: in a mutex.Mutex[T] or mutex.Guard[T], which of the two it is
+	// (MutexHandle, MutexGuard), and MutexElem the value's type; 0 in the others
 	MutexKind int
 	MutexElem Type
 
-	// Genéricos: Params na struct genérica (a declaração); Origin e Args numa
-	// instância (Par[int, string]).
+	// Generics: Params in the generic struct (the declaration); Origin and Args in an
+	// instance (Pair[int, string]).
 	Params      []*ast.TypeParam
 	Origin      *Struct
 	Args        []Type
 	instances   map[string]*Struct
 	methodDecls map[string]*ast.FuncDecl
-	// methodConstraints: restrições que o receptor de um método acrescenta
-	// (fn (v &Vec[T any]) get): uma por parâmetro de tipo, nil se nenhuma
+	// methodConstraints: constraints a method's receiver adds
+	// (fn (v &Vec[T any]) get): one per type parameter, nil if none
 	methodConstraints map[string][]*ast.TypeParam
 	mod               *module
 }
@@ -69,21 +69,21 @@ func (s *Struct) Field(name string) *Field {
 	return nil
 }
 
-// collectStructs registra todas as structs antes de resolver os campos, para
-// que a ordem de declaração não importe. Depois ordena as structs de forma
-// que cada uma venha depois das que ela contém, que é a ordem exigida pelo C,
-// e rejeita struct que contém a si mesma por valor.
+// collectStructs registers every struct before resolving the fields, so
+// declaration order doesn't matter. Then it orders the structs so
+// each one comes after the ones it contains, which is the order C requires,
+// and rejects a struct that contains itself by value.
 func (c *checker) collectStructs(f *ast.File) {
 	for _, d := range f.Structs {
 		switch {
 		case predeclared[d.Name]:
-			c.errorf(d.P, "o nome %q é reservado", d.Name)
+			c.errorf(d.P, "the name %q is reserved", d.Name)
 			continue
 		case c.mod.structs[d.Name] != nil:
-			c.errorf(d.P, "struct %s já declarada na linha %d", d.Name, c.mod.structs[d.Name].Decl.P.Line)
+			c.errorf(d.P, "struct %s already declared on line %d", d.Name, c.mod.structs[d.Name].Decl.P.Line)
 			continue
 		case c.mod.ifaces[d.Name] != nil:
-			c.errorf(d.P, "%s já foi declarado neste arquivo", d.Name)
+			c.errorf(d.P, "%s was already declared in this file", d.Name)
 			continue
 		}
 		s := &Struct{
@@ -91,7 +91,7 @@ func (c *checker) collectStructs(f *ast.File) {
 			mod: c.mod, Extern: d.Extern,
 		}
 		if len(d.TypeParams) > 0 {
-			// genérica: os campos são resolvidos em cada instância
+			// generic: the fields are resolved in each instance
 			c.typeVars(d.TypeParams)
 			s.Params = d.TypeParams
 			s.instances = map[string]*Struct{}
@@ -107,7 +107,7 @@ func (c *checker) collectStructs(f *ast.File) {
 		seen := map[string]bool{}
 		for _, fd := range d.Fields {
 			if seen[fd.Name] {
-				c.errorf(fd.P, "campo %s repetido em %s", fd.Name, d.Name)
+				c.errorf(fd.P, "repeated field %s in %s", fd.Name, d.Name)
 				continue
 			}
 			seen[fd.Name] = true
@@ -144,10 +144,10 @@ func (c *checker) collectStructs(f *ast.File) {
 			}
 			names = append(names, s.Name)
 			if reported[s] {
-				return false // o mesmo ciclo por outro campo: um erro basta
+				return false // the same cycle through another field: one error is enough
 			}
 			reported[s] = true
-			c.errorf(s.Decl.P, "struct %s contém a si mesma por valor (%s); isso vai ser possível com ponteiros",
+			c.errorf(s.Decl.P, "struct %s contains itself by value (%s); that will be possible with pointers",
 				s.Name, strings.Join(names, " → "))
 			return false
 		}
@@ -155,15 +155,15 @@ func (c *checker) collectStructs(f *ast.File) {
 		path = append(path, s)
 		ok := true
 		for _, f := range s.Fields {
-			// [N]T também guarda T por valor
+			// [N]T also keeps T by value
 			t := f.Type
 			for a, isArray := t.(*Array); isArray; a, isArray = t.(*Array) {
 				t = a.Elem
 			}
 			if inner, isStruct := t.(*Struct); isStruct && !visit(inner) {
-				// o campo fica sem tipo: o ciclo some, e o resto da checagem
-				// (tamanho, campos donos) não entra em recursão infinita.
-				// Todos os campos são vistos: dois podem fechar ciclos.
+				// the field stays without a type: the cycle goes away, and the rest of the check
+				// (size, owning fields) doesn't go into infinite recursion.
+				// Every field is seen: two can close cycles.
 				f.Type = Invalid
 				ok = false
 			}
@@ -185,8 +185,8 @@ func (c *checker) collectStructs(f *ast.File) {
 			visit(s)
 		}
 	}
-	// Instâncias de structs genéricas criadas nos campos acima: o Resource das
-	// structs que elas contêm só ficou pronto agora.
+	// Instances of generic structs created in the fields above: the Resource of the
+	// structs they contain is only ready now.
 	for _, s := range c.mod.structs {
 		for _, inst := range s.instances {
 			for _, f := range inst.Fields {
@@ -198,14 +198,14 @@ func (c *checker) collectStructs(f *ast.File) {
 	}
 }
 
-// composite checa "Tipo{campo: valor, ...}". Todos os campos precisam ser
-// listados; "Tipo{}" é o valor zero escrito de forma explícita.
+// composite checks "Type{field: value, ...}". Every field must be
+// listed; "Type{}" is the zero value written explicitly.
 func (c *checker) composite(e *ast.CompositeLit) Type {
 	allowed := c.litOK
 	c.litOK = false
 	var s *Struct
 	if len(e.TypeArgs) > 0 || c.genericStruct(e) {
-		// struct genérica: Par[int, string]{...}
+		// generic struct: Pair[int, string]{...}
 		te := &ast.TypeExpr{Name: e.Type.Name, P: e.Type.P}
 		if e.Module != nil {
 			te.Module = e.Module.Name
@@ -223,16 +223,16 @@ func (c *checker) composite(e *ast.CompositeLit) Type {
 		return c.compositeOf(e, inst, allowed)
 	}
 	if e.Module != nil {
-		// literal de um tipo de outro arquivo: geometria.Ponto{...}
+		// a literal of a type from another file: geometry.Point{...}
 		if c.userModule(e.Module) == nil {
-			c.errorf(e.Module.P, "módulo %s não foi importado", e.Module.Name)
+			c.errorf(e.Module.P, "module %s wasn't imported", e.Module.Name)
 			return Invalid
 		}
 		if t, ok := c.moduleStruct(e.Module.Name, e.Type.Name, e.Type.P).(*Struct); ok {
 			s = t
 		}
 	} else if s = c.mod.structs[e.Type.Name]; s == nil {
-		c.errorf(e.Type.P, "%s não é uma struct", e.Type.Name)
+		c.errorf(e.Type.P, "%s isn't a struct", e.Type.Name)
 	}
 	if s == nil {
 		for _, fi := range e.Fields {
@@ -243,21 +243,21 @@ func (c *checker) composite(e *ast.CompositeLit) Type {
 	return c.compositeOf(e, s, allowed)
 }
 
-// compositeOf checa os campos do literal de s.
+// compositeOf checks the fields of s's literal.
 func (c *checker) compositeOf(e *ast.CompositeLit, s *Struct, allowed bool) Type {
 	if s.Extern {
-		c.errorf(e.Type.P, "%s é um tipo de C opaco: os valores vêm de funções de C", s.Name)
+		c.errorf(e.Type.P, "%s is an opaque C type: the values come from C functions", s.Name)
 		return Invalid
 	}
 	if s.Resource && !allowed {
-		c.errorf(e.Type.P, "literal de %s, que contém ponteiros donos, só pode aparecer dentro de alloc(...)", s.Name)
+		c.errorf(e.Type.P, "a literal of %s, which contains owning pointers, can only appear inside alloc(...)", s.Name)
 	}
 	given := map[string]token.Pos{}
 	for _, fi := range e.Fields {
 		f := s.Field(fi.Name)
 		var vt Type
 		if _, isLit := fi.Value.(*ast.CompositeLit); isLit && f != nil && isResource(f.Type) {
-			c.litOK = true // literal aninhado dentro do literal de alloc
+			c.litOK = true // a literal nested inside alloc's literal
 			vt = c.value(fi.Value)
 		} else {
 			vt = c.value(fi.Value)
@@ -269,29 +269,29 @@ func (c *checker) compositeOf(e *ast.CompositeLit, s *Struct, allowed bool) Type
 		}
 		switch {
 		case f == nil:
-			c.errorf(fi.P, "%s não tem campo %s", s.Name, fi.Name)
+			c.errorf(fi.P, "%s has no field %s", s.Name, fi.Name)
 			continue
 		case given[fi.Name] != (token.Pos{}):
-			c.errorf(fi.P, "campo %s repetido no literal", fi.Name)
+			c.errorf(fi.P, "repeated field %s in the literal", fi.Name)
 			continue
 		}
 		given[fi.Name] = fi.P
-		c.assignable(vt, f.Type, fi.Value.Pos(), "campo "+fi.Name)
+		c.assignable(vt, f.Type, fi.Value.Pos(), "field "+fi.Name)
 	}
 	if len(e.Fields) > 0 {
 		for _, f := range s.Fields {
 			if _, ok := given[f.Name]; !ok {
-				c.errorf(e.Lbrace, "campo %s não inicializado (liste todos os campos, ou use %s{} para o valor zero)", f.Name, s.Name)
+				c.errorf(e.Lbrace, "field %s not initialized (list every field, or use %s{} for the zero value)", f.Name, s.Name)
 			}
 		}
 	}
 	return s
 }
 
-// selector checa "x.campo" em leitura.
+// selector checks "x.field" when read.
 func (c *checker) selector(e *ast.SelectorExpr) Type {
 	if en := c.enumNamed(e.X); en != nil {
-		return c.enumCtor(e, nil, en, e) // Forma.Vazio
+		return c.enumCtor(e, nil, en, e) // Shape.Empty
 	}
 	if m := c.userModule(e.X); m != nil {
 		return c.moduleConst(e, m)
@@ -303,19 +303,19 @@ func (c *checker) field(t Type, e *ast.SelectorExpr) Type {
 	if t == Invalid {
 		return Invalid
 	}
-	// p.campo funciona através de ponteiros e empréstimos, como no Go.
+	// p.field works through pointers and borrows, as in Go.
 	t, _ = c.deref(t, e.X.Pos(), exprName(e.X))
 	if t == Invalid {
 		return Invalid
 	}
 	s, ok := t.(*Struct)
 	if !ok {
-		c.errorf(e.SelPos, "valor do tipo %s não tem campos", t)
+		c.errorf(e.SelPos, "a value of type %s has no fields", t)
 		return Invalid
 	}
 	f := s.Field(e.Sel)
 	if f == nil {
-		c.errorf(e.SelPos, "%s não tem campo %s", s.Name, e.Sel)
+		c.errorf(e.SelPos, "%s has no field %s", s.Name, e.Sel)
 		return Invalid
 	}
 	return f.Type
@@ -326,15 +326,15 @@ func isResource(t Type) bool {
 	return ok && s.Resource
 }
 
-// noCopy recusa copiar um valor de struct que contém ponteiros donos.
+// noCopy refuses to copy a struct value that contains owning pointers.
 func (c *checker) noCopy(t Type, pos token.Pos) {
 	if isResource(t) {
-		c.errorf(pos, "valor do tipo %s contém ponteiros donos e não pode ser copiado; use através de um ponteiro (*%s)", t, t)
+		c.errorf(pos, "a value of type %s contains owning pointers and can't be copied; use it through a pointer (*%s)", t, t)
 	}
 }
 
-// hasNonNullOwner diz se t guarda, por valor, um campo *T, que não pode
-// começar zerado (nil).
+// hasNonNullOwner says whether t keeps, by value, a *T field, which can't
+// start zeroed (nil).
 func hasNonNullOwner(t Type) (string, bool) {
 	s, ok := t.(*Struct)
 	if !ok {
@@ -351,7 +351,7 @@ func hasNonNullOwner(t Type) (string, bool) {
 	return "", false
 }
 
-// genericStruct diz se o literal e é de uma struct genérica (local).
+// genericStruct says whether the literal e is of a (local) generic struct.
 func (c *checker) genericStruct(e *ast.CompositeLit) bool {
 	if e.Module != nil {
 		if m := c.userModule(e.Module); m != nil {

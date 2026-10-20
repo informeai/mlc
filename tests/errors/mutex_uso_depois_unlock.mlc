@@ -1,4 +1,4 @@
-// erro: g está emprestada a x
+// error: g is borrowed by x (line 19) until line 21: use x, or finish using x first
 import "std/atomic"
 import "std/io"
 import "std/mutex"

@@ -1,4 +1,4 @@
-// erro: argumento 1 de soma: esperado &[]int, encontrado &[3]bool
+// error: argument 1 of soma: expected &[]int, found &[3]bool
 fn soma(s &[]int) int {
     return len(s)
 }

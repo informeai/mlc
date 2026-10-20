@@ -1,4 +1,4 @@
-// erro: x já declarada neste escopo (linha 4)
+// error: x already declared in this scope (line 4)
 import "std/io"
 fn main() {
     x := 1

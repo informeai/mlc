@@ -42,7 +42,7 @@ fn test_random() {
     prev := -1
     for h.len() > 0 {
         x := h.pop()
-        testing.check(x >= prev, "em ordem")
+        testing.check(x >= prev, "in order")
         prev = x
     }
     h.free()

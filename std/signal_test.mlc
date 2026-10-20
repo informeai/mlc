@@ -4,10 +4,10 @@ import "std/time"
 
 fn test_listen_and_received() {
     signal.listen(signal.USR1)
-    testing.check(!signal.received(signal.USR1), "ainda não chegou")
+    testing.check(!signal.received(signal.USR1), "hasn't arrived yet")
     signal.raise(signal.USR1)
     testing.check(signal.received(signal.USR1), "chegou")
-    testing.check(signal.received(signal.USR1), "a marca fica até clear")
+    testing.check(signal.received(signal.USR1), "the mark stays until clear")
     signal.clear(signal.USR1)
     testing.check(!signal.received(signal.USR1), "clear esquece")
 }
@@ -17,7 +17,7 @@ fn test_interrupt_does_not_kill() {
     signal.listen_shutdown()
     signal.raise(signal.INT)
     testing.check(signal.received(signal.INT), "INT anotado")
-    testing.check(!signal.received(signal.TERM), "TERM não chegou")
+    testing.check(!signal.received(signal.TERM), "TERM didn't arrive")
 }
 
 fn test_wait() {

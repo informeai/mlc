@@ -1,4 +1,4 @@
-// erro: a única convenção de chamada é "C"
+// error: the only calling convention is "C": extern "C" fn
 extern "Pascal" fn f()
 
 fn main() {

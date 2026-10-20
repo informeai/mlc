@@ -1,4 +1,4 @@
-// erro: vazamento
+// error: leak: st (sqlite.Stmt, line 9) may still be open at the end of the block; close it with st.close()
 // O verificador cobra o close de cada consulta preparada (e do banco).
 import "std/sqlite"
 

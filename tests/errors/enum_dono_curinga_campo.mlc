@@ -1,4 +1,4 @@
-// erro: o campo m de Msg é dono: dê um nome a ele (para liberar ou m
+// error: the field m of Msg is an owner: give it a name (to free or move it), instead of _
 enum E {
     Msg(m []byte)
     Nada

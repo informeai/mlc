@@ -54,7 +54,7 @@ fn test_not_found() {
     c := process.cmd("programa-que-nao-existe-mlc")
     status := 0
     match c.run_inherit(&status) {
-        Ok(_) => testing.fail("o programa não existe")
+        Ok(_) => testing.fail("the program doesn't exist")
         Err(code) => testing.eq_int(code, process.NOT_FOUND)
     }
 }
@@ -65,7 +65,7 @@ fn test_output_too_big() {
     var out [4]byte
     status := 0
     match c.run(&out, &status) {
-        Ok(_) => testing.fail("a saída não cabe")
+        Ok(_) => testing.fail("the output doesn't fit")
         Err(code) => testing.eq_int(code, process.TOO_BIG)
     }
     testing.eq_int(status, 0) // the program ran to the end

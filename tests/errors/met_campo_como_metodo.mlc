@@ -1,4 +1,4 @@
-// erro: Ponto.x é um campo, não um método
+// error: Ponto.x is a field, not a method
 struct Ponto { x int; y int }
 fn main() {
     p := Ponto{x: 1, y: 2}

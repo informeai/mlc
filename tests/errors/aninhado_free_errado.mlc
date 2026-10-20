@@ -1,4 +1,4 @@
-// erro: Lista tem campos donos e não sabe se liberar dentro de vec.new
+// error: Lista has owning fields and doesn't know how to free itself inside vec.new: declare fn (x *Lista) free() freeing the fields and x itself
 import "std/vec"
 
 struct Lista {

@@ -1,4 +1,4 @@
-// erro: sub-slice se aplica a slices e arrays, não a int
+// error: sub-slicing applies to slices and arrays, not to int
 fn f(s &[]int) {
 }
 fn main() {

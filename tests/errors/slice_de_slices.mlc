@@ -1,4 +1,4 @@
-// erro: slices de slices de donos ainda não são suportados
+// error: slices of slices of owners aren't supported yet ([][]T only with a simple T)
 struct No { x int }
 fn f(s [][]?*No) {
 }

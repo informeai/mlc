@@ -1,4 +1,4 @@
-// erro: vazamento: q ainda é dona da memória (linha 6) (em algum caminho) e seria sobrescrita
+// error: leak: q still owns the memory (line 6) (on some path) and would be overwritten; free it or pass ownership first
 struct Ponto { x int; y int }
 fn main() {
     var q ?*Ponto = nil

@@ -1,4 +1,4 @@
-// erro: l.prox foi movida para fora do empréstimo (linha 7) e precisa receber um valor antes de sair da função
+// error: l.prox was moved out of the borrow (line 7) and must receive a value before leaving the function
 struct No {
     valor int
     prox ?*No

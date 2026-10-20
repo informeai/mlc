@@ -1,4 +1,4 @@
-// erro: Q.area precisa receber o receptor emprestado (&Q) para cumprir Area
+// error: Q.area must take the receiver borrowed (&Q) to satisfy Area
 interface Area {
     fn area(self &Self) int
 }

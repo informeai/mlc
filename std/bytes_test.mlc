@@ -7,7 +7,7 @@ fn test_push_and_grow() {
     b.push_str("total: ")
     b.push_int(-42)
     b.push_byte('!')
-    testing.check(b.eq("total: -42!"), "texto montado")
+    testing.check(b.eq("total: -42!"), "assembled text")
     for i := 0; i < 1000; i++ {
         b.push_byte('x')
     }
@@ -35,7 +35,7 @@ fn test_format_into_buf() {
     b.push_str("x=")
     b.reserve(str.format_len("{:>5.1}", 3.14159))
     b.len += str.format(&b.data[b.len:], "{:>5.1}", 3.14159)
-    testing.check(b.eq("x=  3.1"), "formatado no Buf")
+    testing.check(b.eq("x=  3.1"), "formatted into the Buf")
     b.free()
 }
 

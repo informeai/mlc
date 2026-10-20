@@ -1,4 +1,4 @@
-// erro: constante B usada antes de ser declarada
+// error: constant B used before being declared
 const A = B + 1
 const B = 1
 fn main() {

@@ -8,11 +8,11 @@ fn test_full_url() {
     var b [256]byte
     n := u.scheme(&b)
     testing.eq_str(&b[:n], "HTTPS")
-    testing.check(u.scheme_is("https"), "esquema sem diferenciar maiúsculas")
+    testing.check(u.scheme_is("https"), "case-insensitive scheme")
     n = u.host(&b)
     testing.eq_str(&b[:n], "Api.Exemplo.com")
     testing.check(u.host_is("api.exemplo.com"), "host_is")
-    testing.check(u.has_port(), "porta escrita")
+    testing.check(u.has_port(), "written port")
     testing.eq_int(u.port(), 8443)
     n = u.user(&b)
     testing.eq_str(&b[:n], "user:pw")
@@ -35,7 +35,7 @@ fn test_full_url() {
 fn test_defaults() {
     var u url.URL
     testing.check(url.parse_str("http://exemplo.com", &u), "parse")
-    testing.check(!u.has_port(), "sem porta")
+    testing.check(!u.has_port(), "no port")
     testing.eq_int(u.port(), 80)
     var b [64]byte
     testing.eq_int(u.path(&b), 0)
@@ -46,7 +46,7 @@ fn test_defaults() {
     testing.eq_int(u.user(&b), -1)
     testing.check(url.parse_str("https://exemplo.com/", &u), "https")
     testing.eq_int(u.port(), 443)
-    testing.check(url.parse_str("mailto://x", &u), "esquema sem porta conhecida")
+    testing.check(url.parse_str("mailto://x", &u), "scheme without a known port")
     testing.eq_int(u.port(), -1)
 }
 
@@ -60,7 +60,7 @@ fn test_ipv6_and_reference() {
     testing.eq_str(&b[:n], "::1")
     testing.eq_int(u.port(), 8080)
     // only the target, as in the HTTP request
-    testing.check(url.parse_str("/itens/7?x=1", &u), "referência")
+    testing.check(url.parse_str("/itens/7?x=1", &u), "reference")
     testing.eq_int(u.scheme(&b), 0)
     testing.eq_int(u.host(&b), 0)
     n = u.path(&b)
@@ -71,13 +71,13 @@ fn test_ipv6_and_reference() {
 
 fn test_invalid() {
     var u url.URL
-    testing.check(!url.parse_str("http:/x", &u), "esquema sem //")
-    testing.check(!url.parse_str("http://x:porta/", &u), "porta não numérica")
-    testing.check(!url.parse_str("http://x:70000/", &u), "porta grande demais")
-    testing.check(!url.parse_str("http://x:/", &u), "porta vazia")
-    testing.check(!url.parse_str("http://[::1/", &u), "IPv6 sem ]")
+    testing.check(!url.parse_str("http:/x", &u), "scheme without //")
+    testing.check(!url.parse_str("http://x:porta/", &u), "non-numeric port")
+    testing.check(!url.parse_str("http://x:70000/", &u), "port too large")
+    testing.check(!url.parse_str("http://x:/", &u), "empty port")
+    testing.check(!url.parse_str("http://[::1/", &u), "IPv6 without ]")
     var b [8]byte
-    testing.check(url.parse_str("http://x/?q=%zz", &u), "a consulta é lida sem decodificar")
+    testing.check(url.parse_str("http://x/?q=%zz", &u), "the query is read without decoding")
     testing.eq_int(u.query_param("q", &b), -1)
 }
 

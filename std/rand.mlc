@@ -72,7 +72,7 @@ pub fn secure_u64() uint64 {
 // often are drawn again. n must be greater than zero.
 pub fn secure_int_n(n int) int {
     if n <= 0 {
-        fail("rand.secure_int_n: n precisa ser maior que zero")
+        fail("rand.secure_int_n: n must be greater than zero")
     }
     m := uint64(n)
     limit := 0xFFFF_FFFF_FFFF_FFFF - (0xFFFF_FFFF_FFFF_FFFF % m + 1) % m

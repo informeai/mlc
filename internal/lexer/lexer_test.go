@@ -31,9 +31,9 @@ func TestOperators(t *testing.T) {
 func TestSemicolonInsertion(t *testing.T) {
 	tests := []struct{ src, want string }{
 		{"x\n", "IDENT ;"},
-		{"x", "IDENT ;"}, // fim do arquivo também termina o comando
+		{"x", "IDENT ;"}, // end of file also ends the statement
 		{"f(1)\n", "IDENT ( INT ) ;"},
-		{"a +\nb\n", "IDENT + IDENT ;"}, // operador no fim da linha continua a expressão
+		{"a +\nb\n", "IDENT + IDENT ;"}, // an operator at the end of the line continues the expression
 		{"fn main() {\n}\n", "fn IDENT ( ) { } ;"},
 		{"return\n", "return ;"},
 		{"i++\n", "IDENT ++ ;"},
@@ -60,22 +60,22 @@ func TestStringEscapes(t *testing.T) {
 
 func TestErrors(t *testing.T) {
 	tests := []struct{ src, want string }{
-		{`"abc`, "string não terminada"},
-		{`"\q"`, `escape inválido \q`},
-		{"@", "caractere inesperado"},
-		{"$x", "caractere inesperado"},
-		{"0x", "faltam dígitos"},
-		{"1__0", "_ só pode separar dígitos"},
-		{"0b12", "não é um dígito válido"},
-		{"#", "caractere inesperado"},
-		{"12ab", "número malformado"},
+		{`"abc`, "unterminated string"},
+		{`"\q"`, `invalid escape \q`},
+		{"@", "unexpected character"},
+		{"$x", "unexpected character"},
+		{"0x", "digits missing"},
+		{"1__0", "_ can only separate digits"},
+		{"0b12", "isn't a valid digit"},
+		{"#", "unexpected character"},
+		{"12ab", "malformed number"},
 	}
 	for _, tt := range tests {
 		l := New("t.mlc", []byte(tt.src))
 		for l.Next().Kind != token.EOF {
 		}
 		if len(l.Errors()) == 0 || !strings.Contains(l.Errors()[0].Msg, tt.want) {
-			t.Errorf("%q: erros %v, esperado %q", tt.src, l.Errors(), tt.want)
+			t.Errorf("%q: errors %v, expected %q", tt.src, l.Errors(), tt.want)
 		}
 	}
 }
@@ -85,7 +85,7 @@ func TestPositions(t *testing.T) {
 	l.Next() // fn
 	tok := l.Next()
 	if tok.Kind != token.IDENT || tok.Pos != (token.Pos{Line: 2, Col: 3}) {
-		t.Errorf("got %v em %v", tok.Kind, tok.Pos)
+		t.Errorf("got %v at %v", tok.Kind, tok.Pos)
 	}
 }
 
@@ -108,7 +108,7 @@ func TestCharLiterals(t *testing.T) {
 		for l.Next().Kind != token.EOF {
 		}
 		if len(l.Errors()) == 0 {
-			t.Errorf("%s: esperado erro", src)
+			t.Errorf("%s: expected an error", src)
 		}
 	}
 }
@@ -121,12 +121,12 @@ func TestFloatLiterals(t *testing.T) {
 			t.Errorf("%s: got %v %q, erros %v", src, tok.Kind, tok.Lit, l.Errors())
 		}
 	}
-	// "1e" sem dígitos não é expoente: é o número 1 seguido de letra
+	// "1e" without digits isn't an exponent: it's the number 1 followed by a letter
 	l := New("t.mlc", []byte("1e"))
 	for l.Next().Kind != token.EOF {
 	}
 	if len(l.Errors()) == 0 {
-		t.Error("1e: esperado erro de número malformado")
+		t.Error("1e: expected a malformed number error")
 	}
 }
 

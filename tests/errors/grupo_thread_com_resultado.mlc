@@ -1,4 +1,4 @@
-// erro: esperado *thread.Thread, encontrado *thread.Thread[int]
+// error: argument 1 of sync.Group.add: expected *thread.Thread, found *thread.Thread[int]
 import "std/sync"
 import "std/thread"
 

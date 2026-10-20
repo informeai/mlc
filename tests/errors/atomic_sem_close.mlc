@@ -1,4 +1,4 @@
-// erro: vazamento: n (atomic.Int, linha
+// error: leak: n (atomic.Int, line 17) may still be open at the end of the function; close it with n.close()
 import "std/atomic"
 import "std/io"
 import "std/mutex"

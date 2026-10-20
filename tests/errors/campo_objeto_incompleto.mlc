@@ -1,4 +1,4 @@
-// erro: p não pode ser movida: p.prox foi movida para fora (linha 14) e não recebeu valor novo
+// error: p can't be moved: p.prox was moved out (line 14) and didn't receive a new value
 struct No {
     valor int
     prox ?*No

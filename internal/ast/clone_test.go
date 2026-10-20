@@ -14,7 +14,7 @@ func TestCloneIsDeep(t *testing.T) {
 	c := Clone(orig)
 	ret := c.Body.Stmts[0].(*ReturnStmt)
 	if ret == orig.Body.Stmts[0] || ret.Value == orig.Body.Stmts[0].(*ReturnStmt).Value {
-		t.Fatal("o clone compartilha nós com o original")
+		t.Fatal("the clone shares nodes with the original")
 	}
 	if ret.Value.(*Ident).Name != "x" || ret.Value.Pos().Line != 2 {
 		t.Fatalf("o clone perdeu dados: %+v", ret.Value)

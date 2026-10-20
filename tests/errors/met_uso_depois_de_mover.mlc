@@ -1,4 +1,4 @@
-// erro: p já foi liberada ou movida (linha 9)
+// error: p was already freed or moved (line 9)
 import "std/io"
 struct Ponto { x int; y int }
 fn (p *Ponto) destroi() {

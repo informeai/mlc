@@ -1,6 +1,6 @@
-// Package parser implementa um parser recursive descent para a gramática
-// de docs/grammar.md. Cobre o subconjunto dos marcos já implementados e para
-// no primeiro erro de sintaxe.
+// Package parser implements a recursive descent parser for the grammar
+// of docs/grammar.md. It covers the subset of the milestones already implemented and stops
+// at the first syntax error.
 package parser
 
 import (
@@ -12,7 +12,7 @@ import (
 	"mlc/internal/token"
 )
 
-// bailout interrompe o parse no primeiro erro; é recuperado em ParseFile.
+// bailout interrupts the parse at the first error; it's recovered in ParseFile.
 type bailout struct{}
 
 type Parser struct {
@@ -22,16 +22,16 @@ type Parser struct {
 	peek token.Token
 	errs []token.Error
 
-	// noLit desliga literais compostos no nível de cima do cabeçalho de
-	// if/for/match: em "if x == P {", o '{' abre o bloco. Dentro de
-	// parênteses, chamadas e índices eles voltam a valer.
+	// noLit turns off composite literals at the top level of the header of
+	// if/for/match: in "if x == P {", the '{' opens the block. Inside
+	// parentheses, calls and indices they're valid again.
 	noLit  bool
-	extern bool // lendo um extern fn: sem corpo
+	extern bool // reading an extern fn: no body
 }
 
-const litInHeader = "literal de struct no cabeçalho de if, for ou match precisa de parênteses: (Tipo{...})"
+const litInHeader = "a struct literal in the header of if, for or match needs parentheses: (Type{...})"
 
-// withLit executa f com literais compostos ligados ou desligados.
+// withLit runs f with composite literals turned on or off.
 func (p *Parser) withLit(allowed bool, f func()) {
 	old := p.noLit
 	p.noLit = !allowed
@@ -67,40 +67,40 @@ func (p *Parser) errorf(pos token.Pos, format string, args ...any) {
 
 func (p *Parser) expect(k token.Kind) token.Token {
 	if p.tok.Kind != k {
-		p.unexpected("esperado " + describeKind(k))
+		p.unexpected("expected " + describeKind(k))
 	}
 	t := p.tok
 	p.next()
 	return t
 }
 
-// unexpected reporta o token atual. Tokens ILLEGAL já foram reportados pelo lexer.
+// unexpected reports the current token. ILLEGAL tokens were already reported by the lexer.
 func (p *Parser) unexpected(what string) {
 	if p.tok.Kind == token.ILLEGAL {
 		panic(bailout{})
 	}
-	p.errorf(p.tok.Pos, "%s, encontrado %s", what, describe(p.tok))
+	p.errorf(p.tok.Pos, "%s, found %s", what, describe(p.tok))
 }
 
-// expectEOS consome o fim de comando. Antes de '}' ele pode ser omitido.
+// expectEOS consumes the end of statement. Before '}' it can be omitted.
 func (p *Parser) expectEOS() {
 	switch p.tok.Kind {
 	case token.SEMICOLON:
 		p.next()
 	case token.RBRACE, token.EOF:
 	default:
-		p.unexpected("esperado fim de linha ou ';'")
+		p.unexpected("expected end of line or ';'")
 	}
 }
 
 func describeKind(k token.Kind) string {
 	switch k {
 	case token.IDENT:
-		return "identificador"
+		return "identifier"
 	case token.STRING:
 		return "string"
 	case token.SEMICOLON:
-		return "';' ou fim de linha"
+		return "';' or end of line"
 	}
 	return fmt.Sprintf("'%s'", k)
 }
@@ -108,22 +108,22 @@ func describeKind(k token.Kind) string {
 func describe(t token.Token) string {
 	switch t.Kind {
 	case token.EOF:
-		return "fim do arquivo"
+		return "end of file"
 	case token.SEMICOLON:
 		if t.Lit == "\n" {
-			return "fim de linha"
+			return "end of line"
 		}
 	case token.IDENT:
-		return fmt.Sprintf("identificador %s", t.Lit)
+		return fmt.Sprintf("identifier %s", t.Lit)
 	case token.INT, token.FLOAT:
-		return fmt.Sprintf("número %s", t.Lit)
+		return fmt.Sprintf("number %s", t.Lit)
 	case token.STRING:
 		return fmt.Sprintf("string %q", t.Lit)
 	}
 	return fmt.Sprintf("'%s'", t.Kind)
 }
 
-// ---------- Declarações ----------
+// ---------- Declarations ----------
 
 func (p *Parser) parseFile() *ast.File {
 	f := &ast.File{}
@@ -155,7 +155,7 @@ func (p *Parser) parseFile() *ast.File {
 			f.Impls = append(f.Impls, p.parseImpl())
 		case token.IDENT:
 			if p.tok.Lit != "link" || p.peek.Kind != token.STRING {
-				p.unexpected("esperado declaração (import, fn, struct, enum, const, interface, impl ou link)")
+				p.unexpected("expected a declaration (import, fn, struct, enum, const, interface, impl or link)")
 			}
 			pos := p.tok.Pos
 			p.next()
@@ -163,7 +163,7 @@ func (p *Parser) parseFile() *ast.File {
 			p.next()
 			p.expectEOS()
 		default:
-			p.unexpected("esperado declaração (import, fn, struct, enum, const, interface ou impl)")
+			p.unexpected("expected a declaration (import, fn, struct, enum, const, interface or impl)")
 		}
 	}
 	return f
@@ -180,7 +180,7 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 	pos := p.expect(token.FN).Pos
 	var recv *ast.Param
 	if p.tok.Kind == token.LPAREN {
-		// método: fn (p &Ponto) area()
+		// method: fn (p &Point) area()
 		p.next()
 		name := p.expect(token.IDENT)
 		recv = &ast.Param{Name: name.Lit, Type: p.parseType(), P: name.Pos}
@@ -206,7 +206,7 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 	}
 	if fn.Extern {
 		if p.tok.Kind == token.LBRACE {
-			p.errorf(p.tok.Pos, "extern fn não tem corpo: a implementação fica no runtime C")
+			p.errorf(p.tok.Pos, "extern fn has no body: the implementation lives in the C runtime")
 			p.parseBlock()
 			return fn
 		}
@@ -217,21 +217,21 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 	return fn
 }
 
-// parseExtern lê "extern fn sqrt(x float64) float64": uma função sem corpo,
-// implementada no runtime C.
+// parseExtern reads "extern fn sqrt(x float64) float64": a function without a body,
+// implemented in the C runtime.
 func (p *Parser) parseExtern() *ast.FuncDecl {
 	p.expect(token.EXTERN)
 	externC := false
 	if p.tok.Kind == token.STRING {
-		// extern "C" fn: uma função de uma biblioteca de C
+		// extern "C" fn: a function from a C library
 		if p.tok.Lit != "C" {
-			p.errorf(p.tok.Pos, "a única convenção de chamada é \"C\": extern \"C\" fn")
+			p.errorf(p.tok.Pos, "the only calling convention is \"C\": extern \"C\" fn")
 		}
 		externC = true
 		p.next()
 	}
 	if p.tok.Kind != token.FN {
-		p.unexpected("esperado fn depois de extern")
+		p.unexpected("expected fn after extern")
 	}
 	p.extern = true
 	defer func() { p.extern = false }()
@@ -240,7 +240,7 @@ func (p *Parser) parseExtern() *ast.FuncDecl {
 	return fn
 }
 
-// parseExternType lê "extern \"C\" type Banco": um tipo opaco de C.
+// parseExternType reads "extern \"C\" type Db": an opaque C type.
 func (p *Parser) parseExternType() *ast.StructDecl {
 	pos := p.expect(token.EXTERN).Pos
 	p.expect(token.STRING)
@@ -250,7 +250,7 @@ func (p *Parser) parseExternType() *ast.StructDecl {
 	return &ast.StructDecl{Extern: true, Name: name.Lit, P: pos}
 }
 
-// isExternType diz se o que vem é extern "C" type Nome.
+// isExternType says whether what comes is extern "C" type Name.
 func (p *Parser) isExternType() bool {
 	if p.tok.Kind != token.EXTERN || p.peek.Kind != token.STRING {
 		return false
@@ -297,7 +297,7 @@ func (p *Parser) parseConst() *ast.ConstDecl {
 	return d
 }
 
-// startsType diz se o token atual pode começar um tipo.
+// startsType says whether the current token can start a type.
 func (p *Parser) startsType() bool {
 	switch p.tok.Kind {
 	case token.IDENT, token.LBRACK, token.MUL, token.QUESTION, token.AMP, token.FN:
@@ -310,7 +310,7 @@ func (p *Parser) parseType() *ast.TypeExpr {
 	pos := p.tok.Pos
 	switch p.tok.Kind {
 	case token.FN:
-		// fn(int, &T) bool: o tipo de um valor função
+		// fn(int, &T) bool: the type of a function value
 		p.next()
 		t := &ast.TypeExpr{Mod: ast.TypeFunc, P: pos}
 		p.expect(token.LPAREN)
@@ -330,7 +330,7 @@ func (p *Parser) parseType() *ast.TypeExpr {
 		name := p.tok.Lit
 		p.next()
 		if p.tok.Kind == token.PERIOD && p.peek.Kind == token.IDENT {
-			// tipo de outro arquivo: geometria.Ponto
+			// a type from another file: geometry.Point
 			p.next()
 			qualified := &ast.TypeExpr{Module: name, Name: p.tok.Lit, P: pos}
 			p.next()
@@ -344,7 +344,7 @@ func (p *Parser) parseType() *ast.TypeExpr {
 			p.next()
 			return &ast.TypeExpr{Mod: ast.TypeSlice, Elem: p.parseType(), P: pos}
 		}
-		// [N]T: o tamanho é uma expressão constante
+		// [N]T: the size is a constant expression
 		var n ast.Expr
 		p.withLit(true, func() { n = p.parseExpr() })
 		p.expect(token.RBRACK)
@@ -364,11 +364,11 @@ func (p *Parser) parseType() *ast.TypeExpr {
 		p.next()
 		return &ast.TypeExpr{Mod: ast.TypeBorrow, Elem: p.parseType(), P: pos}
 	}
-	p.unexpected("esperado tipo")
+	p.unexpected("expected a type")
 	return nil
 }
 
-// ---------- Comandos ----------
+// ---------- Statements ----------
 
 func (p *Parser) parseBlock() *ast.Block {
 	b := &ast.Block{P: p.expect(token.LBRACE).Pos}
@@ -385,8 +385,8 @@ func (p *Parser) parseBlock() *ast.Block {
 
 func (p *Parser) parseStmt() ast.Stmt {
 	if p.tok.Kind == token.IDENT && p.peek.Kind == token.COLON {
-		// Não existem labels, então "nome:" no começo de um comando quase
-		// sempre é um literal de struct que o cabeçalho de if/for/match cortou.
+		// There are no labels, so "name:" at the start of a statement is almost
+		// always a struct literal the header of if/for/match cut off.
 		p.errorf(p.tok.Pos, litInHeader)
 	}
 	switch p.tok.Kind {
@@ -416,21 +416,21 @@ func (p *Parser) parseStmt() ast.Stmt {
 	case token.CONST:
 		return p.parseConst()
 	case token.ELSE:
-		p.errorf(p.tok.Pos, "else precisa ficar na mesma linha do '}' que fecha o if")
+		p.errorf(p.tok.Pos, "else must be on the same line as the '}' that closes the if")
 	}
 	s := p.parseSimpleStmt()
 	p.expectEOS()
 	return s
 }
 
-// parseSimpleStmt lê x := v, atribuições, x++/x-- ou uma expressão.
+// parseSimpleStmt reads x := v, assignments, x++/x-- or an expression.
 func (p *Parser) parseSimpleStmt() ast.Stmt {
 	x := p.parseExpr()
 	switch p.tok.Kind {
 	case token.DEFINE:
 		id, ok := x.(*ast.Ident)
 		if !ok {
-			p.errorf(x.Pos(), "o lado esquerdo de := precisa ser um nome")
+			p.errorf(x.Pos(), "the left side of := must be a name")
 		}
 		p.next()
 		return &ast.VarDecl{Name: id.Name, Value: p.parseExpr(), Short: true, P: id.P}
@@ -461,7 +461,7 @@ func (p *Parser) parseVarDecl() *ast.VarDecl {
 		d.Value = p.parseExpr()
 	}
 	if d.Type == nil && d.Value == nil {
-		p.errorf(name.Pos, "var %s precisa de tipo ou valor inicial", name.Lit)
+		p.errorf(name.Pos, "var %s needs a type or an initial value", name.Lit)
 	}
 	p.expectEOS()
 	return d
@@ -481,7 +481,7 @@ func (p *Parser) parseIf() *ast.IfStmt {
 	case token.LBRACE:
 		s.Else = p.parseBlock()
 	default:
-		p.unexpected("esperado if ou '{' depois de else")
+		p.unexpected("expected if or '{' after else")
 	}
 	return s
 }
@@ -502,7 +502,7 @@ func (p *Parser) parseMatch() *ast.MatchStmt {
 		if p.tok.Kind == token.LBRACE {
 			p.errorf(s.P, litInHeader)
 		}
-		p.errorf(s.P, "match sem braços")
+		p.errorf(s.P, "match without arms")
 	}
 	return s
 }
@@ -522,9 +522,9 @@ func (p *Parser) parseMatchArm() *ast.MatchArm {
 		arm.Body = p.parseBlock()
 		p.expectEOS()
 	case token.VAR, token.CONST, token.IF, token.FOR, token.MATCH:
-		p.errorf(p.tok.Pos, "o braço do match aceita um comando simples, um bloco, break, continue ou return (use { } para mais)")
+		p.errorf(p.tok.Pos, "a match arm accepts a simple statement, a block, break, continue or return (use { } for more)")
 	default:
-		arm.Body = p.parseStmt() // já consome o fim de comando
+		arm.Body = p.parseStmt() // already consumes the end of statement
 	}
 	return arm
 }
@@ -540,12 +540,12 @@ func (p *Parser) parsePattern() *ast.Pattern {
 		switch t.Lit {
 		case "_":
 			pat.Wildcard = true
-		default: // true, false ou uma constante; o checker valida
+		default: // true, false or a constant; the checker validates
 			pat.Lit = &ast.Ident{Name: t.Lit, P: t.Pos}
 		}
 		p.next()
 		if id, ok := pat.Lit.(*ast.Ident); ok && p.tok.Kind == token.PERIOD && p.peek.Kind == token.IDENT {
-			// constante de outro arquivo: geometria.MAX
+			// a constant from another file: geometry.MAX
 			p.next()
 			pat.Lit = &ast.SelectorExpr{X: id, Sel: p.tok.Lit, SelPos: p.tok.Pos}
 			p.next()
@@ -554,7 +554,7 @@ func (p *Parser) parsePattern() *ast.Pattern {
 	case token.SUB:
 		p.next()
 		if p.tok.Kind != token.INT {
-			p.unexpected("esperado número depois de '-' no padrão")
+			p.unexpected("expected a number after '-' in the pattern")
 		}
 		pat.Neg = true
 	}
@@ -563,7 +563,7 @@ func (p *Parser) parsePattern() *ast.Pattern {
 		pat.Lit = p.parsePrimary()
 		return pat
 	}
-	p.unexpected("esperado padrão (literal ou _)")
+	p.unexpected("expected a pattern (literal or _)")
 	return nil
 }
 
@@ -594,7 +594,7 @@ func (p *Parser) parseForHeader(s *ast.ForStmt) {
 	}
 	if p.tok.Kind == token.SEMICOLON { // for init; cond; post { }
 		if p.tok.Lit == "\n" {
-			p.errorf(p.tok.Pos, "o '{' do for precisa ficar na mesma linha")
+			p.errorf(p.tok.Pos, "the '{' of the for must be on the same line")
 		}
 		p.next()
 		s.Init = init
@@ -610,12 +610,12 @@ func (p *Parser) parseForHeader(s *ast.ForStmt) {
 	// for cond { }
 	es, ok := init.(*ast.ExprStmt)
 	if !ok {
-		p.errorf(init.Pos(), "a condição do for precisa ser uma expressão")
+		p.errorf(init.Pos(), "the for's condition must be an expression")
 	}
 	s.Cond = es.X
 }
 
-// parseComposite lê "Tipo{campo: valor, ...}" depois do nome do tipo.
+// parseComposite reads "Type{field: value, ...}" after the type's name.
 func (p *Parser) parseComposite(mod, typ *ast.Ident) *ast.CompositeLit {
 	lit := &ast.CompositeLit{Module: mod, Type: typ, Lbrace: p.expect(token.LBRACE).Pos}
 	p.withLit(true, func() {
@@ -624,7 +624,7 @@ func (p *Parser) parseComposite(mod, typ *ast.Ident) *ast.CompositeLit {
 			p.expect(token.COLON)
 			lit.Fields = append(lit.Fields, &ast.FieldInit{Name: name.Lit, Value: p.parseExpr(), P: name.Pos})
 			if p.tok.Kind == token.SEMICOLON && p.tok.Lit == "\n" {
-				p.errorf(p.tok.Pos, "falta ',' depois do campo %s (num literal em várias linhas, todo campo termina com vírgula)", name.Lit)
+				p.errorf(p.tok.Pos, "missing ',' after the field %s (in a multi-line literal, every field ends with a comma)", name.Lit)
 			}
 			if p.tok.Kind != token.COMMA {
 				break
@@ -636,9 +636,9 @@ func (p *Parser) parseComposite(mod, typ *ast.Ident) *ast.CompositeLit {
 	return lit
 }
 
-// ---------- Expressões ----------
+// ---------- Expressions ----------
 
-// precedence devolve a precedência de um operador binário (0 se não for um).
+// precedence returns the precedence of a binary operator (0 if it isn't one).
 func precedence(k token.Kind) int {
 	switch k {
 	case token.LOR:
@@ -650,7 +650,7 @@ func precedence(k token.Kind) int {
 	case token.ADD, token.SUB, token.OR, token.XOR, token.ADD_WRAP, token.SUB_WRAP:
 		return 4
 	case token.MUL, token.QUO, token.REM, token.SHL, token.SHR, token.AMP, token.MUL_WRAP:
-		return 5 // como no Go: a & b == c é (a & b) == c
+		return 5 // as in Go: a & b == c is (a & b) == c
 	}
 	return 0
 }
@@ -673,7 +673,7 @@ func (p *Parser) parseBinary(minPrec int) ast.Expr {
 
 func (p *Parser) parseUnary() ast.Expr {
 	switch p.tok.Kind {
-	case token.SUB, token.NOT, token.MUL, token.AMP, token.XOR: // -x, !x, *p (conteúdo), &x (empréstimo), ^x (inverte os bits)
+	case token.SUB, token.NOT, token.MUL, token.AMP, token.XOR: // -x, !x, *p (pointee), &x (borrow), ^x (inverts the bits)
 		op := p.tok
 		p.next()
 		return &ast.UnaryExpr{Op: op.Kind, X: p.parseUnary(), P: op.Pos}
@@ -689,8 +689,8 @@ func (p *Parser) parsePostfix() ast.Expr {
 			call := &ast.CallExpr{Fun: x, Lparen: p.tok.Pos}
 			p.next()
 			if id, ok := x.(*ast.Ident); ok && id.Name == "alloc" && p.tok.Kind == token.LBRACK {
-				// alloc([]T, n): o primeiro argumento é um tipo; alloc([3]int{...}),
-				// um literal de array
+				// alloc([]T, n): the first argument is a type; alloc([3]int{...}),
+				// an array literal
 				typ := p.parseType()
 				if typ.Mod == ast.TypeArray && p.tok.Kind == token.LBRACE {
 					call.Args = append(call.Args, p.arrayLitBody(typ))
@@ -722,14 +722,14 @@ func (p *Parser) parsePostfix() ast.Expr {
 			case *ast.Ident:
 				x = p.parseComposite(nil, t)
 			case *ast.IndexExpr, *ast.IndexListExpr:
-				// literal de struct genérica: Par[int, string]{...}
+				// a generic struct literal: Pair[int, string]{...}
 				if lit := p.genericComposite(t); lit != nil {
 					x = lit
 				} else {
 					return x
 				}
 			case *ast.SelectorExpr:
-				// literal de um tipo de outro arquivo: geometria.Ponto{...}
+				// a literal of a type from another file: geometry.Point{...}
 				mod, ok := t.X.(*ast.Ident)
 				if !ok {
 					return x
@@ -741,7 +741,7 @@ func (p *Parser) parsePostfix() ast.Expr {
 		case token.LBRACK:
 			pos := p.tok.Pos
 			p.next()
-			// s[i], ou o sub-slice s[a:b] com limites opcionais
+			// s[i], or the sub-slice s[a:b] with optional bounds
 			var lo, hi ast.Expr
 			var more []ast.Expr
 			isSlice := false
@@ -766,7 +766,7 @@ func (p *Parser) parsePostfix() ast.Expr {
 			case isSlice:
 				x = &ast.SliceExpr{X: x, Low: lo, High: hi, Lbrack: pos}
 			case len(more) > 0:
-				// f[A, B]: argumentos de tipo
+				// f[A, B]: type arguments
 				x = &ast.IndexListExpr{X: x, Indices: append([]ast.Expr{lo}, more...), Lbrack: pos}
 			default:
 				x = &ast.IndexExpr{X: x, Index: lo, Lbrack: pos}
@@ -781,8 +781,8 @@ func (p *Parser) parsePrimary() ast.Expr {
 	t := p.tok
 	switch t.Kind {
 	case token.QUESTION, token.FN:
-		// ?*T e fn(T) R não começam expressões: são argumentos de tipo,
-		// como em vec.new[?*No](8)
+		// ?*T and fn(T) R don't start expressions: they're type arguments,
+		// as in vec.new[?*Node](8)
 		return &ast.TypeArg{Type: p.parseType()}
 	case token.IDENT:
 		p.next()
@@ -808,11 +808,11 @@ func (p *Parser) parsePrimary() ast.Expr {
 		p.expect(token.RPAREN)
 		return x
 	}
-	p.unexpected("esperado expressão")
+	p.unexpected("expected an expression")
 	return nil
 }
 
-// parsePub lê uma declaração pública: pub fn, pub struct ou pub const.
+// parsePub reads a public declaration: pub fn, pub struct or pub const.
 func (p *Parser) parsePub(f *ast.File) {
 	pos := p.expect(token.PUB).Pos
 	switch p.tok.Kind {
@@ -847,30 +847,30 @@ func (p *Parser) parsePub(f *ast.File) {
 		in.Pub = true
 		f.Interfaces = append(f.Interfaces, in)
 	default:
-		p.errorf(pos, "pub só vale antes de fn, struct, enum, const ou interface")
+		p.errorf(pos, "pub only applies before fn, struct, enum, const or interface")
 	}
 }
 
-// parseArrayLit lê "[3]int{1, 2, 3}". Como um tipo array sozinho nunca é uma
-// expressão, o '{' depois dele sempre abre o literal, mesmo no cabeçalho de
-// if, for e match.
+// parseArrayLit reads "[3]int{1, 2, 3}". Since an array type alone is never an
+// expression, the '{' after it always opens the literal, even in the header of
+// if, for and match.
 func (p *Parser) parseArrayLit() ast.Expr {
 	typ := p.parseType()
 	if p.tok.Kind != token.LBRACE || typ.Mod != ast.TypeArray {
-		// um tipo usado como argumento de tipo: f[[]int](...)
+		// a type used as a type argument: f[[]int](...)
 		return &ast.TypeArg{Type: typ}
 	}
 	return p.arrayLitBody(typ)
 }
 
-// arrayLitBody lê os elementos {a, b, c} de um literal de array.
+// arrayLitBody reads the elements {a, b, c} of an array literal.
 func (p *Parser) arrayLitBody(typ *ast.TypeExpr) *ast.ArrayLit {
 	lit := &ast.ArrayLit{Type: typ, Lbrace: p.expect(token.LBRACE).Pos}
 	p.withLit(true, func() {
 		for p.tok.Kind != token.RBRACE {
 			lit.Elems = append(lit.Elems, p.parseExpr())
 			if p.tok.Kind == token.SEMICOLON && p.tok.Lit == "\n" {
-				p.errorf(p.tok.Pos, "falta ',' depois do elemento (num literal em várias linhas, todo elemento termina com vírgula)")
+				p.errorf(p.tok.Pos, "missing ',' after the element (in a multi-line literal, every element ends with a comma)")
 			}
 			if p.tok.Kind != token.COMMA {
 				break
@@ -882,28 +882,28 @@ func (p *Parser) arrayLitBody(typ *ast.TypeExpr) *ast.ArrayLit {
 	return lit
 }
 
-// parseTypeParams lê [T any, U ordered] depois do nome de uma fn ou struct.
+// parseTypeParams reads [T any, U ordered] after the name of an fn or struct.
 func (p *Parser) parseTypeParams() []*ast.TypeParam {
 	p.expect(token.LBRACK)
 	var params []*ast.TypeParam
 	for {
 		name := p.expect(token.IDENT)
 		if p.tok.Kind != token.IDENT {
-			p.unexpected("esperado a restrição do parâmetro de tipo (any, comparable, ordered, number, integer, owned, ref ou uma interface)")
+			p.unexpected("expected the type parameter's constraint (any, comparable, ordered, number, integer, owned, ref or an interface)")
 		}
 		constraint := ""
 		for {
 			if constraint != "" {
-				p.next() // o + entre as restrições: K owned + hash.Hash
+				p.next() // the + between the constraints: K owned + hash.Hash
 				if p.tok.Kind != token.IDENT {
-					p.unexpected("esperado outra restrição depois de +")
+					p.unexpected("expected another constraint after +")
 				}
 				constraint += "+"
 			}
 			constraint += p.tok.Lit
 			p.next()
 			if p.tok.Kind == token.PERIOD && p.peek.Kind == token.IDENT {
-				// interface de outro arquivo: T io.Display
+				// an interface from another file: T io.Display
 				p.next()
 				constraint += "." + p.tok.Lit
 				p.next()
@@ -922,7 +922,7 @@ func (p *Parser) parseTypeParams() []*ast.TypeParam {
 	return params
 }
 
-// parseTypeArgs lê [int, string] depois do nome de um tipo genérico, se houver.
+// parseTypeArgs reads [int, string] after the name of a generic type, if any.
 func (p *Parser) parseTypeArgs() []*ast.TypeExpr {
 	if p.tok.Kind != token.LBRACK {
 		return nil
@@ -932,7 +932,7 @@ func (p *Parser) parseTypeArgs() []*ast.TypeExpr {
 	for {
 		arg := p.parseType()
 		if p.tok.Kind == token.IDENT && arg.Mod == ast.TypeNamed && arg.Module == "" && len(arg.Args) == 0 {
-			// Vec[T any] no receptor de um método: a restrição do método
+			// Vec[T any] in a method's receiver: the method's constraint
 			arg.Constraint = p.tok.Lit
 			p.next()
 			if p.tok.Kind == token.PERIOD && p.peek.Kind == token.IDENT {
@@ -951,8 +951,8 @@ func (p *Parser) parseTypeArgs() []*ast.TypeExpr {
 	return args
 }
 
-// genericComposite lê o literal de Par[int, string]{...}, se x for Par[...]
-// (ou mod.Par[...]).
+// genericComposite reads the literal of Pair[int, string]{...}, if x is Pair[...]
+// (or mod.Pair[...]).
 func (p *Parser) genericComposite(x ast.Expr) *ast.CompositeLit {
 	var base ast.Expr
 	var args []ast.Expr
@@ -979,8 +979,8 @@ func (p *Parser) genericComposite(x ast.Expr) *ast.CompositeLit {
 	return lit
 }
 
-// parseInterface lê "interface Display { fn write(self &Self, w &Writer) }":
-// assinaturas de métodos, sem corpo.
+// parseInterface reads "interface Display { fn write(self &Self, w &Writer) }":
+// method signatures, without bodies.
 func (p *Parser) parseInterface() *ast.InterfaceDecl {
 	pos := p.expect(token.INTERFACE).Pos
 	in := &ast.InterfaceDecl{Name: p.expect(token.IDENT).Lit, P: pos}
@@ -991,9 +991,9 @@ func (p *Parser) parseInterface() *ast.InterfaceDecl {
 			continue
 		}
 		if p.tok.Kind != token.FN {
-			p.unexpected("esperado fn: uma interface só tem assinaturas de métodos")
+			p.unexpected("expected fn: an interface only has method signatures")
 		}
-		p.extern = true // sem corpo, como um extern fn
+		p.extern = true // without a body, like an extern fn
 		m := p.parseFunc()
 		p.extern = false
 		m.Extern = false
@@ -1004,7 +1004,7 @@ func (p *Parser) parseInterface() *ast.InterfaceDecl {
 	return in
 }
 
-// parseImpl lê "impl [T C] [auto] Interface for Tipo [{ métodos }]".
+// parseImpl reads "impl [T C] [auto] Interface for Type [{ methods }]".
 func (p *Parser) parseImpl() *ast.ImplDecl {
 	pos := p.expect(token.IMPL).Pos
 	d := &ast.ImplDecl{P: pos}
@@ -1017,7 +1017,7 @@ func (p *Parser) parseImpl() *ast.ImplDecl {
 	}
 	d.Iface = p.parseType()
 	if p.tok.Kind != token.FOR {
-		p.unexpected("esperado for: impl Interface for Tipo")
+		p.unexpected("expected for: impl Interface for Type")
 	}
 	p.next()
 	d.Type = p.parseType()
@@ -1030,7 +1030,7 @@ func (p *Parser) parseImpl() *ast.ImplDecl {
 				continue
 			}
 			if p.tok.Kind != token.FN {
-				p.unexpected("esperado fn: o bloco de um impl só tem os métodos da interface")
+				p.unexpected("expected fn: an impl's block only has the interface's methods")
 			}
 			d.Methods = append(d.Methods, p.parseFunc())
 		}
@@ -1040,7 +1040,7 @@ func (p *Parser) parseImpl() *ast.ImplDecl {
 	return d
 }
 
-// parseEnum lê "enum Forma { Circulo(raio float64); Vazio }".
+// parseEnum reads "enum Shape { Circle(radius float64); Empty }".
 func (p *Parser) parseEnum() *ast.EnumDecl {
 	pos := p.expect(token.ENUM).Pos
 	en := &ast.EnumDecl{Name: p.expect(token.IDENT).Lit, P: pos}
@@ -1074,7 +1074,7 @@ func (p *Parser) parseEnum() *ast.EnumDecl {
 	return en
 }
 
-// variantPattern lê o padrão Circulo(r, _) de um match sobre enum.
+// variantPattern reads the pattern Circle(r, _) of a match on an enum.
 func (p *Parser) variantPattern(pat *ast.Pattern) *ast.Pattern {
 	name := p.expect(token.IDENT)
 	pat.Variant = &ast.Ident{Name: name.Lit, P: name.Pos}

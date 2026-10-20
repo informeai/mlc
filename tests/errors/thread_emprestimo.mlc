@@ -1,4 +1,4 @@
-// erro: a função da thread não pode receber um empréstimo (&int)
+// error: the thread's function can't take a borrow (&int): the context is moved to the thread, which becomes its owner
 import "std/io"
 import "std/thread"
 import "std/vec"

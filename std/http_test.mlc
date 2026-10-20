@@ -66,10 +66,10 @@ fn test_request_line_and_headers() {
     var m http.Message
     r := m.read_request(&c)
     ok(r)
-    testing.check(m.method_is("GET"), "método")
+    testing.check(m.method_is("GET"), "method")
     testing.check(m.path_is("/api/itens"), "caminho")
     testing.check(m.path_has_prefix("/api/"), "prefixo")
-    testing.check(!m.path_has_prefix("/api/itens/x"), "prefixo maior que o caminho")
+    testing.check(!m.path_has_prefix("/api/itens/x"), "prefix longer than the path")
     var buf [64]byte
     n := m.target(&buf)
     testing.eq_str(&buf[:n], "/api/itens?nome=caf%C3%A9+com+leite&n=3&flag")
@@ -88,7 +88,7 @@ fn test_request_line_and_headers() {
     testing.eq_int(m.header_count(), 3)
     n = m.header_name(2, &buf)
     testing.eq_str(&buf[:n], "ACCEPT")
-    testing.check(m.keep_alive(), "HTTP/1.1 mantém a conexão")
+    testing.check(m.keep_alive(), "HTTP/1.1 keeps the connection")
     testing.eq_int(m.content_length(), -1)
     r = m.read_body(&c, &buf)
     match r {
@@ -130,7 +130,7 @@ fn test_chunked() {
         Err(code) => testing.eq_int(code, 0)
     }
     ok(m.read_request(&c))
-    testing.check(m.path_is("/next"), "depois do chunked")
+    testing.check(m.path_is("/next"), "after the chunked body")
 }
 
 fn test_body_too_big() {
@@ -230,7 +230,7 @@ fn test_response_until_close() {
     c := pipe("HTTP/1.0 200 OK\r\n\r\ntudo até o fim", 3)
     var m http.Message
     ok(m.read_response(&c))
-    testing.check(!m.keep_alive(), "sem keep-alive")
+    testing.check(!m.keep_alive(), "without keep-alive")
     var body [32]byte
     match m.read_all(&c, &body) {
         Ok(k) => testing.eq_str(&body[:k], "tudo até o fim")
@@ -343,7 +343,7 @@ fn test_match_path() {
     var p http.Params
     testing.check(matches("/itens", "/itens", &p), "fixo")
     testing.check(!matches("/itens", "/itens/", &p), "barra a mais")
-    testing.check(matches("/itens/{id}", "/itens/7", &p), "um parâmetro")
+    testing.check(matches("/itens/{id}", "/itens/7", &p), "one parameter")
     var v [32]byte
     n := p.get("id", &v)
     testing.eq_str(&v[:n], "7")
@@ -352,16 +352,16 @@ fn test_match_path() {
     testing.eq_int(id, 7)
     testing.check(p.is("id", "7"), "is")
     testing.eq_int(p.get("outro", &v), -1)
-    testing.check(!matches("/itens/{id}", "/itens/", &p), "pedaço vazio")
-    testing.check(!matches("/itens/{id}", "/itens/7/x", &p), "pedaço a mais")
-    testing.check(matches("/users/{uid}/posts/{post}", "/users/3/posts/caf%C3%A9", &p), "dois parâmetros")
+    testing.check(!matches("/itens/{id}", "/itens/", &p), "empty piece")
+    testing.check(!matches("/itens/{id}", "/itens/7/x", &p), "extra piece")
+    testing.check(matches("/users/{uid}/posts/{post}", "/users/3/posts/caf%C3%A9", &p), "two parameters")
     n = p.get("post", &v)
     testing.eq_str(&v[:n], "café") // decoded
     testing.check(p.is("uid", "3"), "o primeiro")
     testing.check(matches("/arquivos/{caminho...}", "/arquivos/a/b/c.txt", &p), "resto")
     n = p.get("caminho", &v)
     testing.eq_str(&v[:n], "a/b/c.txt")
-    testing.check(!matches("/arquivos/{caminho...}", "/arquivos/", &p), "resto vazio")
+    testing.check(!matches("/arquivos/{caminho...}", "/arquivos/", &p), "empty rest")
 }
 
 struct App {
@@ -467,15 +467,15 @@ fn test_client_errors() {
     var m http.Message
     var body [16]byte
     match http.get("ftp://exemplo.com/", &m, &body) {
-        Ok(_) => testing.fail("ftp não é http")
+        Ok(_) => testing.fail("ftp isn't http")
         Err(code) => testing.eq_int(code, http.UNSUPPORTED_SCHEME)
     }
     match http.get("http://x:porta/", &m, &body) {
-        Ok(_) => testing.fail("URL inválida")
+        Ok(_) => testing.fail("invalid URL")
         Err(code) => testing.eq_int(code, url.BAD_URL)
     }
     match http.get("http://127.0.0.1:1/", &m, &body) {
-        Ok(_) => testing.fail("porta fechada")
+        Ok(_) => testing.fail("closed port")
         Err(code) => testing.eq_int(code, net.REFUSED)
     }
 }

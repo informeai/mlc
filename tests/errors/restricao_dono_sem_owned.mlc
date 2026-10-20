@@ -1,4 +1,4 @@
-// erro: []byte é dono e não atende hash.Hash, exigida por T em h (para aceitar donos: T owned + hash.Hash)
+// error: []byte is an owner and doesn't satisfy hash.Hash, required by T in h (to accept owners: T owned + hash.Hash)
 import "std/hash"
 
 fn h[T hash.Hash](x &T) uint64 {

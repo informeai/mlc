@@ -1,4 +1,4 @@
-// erro: braço depois de _ nunca é executado
+// error: an arm after _ is never executed
 fn main() {
     match 1 {
         _ => {}

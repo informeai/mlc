@@ -1,4 +1,4 @@
-// erro: close precisa da ponta de canal (a posse), e tx é um empréstimo
+// error: close needs the channel end (ownership), and tx is a borrow (&chan.Sender[int])
 import "std/chan"
 import "std/io"
 

@@ -1,4 +1,4 @@
-// erro: o método Ponto.move empresta o receptor, e um valor temporário não pode ser emprestado
+// error: the method Ponto.move borrows the receiver, and a temporary value can't be borrowed: store it in a variable
 struct Ponto { x int; y int }
 fn (p &Ponto) move() {
     p.x++

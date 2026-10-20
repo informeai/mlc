@@ -1,4 +1,4 @@
-// erro: {:x}, {:b} e {:o} só valem para inteiros, e o valor é float64
+// error: {:x}, {:b} and {:o} only apply to integers, and the value is float64
 import "std/io"
 import "std/str"
 

@@ -1,4 +1,4 @@
-// erro: pub só vale antes de fn, struct, enum, const ou interface
+// error: pub only applies before fn, struct, enum, const or interface
 pub var x = 1
 fn main() {
 }

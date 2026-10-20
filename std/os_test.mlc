@@ -6,11 +6,11 @@ fn test_args() {
     testing.eq_int(os.arg_count(), 1) // only the program's name
     buf := alloc([]byte, 4096)
     match os.arg(0, &buf) {
-        Ok(n) => testing.check(n > 0, "arg(0) é o caminho do programa")
+        Ok(n) => testing.check(n > 0, "arg(0) is the program's path")
         Err(code) => testing.eq_int(code, 0)
     }
     match os.arg(1, &buf) {
-        Ok(_) => testing.fail("arg(1) não existe")
+        Ok(_) => testing.fail("arg(1) doesn't exist")
         Err(code) => testing.eq_int(code, os.NOT_FOUND)
     }
     free(buf)
@@ -19,15 +19,15 @@ fn test_args() {
 fn test_getenv() {
     buf := alloc([]byte, 4096)
     match os.getenv("MLC_VARIAVEL_QUE_NAO_EXISTE", &buf) {
-        Ok(_) => testing.fail("a variável não existe")
+        Ok(_) => testing.fail("the variable doesn't exist")
         Err(code) => testing.eq_int(code, os.NOT_FOUND)
     }
     match os.getenv("PATH", &buf[:1]) {
-        Ok(_) => testing.fail("PATH não cabe em 1 byte")
+        Ok(_) => testing.fail("PATH doesn't fit in 1 byte")
         Err(code) => testing.eq_int(code, os.TOO_LONG)
     }
     match os.getenv("PATH", &buf) {
-        Ok(n) => testing.check(n > 1, "PATH tem conteúdo")
+        Ok(n) => testing.check(n > 1, "PATH has content")
         Err(code) => testing.eq_int(code, 0)
     }
     free(buf)
@@ -64,17 +64,17 @@ fn test_cwd_chdir() {
 fn test_error_text() {
     var msg [160]byte
     n := os.error_text(os.NOT_FOUND, &msg)
-    testing.eq_str(&msg[:n], "não existe")
+    testing.eq_str(&msg[:n], "doesn't exist")
     n = os.error_text(os.TOO_LONG, &msg)
-    testing.eq_str(&msg[:n], "longo demais para o buffer")
+    testing.eq_str(&msg[:n], "too long for the buffer")
     n = os.error_text(1003, &msg) // io.EOF
-    testing.eq_str(&msg[:n], "fim dos dados")
+    testing.eq_str(&msg[:n], "end of the data")
     n = os.error_text(2001, &msg) // net.REFUSED
-    testing.eq_str(&msg[:n], "conexão recusada: ninguém escuta nessa porta")
+    testing.eq_str(&msg[:n], "connection refused: nobody listens on that port")
     n = os.error_text(99999, &msg)
-    testing.eq_str(&msg[:n], "erro desconhecido (99999)")
+    testing.eq_str(&msg[:n], "unknown error (99999)")
     n = os.error_text(-5, &msg)
-    testing.eq_str(&msg[:n], "erro desconhecido (-5)")
+    testing.eq_str(&msg[:n], "unknown error (-5)")
 }
 
 fn test_error_text_small_buffer() {

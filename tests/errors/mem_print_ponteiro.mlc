@@ -1,4 +1,4 @@
-// erro: io.print não escreve ponteiros (*Ponto); escreva o conteúdo
+// error: io.print doesn't write pointers (*Ponto); write the pointee: *p or p.field
 import "std/io"
 struct Ponto { x int; y int }
 fn main() {

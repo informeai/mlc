@@ -17,11 +17,11 @@ fn test_put_get() {
     }
     testing.eq_int(m.len(), 1000)
     k := 777
-    testing.check(m.has(&k), "tem 777")
+    testing.check(m.has(&k), "has 777")
     testing.eq_int(*m.get(&k), 1554)
     testing.eq_int(m.get_or(&k, -1), 1554)
     k = 1000
-    testing.check(!m.has(&k), "não tem 1000")
+    testing.check(!m.has(&k), "doesn't have 1000")
     testing.eq_int(m.get_or(&k, -1), -1)
     testing.eq_int(m.index(&k), -1)
     m.free()
@@ -34,9 +34,9 @@ fn test_put_replaces() {
     testing.eq_int(m.len(), 1)
     k := 1
     testing.eq_int(m.get_or(&k, 0), 20)
-    testing.check(m.set(&k, 30), "set numa chave que existe")
+    testing.check(m.set(&k, 30), "set on a key that exists")
     k = 2
-    testing.check(!m.set(&k, 40), "set numa chave nova não insere")
+    testing.check(!m.set(&k, 40), "set on a new key doesn't insert")
     testing.eq_int(m.len(), 1)
     m.free()
 }
@@ -60,7 +60,7 @@ fn test_remove_and_reinsert() {
         testing.check(m.remove(&k), "remove existente")
     }
     k := 0
-    testing.check(!m.remove(&k), "remove de novo")
+    testing.check(!m.remove(&k), "remove again")
     testing.eq_int(m.len(), 50)
     for i := 0; i < 100; i++ {
         k = i
@@ -169,7 +169,7 @@ fn test_struct_keys() {
     testing.eq_int(m.len(), 400)
     testing.eq_int(m.get_or(&k, -1), 0)
     k = Point{x: 20, y: 0}
-    testing.check(!m.has(&k), "chave que não existe")
+    testing.check(!m.has(&k), "key that doesn't exist")
     m.free()
 }
 

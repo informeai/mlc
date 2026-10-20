@@ -1,4 +1,4 @@
-// erro: declaração não permitida no pós do for
+// error: declaration not allowed in the post statement of for
 fn main() {
     for i := 0; i < 3; j := 1 {
     }

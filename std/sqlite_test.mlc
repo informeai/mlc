@@ -11,10 +11,10 @@ fn open_mem() ?*sqlite.DB {
 }
 
 fn test_available() {
-    testing.check(sqlite.available(), "o sistema tem o SQLite")
+    testing.check(sqlite.available(), "the system has SQLite")
     var v [32]byte
     n := sqlite.version(&v)
-    testing.check(n > 0 && v[0] == '3', "versão 3")
+    testing.check(n > 0 && v[0] == '3', "version 3")
 }
 
 fn test_insert_and_select() {
@@ -99,13 +99,13 @@ fn test_errors() {
         st.close()
     }
     var msg [128]byte
-    testing.check(db.error(&msg) > 0, "mensagem do SQLite")
+    testing.check(db.error(&msg) > 0, "SQLite's message")
     var text [128]byte
     n := os.error_text(sqlite.CONSTRAINT, &text)
-    testing.eq_str(&text[:n], "restrição do banco violada (UNIQUE, NOT NULL, FOREIGN KEY ou CHECK)")
+    testing.eq_str(&text[:n], "database constraint violated (UNIQUE, NOT NULL, FOREIGN KEY or CHECK)")
     // wrong SQL
     bad := db.prepare_str("SELEC 1", &err)
-    testing.check(bad == nil, "SQL inválido")
+    testing.check(bad == nil, "invalid SQL")
     testing.eq_int(err, sqlite.ERROR)
     if bad != nil {
         bad.close()
@@ -126,7 +126,7 @@ fn test_rollback() {
     err := 0
     q := db.prepare_str("SELECT count(*) FROM t", &err)
     if q != nil {
-        testing.check(q.next(), "uma linha")
+        testing.check(q.next(), "one row")
         testing.eq_int(q.int(0), 0)
         q.close()
     }

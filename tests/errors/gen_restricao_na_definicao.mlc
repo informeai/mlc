@@ -1,4 +1,4 @@
-// erro: operador < não se aplica a T e T
+// error: operator < doesn't apply to T and T
 fn menor[T any](a T, b T) bool {
     return a < b
 }

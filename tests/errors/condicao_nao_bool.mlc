@@ -1,4 +1,4 @@
-// erro: a condição do if precisa ser bool, encontrado constante inteira
+// error: the condition of if must be bool, found integer constant
 fn main() {
     if 1 {
     }

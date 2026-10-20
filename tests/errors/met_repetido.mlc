@@ -1,4 +1,4 @@
-// erro: método Ponto.soma já declarado na linha 3
+// error: method Ponto.soma already declared on line 3
 struct Ponto { x int; y int }
 fn (p Ponto) soma() int {
     return p.x + p.y

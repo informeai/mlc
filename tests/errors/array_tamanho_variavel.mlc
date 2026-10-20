@@ -1,4 +1,4 @@
-// erro: o tamanho de um array precisa ser uma constante inteira
+// error: an array's size must be an integer constant
 fn main() {
     n := 3
     var a [n]int

@@ -1,4 +1,4 @@
-// erro: um literal de byte vale um byte só
+// error: a byte literal holds a single byte ('á' takes 2 bytes in UTF-8); use a string
 fn main() {
     c := 'á'
 }

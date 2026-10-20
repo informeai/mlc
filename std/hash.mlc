@@ -233,7 +233,7 @@ pub fn (s &Sha256) write(data &[]byte) {
 // can continue afterwards (sum doesn't change the state).
 pub fn (s &Sha256) sum(dst &[]byte) {
     if len(dst) < 32 {
-        fail("hash.Sha256.sum: o destino precisa de 32 bytes")
+        fail("hash.Sha256.sum: the destination needs 32 bytes")
     }
     c := *s // the padding goes into a copy
     bits := uint64(c.total) *% 8

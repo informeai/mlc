@@ -1,4 +1,4 @@
-// erro: Q.area tem a assinatura errada para Area: esperado fn (self &Q) area() int
+// error: Q.area has the wrong signature for Area: expected fn (self &Q) area() int
 interface Area {
     fn area(self &Self) int
 }

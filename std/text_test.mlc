@@ -3,9 +3,9 @@ import "std/testing"
 import "std/text"
 
 fn test_classes() {
-    testing.check(text.is_space(' ') && text.is_space('\t') && text.is_space('\n'), "espaços")
-    testing.check(!text.is_space('a'), "a não é espaço")
-    testing.check(text.is_digit('0') && text.is_digit('9') && !text.is_digit('a'), "dígitos")
+    testing.check(text.is_space(' ') && text.is_space('\t') && text.is_space('\n'), "spaces")
+    testing.check(!text.is_space('a'), "a isn't a space")
+    testing.check(text.is_digit('0') && text.is_digit('9') && !text.is_digit('a'), "digits")
     testing.check(text.is_letter('a') && text.is_letter('Z') && !text.is_letter('1'), "letras")
 }
 
@@ -19,11 +19,11 @@ fn test_search() {
     testing.eq_int(text.index_of(s, "split"), 7)
     testing.eq_int(text.index_of(s, "splits"), -1)
     testing.eq_int(text.index_of(s, ""), 0)
-    testing.check(text.contains(s, "a s"), "contém 'a s'")
-    testing.check(text.starts_with(s, "ban"), "começa com ban")
-    testing.check(!text.starts_with(s, "split"), "não começa com split")
-    testing.check(text.ends_with(s, "lit"), "termina com lit")
-    testing.check(!text.ends_with(s, "banana split!"), "sufixo maior que o texto")
+    testing.check(text.contains(s, "a s"), "contains 'a s'")
+    testing.check(text.starts_with(s, "ban"), "starts with ban")
+    testing.check(!text.starts_with(s, "split"), "doesn't start with split")
+    testing.check(text.ends_with(s, "lit"), "ends with lit")
+    testing.check(!text.ends_with(s, "banana split!"), "suffix longer than the text")
     testing.eq_int(text.count_byte(s, 'a'), 3)
     free(b)
 }
@@ -86,7 +86,7 @@ fn test_split_next() {
         k++
     }
     testing.eq_int(k, 4)
-    testing.check(got == [4]int{1, 2, 0, 1}, "campos a, bc, (vazio), d")
+    testing.check(got == [4]int{1, 2, 0, 1}, "fields a, bc, (empty), d")
     free(b)
 }
 

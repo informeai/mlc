@@ -1,5 +1,5 @@
-// Package rt embute o runtime em C no binário do mlc, para que o compilador
-// funcione sem depender de arquivos externos.
+// Package rt embeds the C runtime in the mlc binary, so the compiler
+// works without depending on external files.
 package rt
 
 import _ "embed"

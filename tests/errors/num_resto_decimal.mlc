@@ -1,4 +1,4 @@
-// erro: operador % não se aplica a float64 (só a inteiros)
+// error: operator % doesn't apply to float64 (only to integers)
 import "std/io"
 fn main() {
     f := 2.5

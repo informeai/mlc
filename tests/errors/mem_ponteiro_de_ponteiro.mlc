@@ -1,4 +1,4 @@
-// erro: ponteiro para ponteiro não é suportado
+// error: pointer to pointer isn't supported
 fn f(p **int) {
 }
 fn main() {

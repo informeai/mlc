@@ -1,4 +1,4 @@
-// erro: impl cmp.Ord for int precisa ficar no arquivo de int ou no de cmp.Ord
+// error: impl cmp.Ord for int must be in the file of int or of cmp.Ord
 import "std/cmp"
 
 impl auto cmp.Ord for int

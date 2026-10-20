@@ -1,4 +1,4 @@
-// erro: padrão "a" repetido
+// error: repeated pattern "a" (already appears on line 4)
 fn main() {
     match "x" {
         "a", "a" => {}

@@ -1,4 +1,4 @@
-// erro: b já foi liberada ou movida
+// error: b was already freed or moved (line 17)
 import "std/chan"
 import "std/io"
 

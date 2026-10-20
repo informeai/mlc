@@ -1,4 +1,4 @@
-// erro: falta ',' depois do campo y
+// error: missing ',' after the field y (in a multi-line literal, every field ends with a comma)
 import "std/io"
 struct Ponto { x int; y int }
 fn main() {

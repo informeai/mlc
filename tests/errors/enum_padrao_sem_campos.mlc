@@ -1,4 +1,4 @@
-// erro: Circulo tem 1 campo(s): escreva Circulo(...) dando um nome a cada um (ou _)
+// error: Circulo has 1 field(s): write Circulo(...) giving each one a name (or _)
 enum Forma {
     Circulo(raio float64)
     Vazio

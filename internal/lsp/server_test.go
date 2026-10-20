@@ -10,14 +10,14 @@ import (
 	"time"
 )
 
-// client conversa com o servidor por pipes, como um editor.
+// client talks to the server through pipes, like an editor.
 type client struct {
 	t      *testing.T
 	conn   *conn
 	nextID int
-	notes  chan *message // notificações do servidor
-	resps  chan *message // respostas
-	done   chan int      // código de saída de Run
+	notes  chan *message // the server's notifications
+	resps  chan *message // responses
+	done   chan int      // Run's exit code
 }
 
 func startServer(t *testing.T) *client {
@@ -54,7 +54,7 @@ func (c *client) request(method string, params any) *message {
 	case m := <-c.resps:
 		return m
 	case <-time.After(10 * time.Second):
-		c.t.Fatalf("sem resposta para %s", method)
+		c.t.Fatalf("no response for %s", method)
 	}
 	return nil
 }
@@ -65,7 +65,7 @@ func (c *client) notify(method string, params any) {
 	}
 }
 
-// diagnostics espera a próxima publicação de diagnósticos para uri.
+// diagnostics waits for the next publication of diagnostics for uri.
 func (c *client) diagnostics(uri string) []diagnostic {
 	for {
 		select {
@@ -82,7 +82,7 @@ func (c *client) diagnostics(uri string) []diagnostic {
 				return p.Diagnostics
 			}
 		case <-time.After(10 * time.Second):
-			c.t.Fatalf("sem diagnósticos para %s", uri)
+			c.t.Fatalf("no diagnostics for %s", uri)
 		}
 	}
 }
@@ -98,7 +98,7 @@ func mustJSON(v any) json.RawMessage {
 func resultInto(t *testing.T, m *message, v any) {
 	t.Helper()
 	if m.Error != nil {
-		t.Fatalf("erro do servidor: %s", m.Error.Message)
+		t.Fatalf("server error: %s", m.Error.Message)
 	}
 	b, _ := json.Marshal(m.Result)
 	if err := json.Unmarshal(b, v); err != nil {
@@ -120,40 +120,40 @@ func TestSession(t *testing.T) {
 	}
 	c.notify("initialized", map[string]any{})
 
-	// erro de tipo na linha 3 (posição 2 no LSP), que ainda não foi salvo
+	// type error on line 3 (position 2 in the LSP), not saved yet
 	uri := "file://" + filepath.Join(dir, "main.mlc")
 	bad := "import \"std/io\"\nfn main() {\n    x := \"olá\" + 1\n    io.print(x)\n}\n"
 	c.notify("textDocument/didOpen", map[string]any{"textDocument": map[string]any{"uri": uri, "languageId": "mlc", "version": 1, "text": bad}})
 	diags := c.diagnostics(uri)
 	if len(diags) != 1 || diags[0].Range.Start.Line != 2 {
-		t.Fatalf("esperado um erro na linha 3: %+v", diags)
+		t.Fatalf("expected an error on line 3: %+v", diags)
 	}
-	t.Logf("diagnóstico: %+v", diags[0])
+	t.Logf("diagnostic: %+v", diags[0])
 
-	// corrigido ao digitar: os diagnósticos somem
+	// fixed while typing: the diagnostics go away
 	good := "import \"std/io\"\nfn main() {\n    x:=1+2\n    io.print(x)\n}\n"
 	c.notify("textDocument/didChange", map[string]any{"textDocument": map[string]any{"uri": uri, "version": 2}, "contentChanges": []any{map[string]any{"text": good}}})
 	if diags := c.diagnostics(uri); len(diags) != 0 {
-		t.Fatalf("esperado nenhum erro: %+v", diags)
+		t.Fatalf("expected no error: %+v", diags)
 	}
 
-	// vazamento: erro do verificador de posse
+	// leak: an ownership checker error
 	leak := "import \"std/io\"\nfn main() {\n    p := alloc(1)\n    io.print(*p)\n}\n"
 	c.notify("textDocument/didChange", map[string]any{"textDocument": map[string]any{"uri": uri, "version": 3}, "contentChanges": []any{map[string]any{"text": leak}}})
 	if diags := c.diagnostics(uri); len(diags) == 0 || !strings.Contains(diags[0].Message, "free") {
-		t.Fatalf("esperado erro de posse: %+v", diags)
+		t.Fatalf("expected an ownership error: %+v", diags)
 	}
 	c.notify("textDocument/didChange", map[string]any{"textDocument": map[string]any{"uri": uri, "version": 4}, "contentChanges": []any{map[string]any{"text": good}}})
 	c.diagnostics(uri)
 
-	// formatação
+	// formatting
 	var edits []textEdit
 	resultInto(t, c.request("textDocument/formatting", map[string]any{"textDocument": map[string]any{"uri": uri}, "options": map[string]any{"tabSize": 4, "insertSpaces": true}}), &edits)
 	if len(edits) != 1 || !strings.Contains(edits[0].NewText, "x := 1 + 2") {
-		t.Fatalf("formatação inesperada: %+v", edits)
+		t.Fatalf("unexpected formatting: %+v", edits)
 	}
 
-	// cores: "import" é palavra reservada, "std/io" é string
+	// colors: "import" is a keyword, "std/io" is a string
 	var toks struct {
 		Data []int `json:"data"`
 	}
@@ -162,7 +162,7 @@ func TestSession(t *testing.T) {
 		t.Fatalf("semantic tokens inesperados: %v", toks.Data)
 	}
 
-	// módulo: o erro aparece no módulo, que é checado pelo main que o importa
+	// module: the error shows up in the module, which is checked through the main that imports it
 	modURI := "file://" + filepath.Join(dir, "geo.mlc")
 	main2 := "import \"std/io\"\nimport \"geo\"\nfn main() {\n    io.print(geo.dobro(2))\n}\n"
 	os.WriteFile(filepath.Join(dir, "geo.mlc"), []byte("pub fn dobro(x int) int {\n    return x * 2\n}\n"), 0o644)
@@ -172,22 +172,22 @@ func TestSession(t *testing.T) {
 	c.notify("textDocument/didOpen", map[string]any{"textDocument": map[string]any{"uri": modURI, "languageId": "mlc", "version": 1, "text": modBad}})
 	diags = c.diagnostics(modURI)
 	if len(diags) != 1 || diags[0].Range.Start.Line != 1 {
-		t.Fatalf("esperado erro na linha 2 do módulo: %+v", diags)
+		t.Fatalf("expected an error on line 2 of the module: %+v", diags)
 	}
 
-	// método desconhecido devolve erro; shutdown e exit encerram com 0
+	// an unknown method returns an error; shutdown and exit end with 0
 	if m := c.request("textDocument/references", map[string]any{}); m.Error == nil || m.Error.Code != codeMethodNotFound {
-		t.Fatalf("esperado MethodNotFound: %+v", m)
+		t.Fatalf("expected MethodNotFound: %+v", m)
 	}
 	c.request("shutdown", nil)
 	c.notify("exit", nil)
 	select {
 	case code := <-c.done:
 		if code != 0 {
-			t.Fatalf("código de saída %d", code)
+			t.Fatalf("exit code %d", code)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("o servidor não encerrou")
+		t.Fatal("the server didn't stop")
 	}
 }
 
@@ -195,7 +195,7 @@ func TestPositionsUTF16(t *testing.T) {
 	src := []byte("// ação 😀\nx\n")
 	l := newLineIndex(src)
 	if p := l.position(src, len("// ação 😀")); p.Line != 0 || p.Character != 10 {
-		t.Fatalf("posição em UTF-16 errada: %+v", p)
+		t.Fatalf("wrong UTF-16 position: %+v", p)
 	}
 	if p := l.end(src); p.Line != 2 || p.Character != 0 {
 		t.Fatalf("fim errado: %+v", p)

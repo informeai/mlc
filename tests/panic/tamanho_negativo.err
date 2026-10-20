@@ -1,1 +1,1 @@
-panic: tamanho_negativo.mlc:3: tamanho negativo em alloc de slice
+panic: tamanho_negativo.mlc:3: negative size in slice alloc

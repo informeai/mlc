@@ -1,4 +1,4 @@
-// erro: padrão do tipo string em match sobre int
+// error: pattern of type string in a match on int
 fn main() {
     match 1 {
         "a" => {}

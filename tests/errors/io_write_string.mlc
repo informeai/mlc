@@ -1,4 +1,4 @@
-// erro: argumento 1 de io.write: esperado &[]byte, encontrado string
+// error: argument 1 of io.write: expected &[]byte, found string
 import "std/io"
 fn main() {
     io.write("oi")

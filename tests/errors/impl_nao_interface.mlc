@@ -1,4 +1,4 @@
-// erro: Q não é uma interface
+// error: Q isn't an interface
 struct Q {
     l int
 }

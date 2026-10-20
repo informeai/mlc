@@ -1,4 +1,4 @@
-// erro: literal de byte vazio
+// error: empty byte literal
 fn main() {
     c := ''
 }

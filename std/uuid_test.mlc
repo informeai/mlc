@@ -8,8 +8,8 @@ fn test_v4_format() {
     var buf [36]byte
     n := id.text(&buf)
     testing.eq_int(n, uuid.TEXT_LEN)
-    testing.check(buf[8] == '-' && buf[13] == '-' && buf[18] == '-' && buf[23] == '-', "hífens")
-    testing.check(buf[14] == '4', "versão no texto")
+    testing.check(buf[8] == '-' && buf[13] == '-' && buf[18] == '-' && buf[23] == '-', "hyphens")
+    testing.check(buf[14] == '4', "version in the text")
     testing.check(buf[19] == '8' || buf[19] == '9' || buf[19] == 'a' || buf[19] == 'b', "variante RFC")
     var back uuid.UUID
     testing.check(uuid.parse(&buf, &back), "parse")
@@ -37,12 +37,12 @@ fn test_parse_errors() {
     var u uuid.UUID
     var buf [40]byte
     n := str.copy(&buf, "018BCFE5-6800-7ABC-8DEF-0123456789AB")
-    testing.check(uuid.parse(&buf[:n], &u), "maiúsculas")
+    testing.check(uuid.parse(&buf[:n], &u), "uppercase")
     testing.eq_int(u.version(), 7)
     n = str.copy(&buf, "018bcfe5x6800-7abc-8def-0123456789ab")
-    testing.check(!uuid.parse(&buf[:n], &u), "sem hífen")
+    testing.check(!uuid.parse(&buf[:n], &u), "without a hyphen")
     n = str.copy(&buf, "018bcfe5-6800-7abc-8def-0123456789a")
     testing.check(!uuid.parse(&buf[:n], &u), "curto")
     n = str.copy(&buf, "018bcfe5-6800-7abc-8def-0123456789ag")
-    testing.check(!uuid.parse(&buf[:n], &u), "dígito inválido")
+    testing.check(!uuid.parse(&buf[:n], &u), "invalid digit")
 }

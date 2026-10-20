@@ -1,4 +1,4 @@
-// erro: var x precisa de tipo ou valor inicial
+// error: var x needs a type or an initial value
 fn main() {
     var x
 }

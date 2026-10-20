@@ -1,4 +1,4 @@
-// erro: &?*T só serve para handles de C
+// error: &?*T only serves C handles (?*X, with X an extern "C" type): the C function writes the handle into the variable
 extern "C" type H
 extern "C" type G
 extern "C" fn h_open(n int32, out &?*H) int32

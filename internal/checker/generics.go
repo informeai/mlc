@@ -8,39 +8,39 @@ import (
 	"mlc/internal/token"
 )
 
-// Genéricos
+// Generics
 //
-//	fn maior[T ordered](a T, b T) T { ... }
-//	struct Par[A any, B any] { a A; b B }
-//	fn (v &Vetor[T]) tamanho() int { ... }
+//	fn larger[T ordered](a T, b T) T { ... }
+//	struct Pair[A any, B any] { a A; b B }
+//	fn (v &Vector[T]) size() int { ... }
 //
-// A definição é checada uma vez, de forma abstrata: cada parâmetro de tipo é
-// um TypeVar, e só vale o que a restrição permite (com T any, a < b é erro na
-// própria definição). Cada uso com tipos concretos (maior[int], Par[int,
-// string]) cria uma instância: uma cópia da declaração, checada com os tipos
-// reais e gerada no C com nome próprio (monomorfização).
+// The definition is checked once, abstractly: each type parameter is
+// a TypeVar, and only what the constraint allows is valid (with T any, a < b is an error in
+// the definition itself). Each use with concrete types (larger[int], Pair[int,
+// string]) creates an instance: a copy of the declaration, checked with the real
+// types and generated in C with its own name (monomorphization).
 //
-// Restrições: any e comparable (qualquer tipo sem posse), ordered e number
-// (números), integer (inteiros). Nesta versão, argumentos de tipo não podem
-// ser donos nem empréstimos.
+// Constraints: any and comparable (any type without ownership), ordered and number
+// (numbers), integer (integers), owned (also simple owners) and ref (any type,
+// only borrowed); an interface, alone or combined with +.
 
-// TypeVar é um parâmetro de tipo durante a checagem abstrata da definição.
+// TypeVar is a type parameter during the abstract check of the definition.
 type TypeVar struct {
 	Name       string
 	Constraint string
-	Iface      *Interface // restrição que é uma interface (nil nas embutidas)
+	Iface      *Interface // a constraint that's an interface (nil for the built-in ones)
 }
 
 func (t *TypeVar) String() string { return t.Name }
 
 var constraints = map[string]bool{"any": true, "comparable": true, "ordered": true, "number": true, "integer": true, "owned": true, "ref": true}
 
-// A restrição ref aceita qualquer tipo (inclusive structs com donos), porque
-// o parâmetro só aparece emprestado: &C. É a do contexto de um callback
+// The ref constraint accepts any type (including structs with owners), because
+// the parameter only appears borrowed: &C. It's the one for a callback's context
 // (fn (m &Map[K, V]) each_with[C ref](ctx &C, f fn(&C, &K, &V))).
 
-// tvHas diz se t é um TypeVar cuja restrição permite a capacidade cap:
-// "eq" (==), "order" (<), "arith" (+ - * /) ou "mod" (%).
+// tvHas says whether t is a TypeVar whose constraint allows the capability cap:
+// "eq" (==), "order" (<), "arith" (+ - * /) or "mod" (%).
 func tvHas(t Type, cap string) bool {
 	tv, ok := t.(*TypeVar)
 	if !ok {
@@ -60,8 +60,8 @@ func tvHas(t Type, cap string) bool {
 func numLike(t Type) bool   { return isNumeric(t) || tvHas(t, "arith") }
 func orderLike(t Type) bool { return isNumeric(t) || tvHas(t, "order") }
 
-// abstract diz se t contém um TypeVar (então é só da checagem abstrata e
-// nunca chega ao gerador).
+// abstract says whether t contains a TypeVar (so it belongs only to the abstract check and
+// never gets to the generator).
 func abstract(t Type) bool {
 	switch t := t.(type) {
 	case *TypeVar:
@@ -100,14 +100,14 @@ func anyAbstract(ts []Type) bool {
 	return false
 }
 
-// satisfies diz se o tipo t atende a restrição c.
+// satisfies says whether the type t satisfies the constraint c.
 func satisfies(t Type, c string) bool {
 	if tv, ok := t.(*TypeVar); ok {
 		switch c {
 		case "ref":
-			return true // ref aceita tudo
+			return true // ref accepts everything
 		case "owned":
-			return tv.Constraint != "ref" // todo tipo aceito por outra restrição (menos ref) é aceito por owned
+			return tv.Constraint != "ref" // every type accepted by another constraint (except ref) is accepted by owned
 		case "any", "comparable":
 			return tv.Constraint != "owned" && tv.Constraint != "ref"
 		case "ordered", "number":
@@ -134,7 +134,7 @@ func satisfies(t Type, c string) bool {
 	return true
 }
 
-// typeName dá um nome de identificador C para t, usado nas instâncias.
+// typeName gives a C identifier name for t, used in the instances.
 func typeName(t Type) string {
 	switch t := t.(type) {
 	case *Struct:
@@ -155,10 +155,10 @@ func typeName(t Type) string {
 	return strings.ReplaceAll(t.String(), " ", "_")
 }
 
-// typeKey identifica t no cache de instâncias. TypeVars, structs e enums
-// entram pela identidade: dois parâmetros chamados T (o de sort e o de
-// reverse) são tipos diferentes, assim como duas structs Ponto de arquivos
-// diferentes.
+// typeKey identifies t in the instance cache. TypeVars, structs and enums
+// go in by identity: two parameters called T (sort's and
+// reverse's) are different types, just like two Point structs from different
+// files.
 func typeKey(t Type) string {
 	switch t := t.(type) {
 	case *TypeVar, *Struct, *Enum:
@@ -191,7 +191,7 @@ func typeList(ts []Type) (display, key, mangled string) {
 	return strings.Join(d, ", "), strings.Join(k, ","), strings.Join(m, "__")
 }
 
-// bind liga os nomes dos parâmetros de tipo aos tipos.
+// bind binds the names of the type parameters to the types.
 func bind(params []*ast.TypeParam, args []Type) map[string]Type {
 	m := map[string]Type{}
 	for i, p := range params {
@@ -202,14 +202,14 @@ func bind(params []*ast.TypeParam, args []Type) map[string]Type {
 	return m
 }
 
-// typeVars cria os TypeVars de uma lista de parâmetros de tipo, checando as
-// restrições.
+// typeVars creates the TypeVars of a list of type parameters, checking the
+// constraints.
 func (c *checker) typeVars(params []*ast.TypeParam) []Type {
 	var vs []Type
 	seen := map[string]bool{}
 	for _, p := range params {
 		if seen[p.Name] {
-			c.errorf(p.P, "parâmetro de tipo %s repetido", p.Name)
+			c.errorf(p.P, "repeated type parameter %s", p.Name)
 		}
 		seen[p.Name] = true
 		vs = append(vs, c.newTypeVar(p.Name, p))
@@ -217,10 +217,10 @@ func (c *checker) typeVars(params []*ast.TypeParam) []Type {
 	return vs
 }
 
-// checkTypeArgs confere quantidade e restrições dos argumentos de tipo.
+// checkTypeArgs checks the number and the constraints of the type arguments.
 func (c *checker) checkTypeArgs(what string, params []*ast.TypeParam, args []Type, pos token.Pos) bool {
 	if len(args) != len(params) {
-		c.errorf(pos, "%s espera %d argumento(s) de tipo, recebeu %d", what, len(params), len(args))
+		c.errorf(pos, "%s expects %d type argument(s), got %d", what, len(params), len(args))
 		return false
 	}
 	ok := true
@@ -230,7 +230,7 @@ func (c *checker) checkTypeArgs(what string, params []*ast.TypeParam, args []Typ
 			continue
 		}
 		if b, _, _ := splitConstraint(p.Constraint); b == "owned" && !abstract(args[i]) && c.instName == "" {
-			c.requireFree(args[i], pos, what) // ?*X com X dono: precisa de free
+			c.requireFree(args[i], pos, what) // ?*X with X an owner: needs free
 		}
 		if !c.satisfiesParam(args[i], p) {
 			reason := ""
@@ -241,33 +241,33 @@ func (c *checker) checkTypeArgs(what string, params []*ast.TypeParam, args []Typ
 					reason = " (" + why + ")"
 				}
 			case isOpaque(args[i]) && builtin != "ref":
-				reason = fmt.Sprintf(" (%s é um tipo de C opaco e só existe atrás de ponteiro: o genérico precisa da restrição ref, que usa %s só emprestado, como [%s %s])", args[i], p.Name, p.Name, refConstraint(iface))
+				reason = fmt.Sprintf(" (%s is an opaque C type and only exists behind a pointer: the generic needs the ref constraint, which uses %s only borrowed, like [%s %s])", args[i], p.Name, p.Name, refConstraint(iface))
 			case builtin == "ref" && isBorrow(args[i]):
-				reason = " (um empréstimo não pode ser argumento de tipo: o parâmetro já é usado como &" + p.Name + ")"
+				reason = " (a borrow can't be a type argument: the parameter is already used as &" + p.Name + ")"
 			case builtin != "" && builtin != "owned" && !satisfies(args[i], builtin) && (IsOwner(args[i]) || isBorrow(args[i]) || isResource(args[i])):
-				reason = " (é dono: para aceitar donos, a restrição precisa ser owned)"
+				reason = " (it's an owner: to accept owners, the constraint must be owned)"
 			case iface != "" && (builtin == "" || satisfies(args[i], builtin)):
 				if IsOwner(args[i]) && builtin != "owned" {
-					c.errorf(pos, "%s é dono e não atende %s, exigida por %s em %s (para aceitar donos: %s owned + %s)", args[i], p.Constraint, p.Name, what, p.Name, iface)
+					c.errorf(pos, "%s is an owner and doesn't satisfy %s, required by %s in %s (to accept owners: %s owned + %s)", args[i], p.Constraint, p.Name, what, p.Name, iface)
 				} else {
 					hint := fmt.Sprintf("declare impl %s for %s", iface, args[i])
 					if base := baseOf(args[i]); (iface == "cmp.Eq" || iface == "cmp.Ord" || iface == "io.Display") && (isStructType(base) || isEnumType(base)) {
-						hint = fmt.Sprintf("declare impl auto %s for %s, ou escreva o método", iface, base)
+						hint = fmt.Sprintf("declare impl auto %s for %s, or write the method", iface, base)
 					}
-					c.errorf(pos, "%s não implementa %s, exigida por %s em %s (%s)", args[i], iface, p.Name, what, hint)
+					c.errorf(pos, "%s doesn't implement %s, required by %s in %s (%s)", args[i], iface, p.Name, what, hint)
 				}
 				ok = false
 				continue
 			}
-			c.errorf(pos, "%s não atende %s, exigida por %s em %s%s", args[i], p.Constraint, p.Name, what, reason)
+			c.errorf(pos, "%s doesn't satisfy %s, required by %s in %s%s", args[i], p.Constraint, p.Name, what, reason)
 			ok = false
 		}
 	}
 	return ok
 }
 
-// refConstraint escreve a restrição ref, com a interface de iface se houver
-// (para o exemplo da mensagem de erro).
+// refConstraint writes the ref constraint, with iface's interface if any
+// (for the error message's example).
 func refConstraint(iface string) string {
 	if iface == "" {
 		return "ref"
@@ -275,9 +275,9 @@ func refConstraint(iface string) string {
 	return "ref + " + iface
 }
 
-// ---------- structs genéricas ----------
+// ---------- generic structs ----------
 
-// instStruct devolve a instância de uma struct genérica com os argumentos dados.
+// instStruct returns the instance of a generic struct with the given arguments.
 func (c *checker) instStruct(s *Struct, args []Type, pos token.Pos) Type {
 	if !c.checkTypeArgs(s.Name, s.Params, args, pos) {
 		return Invalid
@@ -298,7 +298,7 @@ func (c *checker) instStruct(s *Struct, args []Type, pos token.Pos) Type {
 	for _, fd := range s.Decl.Fields {
 		ft := c.resolveType(fd.Type, ctxField)
 		if fs, ok := ft.(*Struct); ok && c.building[fs] {
-			c.errorf(fd.P, "struct %s contém a si mesma por valor; use um ponteiro", inst.Name)
+			c.errorf(fd.P, "struct %s contains itself by value; use a pointer", inst.Name)
 			ft = Invalid
 		}
 		inst.Fields = append(inst.Fields, &Field{Name: fd.Name, Type: ft})
@@ -314,11 +314,11 @@ func (c *checker) instStruct(s *Struct, args []Type, pos token.Pos) Type {
 	return inst
 }
 
-// ---------- funções e métodos genéricos ----------
+// ---------- generic functions and methods ----------
 
-// instFunc devolve a instância de uma função genérica. Instâncias concretas
-// entram na fila para ter o corpo checado (e depois gerado); com argumentos
-// abstratos (dentro de outra definição genérica), só a assinatura importa.
+// instFunc returns the instance of a generic function. Concrete instances
+// go into the queue to have their body checked (and then generated); with abstract
+// arguments (inside another generic definition), only the signature matters.
 func (c *checker) instFunc(g *Func, args []Type, pos token.Pos) *Func {
 	if !c.checkTypeArgs(g.Name, g.Decl.TypeParams, args, pos) {
 		return nil
@@ -344,8 +344,8 @@ func (c *checker) instFunc(g *Func, args []Type, pos token.Pos) *Func {
 	return inst
 }
 
-// instMethod devolve o método name da instância de struct s, criando-o a
-// partir da declaração genérica.
+// instMethod returns the method name of the struct instance s, creating it
+// from the generic declaration.
 func (c *checker) instMethod(s *Struct, name string) *Func {
 	if m := s.Methods[name]; m != nil {
 		return m
@@ -374,7 +374,7 @@ func (c *checker) instMethod(s *Struct, name string) *Func {
 	}
 	s.Methods[name] = m
 	if len(d.TypeParams) > 0 {
-		// método com parâmetros de tipo próprios: um modelo, instanciado na chamada
+		// a method with its own type parameters: a template, instantiated at the call
 		c.withScope(origin.mod, binding, func() {
 			recv := &Local{Name: d.Recv.Name, CName: "l_" + d.Recv.Name, Type: c.recvType(s, m.recv), Pos: d.Recv.P, Param: true}
 			c.genericMethod(m, d, origin.mod, binding, recv)
@@ -411,7 +411,7 @@ func recvModeOf(t *ast.TypeExpr) recvMode {
 	return recvValue
 }
 
-// withScope executa f no módulo m, com os parâmetros de tipo ligados.
+// withScope runs f in the module m, with the type parameters bound.
 func (c *checker) withScope(m *module, binding map[string]Type, f func()) {
 	savedMod, savedTP, savedScope := c.mod, c.typeParams, c.scope
 	c.mod, c.typeParams, c.scope = m, binding, nil
@@ -425,34 +425,34 @@ type pendingInst struct {
 }
 
 func (c *checker) queue(fn *Func, binding map[string]Type) {
-	fn.queued = true // o corpo é checado em checkInstances, com binding
+	fn.queued = true // the body is checked in checkInstances, with binding
 	c.info.Funcs = append(c.info.Funcs, fn)
 	c.pending = append(c.pending, pendingInst{fn, binding})
 }
 
-// checkInstances checa o corpo das instâncias concretas. Checar uma pode criar
-// outras, que entram na fila.
+// checkInstances checks the body of the concrete instances. Checking one can create
+// others, which go into the queue.
 func (c *checker) checkInstances() {
 	for len(c.pending) > 0 {
 		p := c.pending[0]
 		c.pending = c.pending[1:]
 		saved := c.instName
 		c.instName = p.fn.Name
-		c.muted = c.probes[p.fn] // os erros de tipo já aparecem na definição
+		c.muted = c.probes[p.fn] // type errors already show up in the definition
 		c.typeParams = p.binding
 		c.checkFunc(p.fn)
 		c.typeParams = nil
 		if c.muted && c.mutedErrs > 0 {
-			c.probeBroken[p.fn] = true // não verifica a posse de código mal tipado
+			c.probeBroken[p.fn] = true // doesn't check the ownership of badly typed code
 		}
 		c.instName, c.muted, c.mutedErrs = saved, false, 0
 	}
 }
 
-// ---------- chamadas ----------
+// ---------- calls ----------
 
-// genericCall checa uma chamada a uma função genérica: f(args), com os tipos
-// deduzidos dos argumentos, ou f[T](args), com os tipos explícitos.
+// genericCall checks a call to a generic function: f(args), with the types
+// inferred from the arguments, or f[T](args), with the explicit types.
 func (c *checker) genericCall(e *ast.CallExpr, g *Func, explicit []ast.Expr) Type {
 	var args []Type
 	if explicit != nil {
@@ -462,7 +462,7 @@ func (c *checker) genericCall(e *ast.CallExpr, g *Func, explicit []ast.Expr) Typ
 	} else {
 		args = c.infer(e, g)
 		if args == nil {
-			return Invalid // os argumentos já foram avaliados na inferência
+			return Invalid // the arguments were already evaluated in the inference
 		}
 	}
 	inst := c.instFunc(g, args, e.Lparen)
@@ -473,7 +473,7 @@ func (c *checker) genericCall(e *ast.CallExpr, g *Func, explicit []ast.Expr) Typ
 	return c.userCall(e, inst)
 }
 
-// infer deduz os argumentos de tipo de uma chamada a partir dos argumentos.
+// infer infers the type arguments of a call from the arguments.
 func (c *checker) infer(e *ast.CallExpr, g *Func) []Type {
 	vars := map[*TypeVar]bool{}
 	for _, v := range g.typeVars {
@@ -496,7 +496,7 @@ func (c *checker) infer(e *ast.CallExpr, g *Func) []Type {
 		}
 		unify(g.Params[i].Type, at, vars, bound)
 	}
-	c.errs = c.errs[:saved] // os argumentos são checados de novo, com os tipos certos
+	c.errs = c.errs[:saved] // the arguments are checked again, with the right types
 	for _, u := range untyped {
 		if tv, ok := u.p.(*TypeVar); ok && vars[tv] && bound[tv] == nil {
 			bound[tv] = DefaultType(u.t)
@@ -506,7 +506,7 @@ func (c *checker) infer(e *ast.CallExpr, g *Func) []Type {
 	for _, v := range g.typeVars {
 		t := bound[v.(*TypeVar)]
 		if t == nil {
-			c.errorf(e.Lparen, "não foi possível deduzir %s em %s: escreva os tipos, como %s[int](...)", v, g.Name, g.Name)
+			c.errorf(e.Lparen, "couldn't infer %s in %s: write the types, like %s[int](...)", v, g.Name, g.Name)
 			return nil
 		}
 		args = append(args, t)
@@ -514,7 +514,7 @@ func (c *checker) infer(e *ast.CallExpr, g *Func) []Type {
 	return args
 }
 
-// peekType calcula o tipo de um argumento antes de saber o tipo do parâmetro.
+// peekType computes an argument's type before knowing the parameter's type.
 func (c *checker) peekType(a ast.Expr) Type {
 	u, ok := a.(*ast.UnaryExpr)
 	if !ok || u.Op != token.AMP {
@@ -533,7 +533,7 @@ func (c *checker) peekType(a ast.Expr) Type {
 	}
 }
 
-// unify liga os TypeVars de vars que aparecem em p aos tipos correspondentes de a.
+// unify binds the TypeVars of vars that appear in p to the corresponding types of a.
 func unify(p, a Type, vars map[*TypeVar]bool, bound map[*TypeVar]Type) {
 	switch pt := p.(type) {
 	case *TypeVar:
@@ -544,7 +544,7 @@ func unify(p, a Type, vars map[*TypeVar]bool, bound map[*TypeVar]Type) {
 		switch at := a.(type) {
 		case *Slice:
 			unify(pt.Elem, at.Elem, vars, bound)
-		case *Array: // &a, com a [N]T, vai para &[]T
+		case *Array: // &a, with a [N]T, goes to &[]T
 			unify(pt.Elem, at.Elem, vars, bound)
 		}
 	case *Array:
@@ -571,7 +571,7 @@ func unify(p, a Type, vars map[*TypeVar]bool, bound map[*TypeVar]Type) {
 			}
 		}
 	case *FuncType:
-		// fn(&C, &K) R contra a função passada: C vem do primeiro parâmetro dela
+		// fn(&C, &K) R against the passed function: C comes from its first parameter
 		if at, ok := a.(*FuncType); ok && len(at.Params) == len(pt.Params) {
 			for i := range pt.Params {
 				unify(pt.Params[i], at.Params[i], vars, bound)
@@ -581,8 +581,8 @@ func unify(p, a Type, vars map[*TypeVar]bool, bound map[*TypeVar]Type) {
 	}
 }
 
-// exprType lê um tipo escrito como expressão (o argumento de tipo de f[int],
-// Par[int, string]{...}).
+// exprType reads a type written as an expression (the type argument of f[int],
+// Pair[int, string]{...}).
 func (c *checker) exprType(e ast.Expr) Type {
 	if u, ok := e.(*ast.UnaryExpr); ok && (u.Op == token.MUL || u.Op == token.AMP) {
 		return c.resolveType(typeExprOf(u), ctxTypeArg)
@@ -611,11 +611,11 @@ func (c *checker) exprType(e ast.Expr) Type {
 			}
 		}
 	}
-	c.errorf(e.Pos(), "esperado um tipo")
+	c.errorf(e.Pos(), "expected a type")
 	return Invalid
 }
 
-// typeExprOf converte uma expressão que escreve um tipo na forma de TypeExpr.
+// typeExprOf converts an expression that writes a type into a TypeExpr.
 func typeExprOf(e ast.Expr) *ast.TypeExpr {
 	switch e := e.(type) {
 	case *ast.TypeArg:
@@ -634,7 +634,7 @@ func typeExprOf(e ast.Expr) *ast.TypeExpr {
 		}
 		return t
 	case *ast.UnaryExpr:
-		// *No e &T entre colchetes são lidos como expressões: f[*No](x)
+		// *Node and &T between brackets are read as expressions: f[*Node](x)
 		switch e.Op {
 		case token.MUL:
 			return &ast.TypeExpr{Mod: ast.TypePointer, Elem: typeExprOf(e.X), P: e.P}
@@ -655,7 +655,7 @@ func splitIndex(e ast.Expr) (ast.Expr, []ast.Expr) {
 	return e, nil
 }
 
-// genericFuncOf devolve a função genérica nomeada por e (f ou mod.f), se houver.
+// genericFuncOf returns the generic function named by e (f or mod.f), if any.
 func (c *checker) genericFuncOf(e ast.Expr) *Func {
 	switch e := e.(type) {
 	case *ast.Ident:
@@ -666,7 +666,7 @@ func (c *checker) genericFuncOf(e ast.Expr) *Func {
 		if m := c.userModule(e.X); m != nil {
 			if g := m.generics[e.Sel]; g != nil {
 				if !g.Pub {
-					c.errorf(e.SelPos, "%s.%s não é pública (declare com pub fn)", m.name, e.Sel)
+					c.errorf(e.SelPos, "%s.%s isn't public (declare it with pub fn)", m.name, e.Sel)
 				}
 				return g
 			}
@@ -675,8 +675,8 @@ func (c *checker) genericFuncOf(e ast.Expr) *Func {
 	return nil
 }
 
-// recvParamNames devolve os nomes dos parâmetros de tipo de um receptor como
-// &Vetor[T]: ["T"].
+// recvParamNames returns the names of the type parameters of a receiver like
+// &Vector[T]: ["T"].
 func recvParamNames(t *ast.TypeExpr) []string {
 	if t.Mod == ast.TypeBorrow || t.Mod == ast.TypePointer {
 		t = t.Elem
@@ -688,20 +688,20 @@ func recvParamNames(t *ast.TypeExpr) []string {
 	return names
 }
 
-// abstractCheck é uma definição genérica esperando a checagem abstrata do corpo.
+// abstractCheck is a generic definition waiting for the abstract check of its body.
 type abstractCheck struct {
 	fn      *Func
 	binding map[string]Type
 }
 
-// collectGeneric registra uma função genérica: a assinatura com TypeVars, para
-// as chamadas, e o corpo para a checagem abstrata.
+// collectGeneric registers a generic function: the signature with TypeVars, for
+// the calls, and the body for the abstract check.
 func (c *checker) collectGeneric(d *ast.FuncDecl) {
 	if d.Extern {
-		c.errorf(d.P, "extern fn não pode ser genérica")
+		c.errorf(d.P, "an extern fn can't be generic")
 	}
 	if d.Name == "main" {
-		c.errorf(d.P, "main não pode ser genérica")
+		c.errorf(d.P, "main can't be generic")
 	}
 	g := &Func{
 		Name: c.qualify(d.Name), Result: Void, Decl: d,
@@ -715,33 +715,33 @@ func (c *checker) collectGeneric(d *ast.FuncDecl) {
 	c.abstracts = append(c.abstracts, abstractCheck{g, binding})
 }
 
-// collectGenericMethod registra um método de struct genérica. O receptor
-// nomeia os parâmetros de tipo da struct: fn (v &Vetor[T]) tamanho() int.
+// collectGenericMethod registers a method of a generic struct. The receiver
+// names the struct's type parameters: fn (v &Vector[T]) size() int.
 func (c *checker) collectGenericMethod(d *ast.FuncDecl, s *Struct, named *ast.TypeExpr) {
 	if len(named.Args) != len(s.Params) {
-		c.errorf(named.P, "o receptor precisa nomear os %d parâmetro(s) de tipo de %s, como %s[T]", len(s.Params), s.Name, s.Name)
+		c.errorf(named.P, "the receiver must name the %d type parameter(s) of %s, like %s[T]", len(s.Params), s.Name, s.Name)
 		return
 	}
 	seen := map[string]bool{}
 	for _, a := range named.Args {
 		if a.Mod != ast.TypeNamed || a.Module != "" || len(a.Args) > 0 || seen[a.Name] {
-			c.errorf(a.P, "no receptor, os argumentos de tipo precisam ser nomes novos e diferentes, como %s[T]", s.Name)
+			c.errorf(a.P, "in the receiver, the type arguments must be new and different names, like %s[T]", s.Name)
 			return
 		}
 		seen[a.Name] = true
 	}
 	for _, f := range s.Decl.Fields {
 		if f.Name == d.Name {
-			c.errorf(d.P, "%s já tem um campo %s; o método precisa de outro nome", s.Name, d.Name)
+			c.errorf(d.P, "%s already has a field %s; the method needs another name", s.Name, d.Name)
 			return
 		}
 	}
 	if prev := s.methodDecls[d.Name]; prev != nil {
-		c.errorf(d.P, "método %s.%s já declarado na linha %d", s.Name, d.Name, prev.P.Line)
+		c.errorf(d.P, "method %s.%s already declared on line %d", s.Name, d.Name, prev.P.Line)
 		return
 	}
 	s.methodDecls[d.Name] = d
-	// restrições do receptor: fn (v &Vec[T any]) get() só existe com T any
+	// the receiver's constraints: fn (v &Vec[T any]) get() only exists with T any
 	var cons []*ast.TypeParam
 	for _, a := range named.Args {
 		if a.Constraint == "" {
@@ -750,10 +750,10 @@ func (c *checker) collectGenericMethod(d *ast.FuncDecl, s *Struct, named *ast.Ty
 		}
 		b, iface, ok := splitConstraint(a.Constraint)
 		if !ok || (b == "" && c.lookupIface(iface, a.P, false) == nil) {
-			c.errorf(a.P, "restrição desconhecida %q", a.Constraint)
+			c.errorf(a.P, "unknown constraint %q", a.Constraint)
 		}
-		// a restrição do receptor se soma à da struct: em Map[K owned + Hash],
-		// fn (m &Map[K any, V]) pede K any + Hash
+		// the receiver's constraint adds to the struct's: in Map[K owned + Hash],
+		// fn (m &Map[K any, V]) asks for K any + Hash
 		sb, siface, _ := splitConstraint(s.Params[len(cons)].Constraint)
 		if b == "" {
 			b = sb
@@ -774,12 +774,12 @@ func (c *checker) collectGenericMethod(d *ast.FuncDecl, s *Struct, named *ast.Ty
 		s.methodConstraints = map[string][]*ast.TypeParam{}
 	}
 	s.methodConstraints[d.Name] = cons
-	// checagem abstrata: uma instância de s com TypeVars no lugar dos tipos
+	// abstract check: an instance of s with TypeVars instead of the types
 	var vars []Type
 	for i, a := range named.Args {
 		p := s.Params[i]
 		if cons[i] != nil {
-			p = cons[i] // no corpo, T tem a restrição do receptor
+			p = cons[i] // in the body, T has the receiver's constraint
 		}
 		vars = append(vars, c.newTypeVar(a.Name, p))
 	}
@@ -793,24 +793,24 @@ func (c *checker) collectGenericMethod(d *ast.FuncDecl, s *Struct, named *ast.Ty
 			binding[a.Name] = vars[i]
 		}
 		for k, v := range m.methodBinding {
-			binding[k] = v // os parâmetros de tipo do próprio método (each[C])
+			binding[k] = v // the method's own type parameters (each[C])
 		}
 		c.abstracts = append(c.abstracts, abstractCheck{m, binding})
 	}
 }
 
-// ---------- métodos genéricos ----------
+// ---------- generic methods ----------
 //
 //	fn (m &Map[K, V]) each[C any](ctx &C, f fn(&C, &K, &V))
 //
-// Um método pode ter parâmetros de tipo próprios, além dos da struct. O
-// método vira um modelo: na chamada, os tipos dele são deduzidos dos
-// argumentos (sem o receptor) ou escritos (m.each[Soma](...)), e cada
-// combinação é uma instância comum, checada e gerada como uma função
-// genérica.
+// A method can have its own type parameters, besides the struct's. The
+// method becomes a template: at the call, its types are inferred from the
+// arguments (without the receiver) or written (m.each[Sum](...)), and each
+// combination is an ordinary instance, checked and generated like a generic
+// function.
 
-// genericMethod prepara m, de declaração d, como modelo de método genérico.
-// binding tem os tipos da struct (vazio numa struct comum).
+// genericMethod prepares m, of declaration d, as a generic method template.
+// binding has the struct's types (empty in an ordinary struct).
 func (c *checker) genericMethod(m *Func, d *ast.FuncDecl, mod *module, binding map[string]Type, recv *Local) {
 	m.typeVars = c.typeVars(d.TypeParams)
 	m.instances = map[string]*Func{}
@@ -826,8 +826,8 @@ func (c *checker) genericMethod(m *Func, d *ast.FuncDecl, mod *module, binding m
 	c.withScope(mod, full, func() { c.signature(m, d, recv) })
 }
 
-// instGenericMethod devolve a instância do método genérico m com os tipos
-// args dos parâmetros dele.
+// instGenericMethod returns the instance of the generic method m with the types
+// args of its parameters.
 func (c *checker) instGenericMethod(m *Func, args []Type, pos token.Pos) *Func {
 	d := m.Decl
 	if !c.checkTypeArgs(m.Name, d.TypeParams, args, pos) {
@@ -866,8 +866,8 @@ func (c *checker) instGenericMethod(m *Func, args []Type, pos token.Pos) *Func {
 	return inst
 }
 
-// genericMethodCall checa x.m(args) (ou x.m[T](args)) com m um método
-// genérico.
+// genericMethodCall checks x.m(args) (or x.m[T](args)) with m a generic
+// method.
 func (c *checker) genericMethodCall(e *ast.CallExpr, sel *ast.SelectorExpr, t Type, s *Struct, m *Func, explicit []ast.Expr) Type {
 	recv := c.receiverArg(sel.X, t, s, m)
 	if recv == nil {
@@ -894,11 +894,11 @@ func (c *checker) genericMethodCall(e *ast.CallExpr, sel *ast.SelectorExpr, t Ty
 				unify(m.Params[i+1].Type, at, vars, bound)
 			}
 		}
-		c.errs = c.errs[:saved] // os argumentos são checados de novo, com os tipos certos
+		c.errs = c.errs[:saved] // the arguments are checked again, with the right types
 		for _, v := range m.typeVars {
 			bt := bound[v.(*TypeVar)]
 			if bt == nil {
-				c.errorf(e.Lparen, "não foi possível deduzir %s em %s: escreva os tipos, como %s[%s](...)", v, m.Name, sel.Sel, v)
+				c.errorf(e.Lparen, "couldn't infer %s in %s: write the types, like %s[%s](...)", v, m.Name, sel.Sel, v)
 				c.checkArgs(e)
 				return Invalid
 			}
@@ -916,7 +916,7 @@ func (c *checker) genericMethodCall(e *ast.CallExpr, sel *ast.SelectorExpr, t Ty
 	return inst.Result
 }
 
-// checkAbstracts checa o corpo das definições genéricas do módulo atual.
+// checkAbstracts checks the body of the current module's generic definitions.
 func (c *checker) checkAbstracts() {
 	for _, a := range c.abstracts {
 		if a.fn.mod != c.mod {
@@ -928,8 +928,8 @@ func (c *checker) checkAbstracts() {
 	}
 }
 
-// namesType diz se e é o nome de uma struct (local ou mod.Struct), que pode
-// receber argumentos de tipo.
+// namesType says whether e is the name of a struct (local or mod.Struct), which can
+// receive type arguments.
 func (c *checker) namesType(e ast.Expr) bool {
 	switch e := e.(type) {
 	case *ast.Ident:
@@ -942,7 +942,7 @@ func (c *checker) namesType(e ast.Expr) bool {
 	return false
 }
 
-// baseOf tira o ponteiro de ?*T e *T: o tipo que um impl implementa.
+// baseOf removes the pointer from ?*T and *T: the type an impl implements.
 func baseOf(t Type) Type {
 	if p, ok := t.(*Pointer); ok {
 		return p.Elem

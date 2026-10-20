@@ -4,28 +4,28 @@ import (
 	"strings"
 )
 
-// Fase 4: enumeração exaustiva com um modelo de referência.
+// Phase 4: exhaustive enumeration with a reference model.
 //
-// Enumerate gera todos os programas até um tamanho, a partir de um alfabeto
-// pequeno de comandos sobre três variáveis donas (os parâmetros x e y, *Box,
-// e q, ?*Box), um empréstimo r, if e laço com condições que o verificador
-// não conhece (flip()). Cada programa é julgado pelo verificador e pelo
-// modelo de referência (model.go), e os dois vereditos são comparados.
+// Enumerate generates every program up to a size, from a small alphabet
+// of statements over three owning variables (the parameters x and y, *Box,
+// and q, ?*Box), a borrow r, if and a loop with conditions the checker
+// doesn't know (flip()). Each program is judged by the checker and by the
+// reference model (model.go), and the two verdicts are compared.
 
-// Stmt é um comando do alfabeto: um átomo, um if ou um laço.
+// Stmt is a statement of the alphabet: an atom, an if or a loop.
 type Stmt struct {
-	Atom    string // o comando (um dos Atoms), ou "" num bloco
+	Atom    string // the statement (one of the Atoms), or "" in a block
 	If      bool   // if flip() { Body } [else { Else }]
 	Loop    bool   // for flip() { Body }
 	Body    []*Stmt
 	Else    []*Stmt
 	HasElse bool
-	// formas usadas só pelos testes metamórficos (metamorphic.go)
-	Block   bool // { Body }: um bloco solto
-	Negated bool // if !flip(): a mesma escolha desconhecida
+	// forms used only by the metamorphic tests (metamorphic.go)
+	Block   bool // { Body }: a loose block
+	Negated bool // if !flip(): the same unknown choice
 }
 
-// Atoms são os comandos simples. A semântica de cada um está em model.go.
+// Atoms are the simple statements. The semantics of each one is in model.go.
 var Atoms = []string{
 	"free(x)",
 	"free(y)",
@@ -44,8 +44,8 @@ var Atoms = []string{
 	"break",
 }
 
-// size é o tamanho de uma lista: cada comando conta 1, mais o que tem
-// dentro.
+// size is the size of a list: each statement counts 1, plus what it has
+// inside.
 func size(ss []*Stmt) int {
 	n := 0
 	for _, s := range ss {
@@ -54,10 +54,10 @@ func size(ss []*Stmt) int {
 	return n
 }
 
-// Enumerate chama visit com cada corpo de função de tamanho exatamente n.
-// Programas que só diferem pela troca de x com y são visitados uma vez, e os
-// que nem passariam nos tipos por causa de r (usada sem estar declarada, ou
-// declarada duas vezes no mesmo escopo) não são gerados.
+// Enumerate calls visit with each function body of size exactly n.
+// Programs that only differ by swapping x with y are visited once, and the ones
+// that wouldn't even pass the types because of r (used without being declared, or
+// declared twice in the same scope) aren't generated.
 func Enumerate(n int, visit func([]*Stmt)) {
 	lists(n, false, rNone, false, func(ss []*Stmt) {
 		if canonical(ss) {
@@ -66,16 +66,16 @@ func Enumerate(n int, visit func([]*Stmt)) {
 	})
 }
 
-// A visibilidade de r num ponto do programa.
+// The visibility of r at a point of the program.
 const (
-	rNone  = iota // não declarada
-	rOuter        // declarada num escopo de fora (pode ser declarada de novo aqui)
-	rHere         // declarada neste escopo
+	rNone  = iota // not declared
+	rOuter        // declared in an outer scope (can be declared again here)
+	rHere         // declared in this scope
 )
 
-// lists gera todas as listas de comandos de tamanho n; inLoop permite
-// break; pending diz que r foi declarada nesta lista e ainda não foi usada
-// (a lista precisa usá-la antes de acabar).
+// lists generates every statement list of size n; inLoop allows
+// break; pending says r was declared in this list and hasn't been used yet
+// (the list must use it before it ends).
 func lists(n int, inLoop bool, rv int, pending bool, visit func([]*Stmt)) {
 	if n == 0 {
 		if !pending {
@@ -83,7 +83,7 @@ func lists(n int, inLoop bool, rv int, pending bool, visit func([]*Stmt)) {
 		}
 		return
 	}
-	// o primeiro comando tem tamanho k, o resto n-k
+	// the first statement has size k, the rest n-k
 	for k := 1; k <= n; k++ {
 		stmts(k, inLoop, rv, func(first *Stmt) {
 			next, still := rv, pending
@@ -100,7 +100,7 @@ func lists(n int, inLoop bool, rv int, pending bool, visit func([]*Stmt)) {
 	}
 }
 
-// usesR diz se a lista usa o r de fora (antes de declarar outro).
+// usesR says whether the list uses the outer r (before declaring another).
 func usesR(ss []*Stmt) bool {
 	for _, s := range ss {
 		switch {
@@ -115,11 +115,11 @@ func usesR(ss []*Stmt) bool {
 	return false
 }
 
-// stmts gera todos os comandos de tamanho n.
+// stmts generates every statement of size n.
 func stmts(n int, inLoop bool, rv int, visit func(*Stmt)) {
 	inner := rv
 	if inner == rHere {
-		inner = rOuter // dentro de um bloco, r de fora pode ser declarada de novo
+		inner = rOuter // inside a block, the outer r can be declared again
 	}
 	if n == 1 {
 		for _, a := range Atoms {
@@ -133,7 +133,7 @@ func stmts(n int, inLoop bool, rv int, visit func(*Stmt)) {
 		}
 	}
 	if n >= 2 {
-		// if sem else, e laço: o corpo tem n-1
+		// if without else, and a loop: the body has n-1
 		lists(n-1, inLoop, inner, false, func(body []*Stmt) {
 			visit(&Stmt{If: true, Body: body})
 		})
@@ -142,7 +142,7 @@ func stmts(n int, inLoop bool, rv int, visit func(*Stmt)) {
 		})
 	}
 	if n >= 3 {
-		// if com else: os dois lados somam n-1, nenhum vazio
+		// if with else: both sides add up to n-1, neither empty
 		for a := 1; a <= n-2; a++ {
 			lists(a, inLoop, inner, false, func(then []*Stmt) {
 				lists(n-1-a, inLoop, inner, false, func(els []*Stmt) {
@@ -153,8 +153,8 @@ func stmts(n int, inLoop bool, rv int, visit func(*Stmt)) {
 	}
 }
 
-// canonical diz se o programa é o representante da troca de x com y (o
-// que menciona x antes de y, ou o que não muda com a troca).
+// canonical says whether the program is the representative of the x-y swap (the
+// one that mentions x before y, or the one the swap doesn't change).
 func canonical(ss []*Stmt) bool {
 	src := render(ss, 0)
 	swapped := strings.NewReplacer("x", "\x00", "y", "x").Replace(src)
@@ -162,7 +162,7 @@ func canonical(ss []*Stmt) bool {
 	return src <= swapped
 }
 
-// EnumSource escreve o programa completo.
+// EnumSource writes the complete program.
 func EnumSource(ss []*Stmt) []byte {
 	var b strings.Builder
 	b.WriteString(enumHeader)

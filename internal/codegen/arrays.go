@@ -8,9 +8,9 @@ import (
 	"mlc/internal/checker"
 )
 
-// Arrays viram "struct mlc_ar_<N>_<T> { T a[N]; }": dentro de uma struct, o
-// array do C pode ser atribuído, passado e devolvido por valor, como o
-// array do MLC. O índice passa por MLC_INDEX com o tamanho constante.
+// Arrays become "struct mlc_ar_<N>_<T> { T a[N]; }": inside a struct, the
+// C array can be assigned, passed and returned by value, like the
+// MLC array. The index goes through MLC_INDEX with the constant size.
 
 func arrayCType(a *checker.Array) string { return "mlc_ar_" + mangle(a) }
 
@@ -28,8 +28,8 @@ func (g *gen) arrayDef(a *checker.Array) {
 	g.raw("    }\n    return true;\n}\n\n")
 }
 
-// arrayOf devolve o array de e (seguindo o empréstimo, se e for &[N]T) e o
-// seu tipo.
+// arrayOf returns the array of e (following the borrow, if e is &[N]T) and
+// its type.
 func (g *gen) arrayOf(e ast.Expr) (string, *checker.Array) {
 	switch t := g.info.Types[e].(type) {
 	case *checker.Array:
@@ -60,14 +60,14 @@ func (g *gen) arrayLit(e *ast.ArrayLit) string {
 	return sequence(pre, fmt.Sprintf("((%s){{%s}})", arrayCType(a), strings.Join(vals, ", ")))
 }
 
-// arrayView traduz &a (ou &a[i:j]), com a [N]T, para um empréstimo de slice:
-// um slice temporário que aponta para os elementos do array.
+// arrayView translates &a (or &a[i:j]), with a [N]T, into a slice borrow:
+// a temporary slice that points to the array's elements.
 func (g *gen) arrayView(x ast.Expr) string {
 	a, at := g.arrayOf(x)
 	return fmt.Sprintf("&(%s){%s.a, INT64_C(%d)}", sliceCType(&checker.Slice{Elem: at.Elem}), a, at.Len)
 }
 
-// forInArray traduz "for x in a" com a [N]T.
+// forInArray translates "for x in a" with a [N]T.
 func (g *gen) forInArray(s *ast.ForStmt) {
 	i := g.newName("mlc_i")
 	a, at := g.arrayOf(s.Iter)
@@ -79,7 +79,7 @@ func (g *gen) forInArray(s *ast.ForStmt) {
 	}
 }
 
-// arrayType devolve o array de t ([N]T ou &[N]T), ou nil.
+// arrayType returns the array of t ([N]T or &[N]T), or nil.
 func arrayType(t checker.Type) *checker.Array {
 	if b, ok := t.(*checker.Borrow); ok {
 		t = b.Elem
@@ -93,7 +93,7 @@ func isArrayBorrow(t checker.Type) bool {
 	return ok && isArray(b.Elem)
 }
 
-// arraySubSlice traduz &a[i:j] com a [N]T: limites checados contra N.
+// arraySubSlice translates &a[i:j] with a [N]T: bounds checked against N.
 func (g *gen) arraySubSlice(e *ast.SliceExpr) string {
 	a, at := g.arrayOf(e.X)
 	lo := g.temp(checker.Int)

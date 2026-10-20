@@ -1,4 +1,4 @@
-// erro: copia já foi liberada ou movida
+// error: copia was already freed or moved (line 8)
 import "std/map"
 import "std/io"
 

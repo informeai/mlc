@@ -1,4 +1,4 @@
-// erro: a função da thread recebe um parâmetro, o contexto
+// error: the thread's function takes one parameter, the context (fn(C) or fn(C) R); to carry several things, gather them in a struct
 import "std/io"
 import "std/thread"
 import "std/vec"

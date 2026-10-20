@@ -1,4 +1,4 @@
-// erro: literal de struct no cabeçalho de if, for ou match precisa de parênteses
+// error: a struct literal in the header of if, for or match needs parentheses: (Type{...})
 struct Ponto { x int }
 fn main() {
     match Ponto{} {

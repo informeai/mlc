@@ -1,4 +1,4 @@
-// erro: expressão calculada mas não usada
+// error: expression computed but not used
 fn main() {
     1 + 2
 }

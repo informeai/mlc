@@ -1,4 +1,4 @@
-// erro: buf já foi liberada ou movida (linha 5)
+// error: buf was already freed or moved (line 5)
 import "std/str"
 fn main() {
     buf := alloc([]byte, 4)

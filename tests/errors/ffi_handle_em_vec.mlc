@@ -1,4 +1,4 @@
-// erro: um handle de C precisa da função de C que o fecha, e drop não sabe qual é
+// error: ?*FILE doesn't satisfy owned, required by T in vec.new (a C handle needs the C function that closes it, and drop doesn't know which one)
 import "std/vec"
 
 extern "C" type FILE

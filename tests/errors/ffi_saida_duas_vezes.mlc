@@ -1,4 +1,4 @@
-// erro: h recebe dois handles na mesma chamada
+// error: h receives two handles in the same call
 extern "C" type H
 extern "C" type G
 extern "C" fn h_open(n int32, out &?*H) int32

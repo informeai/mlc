@@ -1,4 +1,4 @@
-// erro: Circulo tem 1 campo(s), o padrão nomeia 2
+// error: Circulo has 1 field(s), the pattern names 2
 enum Forma {
     Circulo(raio float64)
     Vazio

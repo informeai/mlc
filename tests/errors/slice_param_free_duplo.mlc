@@ -1,4 +1,4 @@
-// erro: s liberada duas vezes
+// error: s freed twice: it was already freed or moved (line 3)
 fn f(s []int) {
     free(s)
     free(s)

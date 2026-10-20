@@ -1,4 +1,4 @@
-// Package ast define a árvore sintática produzida pelo parser.
+// Package ast defines the syntax tree produced by the parser.
 package ast
 
 import "mlc/internal/token"
@@ -11,15 +11,15 @@ type File struct {
 	Imports    []*Import
 	Structs    []*StructDecl
 	Enums      []*EnumDecl
-	Consts     []*ConstDecl // na ordem do arquivo
+	Consts     []*ConstDecl // in file order
 	Funcs      []*FuncDecl
 	Interfaces []*InterfaceDecl
 	Impls      []*ImplDecl
-	Links      []*LinkDecl // link "sqlite3": bibliotecas de C a ligar
+	Links      []*LinkDecl // link "sqlite3": C libraries to link
 }
 
-// LinkDecl é "link \"sqlite3\"": a biblioteca de C que o arquivo usa (vira
-// -lsqlite3 na ligação).
+// LinkDecl is "link \"sqlite3\"": the C library the file uses (it becomes
+// -lsqlite3 when linking).
 type LinkDecl struct {
 	Lib string
 	P   token.Pos
@@ -27,29 +27,29 @@ type LinkDecl struct {
 
 func (n *LinkDecl) Pos() token.Pos { return n.P }
 
-// InterfaceDecl é "interface Display { fn write(self &Self, w &Writer) }":
-// assinaturas de métodos que um tipo implementa com impl. Nesta versão, uma
-// interface só serve como restrição de genérico.
+// InterfaceDecl is "interface Display { fn write(self &Self, w &Writer) }":
+// method signatures a type implements with impl. In this version, an
+// interface only serves as a generic constraint.
 type InterfaceDecl struct {
 	Name    string
 	Pub     bool
-	Methods []*FuncDecl // sem corpo; o primeiro parâmetro é o receptor (self &Self)
+	Methods []*FuncDecl // no body; the first parameter is the receiver (self &Self)
 	P       token.Pos
 }
 
-// ImplDecl declara que um tipo implementa uma interface:
+// ImplDecl declares that a type implements an interface:
 //
-//	impl Display for Ponto                       (com os métodos da struct)
+//	impl Display for Point                       (with the struct's methods)
 //	impl Display for int { fn (x &int) write(...) {...} }
-//	impl[T Display] Display for []T { ... }       (genérico)
-//	impl auto Display for Ponto                  (write gerado)
+//	impl[T Display] Display for []T { ... }       (generic)
+//	impl auto Display for Point                  (write generated)
 type ImplDecl struct {
 	TypeParams []*TypeParam
 	Auto       bool
-	Iface      *TypeExpr // a interface (Display ou io.Display)
+	Iface      *TypeExpr // the interface (Display or io.Display)
 	Type       *TypeExpr
-	Methods    []*FuncDecl // forma com bloco; nil na forma de uma linha
-	Block      bool        // tem bloco { } (mesmo vazio)
+	Methods    []*FuncDecl // the form with a block; nil in the one-line form
+	Block      bool        // has a block { } (even empty)
 	P          token.Pos
 }
 
@@ -57,9 +57,9 @@ func (n *InterfaceDecl) Pos() token.Pos { return n.P }
 func (n *ImplDecl) Pos() token.Pos      { return n.P }
 
 type StructDecl struct {
-	Extern     bool // extern "C" type Banco: tipo opaco de C, só atrás de ponteiro
+	Extern     bool // extern "C" type Db: an opaque C type, only behind a pointer
 	Name       string
-	TypeParams []*TypeParam // struct Par[A any, B any] { ... }
+	TypeParams []*TypeParam // struct Pair[A any, B any] { ... }
 	Pub        bool
 	Fields     []*FieldDecl
 	P          token.Pos
@@ -71,13 +71,13 @@ type FieldDecl struct {
 	P    token.Pos
 }
 
-// ConstDecl é "const N T = v", no topo do arquivo ou dentro de um bloco.
+// ConstDecl is "const N T = v", at the top of the file or inside a block.
 type ConstDecl struct {
 	Name  string
 	Pub   bool
-	Type  *TypeExpr // opcional
+	Type  *TypeExpr // optional
 	Value Expr
-	P     token.Pos // posição do nome
+	P     token.Pos // position of the name
 }
 
 func (n *StructDecl) Pos() token.Pos { return n.P }
@@ -92,14 +92,14 @@ type Import struct {
 }
 
 type FuncDecl struct {
-	Extern     bool // extern fn: implementada no runtime C (só na biblioteca padrão), sem corpo
-	ExternC    bool // extern "C" fn: uma função de C de verdade, chamada pelo nome
+	Extern     bool // extern fn: implemented in the C runtime (only in the standard library), without a body
+	ExternC    bool // extern "C" fn: a real C function, called by name
 	Name       string
-	TypeParams []*TypeParam // fn maior[T ordered](...)
-	Pub        bool         // visível para quem importa o arquivo
-	Recv       *Param       // receptor de um método: fn (p &Ponto) area(); nil numa função
+	TypeParams []*TypeParam // fn larger[T ordered](...)
+	Pub        bool         // visible to whoever imports the file
+	Recv       *Param       // a method's receiver: fn (p &Point) area(); nil in a function
 	Params     []*Param
-	Result     *TypeExpr // nil quando a função não retorna valor
+	Result     *TypeExpr // nil when the function returns no value
 	Body       *Block
 	P          token.Pos
 }
@@ -110,18 +110,18 @@ type Param struct {
 	P    token.Pos
 }
 
-// TypeExpr é um tipo escrito no código: um nome (int, Ponto) ou um
-// modificador aplicado a Elem: []T, *T, ?*T ou &T.
+// TypeExpr is a type written in the code: a name (int, Point) or a
+// modifier applied to Elem: []T, *T, ?*T or &T.
 type TypeExpr struct {
 	Name   string
-	Module string // qualificador: "geometria" em geometria.Ponto
+	Module string // qualifier: "geometry" in geometry.Point
 	Mod    TypeMod
-	Elem   *TypeExpr   // não nil quando Mod != TypeNamed
-	Len    Expr        // tamanho de [N]T
-	Args   []*TypeExpr // argumentos de tipo: Par[int, string]
-	Params []*TypeExpr // fn(int, &T) R: os parâmetros; o retorno fica em Elem (nil: nenhum)
-	// Constraint: restrição escrita no receptor de um método, como o any de
-	// fn (v &Vec[T any]) get(): o método só existe quando T a atende
+	Elem   *TypeExpr   // not nil when Mod != TypeNamed
+	Len    Expr        // size of [N]T
+	Args   []*TypeExpr // type arguments: Pair[int, string]
+	Params []*TypeExpr // fn(int, &T) R: the parameters; the result is in Elem (nil: none)
+	// Constraint: a constraint written in a method's receiver, like the any of
+	// fn (v &Vec[T any]) get(): the method only exists when T satisfies it
 	Constraint string
 	P          token.Pos
 }
@@ -136,7 +136,7 @@ const (
 	TypeBorrow            // &T
 	TypeArray             // [N]T
 	TypeFunc              // fn(T, U) R
-	TypeOptBorrow         // ?&T (só em parâmetros de extern "C" fn)
+	TypeOptBorrow         // ?&T (only in parameters of extern "C" fn)
 )
 
 func (n *Import) Pos() token.Pos   { return n.P }
@@ -144,7 +144,7 @@ func (n *FuncDecl) Pos() token.Pos { return n.P }
 func (n *Param) Pos() token.Pos    { return n.P }
 func (n *TypeExpr) Pos() token.Pos { return n.P }
 
-// ---------- Comandos ----------
+// ---------- Statements ----------
 
 type Stmt interface {
 	Node
@@ -154,7 +154,7 @@ type Stmt interface {
 type Block struct {
 	Stmts []Stmt
 	P     token.Pos
-	End   token.Pos // posição do '}'
+	End   token.Pos // position of the '}'
 }
 
 type ExprStmt struct {
@@ -162,21 +162,21 @@ type ExprStmt struct {
 }
 
 type ReturnStmt struct {
-	Value Expr // nil em "return" sem valor
+	Value Expr // nil in a "return" without a value
 	P     token.Pos
 }
 
-// VarDecl é "var x T = v" ou "x := v" (Short). Type ou Value pode ser nil,
-// mas não os dois.
+// VarDecl is "var x T = v" or "x := v" (Short). Type or Value can be nil,
+// but not both.
 type VarDecl struct {
 	Name  string
 	Type  *TypeExpr
 	Value Expr
 	Short bool
-	P     token.Pos // posição do nome
+	P     token.Pos // position of the name
 }
 
-// AssignStmt é "x = v" ou uma atribuição composta como "x += v".
+// AssignStmt is "x = v" or a compound assignment like "x += v".
 type AssignStmt struct {
 	Op    token.Kind // ASSIGN, ADD_ASSIGN, ...
 	Lhs   Expr
@@ -185,7 +185,7 @@ type AssignStmt struct {
 }
 
 type IncDecStmt struct {
-	Op    token.Kind // INC ou DEC
+	Op    token.Kind // INC or DEC
 	X     Expr
 	OpPos token.Pos
 }
@@ -193,12 +193,12 @@ type IncDecStmt struct {
 type IfStmt struct {
 	Cond Expr
 	Then *Block
-	Else Stmt // nil, *IfStmt ou *Block
+	Else Stmt // nil, *IfStmt or *Block
 	P    token.Pos
 }
 
-// ForStmt cobre as quatro formas: "for { }" (tudo nil), "for cond { }" (só
-// Cond), "for init; cond; post { }" e "for x in s { }" (Var e Iter).
+// ForStmt covers the four forms: "for { }" (all nil), "for cond { }" (only
+// Cond), "for init; cond; post { }" and "for x in s { }" (Var and Iter).
 type ForStmt struct {
 	Init Stmt
 	Cond Expr
@@ -209,7 +209,7 @@ type ForStmt struct {
 	P    token.Pos
 }
 
-// MatchStmt é "match x { padrões => corpo ... }". Só um braço executa.
+// MatchStmt is "match x { patterns => body ... }". Only one arm runs.
 type MatchStmt struct {
 	Subject Expr
 	Arms    []*MatchArm
@@ -218,14 +218,14 @@ type MatchStmt struct {
 
 type MatchArm struct {
 	Patterns []*Pattern
-	Body     Stmt // comando simples, *Block, *BranchStmt ou *ReturnStmt
+	Body     Stmt // a simple statement, *Block, *BranchStmt or *ReturnStmt
 	P        token.Pos
 }
 
-// Pattern é um literal (Lit: *IntLit, *StringLit, *FloatLit ou *Ident
-// true/false) ou o curinga _. Neg marca um inteiro negativo, como em -1.
+// Pattern is a literal (Lit: *IntLit, *StringLit, *FloatLit or *Ident
+// true/false) or the wildcard _. Neg marks a negative integer, as in -1.
 type Pattern struct {
-	// Variante de enum: Circulo(r, _). Binds tem um nome por campo (_ ignora).
+	// An enum variant: Circle(r, _). Binds has one name per field (_ ignores).
 	Variant  *Ident
 	Binds    []*Ident
 	Wildcard bool
@@ -240,7 +240,7 @@ func (n *Pattern) Pos() token.Pos   { return n.P }
 
 func (*MatchStmt) stmtNode() {}
 
-// BranchStmt é break ou continue.
+// BranchStmt is break or continue.
 type BranchStmt struct {
 	Tok token.Kind
 	P   token.Pos
@@ -266,7 +266,7 @@ func (*IfStmt) stmtNode()     {}
 func (*ForStmt) stmtNode()    {}
 func (*BranchStmt) stmtNode() {}
 
-// ---------- Expressões ----------
+// ---------- Expressions ----------
 
 type Expr interface {
 	Node
@@ -288,7 +288,7 @@ type FloatLit struct {
 	P     token.Pos
 }
 
-// StringLit guarda o valor já sem escapes.
+// StringLit keeps the value already without escapes.
 type StringLit struct {
 	Value string
 	P     token.Pos
@@ -343,11 +343,11 @@ func (*CallExpr) exprNode()     {}
 func (*SelectorExpr) exprNode() {}
 func (*IndexExpr) exprNode()    {}
 
-// CompositeLit é "Ponto{x: 1, y: 2}". Fields vazio significa o valor zero.
+// CompositeLit is "Point{x: 1, y: 2}". Empty Fields means the zero value.
 type CompositeLit struct {
 	Type     *Ident
-	Module   *Ident // qualificador: geometria em geometria.Ponto{...}
-	TypeArgs []Expr // Par[int, string]{...}
+	Module   *Ident // qualifier: geometry in geometry.Point{...}
+	TypeArgs []Expr // Pair[int, string]{...}
 	Fields   []*FieldInit
 	Lbrace   token.Pos
 }
@@ -362,7 +362,7 @@ func (n *CompositeLit) Pos() token.Pos { return n.Type.P }
 
 func (*CompositeLit) exprNode() {}
 
-// TypeArg é um tipo usado como argumento: o []int de alloc([]int, n).
+// TypeArg is a type used as an argument: the []int of alloc([]int, n).
 type TypeArg struct {
 	Type *TypeExpr
 }
@@ -371,7 +371,7 @@ func (n *TypeArg) Pos() token.Pos { return n.Type.P }
 
 func (*TypeArg) exprNode() {}
 
-// SliceExpr é s[a:b]. Low e High podem ser nil (s[:b], s[a:], s[:]).
+// SliceExpr is s[a:b]. Low and High can be nil (s[:b], s[a:], s[:]).
 type SliceExpr struct {
 	X, Low, High Expr
 	Lbrack       token.Pos
@@ -381,7 +381,7 @@ func (n *SliceExpr) Pos() token.Pos { return n.X.Pos() }
 
 func (*SliceExpr) exprNode() {}
 
-// CharLit é um literal de byte: 'a'.
+// CharLit is a byte literal: 'a'.
 type CharLit struct {
 	Value byte
 	P     token.Pos
@@ -391,7 +391,7 @@ func (n *CharLit) Pos() token.Pos { return n.P }
 
 func (*CharLit) exprNode() {}
 
-// ArrayLit é "[3]int{1, 2, 3}". Elems vazio significa o valor zero.
+// ArrayLit is "[3]int{1, 2, 3}". Empty Elems means the zero value.
 type ArrayLit struct {
 	Type   *TypeExpr
 	Elems  []Expr
@@ -402,16 +402,16 @@ func (n *ArrayLit) Pos() token.Pos { return n.Type.P }
 
 func (*ArrayLit) exprNode() {}
 
-// TypeParam é um parâmetro de tipo: o T de fn maior[T ordered](...).
+// TypeParam is a type parameter: the T of fn larger[T ordered](...).
 type TypeParam struct {
 	Name       string
 	Constraint string // any, comparable, ordered, number, integer
 	P          token.Pos
 }
 
-// IndexListExpr é f[A, B]: argumentos de tipo de uma função ou struct genérica.
-// Com um argumento só, f[int] é um IndexExpr; o checker decide se é índice ou
-// instância.
+// IndexListExpr is f[A, B]: type arguments of a generic function or struct.
+// With a single argument, f[int] is an IndexExpr; the checker decides whether it's an index or
+// an instance.
 type IndexListExpr struct {
 	X       Expr
 	Indices []Expr
@@ -422,7 +422,7 @@ func (n *IndexListExpr) Pos() token.Pos { return n.X.Pos() }
 
 func (*IndexListExpr) exprNode() {}
 
-// EnumDecl é "enum Forma { Circulo(raio float64); Vazio }".
+// EnumDecl is "enum Shape { Circle(radius float64); Empty }".
 type EnumDecl struct {
 	Name       string
 	Pub        bool
@@ -431,7 +431,7 @@ type EnumDecl struct {
 	P          token.Pos
 }
 
-// VariantDecl é uma variante de enum, com campos opcionais: Circulo(raio float64).
+// VariantDecl is an enum variant, with optional fields: Circle(radius float64).
 type VariantDecl struct {
 	Name   string
 	Fields []*FieldDecl

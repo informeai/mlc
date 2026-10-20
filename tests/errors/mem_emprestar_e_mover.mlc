@@ -1,4 +1,4 @@
-// erro: p é emprestada e movida na mesma chamada
+// error: p is borrowed and moved in the same call
 struct Ponto { x int; y int }
 fn f(a &Ponto, b *Ponto) {
     free(b)

@@ -1,4 +1,4 @@
-// erro: *No não atende owned, exigida por T em vec.new (*T não tem valor zero e as coleções precisam de posições vazias: use ?*No)
+// error: *No doesn't satisfy owned, required by T in vec.new (*T has no zero value and collections need empty slots: use ?*No)
 import "std/vec"
 
 struct No {

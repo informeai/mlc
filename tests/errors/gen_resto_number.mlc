@@ -1,4 +1,4 @@
-// erro: operador % não se aplica a T (só a inteiros)
+// error: operator % doesn't apply to T (only to integers)
 fn resto[T number](a T, b T) T {
     return a % b
 }

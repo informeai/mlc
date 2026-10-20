@@ -1,5 +1,5 @@
-// Package lexer transforma código MLC em tokens, inserindo ';' no fim das
-// linhas com a mesma regra do Go.
+// Package lexer turns MLC code into tokens, inserting ';' at the end of
+// lines with Go's rule.
 package lexer
 
 import (
@@ -18,16 +18,16 @@ type Lexer struct {
 	last token.Kind
 	errs []token.Error
 
-	comments bool // devolver os comentários como tokens COMMENT
+	comments bool // return the comments as COMMENT tokens
 }
 
 func New(file string, src []byte) *Lexer {
 	return &Lexer{file: file, src: src, line: 1, col: 1, last: token.EOF}
 }
 
-// NewWithComments cria um lexer que também devolve os comentários, como
-// tokens COMMENT (usado pelo formatador). Comentários não mudam a inserção
-// automática de ';'.
+// NewWithComments creates a lexer that also returns the comments, as
+// COMMENT tokens (used by the formatter). Comments don't change the automatic
+// insertion of ';'.
 func NewWithComments(file string, src []byte) *Lexer {
 	l := New(file, src)
 	l.comments = true
@@ -36,7 +36,7 @@ func NewWithComments(file string, src []byte) *Lexer {
 
 func (l *Lexer) Errors() []token.Error { return l.errs }
 
-// Next devolve o próximo token. Depois do fim do arquivo devolve sempre EOF.
+// Next returns the next token. After the end of the file it always returns EOF.
 func (l *Lexer) Next() token.Token {
 	tok := l.scan()
 	if tok.Kind != token.COMMENT {
@@ -45,7 +45,7 @@ func (l *Lexer) Next() token.Token {
 	return tok
 }
 
-// insertsSemi diz se uma quebra de linha depois de k termina o comando.
+// insertsSemi says whether a line break after k ends the statement.
 func insertsSemi(k token.Kind) bool {
 	switch k {
 	case token.IDENT, token.INT, token.FLOAT, token.STRING, token.CHAR,
@@ -76,7 +76,7 @@ func (l *Lexer) advance() {
 	l.off++
 }
 
-// match consome o próximo byte se ele for c.
+// match consumes the next byte if it's c.
 func (l *Lexer) match(c byte) bool {
 	if l.off < len(l.src) && l.src[l.off] == c {
 		l.advance()
@@ -209,13 +209,13 @@ func (l *Lexer) scanToken() token.Token {
 	}
 	lit := string(l.src[start:l.off])
 	if k == token.ILLEGAL {
-		l.errorf(pos, "caractere inesperado %q", lit)
+		l.errorf(pos, "unexpected character %q", lit)
 	}
 	return token.Token{Kind: k, Lit: lit, Pos: pos}
 }
 
-// wrap lê o % de +%, -% e *% (aritmética que dá a volta), com o = opcional
-// da atribuição composta. Devolve ILLEGAL se não houver %.
+// wrap reads the % of +%, -% and *% (wrapping arithmetic), with the optional =
+// of compound assignment. Returns ILLEGAL if there's no %.
 func (l *Lexer) wrap(op, assign token.Kind) token.Kind {
 	if !l.match('%') {
 		return token.ILLEGAL
@@ -226,13 +226,13 @@ func (l *Lexer) wrap(op, assign token.Kind) token.Kind {
 	return op
 }
 
-// alt é uma variante de dois caracteres: se o próximo byte for next, o token é kind.
+// alt is a two-character variant: if the next byte is next, the token is kind.
 type alt struct {
 	next byte
 	kind token.Kind
 }
 
-// pick escolhe entre o token simples def e as variantes de dois caracteres.
+// pick chooses between the simple token def and the two-character variants.
 func (l *Lexer) pick(def token.Kind, alts ...alt) token.Kind {
 	for _, a := range alts {
 		if l.match(a.next) {
@@ -254,7 +254,7 @@ func (l *Lexer) scanIdent(pos token.Pos) token.Token {
 func (l *Lexer) scanNumber(pos token.Pos) token.Token {
 	start := l.off
 	kind := token.INT
-	// 0xFF, 0b1010, 0o17: inteiros em outras bases
+	// 0xFF, 0b1010, 0o17: integers in other bases
 	if l.peek(0) == '0' {
 		var base func(byte) bool
 		switch l.peek(1) {
@@ -269,10 +269,10 @@ func (l *Lexer) scanNumber(pos token.Pos) token.Token {
 			l.advance()
 			l.advance()
 			if !l.digits(base, start) {
-				l.errorf(pos, "número malformado: faltam dígitos depois de %q", string(l.src[start:l.off]))
+				l.errorf(pos, "malformed number: digits missing after %q", string(l.src[start:l.off]))
 			}
 			if l.off < len(l.src) && (isLetter(l.src[l.off]) || isDigit(l.src[l.off])) {
-				l.errorf(l.pos(), "número malformado: %q não é um dígito válido em %q", l.src[l.off], string(l.src[start:l.off]))
+				l.errorf(l.pos(), "malformed number: %q isn't a valid digit in %q", l.src[l.off], string(l.src[start:l.off]))
 				for l.off < len(l.src) && (isLetter(l.src[l.off]) || isDigit(l.src[l.off])) {
 					l.advance()
 				}
@@ -286,7 +286,7 @@ func (l *Lexer) scanNumber(pos token.Pos) token.Token {
 		l.advance()
 		l.digits(isDigit, start)
 	}
-	// expoente: 1e9, 2.5E-3
+	// exponent: 1e9, 2.5E-3
 	if c := l.peek(0); c == 'e' || c == 'E' {
 		sign := l.peek(1) == '+' || l.peek(1) == '-'
 		if isDigit(l.peek(1)) || (sign && isDigit(l.peek(2))) {
@@ -299,7 +299,7 @@ func (l *Lexer) scanNumber(pos token.Pos) token.Token {
 		}
 	}
 	if l.off < len(l.src) && isLetter(l.src[l.off]) {
-		l.errorf(l.pos(), "número malformado: letra logo após %q", string(l.src[start:l.off]))
+		l.errorf(l.pos(), "malformed number: letter right after %q", string(l.src[start:l.off]))
 		for l.off < len(l.src) && (isLetter(l.src[l.off]) || isDigit(l.src[l.off])) {
 			l.advance()
 		}
@@ -307,15 +307,15 @@ func (l *Lexer) scanNumber(pos token.Pos) token.Token {
 	return token.Token{Kind: kind, Lit: string(l.src[start:l.off]), Pos: pos}
 }
 
-// digits lê dígitos (conforme ok) e separadores _ entre eles: 1_000_000.
-// Devolve se leu algum dígito.
+// digits reads digits (according to ok) and _ separators between them: 1_000_000.
+// Returns whether it read any digit.
 func (l *Lexer) digits(ok func(byte) bool, start int) bool {
 	any, lastUnderscore := false, false
 	for l.off < len(l.src) {
 		c := l.src[l.off]
 		if c == '_' {
 			if !any || lastUnderscore {
-				l.errorf(l.pos(), "número malformado: _ só pode separar dígitos")
+				l.errorf(l.pos(), "malformed number: _ can only separate digits")
 			}
 			lastUnderscore = true
 			l.advance()
@@ -328,7 +328,7 @@ func (l *Lexer) digits(ok func(byte) bool, start int) bool {
 		l.advance()
 	}
 	if lastUnderscore {
-		l.errorf(l.pos(), "número malformado: _ só pode separar dígitos")
+		l.errorf(l.pos(), "malformed number: _ can only separate digits")
 	}
 	return any
 }
@@ -337,13 +337,13 @@ func isHex(c byte) bool {
 	return isDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 }
 
-// scanString lê um literal entre aspas e devolve o valor já sem escapes.
+// scanString reads a literal between quotes and returns the value already without escapes.
 func (l *Lexer) scanString(pos token.Pos) token.Token {
-	l.advance() // aspas de abertura
+	l.advance() // opening quote
 	var sb strings.Builder
 	for {
 		if l.off >= len(l.src) || l.src[l.off] == '\n' {
-			l.errorf(pos, "string não terminada")
+			l.errorf(pos, "unterminated string")
 			break
 		}
 		c := l.src[l.off]
@@ -371,7 +371,7 @@ func (l *Lexer) scanString(pos token.Pos) token.Token {
 			case '\\', '"':
 				sb.WriteByte(e)
 			default:
-				l.errorf(escPos, "escape inválido \\%c", e)
+				l.errorf(escPos, "invalid escape \\%c", e)
 			}
 			continue
 		}
@@ -381,10 +381,10 @@ func (l *Lexer) scanString(pos token.Pos) token.Token {
 	return token.Token{Kind: token.STRING, Lit: sb.String(), Pos: pos}
 }
 
-// scanChar lê um literal de byte: 'a', '\n', '\”. Um literal vale um byte só,
-// então letras que ocupam mais de um byte em UTF-8 (como 'á') não cabem.
+// scanChar reads a byte literal: 'a', '\n', '\”. A literal holds a single byte,
+// so letters that take more than one byte in UTF-8 (like 'á') don't fit.
 func (l *Lexer) scanChar(pos token.Pos) token.Token {
-	l.advance() // aspas de abertura
+	l.advance() // opening quote
 	var b []byte
 	for l.off < len(l.src) && l.src[l.off] != '\'' && l.src[l.off] != '\n' {
 		c := l.src[l.off]
@@ -411,20 +411,20 @@ func (l *Lexer) scanChar(pos token.Pos) token.Token {
 		case '\\', '\'', '"':
 			b = append(b, e)
 		default:
-			l.errorf(escPos, "escape inválido \\%c", e)
+			l.errorf(escPos, "invalid escape \\%c", e)
 		}
 	}
 	if l.off >= len(l.src) || l.src[l.off] != '\'' {
-		l.errorf(pos, "literal de byte não terminado")
+		l.errorf(pos, "unterminated byte literal")
 		return token.Token{Kind: token.CHAR, Lit: "\x00", Pos: pos}
 	}
 	l.advance()
 	switch {
 	case len(b) == 0:
-		l.errorf(pos, "literal de byte vazio")
+		l.errorf(pos, "empty byte literal")
 		b = []byte{0}
 	case len(b) > 1:
-		l.errorf(pos, "um literal de byte vale um byte só ('%s' ocupa %d bytes em UTF-8); use uma string", b, len(b))
+		l.errorf(pos, "a byte literal holds a single byte ('%s' takes %d bytes in UTF-8); use a string", b, len(b))
 		b = b[:1]
 	}
 	return token.Token{Kind: token.CHAR, Lit: string(b), Pos: pos}

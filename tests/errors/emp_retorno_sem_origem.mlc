@@ -1,4 +1,4 @@
-// erro: novo devolve &P sem receber nenhum empréstimo
+// error: novo returns &P without taking any borrow: the result would point to something that stops existing
 import "std/io"
 import "std/vec"
 

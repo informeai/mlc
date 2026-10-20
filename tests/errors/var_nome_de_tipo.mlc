@@ -1,4 +1,4 @@
-// erro: o nome Ponto já é um tipo (struct)
+// error: the name Ponto is already a type (struct)
 import "std/io"
 struct Ponto { x int }
 fn main() {

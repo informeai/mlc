@@ -1,4 +1,4 @@
-// erro: um guard precisa de unlock() na thread que travou
+// error: ?*mutex.Guard[int] doesn't satisfy owned, required by T in vec.new (a guard needs unlock() on the thread that locked, and drop doesn't know that)
 import "std/atomic"
 import "std/io"
 import "std/mutex"

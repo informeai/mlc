@@ -26,17 +26,17 @@ fn test_ok() {
         Ok(v) => testing.eq_int(v, 42)
         Err(e) => {
             free(e)
-            testing.fail("42 é válido")
+            testing.fail("42 is valid")
         }
     }
 }
 
 fn test_err_with_content() {
     match parse("4x") {
-        Ok(_) => testing.fail("4x é inválido")
+        Ok(_) => testing.fail("4x is invalid")
         Err(e) => {
             match e {
-                Empty => testing.fail("não é vazio")
+                Empty => testing.fail("isn't empty")
                 Bad(msg) => {
                     testing.eq_str(&msg, "4x")
                     free(msg)
@@ -49,7 +49,7 @@ fn test_err_with_content() {
 fn test_err_code() {
     var r result.Result[int, int] = result.Result.Err(7)
     match r {
-        Ok(_) => testing.fail("é erro")
+        Ok(_) => testing.fail("is an error")
         Err(code) => testing.eq_int(code, 7)
     }
 }

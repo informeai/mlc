@@ -1,4 +1,4 @@
-// erro: módulo io não foi importado (adicione: import "std/io")
+// error: module io wasn't imported (add: import "std/io")
 fn main() {
     io.print(1)
 }

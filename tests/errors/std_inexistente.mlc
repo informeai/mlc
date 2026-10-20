@@ -1,4 +1,4 @@
-// erro: a biblioteca padrão não tem o módulo "std/nada"
+// error: the standard library has no module "std/nada"
 import "std/nada"
 
 fn main() {

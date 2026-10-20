@@ -1,4 +1,4 @@
-// erro: vazamento: h.b ainda é dona da memória (linha 18) (em algum caminho)
+// error: leak: h.b still owns the memory (line 18) (on some path) and would be overwritten; free it or pass ownership first
 // Cobertura do verificador (fase 5): regra de posse que nenhum teste disparava.
 struct Box {
     v int

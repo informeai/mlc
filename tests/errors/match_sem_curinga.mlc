@@ -1,4 +1,4 @@
-// erro: match sobre int precisa de um braço _
+// error: a match on int needs a _ arm
 fn main() {
     match 1 {
         1 => {}

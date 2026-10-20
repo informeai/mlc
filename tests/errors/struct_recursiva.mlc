@@ -1,4 +1,4 @@
-// erro: struct A contém a si mesma por valor (A → B → A)
+// error: struct A contains itself by value (A → B → A); that will be possible with pointers
 struct A { b B }
 struct B { a A }
 fn main() {

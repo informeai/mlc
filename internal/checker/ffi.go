@@ -7,36 +7,36 @@ import (
 	"mlc/internal/token"
 )
 
-// Funções de C (FFI)
+// C functions (FFI)
 //
 //	link "sqlite3"
-//	extern "C" type Banco                                  // handle opaco de C
-//	extern "C" fn abre(nome string) ?*Banco                  // um handle (ou NULL)
+//	extern "C" type Db                                     // opaque C handle
+//	extern "C" fn open(name string) ?*Db                  // a handle (or NULL)
 //	extern "C" fn strlen(s string) uint64
 //	extern "C" fn memcmp(a &[]byte, b &[]byte, n uint64) int32
-//	extern "C" fn fclose(f *Arquivo) int32                 // consome o handle
+//	extern "C" fn fclose(f *File) int32                    // consumes the handle
 //
-// Qualquer arquivo pode declarar funções de C. A fronteira é conferida: só
-// passam números, bool, string (um literal, terminado em zero), &[]T (vai o
-// ponteiro para os dados), &T e handles de C (*X e ?*X, com X um extern
-// "C" type). Nada que seja dono de memória do MLC atravessa: o C não pode
-// liberar nem guardar memória do MLC. A assinatura precisa bater com a do C
-// (int do C é int32; size_t é uint64), e funções variádicas (printf) não
-// são aceitas.
+// Any file can declare C functions. The boundary is checked: only
+// numbers, bool, string (a literal, zero-terminated), &[]T (the pointer to the
+// data goes), &T and C handles (*X and ?*X, with X an extern
+// "C" type) go through. Nothing that owns MLC memory crosses: C can't
+// free or keep MLC memory. The signature must match C's
+// (C's int is int32; size_t is uint64), and variadic functions (printf) aren't
+// accepted.
 //
-// Um handle de C é um dono como os outros: o verificador cobra que ele seja
-// passado a uma função de C que o recebe por posse (*X), não deixa usar free
-// nele nem ver o conteúdo. Uma função de C que devolve um handle devolve ?*X,
-// porque pode devolver NULL.
+// A C handle is an owner like the others: the checker requires it to be
+// passed to a C function that takes it by ownership (*X), and doesn't allow free
+// on it nor looking at its content. A C function that returns a handle returns ?*X,
+// because it may return NULL.
 //
-// Um parâmetro &?*X (OutHandle) é um handle devolvido por ponteiro, como em
-// int sqlite3_open(const char *, sqlite3 **): quem chama passa &db, com db
-// uma variável ?*X que não tem handle (nil ou já fechada), e depois da
-// chamada db pode ter um handle novo, que o verificador obriga a fechar.
+// A &?*X parameter (OutHandle) is a handle returned through a pointer, as in
+// int sqlite3_open(const char *, sqlite3 **): the caller passes &db, with db
+// a ?*X variable that holds no handle (nil or already closed), and after the
+// call db may hold a new handle, which the checker forces you to close.
 
-// OptArg é ?&T (ou ?&?*X), um parâmetro de função de C que pode ser NULL:
-// quem chama passa nil ou o mesmo que passaria para &T (ou &?*X).
-type OptArg struct{ Inner Type } // *Borrow ou *OutHandle
+// OptArg is ?&T (or ?&?*X), a C function parameter that may be NULL:
+// the caller passes nil or the same as it would pass for &T (or &?*X).
+type OptArg struct{ Inner Type } // *Borrow or *OutHandle
 
 func (o *OptArg) String() string { return "?" + o.Inner.String() }
 
@@ -54,8 +54,8 @@ func (c *checker) optArgType(inner Type) *OptArg {
 	return o
 }
 
-// OutHandle é o tipo &?*X de um parâmetro de saída de uma função de C: ela
-// escreve um handle novo (ou NULL) na variável emprestada.
+// OutHandle is the &?*X type of a C function's out parameter: it
+// writes a new handle (or NULL) into the borrowed variable.
 type OutHandle struct{ Ptr *Pointer }
 
 func (o *OutHandle) String() string { return "&" + o.Ptr.String() }
@@ -65,14 +65,14 @@ func isOutHandle(t Type) bool {
 	return ok
 }
 
-// outHandleType resolve &?*X na assinatura de uma função de C.
+// outHandleType resolves &?*X in a C function's signature.
 func (c *checker) outHandleType(t *ast.TypeExpr) Type {
 	elem := c.resolveType(t.Elem.Elem, ctxElem)
 	if elem == Invalid {
 		return Invalid
 	}
 	if !isExternStruct(elem) {
-		c.errorf(t.P, "&?*T só serve para handles de C (?*X, com X um extern \"C\" type): a função de C escreve o handle na variável")
+		c.errorf(t.P, "&?*T only serves C handles (?*X, with X an extern \"C\" type): the C function writes the handle into the variable")
 		return Invalid
 	}
 	p := c.pointerTo(elem, true)
@@ -84,36 +84,36 @@ func (c *checker) outHandleType(t *ast.TypeExpr) Type {
 	return oh
 }
 
-// outArg checa o argumento de um parâmetro &?*X: &v, com v uma variável ou
-// campo do tipo ?*X.
+// outArg checks the argument of a &?*X parameter: &v, with v a variable or
+// field of type ?*X.
 func (c *checker) outArg(a ast.Expr, oh *OutHandle, context string) {
 	u, ok := a.(*ast.UnaryExpr)
 	if !ok || u.Op != token.AMP {
 		c.value(a)
-		c.errorf(a.Pos(), "%s: esperado %s; passe a variável que recebe o handle com &: f(&h)", context, oh)
+		c.errorf(a.Pos(), "%s: expected %s; pass the variable that receives the handle with &: f(&h)", context, oh)
 		return
 	}
 	switch u.X.(type) {
 	case *ast.Ident, *ast.SelectorExpr:
 	default:
 		c.peekType(a)
-		c.errorf(a.Pos(), "%s: o handle precisa ir para uma variável ou campo ?*X: f(&h)", context)
+		c.errorf(a.Pos(), "%s: the handle must go into a ?*X variable or field: f(&h)", context)
 		return
 	}
 	t := c.value(u.X)
 	if t != Invalid && t != oh.Ptr {
-		c.errorf(a.Pos(), "%s: esperado %s, encontrado &%s (declare var h %s = nil)", context, oh, t, oh.Ptr)
+		c.errorf(a.Pos(), "%s: expected %s, found &%s (declare var h %s = nil)", context, oh, t, oh.Ptr)
 	}
 	c.info.Types[a] = oh
 }
 
-// cScalar diz se t passa direto para o C.
+// cScalar says whether t goes straight to C.
 func cScalar(t Type) bool {
 	return isNumeric(t) || t == Bool
 }
 
-// cStructOK diz se uma struct do MLC pode ser emprestada ao C: só campos
-// escalares (o C vê a mesma disposição na memória).
+// cStructOK says whether an MLC struct can be lent to C: only scalar
+// fields (C sees the same layout in memory).
 func cStructOK(s *Struct) bool {
 	if s.Resource || s.Origin != nil {
 		return false
@@ -131,8 +131,8 @@ func isExternStruct(t Type) bool {
 	return ok && s.Extern
 }
 
-// cParamOK explica por que t não pode ser parâmetro de uma função de C, ou
-// devolve "".
+// cParamOK explains why t can't be a parameter of a C function, or
+// returns "".
 func cParamOK(t Type) string {
 	switch tt := t.(type) {
 	case *OutHandle:
@@ -145,79 +145,79 @@ func cParamOK(t Type) string {
 			if cScalar(e.Elem) {
 				return ""
 			}
-			return "um slice emprestado ao C precisa ter elementos numéricos ou bool"
+			return "a slice lent to C must have numeric or bool elements"
 		case *Struct:
 			if e.Extern || cStructOK(e) {
 				return ""
 			}
-			return "uma struct emprestada ao C só pode ter campos numéricos ou bool"
+			return "a struct lent to C can only have numeric or bool fields"
 		}
 		if cScalar(tt.Elem) {
 			return ""
 		}
-		return "esse empréstimo não tem representação em C"
+		return "that borrow has no representation in C"
 	case *Pointer:
 		if isExternStruct(tt.Elem) {
-			return "" // a função de C recebe a posse do handle
+			return "" // the C function takes ownership of the handle
 		}
-		return "memória do MLC não pode ser entregue ao C (ele não saberia liberá-la); empreste com &"
+		return "MLC memory can't be handed to C (it wouldn't know how to free it); lend it with &"
 	case *Slice:
-		return "um slice dono não pode ser entregue ao C; empreste com &[]T"
+		return "an owning slice can't be handed to C; lend it with &[]T"
 	}
 	if cScalar(t) || t == String {
 		return ""
 	}
-	return "esse tipo não tem representação em C"
+	return "that type has no representation in C"
 }
 
-// cResultOK explica por que t não pode ser retorno de uma função de C, ou
-// devolve "".
+// cResultOK explains why t can't be the result of a C function, or
+// returns "".
 func cResultOK(t Type) string {
 	if t == Void || cScalar(t) {
 		return ""
 	}
 	if p, ok := t.(*Pointer); ok && isExternStruct(p.Elem) {
 		if !p.Nullable {
-			return "uma função de C pode devolver NULL: o retorno precisa ser ?" + t.String()
+			return "a C function may return NULL: the return type must be ?" + t.String()
 		}
 		return ""
 	}
-	return "uma função de C só devolve números, bool ou um handle (?*X, com X um extern \"C\" type)"
+	return "a C function only returns numbers, bool or a handle (?*X, with X an extern \"C\" type)"
 }
 
-// collectExternC registra uma função de C declarada com extern "C" fn.
+// collectExternC registers a C function declared with extern "C" fn.
 func (c *checker) collectExternC(fn *Func, d *ast.FuncDecl) {
 	if len(d.TypeParams) > 0 || d.Recv != nil {
-		c.errorf(d.P, "uma função de C não pode ser genérica nem método")
+		c.errorf(d.P, "a C function can't be generic or a method")
 		return
 	}
 	for i, p := range fn.Params {
 		if p.Type == Invalid {
-			continue // o tipo já deu erro
+			continue // the type already gave an error
 		}
 		if why := cParamOK(p.Type); why != "" {
-			c.errorf(d.Params[i].P, "parâmetro %s de %s (%s): %s", p.Name, d.Name, p.Type, why)
+			c.errorf(d.Params[i].P, "parameter %s of %s (%s): %s", p.Name, d.Name, p.Type, why)
 		}
 	}
 	if why := cResultOK(fn.Result); why != "" && fn.Result != Invalid {
-		c.errorf(d.P, "retorno de %s (%s): %s", d.Name, fn.Result, why)
+		c.errorf(d.P, "return of %s (%s): %s", d.Name, fn.Result, why)
 	}
 	fn.CSym = d.Name
 	fn.CName = "mlc_c_" + d.Name
 	c.mod.funcs[d.Name] = fn
 	for _, prev := range c.info.CExterns {
 		if prev.CSym == d.Name {
-			return // a mesma função de C declarada em dois arquivos
+			return // the same C function declared in two files
 		}
 	}
 	c.info.CExterns = append(c.info.CExterns, fn)
 }
 
-// collectLinks registra as bibliotecas de C pedidas com link "nome".
+// collectLinks registers the C libraries asked for with link "name".
 func (c *checker) collectLinks(f *ast.File) {
 	for _, l := range f.Links {
 		if l.Lib == "" || strings.ContainsAny(l.Lib, "/\\ ") || strings.HasPrefix(l.Lib, "-") {
-			c.errorf(l.P, "link %q: escreva só o nome da biblioteca, como link \"sqlite3\" (para -lsqlite3)", l.Lib)
+			c.errorf(l.P, "link %q: write only the library's name, like link \"sqlite3\" (for -lsqlite3)", l.Lib)
 			continue
 		}
 		dup := false

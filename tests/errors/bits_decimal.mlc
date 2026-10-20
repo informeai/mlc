@@ -1,4 +1,4 @@
-// erro: operador & só se aplica a inteiros
+// error: operator & only applies to integers, not to constante decimal
 fn main() {
     x := 1.5 & 2
 }

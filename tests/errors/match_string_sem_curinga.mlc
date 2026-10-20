@@ -1,4 +1,4 @@
-// erro: match sobre string precisa de um braço _
+// error: a match on string needs a _ arm
 fn main() {
     match "a" {
         "a" => {}

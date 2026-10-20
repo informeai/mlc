@@ -31,7 +31,7 @@ fn test_grows_and_keeps_spans() {
         a.copy_str("0123456789")
     }
     testing.check(a.capacity() >= 1003, "cresceu")
-    testing.check(a.eq(first, "abc"), "o pedaço de antes do crescimento continua valendo")
+    testing.check(a.eq(first, "abc"), "the piece from before the growth is still valid")
     a.free()
 }
 

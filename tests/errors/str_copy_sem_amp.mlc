@@ -1,4 +1,4 @@
-// erro: argumento 1 de str.copy: esperado &[]byte; para emprestar, escreva &buf
+// error: argument 1 of str.copy: expected &[]byte; to borrow, write &buf
 import "std/str"
 fn main() {
     buf := alloc([]byte, 4)

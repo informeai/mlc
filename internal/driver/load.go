@@ -16,28 +16,28 @@ import (
 	"mlc/std"
 )
 
-// Loader lê um arquivo do programa pelo nome (o caminho do arquivo principal
-// ou o de um import, relativo à pasta do principal).
+// Loader reads a program file by name (the main file's path
+// or an import's, relative to the main file's folder).
 type Loader func(name string) ([]byte, error)
 
-// loader carrega o arquivo principal e, recursivamente, os arquivos que ele
-// importa. Os caminhos de import são relativos à pasta do arquivo principal:
-// import "util/texto" carrega util/texto.mlc. Cada arquivo é carregado uma
-// vez, e a lista final tem cada um depois dos que ele importa.
+// loader loads the main file and, recursively, the files it
+// imports. Import paths are relative to the main file's folder:
+// import "util/text" loads util/text.mlc. Each file is loaded once,
+// and the final list has each one after the ones it imports.
 type loader struct {
 	root  string
 	read  Loader
 	srcs  []checker.Source
-	state map[string]int // 1: carregando; 2: pronto
-	stack []string       // imports sendo carregados, para descrever ciclos
+	state map[string]int // 1: loading; 2: done
+	stack []string       // imports being loaded, to describe cycles
 	errs  []token.Error
-	dirs  []string // onde procurar os imports, em ordem (SearchDirs)
+	dirs  []string // where to look for imports, in order (SearchDirs)
 }
 
-// SearchDirs devolve as pastas onde um import "x/y" é procurado, em ordem:
-// a do arquivo principal, a pasta lib/ ao lado dele (bibliotecas copiadas
-// para o projeto), as pastas de -I e as de MLC_PATH (separadas por : ).
-// Vale a primeira que tiver o arquivo.
+// SearchDirs returns the folders where an import "x/y" is looked up, in order:
+// the main file's, the lib/ folder next to it (libraries copied
+// into the project), the -I folders and those of MLC_PATH (separated by : ).
+// The first one that has the file wins.
 func SearchDirs(root string, importDirs []string) []string {
 	var out []string
 	seen := map[string]bool{}
@@ -102,7 +102,7 @@ func (l *loader) visit(from string, imp *ast.Import) {
 				break
 			}
 		}
-		l.errorf(from, imp.P, "importação circular: %s", cycle)
+		l.errorf(from, imp.P, "circular import: %s", cycle)
 		return
 	}
 	isStd := strings.HasPrefix(imp.Path, "std/")
@@ -110,11 +110,11 @@ func (l *loader) visit(from string, imp *ast.Import) {
 	var src []byte
 	var err error
 	if isStd {
-		// biblioteca padrão: embutida no compilador
+		// standard library: built into the compiler
 		name = imp.Path + ".mlc"
 		src, err = std.FS.ReadFile(strings.TrimPrefix(name, "std/"))
 	} else {
-		// a primeira pasta de busca que tiver o arquivo
+		// the first search folder that has the file
 		err = fs.ErrNotExist
 		for _, d := range l.dirs {
 			name = filepath.Join(d, filepath.FromSlash(imp.Path)+".mlc")
@@ -125,20 +125,20 @@ func (l *loader) visit(from string, imp *ast.Import) {
 	}
 	if err != nil {
 		if isStd {
-			l.errorf(from, imp.P, "a biblioteca padrão não tem o módulo %q", imp.Path)
+			l.errorf(from, imp.P, "the standard library has no module %q", imp.Path)
 		} else if errors.Is(err, fs.ErrNotExist) {
 			hint := ""
 			if _, err := std.FS.ReadFile(imp.Path + ".mlc"); err == nil {
-				hint = fmt.Sprintf(" (para o da biblioteca padrão: import \"std/%s\")", imp.Path)
+				hint = fmt.Sprintf(" (for the standard library's: import \"std/%s\")", imp.Path)
 			}
 			var where []string
 			for _, d := range l.dirs {
 				where = append(where, strconv.Quote(d))
 			}
-			l.errorf(from, imp.P, "módulo desconhecido %q: arquivo %s.mlc não encontrado (procurado em %s; outras pastas: -I ou MLC_PATH)%s",
+			l.errorf(from, imp.P, "unknown module %q: file %s.mlc not found (searched in %s; other folders: -I or MLC_PATH)%s",
 				imp.Path, imp.Path, strings.Join(where, ", "), hint)
 		} else {
-			l.errorf(from, imp.P, "não foi possível ler %s: %v", name, err)
+			l.errorf(from, imp.P, "couldn't read %s: %v", name, err)
 		}
 		return
 	}
@@ -156,26 +156,26 @@ func (l *loader) visit(from string, imp *ast.Import) {
 	l.srcs = append(l.srcs, checker.Source{Path: imp.Path, File: name, AST: f, Std: isStd})
 }
 
-// badPath explica o que há de errado num caminho de import, ou devolve "".
+// badPath explains what's wrong with an import path, or returns "".
 func badPath(p string) string {
 	switch {
 	case p == "":
-		return "caminho vazio"
+		return "empty path"
 	case strings.HasSuffix(p, ".mlc"):
-		return fmt.Sprintf("escreva sem a extensão: import %q", strings.TrimSuffix(p, ".mlc"))
+		return fmt.Sprintf("write it without the extension: import %q", strings.TrimSuffix(p, ".mlc"))
 	case strings.HasPrefix(p, "/"):
-		return "o caminho é relativo à pasta do arquivo principal, sem / no começo"
+		return "the path is relative to the main file's folder, without / at the start"
 	case strings.Contains(p, "\\"):
-		return "use / para separar pastas"
+		return "use / to separate folders"
 	case strings.HasSuffix(p, "_test"):
-		return "um arquivo _test.mlc é um programa de teste (mlc test) e não pode ser importado"
+		return "a _test.mlc file is a test program (mlc test) and can't be imported"
 	}
 	for _, part := range strings.Split(p, "/") {
 		if part == ".." || part == "." {
-			return "o caminho não pode ter . nem .. (é relativo à pasta do arquivo principal)"
+			return "the path can't have . or .. (it's relative to the main file's folder)"
 		}
 		if !isIdent(part) {
-			return fmt.Sprintf("%q não é um nome válido (letras, dígitos e _, começando por letra)", part)
+			return fmt.Sprintf("%q isn't a valid name (letters, digits and _, starting with a letter)", part)
 		}
 	}
 	return ""

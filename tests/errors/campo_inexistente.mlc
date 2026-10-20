@@ -1,4 +1,4 @@
-// erro: Ponto não tem campo z
+// error: Ponto has no field z
 import "std/io"
 struct Ponto { x int; y int }
 fn main() {

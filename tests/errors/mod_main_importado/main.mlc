@@ -1,4 +1,4 @@
-// erro: fn main só pode existir no arquivo principal; outro.mlc é importado
+// error: fn main can only exist in the main file; outro.mlc is imported
 import "outro"
 fn main() {
 }

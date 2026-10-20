@@ -1,4 +1,4 @@
-// erro: memória do MLC não pode ser entregue ao C
+// error: parameter p of guarda (*P): MLC memory can't be handed to C (it wouldn't know how to free it); lend it with &
 struct P {
     x int
 }

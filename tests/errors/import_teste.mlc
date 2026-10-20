@@ -1,4 +1,4 @@
-// erro: um arquivo _test.mlc é um programa de teste
+// error: import "std/vec_test": a _test.mlc file is a test program (mlc test) and can't be imported
 import "std/vec_test"
 
 fn main() {

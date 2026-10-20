@@ -1,49 +1,49 @@
 package fuzz
 
-// Fase 5: testes metamórficos. Cada transformação aqui não muda a
-// segurança de um programa; se o verificador der um veredito diferente
-// para a versão transformada, ele está olhando a forma do código, não o
-// significado.
+// Phase 5: metamorphic tests. Each transformation here doesn't change a
+// program's safety; if the checker gives a different verdict
+// for the transformed version, it's looking at the shape of the code, not at its
+// meaning.
 
-// Variant é um programa transformado.
+// Variant is a transformed program.
 type Variant struct {
 	Kind string
 	Prog []*Stmt
 }
 
-// Variants devolve as versões transformadas de um programa enumerado:
+// Variants returns the transformed versions of an enumerated program:
 //
-//   - "bloco": o corpo inteiro dentro de um bloco { };
-//   - "if invertido": if c { A } else { B } vira if !c { B } else { A };
-//   - "else vazio": if c { A } ganha um else { } vazio;
-//   - "troca": dois comandos vizinhos que não mexem nas mesmas variáveis
-//     trocam de lugar;
-//   - "neutro": um comando que não mexe em nada (acc += 1) entra entre dois.
+//   - "block": the whole body inside a block { };
+//   - "inverted if": if c { A } else { B } becomes if !c { B } else { A };
+//   - "empty else": if c { A } gets an empty else { };
+//   - "swap": two neighboring statements that don't touch the same variables
+//     swap places;
+//   - "neutral": a statement that touches nothing (acc += 1) goes between two.
 func Variants(ss []*Stmt) []Variant {
 	var out []Variant
-	out = append(out, Variant{"bloco", []*Stmt{{Block: true, Body: ss}}})
+	out = append(out, Variant{"block", []*Stmt{{Block: true, Body: ss}}})
 	eachList(ss, func(ns []*Stmt, rebuild func([]*Stmt) []*Stmt) {
 		for i, n := range ns {
 			if n.If && n.HasElse {
 				inv := *n
 				inv.Negated = !n.Negated
 				inv.Body, inv.Else = n.Else, n.Body
-				out = append(out, Variant{"if invertido", rebuild(replaced(ns, i, &inv))})
+				out = append(out, Variant{"inverted if", rebuild(replaced(ns, i, &inv))})
 			}
 			if n.If && !n.HasElse {
 				e := *n
 				e.HasElse = true
-				out = append(out, Variant{"else vazio", rebuild(replaced(ns, i, &e))})
+				out = append(out, Variant{"empty else", rebuild(replaced(ns, i, &e))})
 			}
 			if i+1 < len(ns) && independent(ns[i], ns[i+1]) {
 				sw := append([]*Stmt{}, ns...)
 				sw[i], sw[i+1] = sw[i+1], sw[i]
-				out = append(out, Variant{"troca", rebuild(sw)})
+				out = append(out, Variant{"swap", rebuild(sw)})
 			}
 		}
 		for i := 0; i <= len(ns); i++ {
 			ins := append(append(append([]*Stmt{}, ns[:i]...), &Stmt{Atom: "acc += 1"}), ns[i:]...)
-			out = append(out, Variant{"neutro", rebuild(ins)})
+			out = append(out, Variant{"neutral", rebuild(ins)})
 		}
 	})
 	return out
@@ -55,9 +55,9 @@ func replaced(ns []*Stmt, i int, n *Stmt) []*Stmt {
 	return c
 }
 
-// eachList chama f com cada lista de comandos do programa (o corpo e os de
-// dentro dos blocos), junto com a função que remonta o programa inteiro
-// com a lista trocada.
+// eachList calls f with each statement list of the program (the body and the ones
+// inside blocks), along with the function that rebuilds the whole program
+// with the list replaced.
 func eachList(ss []*Stmt, f func(ns []*Stmt, rebuild func([]*Stmt) []*Stmt)) {
 	var walk func(ns []*Stmt, rebuild func([]*Stmt) []*Stmt)
 	walk = func(ns []*Stmt, rebuild func([]*Stmt) []*Stmt) {
@@ -81,8 +81,8 @@ func eachList(ss []*Stmt, f func(ns []*Stmt, rebuild func([]*Stmt) []*Stmt)) {
 	walk(ss, func(ns []*Stmt) []*Stmt { return ns })
 }
 
-// touches diz em que um comando mexe (r conta como as duas variáveis que
-// pode emprestar; break e os blocos, como tudo).
+// touches says what a statement touches (r counts as the two variables it
+// can borrow; break and blocks, as everything).
 func touches(s *Stmt) map[string]bool {
 	all := map[string]bool{"x": true, "y": true, "q": true, "r": true}
 	switch s.Atom {
@@ -119,7 +119,7 @@ func independent(a, b *Stmt) bool {
 	return true
 }
 
-// hasRef diz se o programa usa empréstimos (r).
+// hasRef says whether the program uses borrows (r).
 func hasRef(ss []*Stmt) bool {
 	for _, s := range ss {
 		if s.Atom == "acc += r.v" || len(s.Atom) > 4 && s.Atom[:4] == "r :=" || hasRef(s.Body) || hasRef(s.Else) {

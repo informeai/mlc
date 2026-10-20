@@ -1,4 +1,4 @@
-// erro: campo y: esperado int, encontrado string
+// error: field y: expected int, found string
 import "std/io"
 struct Ponto { x int; y int }
 fn main() {

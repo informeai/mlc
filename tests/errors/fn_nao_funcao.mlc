@@ -1,4 +1,4 @@
-// erro: valor do tipo int não é uma função
+// error: a value of type int isn't a function
 fn main() {
     x := 1
     x(2)

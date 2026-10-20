@@ -9,33 +9,33 @@ import (
 	"mlc/internal/token"
 )
 
-// Pilha
+// Stack
 //
-// Arrays e structs com arrays vivem na pilha, e a pilha de uma thread tem o
-// tamanho pedido no thread.spawn (64 KB com thread.STACK_64KB). Um buffer
-// maior que a pilha não pode ficar sem aviso: no C, o quadro da função pula
-// a página de guarda e as escritas caem na memória de outra coisa.
+// Arrays and structs with arrays live on the stack, and a thread's stack has the
+// size asked for in thread.spawn (64 KB with thread.STACK_64KB). A buffer
+// larger than the stack can't go unnoticed: in C, the function's frame skips
+// the guard page and the writes land in something else's memory.
 //
-// Por isso o checker estima a pilha de cada função: o quadro (as variáveis
-// locais, os parâmetros e os valores temporários grandes) mais a maior
-// pilha entre as funções que ela chama direto. Na compilação, recusa um
-// thread.spawn (ou um main) cuja função não cabe na pilha pedida. Recursão e
-// chamadas por valor fn não entram na conta (não dá para saber a
-// profundidade): para elas fica a conferência do gerador, que antes de
-// entrar numa função de quadro grande confere se ele cabe no que resta da
-// pilha da thread e, se não couber, para com panic em vez de corromper.
+// So the checker estimates each function's stack: the frame (the local
+// variables, the parameters and the large temporary values) plus the largest
+// stack among the functions it calls directly. At compile time, it refuses a
+// thread.spawn (or a main) whose function doesn't fit in the requested stack. Recursion and
+// calls through fn values don't enter the count (there's no way to know the
+// depth): for them there's the generator's check, which before
+// entering a function with a large frame checks whether it fits in what's left of the
+// thread's stack and, if it doesn't, stops with a panic instead of corrupting.
 
-// BigFrame é o tamanho de quadro a partir do qual o gerador confere a pilha
-// antes de entrar na função. Abaixo disso, o quadro é menor que a página de
-// guarda, e um estouro sempre cai nela.
+// BigFrame is the frame size from which the generator checks the stack
+// before entering the function. Below it, the frame is smaller than the guard
+// page, and an overflow always lands on it.
 const BigFrame = 2048
 
-// MainStack é a pilha da thread principal (o padrão do macOS e do Linux).
+// MainStack is the main thread's stack (the macOS and Linux default).
 const MainStack = 8 << 20
 
-// StackReserve é a parte da pilha que a conferência deixa livre: o que o C
-// usa além das variáveis do MLC, e o panic que avisa do estouro. O runtime
-// usa a mesma conta (mlc_stack_init).
+// StackReserve is the part of the stack the check leaves free: what C
+// uses besides MLC's variables, and the panic that reports the overflow. The runtime
+// uses the same calculation (mlc_stack_init).
 func StackReserve(stack int64) int64 {
 	r := stack / 8
 	if r < 4096 {
@@ -47,28 +47,28 @@ func StackReserve(stack int64) int64 {
 	return r
 }
 
-// stackUse é a pilha estimada de uma função e o que mais pesa nela.
+// stackUse is a function's estimated stack and what weighs most in it.
 type stackUse struct {
 	bytes   int64
 	biggest *stackItem
 }
 
-// stackItem é a maior variável (ou valor temporário) no caminho mais fundo.
+// stackItem is the largest variable (or temporary value) on the deepest path.
 type stackItem struct {
-	name string // variável, ou "" para um valor temporário
+	name string // a variable, or "" for a temporary value
 	typ  Type
 	fn   *Func
 	size int64
 }
 
-// spawnSite é um thread.spawn, guardado para conferir a pilha no fim.
+// spawnSite is a thread.spawn, kept to check the stack at the end.
 type spawnSite struct {
 	call *ast.CallExpr
 	mod  *module
 }
 
-// checkStacks calcula o quadro de cada função (Func.Frame, usado pelo
-// gerador) e confere os thread.spawn e o main.
+// checkStacks computes each function's frame (Func.Frame, used by the
+// generator) and checks the thread.spawn calls and main.
 func (c *checker) checkStacks() {
 	for _, fn := range c.info.Funcs {
 		if fn.Decl != nil && fn.Decl.Body != nil {
@@ -80,10 +80,10 @@ func (c *checker) checkStacks() {
 		fn := c.info.FuncRefs[s.call.Args[0]]
 		v, ok := c.info.Values[s.call.Args[2]].(*big.Int)
 		if fn == nil || fn.Decl == nil || !ok || !v.IsInt64() {
-			continue // valor fn ou tamanho calculado: fica a conferência do gerador
+			continue // fn value or computed size: the generator's check remains
 		}
 		if v.Int64() < 16384 {
-			continue // abaixo do mínimo, o thread.spawn dá panic
+			continue // below the minimum, thread.spawn panics
 		}
 		c.mod = s.mod
 		c.fitStack(fn, v.Int64(), s.call.Args[2].Pos(), uses, true)
@@ -98,32 +98,32 @@ func (c *checker) checkStacks() {
 	}
 }
 
-// fitStack recusa fn se a pilha estimada não couber em stack.
+// fitStack refuses fn if the estimated stack doesn't fit in stack.
 func (c *checker) fitStack(fn *Func, stack int64, pos token.Pos, uses map[*Func]*stackUse, thread bool) {
 	u := c.stackOf(fn, uses, map[*Func]bool{})
 	room := stack - StackReserve(stack)
 	if u.bytes <= room {
 		return
 	}
-	what := "a variável " + u.biggest.name
+	what := "the variable " + u.biggest.name
 	if u.biggest.name == "" {
-		what = "um valor temporário"
+		what = "a temporary value"
 	}
-	where := fmt.Sprintf("%s %s (%s) em %s", what, u.biggest.typ, kb(u.biggest.size), u.biggest.fn.Name)
-	fix := "ponha o buffer no heap"
+	where := fmt.Sprintf("%s %s (%s) in %s", what, u.biggest.typ, kb(u.biggest.size), u.biggest.fn.Name)
+	fix := "put the buffer on the heap"
 	if a, ok := u.biggest.typ.(*Array); ok {
-		fix = fmt.Sprintf("ponha o buffer no heap com alloc([]%s, %d)", a.Elem, a.Len)
+		fix = fmt.Sprintf("put the buffer on the heap with alloc([]%s, %d)", a.Elem, a.Len)
 	}
 	if !thread {
-		c.errorf(pos, "%s precisa de cerca de %s de pilha, e a thread principal tem %s (o maior peso é %s): %s",
+		c.errorf(pos, "%s needs about %s of stack, and the main thread has %s (the heaviest is %s): %s",
 			fn.Name, kb(u.bytes), kb(stack), where, fix)
 		return
 	}
-	c.errorf(pos, "a thread de %s precisa de cerca de %s de pilha, e thread.spawn pede %s (o maior peso é %s): %s, ou peça uma pilha maior%s",
+	c.errorf(pos, "the thread of %s needs about %s of stack, and thread.spawn asks for %s (the heaviest is %s): %s, or ask for a larger stack%s",
 		fn.Name, kb(u.bytes), kb(stack), where, fix, suggestStack(u.bytes))
 }
 
-// suggestStack sugere a menor constante de std/thread em que n cabe.
+// suggestStack suggests the smallest std/thread constant n fits in.
 func suggestStack(n int64) string {
 	for _, s := range []struct {
 		name string
@@ -136,9 +136,9 @@ func suggestStack(n int64) string {
 	return ""
 }
 
-// stackOf é o quadro de fn mais a maior pilha entre as funções que ela
-// chama direto. Uma chamada recursiva não soma de novo (open marca as
-// funções no caminho atual).
+// stackOf is fn's frame plus the largest stack among the functions it
+// calls directly. A recursive call doesn't add again (open marks the
+// functions on the current path).
 func (c *checker) stackOf(fn *Func, uses map[*Func]*stackUse, open map[*Func]bool) *stackUse {
 	if u, ok := uses[fn]; ok {
 		return u
@@ -168,7 +168,7 @@ func (c *checker) stackOf(fn *Func, uses map[*Func]*stackUse, open map[*Func]boo
 	return u
 }
 
-// callees são as funções do MLC que fn chama direto (sem valor fn).
+// callees are the MLC functions fn calls directly (without fn values).
 func (c *checker) callees(fn *Func) []*Func {
 	if fn.Decl == nil || fn.Decl.Body == nil {
 		return nil
@@ -188,10 +188,10 @@ func (c *checker) callees(fn *Func) []*Func {
 	return out
 }
 
-// frame estima o quadro de fn: parâmetros e variáveis locais (todas, como
-// se vivessem ao mesmo tempo) e os valores grandes que o C guarda em
-// temporárias (resultados de chamadas e literais que não vão direto para
-// uma variável).
+// frame estimates fn's frame: parameters and local variables (all of them, as
+// if they lived at the same time) and the large values C keeps in
+// temporaries (call results and literals that don't go straight into
+// a variable).
 func (c *checker) frame(fn *Func) (int64, *stackItem) {
 	var total int64
 	var top *stackItem
@@ -208,7 +208,7 @@ func (c *checker) frame(fn *Func) (int64, *stackItem) {
 	for _, p := range fn.Params {
 		add(p.Name, p.Type)
 	}
-	direct := map[ast.Expr]bool{} // valor de uma declaração: é a própria variável
+	direct := map[ast.Expr]bool{} // a declaration's value: it's the variable itself
 	ast.Inspect(fn.Decl.Body, func(n ast.Node) bool {
 		switch n := n.(type) {
 		case *ast.VarDecl:
@@ -224,7 +224,7 @@ func (c *checker) frame(fn *Func) (int64, *stackItem) {
 			}
 		case *ast.Pattern:
 			for _, l := range c.info.PatternBinds[n] {
-				if l != nil { // _ não declara nada
+				if l != nil { // _ declares nothing
 					add(l.Name, l.Type)
 				}
 			}
@@ -239,7 +239,7 @@ func (c *checker) frame(fn *Func) (int64, *stackItem) {
 	return total, top
 }
 
-// kb escreve um tamanho em bytes de forma legível.
+// kb writes a size in bytes in a readable way.
 func kb(n int64) string {
 	switch {
 	case n >= 1<<20 && n%(1<<20) == 0:

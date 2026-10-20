@@ -1,9 +1,9 @@
--- Liga o mlc lsp aos arquivos .mlc: erros ao digitar (vim.diagnostic), cores
--- semânticas e formatação (vim.lsp.buf.format). A configuração está em
+-- Hooks mlc lsp up to .mlc files: errors as you type (vim.diagnostic), semantic
+-- colors and formatting (vim.lsp.buf.format). The configuration is in
 -- lsp/mlc.lua.
 
--- também em ftdetect/; repetido aqui para quando o plugin entra no
--- runtimepath depois de a detecção de tipos já ter sido ligada
+-- also in ftdetect/; repeated here for when the plugin enters the
+-- runtimepath after file type detection was already turned on
 vim.filetype.add({ extension = { mlc = "mlc" } })
 
 if vim.fn.has("nvim-0.11") == 1 then

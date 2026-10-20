@@ -1,4 +1,4 @@
-// erro: return: esperado []byte, encontrado &[]byte
+// error: return: expected []byte, found &[]byte
 enum E {
     Msg(m []byte)
     Nada

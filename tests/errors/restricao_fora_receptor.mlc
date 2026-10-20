@@ -1,4 +1,4 @@
-// erro: uma restrição (int any) só pode aparecer no receptor de um método
+// error: a constraint (int any) can only appear in a method's receiver
 struct B[T any] {
     x T
 }

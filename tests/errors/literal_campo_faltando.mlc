@@ -1,4 +1,4 @@
-// erro: campo y não inicializado (liste todos os campos, ou use Ponto{} para o valor zero)
+// error: field y not initialized (list every field, or use Ponto{} for the zero value)
 import "std/io"
 struct Ponto { x int; y int }
 fn main() {

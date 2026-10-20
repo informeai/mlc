@@ -1,4 +1,4 @@
-// erro: s está emprestada a t (linha 5) até a linha 7: use t, ou termine de usar t antes
+// error: s is borrowed by t (line 5) until line 7: use t, or finish using t first
 import "std/io"
 fn main() {
     s := alloc([]int, 3)

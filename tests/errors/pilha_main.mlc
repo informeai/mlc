@@ -1,4 +1,4 @@
-// erro: main precisa de cerca de 8,6 MB de pilha, e a thread principal tem 8 MB
+// error: main needs about 8,6 MB of stack, and the main thread has 8 MB (the heaviest is the variable x [1000000]byte (977 KB) in a): put the buffer on the heap with alloc([]byte, 1000000)
 fn a(n int) int {
     var x [1000000]byte
     x[n] = 1

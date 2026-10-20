@@ -1,1 +1,1 @@
-panic: estouro.mlc:4: estouro de inteiro na multiplicação
+panic: estouro.mlc:4: overflow of int in multiplication

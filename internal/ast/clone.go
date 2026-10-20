@@ -2,9 +2,9 @@ package ast
 
 import "reflect"
 
-// Clone devolve uma cópia profunda de uma árvore sintática. Cada instância de
-// uma função genérica é checada e gerada a partir da própria cópia, porque as
-// informações do checker são guardadas por nó.
+// Clone returns a deep copy of a syntax tree. Each instance of
+// a generic function is checked and generated from its own copy, because the
+// checker's information is stored per node.
 func Clone[T any](n T) T {
 	return cloneValue(reflect.ValueOf(n)).Interface().(T)
 }

@@ -1,4 +1,4 @@
-// erro: literal de No, que contém ponteiros donos, só pode aparecer dentro de alloc(...)
+// error: a literal of No, which contains owning pointers, can only appear inside alloc(...)
 struct No {
     valor int
     prox ?*No

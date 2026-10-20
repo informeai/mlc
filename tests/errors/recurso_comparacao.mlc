@@ -1,4 +1,4 @@
-// erro: structs que contêm ponteiros donos não podem ser comparadas com ==
+// error: structs that contain owning pointers can't be compared with ==
 import "std/io"
 struct No {
     valor int

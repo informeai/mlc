@@ -1,1 +1,1 @@
-panic: conversao_int32.mlc:3: valor 3000000000 não cabe em int32 (-2147483648 a 2147483647)
+panic: conversao_int32.mlc:3: value 3000000000 doesn't fit in int32 (-2147483648 to 2147483647)

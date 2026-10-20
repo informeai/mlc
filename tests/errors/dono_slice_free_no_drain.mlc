@@ -1,4 +1,4 @@
-// erro: s pode já ter sido liberada ou movida (linha 7), dependendo do caminho
+// error: s may have already been freed or moved (line 7), depending on the path
 struct Item { peso int }
 fn main() {
     s := alloc([]?*Item, 2)

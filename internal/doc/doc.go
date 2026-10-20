@@ -17,19 +17,19 @@ import (
 	"mlc/std"
 )
 
-// Module é um arquivo .mlc analisado (sem checagem de tipos), com o texto de
-// onde saem os comentários.
+// Module is a parsed .mlc file (without type checking), with the text the
+// comments come from.
 type Module struct {
-	Path string // como no import ("std/http", "util/texto") ou o caminho do arquivo
-	Name string // o qualificador usado no código: http, texto
+	Path string // as in the import ("std/http", "util/text") or the file's path
+	Name string // the qualifier used in the code: http, text
 	Text []byte
 	File *ast.File
-	// All: mostra também o que não é pub. Vale sozinho para um arquivo sem
-	// nenhuma declaração pub (um programa, não uma biblioteca).
+	// All: also shows what isn't pub. It holds on its own for a file without
+	// any pub declaration (a program, not a library).
 	All bool
 }
 
-// Parse analisa um módulo.
+// Parse parses a module.
 func Parse(path string, text []byte) (*Module, error) {
 	f, errs := parser.ParseFile(path, text)
 	if len(errs) > 0 {
@@ -71,23 +71,23 @@ func (m *Module) hasPub() bool {
 	return false
 }
 
-// ---------- onde achar ----------
+// ---------- where to find ----------
 
-// Query é o que o mlc doc recebeu: um módulo, um símbolo dele, ou um embutido.
+// Query is what mlc doc received: a module, one of its symbols, or a built-in.
 type Query struct {
 	Module  *Module
 	Symbol  string // "", "Message", "respond", "Message.read_body"
-	Builtin string // chave de Builtins, quando o pedido é um embutido
+	Builtin string // key of Builtins, when the request is a built-in
 }
 
-// Lookup resolve os argumentos do mlc doc: [módulo[.símbolo]] [símbolo].
-// O módulo é da biblioteca padrão (http ou std/http), um arquivo .mlc, ou
-// um import procurado em dirs (as pastas de busca dos imports). Um nome que
-// não é módulo pode ser um embutido (alloc, io.printf, thread.spawn). Com
-// all, mostra também o que não é pub.
+// Lookup resolves mlc doc's arguments: [module[.symbol]] [symbol].
+// The module is from the standard library (http or std/http), a .mlc file, or
+// an import looked up in dirs (the import search folders). A name that
+// isn't a module can be a built-in (alloc, io.printf, thread.spawn). With
+// all, it also shows what isn't pub.
 func Lookup(args []string, dirs []string, all bool) (*Query, error) {
 	if len(args) == 0 || len(args) > 2 {
-		return nil, errors.New("uso: mlc doc [módulo[.símbolo]] [símbolo]")
+		return nil, errors.New("usage: mlc doc [module[.symbol]] [symbol]")
 	}
 	arg := args[0]
 	mod, sym := arg, ""
@@ -99,7 +99,7 @@ func Lookup(args []string, dirs []string, all bool) (*Query, error) {
 	}
 	if len(args) == 2 {
 		if sym != "" {
-			return nil, errors.New("uso: mlc doc [módulo[.símbolo]] [símbolo]")
+			return nil, errors.New("usage: mlc doc [module[.symbol]] [symbol]")
 		}
 		sym = args[1]
 	}
@@ -113,13 +113,13 @@ func Lookup(args []string, dirs []string, all bool) (*Query, error) {
 	m.All = m.All || all
 	q := &Query{Module: m, Symbol: sym}
 	if sym != "" && !m.has(sym) {
-		// io.printf, thread.spawn, log.Logger.info: reescritos pelo compilador
+		// io.printf, thread.spawn, log.Logger.info: rewritten by the compiler
 		for _, k := range []string{m.Name + "." + sym, sym} {
 			if key := builtinKey(k); key != "" {
 				return &Query{Builtin: key}, nil
 			}
 		}
-		return nil, fmt.Errorf("%s não tem %q (veja mlc doc %s)", m.Path, sym, m.Path)
+		return nil, fmt.Errorf("%s has no %q (see mlc doc %s)", m.Path, sym, m.Path)
 	}
 	return q, nil
 }
@@ -136,7 +136,7 @@ func builtinKey(s string) string {
 	return ""
 }
 
-// findModule acha o módulo como o import acharia.
+// findModule finds the module as the import would.
 func findModule(mod string, dirs []string) (*Module, error) {
 	if strings.HasSuffix(mod, ".mlc") {
 		text, err := os.ReadFile(mod)
@@ -155,7 +155,7 @@ func findModule(mod string, dirs []string) (*Module, error) {
 			return m, err
 		}
 		if strings.HasPrefix(mod, "std/") {
-			return nil, fmt.Errorf("a biblioteca padrão não tem o módulo %q (veja mlc doc)", mod)
+			return nil, fmt.Errorf("the standard library has no module %q (see mlc doc)", mod)
 		}
 	}
 	for _, d := range dirs {
@@ -176,12 +176,12 @@ func findModule(mod string, dirs []string) (*Module, error) {
 	for _, d := range dirs {
 		where = append(where, strconv.Quote(d))
 	}
-	return nil, fmt.Errorf("módulo %q não encontrado: não é da biblioteca padrão nem está em %s (outras pastas: -I ou MLC_PATH)", mod, strings.Join(where, ", "))
+	return nil, fmt.Errorf("module %q not found: it isn't in the standard library nor in %s (other folders: -I or MLC_PATH)", mod, strings.Join(where, ", "))
 }
 
-// ---------- o que escrever ----------
+// ---------- what to write ----------
 
-// Write escreve a documentação pedida.
+// Write writes the requested documentation.
 func (q *Query) Write(w io.Writer) {
 	switch {
 	case q.Builtin != "":
@@ -193,11 +193,11 @@ func (q *Query) Write(w io.Writer) {
 	}
 }
 
-// WriteIndex lista os módulos da biblioteca padrão com a primeira frase da
-// descrição de cada um.
+// WriteIndex lists the standard library's modules with the first sentence of
+// each one's description.
 func WriteIndex(w io.Writer) {
 	entries, _ := fs.ReadDir(std.FS, ".")
-	fmt.Fprintln(w, "Biblioteca padrão (import \"std/<nome>\"):")
+	fmt.Fprintln(w, "Standard library (import \"std/<name>\"):")
 	fmt.Fprintln(w)
 	var names []string
 	for _, e := range entries {
@@ -213,24 +213,24 @@ func WriteIndex(w io.Writer) {
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Embutidos: alloc, free, realloc, len, take, replace, drain, drop, io.print,")
-	fmt.Fprintln(w, "io.printf, thread.spawn, os tipos (int, byte, string...) e as restrições de")
-	fmt.Fprintln(w, "genéricos (any, owned, ref...): mlc doc builtin lista todos.")
+	fmt.Fprintln(w, "io.printf, thread.spawn, the types (int, byte, string...) and the generic")
+	fmt.Fprintln(w, "constraints (any, owned, ref...): mlc doc builtin lists them all.")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "mlc doc http              o módulo: descrição, constantes, tipos e funções")
-	fmt.Fprintln(w, "mlc doc http.Message      um tipo, com os campos e os métodos")
-	fmt.Fprintln(w, "mlc doc http.respond      uma função (ou http.Message.read_body, um método)")
-	fmt.Fprintln(w, "mlc doc util/texto        uma biblioteca sua (procurada como o import)")
-	fmt.Fprintln(w, "mlc doc alloc             um embutido")
+	fmt.Fprintln(w, "mlc doc http              the module: description, constants, types, functions")
+	fmt.Fprintln(w, "mlc doc http.Message      a type, with its fields and methods")
+	fmt.Fprintln(w, "mlc doc http.respond      a function (or http.Message.read_body, a method)")
+	fmt.Fprintln(w, "mlc doc util/text         a library of yours (looked up like the import)")
+	fmt.Fprintln(w, "mlc doc alloc             a built-in")
 }
 
-// WriteBuiltins lista os embutidos.
+// WriteBuiltins lists the built-ins.
 func WriteBuiltins(w io.Writer) {
 	var keys []string
 	for k := range Builtins {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	fmt.Fprintln(w, "Embutidos (mlc doc <nome> para a descrição):")
+	fmt.Fprintln(w, "Built-ins (mlc doc <name> for the description):")
 	fmt.Fprintln(w)
 	for _, k := range keys {
 		fmt.Fprintf(w, "  %-18s %s\n", k, Builtins[k][0])
@@ -241,7 +241,7 @@ func writeBuiltin(w io.Writer, key string) {
 	d := Builtins[key]
 	fmt.Fprintln(w, d[0])
 	fmt.Fprintln(w)
-	writeText(w, []string{strings.ReplaceAll(d[1], "**", "")}) // negrito do markdown
+	writeText(w, []string{strings.ReplaceAll(d[1], "**", "")}) // markdown bold
 	fmt.Fprintln(w)
 }
 
@@ -262,7 +262,7 @@ func (m *Module) writeOverview(w io.Writer) {
 			consts = append(consts, m.rawLine(d.P.Line))
 		}
 	}
-	section(w, "Constantes", consts)
+	section(w, "Constants", consts)
 
 	var types []string
 	for _, d := range f.Interfaces {
@@ -280,7 +280,7 @@ func (m *Module) writeOverview(w io.Writer) {
 			types = appendType(types, m.typeEntry(d.P.Line, d.Name))
 		}
 	}
-	section(w, "Tipos", types)
+	section(w, "Types", types)
 
 	var funcs []string
 	for _, d := range f.Funcs {
@@ -288,17 +288,17 @@ func (m *Module) writeOverview(w io.Writer) {
 			funcs = append(funcs, display(Signature(m.Text, d.P)))
 		}
 	}
-	section(w, "Funções", funcs)
+	section(w, "Functions", funcs)
 
 	var impls []string
 	for _, d := range f.Impls {
 		impls = append(impls, Line(m.Text, d.P))
 	}
-	section(w, "Implementações", impls)
+	section(w, "Implementations", impls)
 }
 
-// appendType junta a entrada de um tipo à lista, com uma linha em branco
-// antes quando o tipo anterior ou este têm métodos (para separar os grupos).
+// appendType adds a type's entry to the list, with a blank line
+// before it when the previous type or this one has methods (to separate the groups).
 func appendType(types, entry []string) []string {
 	if len(types) > 0 && (len(entry) > 1 || strings.HasPrefix(types[len(types)-1], "    ")) {
 		types = append(types, "")
@@ -306,7 +306,7 @@ func appendType(types, entry []string) []string {
 	return append(types, entry...)
 }
 
-// typeEntry é a linha do tipo seguida dos métodos dele, recuados.
+// typeEntry is the type's line followed by its methods, indented.
 func (m *Module) typeEntry(line int, name string) []string {
 	head := display(strings.TrimSuffix(strings.TrimSpace(StripComment(m.rawLine(line))), "{"))
 	out := []string{strings.TrimSpace(head)}
@@ -330,8 +330,8 @@ func section(w io.Writer, title string, lines []string) {
 	}
 }
 
-// writeSymbol escreve um tipo (declaração, descrição, implementações e
-// métodos), uma função, um método ou uma constante.
+// writeSymbol writes a type (declaration, description, implementations and
+// methods), a function, a method or a constant.
 func (m *Module) writeSymbol(w io.Writer, sym string) {
 	f := m.File
 	typ, member, _ := strings.Cut(sym, ".")
@@ -396,7 +396,7 @@ func (m *Module) writeSymbol(w io.Writer, sym string) {
 	}
 }
 
-// has diz se o módulo declara sym (Tipo, função, constante ou Tipo.membro).
+// has says whether the module declares sym (Type, function, constant or Type.member).
 func (m *Module) has(sym string) bool {
 	var b strings.Builder
 	m.writeSymbol(&b, sym)
@@ -423,12 +423,12 @@ func (m *Module) writeType(w io.Writer, name string, line int) {
 			impls = append(impls, Line(m.Text, d.P))
 		}
 	}
-	section(w, "Implementações", impls)
+	section(w, "Implementations", impls)
 	ms := m.methods(name)
 	if len(ms) == 0 {
 		return
 	}
-	fmt.Fprintf(w, "\nMétodos\n")
+	fmt.Fprintf(w, "\nMethods\n")
 	for _, d := range ms {
 		fmt.Fprintf(w, "\n  %s\n", display(Signature(m.Text, d.P)))
 		if s := summary(commentAt(m.Text, d.P.Line)); s != "" {
@@ -437,7 +437,7 @@ func (m *Module) writeType(w io.Writer, name string, line int) {
 	}
 }
 
-// methods são os métodos visíveis do tipo name, na ordem do arquivo.
+// methods are the visible methods of the type name, in file order.
 func (m *Module) methods(name string) []*ast.FuncDecl {
 	var out []*ast.FuncDecl
 	for _, d := range m.File.Funcs {
@@ -478,9 +478,9 @@ func blockAt(text []byte, line int) string {
 	return Block(text, posAt(line))
 }
 
-// display tira o pub (tudo que o mlc doc mostra é visível para quem
-// importa) e o extern de uma extern fn (implementada no runtime: para quem
-// chama, é uma função como as outras).
+// display removes the pub (everything mlc doc shows is visible to whoever
+// imports) and the extern of an extern fn (implemented in the runtime: for the
+// caller, it's a function like the others).
 func display(s string) string {
 	lines := strings.Split(s, "\n")
 	for i, l := range lines {
@@ -494,7 +494,7 @@ func display(s string) string {
 	return strings.Join(lines, "\n")
 }
 
-// summary é a primeira frase de um comentário.
+// summary is the first sentence of a comment.
 func summary(lines []string) string {
 	var parts []string
 	for _, l := range lines {
@@ -513,8 +513,8 @@ func summary(lines []string) string {
 	return s
 }
 
-// short corta uma frase longa no primeiro ":" ou "(" antes de n caracteres,
-// ou na última palavra que cabe.
+// short cuts a long sentence at the first ":" or "(" before n characters,
+// or at the last word that fits.
 func short(s string, n int) string {
 	if len([]rune(s)) <= n {
 		return s
@@ -531,9 +531,9 @@ func short(s string, n int) string {
 	return string(r) + "…"
 }
 
-// writeText escreve um comentário recuado em 4 espaços (os exemplos de
-// código, já recuados no comentário, ficam com 8). Parágrafos longos de uma
-// linha só (os textos dos embutidos) são quebrados em 76 colunas.
+// writeText writes a comment indented by 4 spaces (the code examples,
+// already indented in the comment, end up with 8). Long one-line
+// paragraphs (the built-ins' texts) are wrapped at 76 columns.
 func writeText(w io.Writer, lines []string) {
 	for _, l := range lines {
 		if l == "" {

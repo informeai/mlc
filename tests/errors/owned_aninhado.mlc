@@ -1,4 +1,4 @@
-// erro: L tem campos donos e não sabe se liberar dentro de vec.new: declare fn (x *L) free() liberando os campos e o próprio x
+// error: L has owning fields and doesn't know how to free itself inside vec.new: declare fn (x *L) free() freeing the fields and x itself
 import "std/vec"
 
 struct L {

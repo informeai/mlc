@@ -1,4 +1,4 @@
-// erro: argumento 2 de K.run[int]: esperado fn(&int, int), encontrado fn(&bool, int)
+// error: argument 2 of K.run[int]: expected fn(&int, int), found fn(&bool, int)
 struct K {
     n int
 }

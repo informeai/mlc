@@ -1,1 +1,1 @@
-panic: array_indice.mlc:6: índice 3 fora dos limites (tamanho 3)
+panic: array_indice.mlc:6: index 3 out of bounds (length 3)

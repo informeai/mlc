@@ -1,4 +1,4 @@
-// erro: combine no máximo uma restrição embutida e uma interface
+// error: constraint "owned+ordered": combine at most one built-in constraint and one interface, like owned + hash.Hash
 fn f[T owned + ordered](x T) {
     drop(x)
 }

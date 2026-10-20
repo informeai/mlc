@@ -1,4 +1,4 @@
-// erro: identificador não declarado: y
+// error: undeclared identifier: y
 fn main() {
     y = 1
 }

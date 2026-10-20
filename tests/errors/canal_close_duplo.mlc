@@ -1,4 +1,4 @@
-// erro: rx já foi liberada ou movida
+// error: rx was already freed or moved (line 15)
 import "std/chan"
 import "std/io"
 

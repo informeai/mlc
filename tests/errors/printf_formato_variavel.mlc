@@ -1,4 +1,4 @@
-// erro: o formato de io.printf precisa ser uma string literal
+// error: the format of io.printf must be a string literal
 import "std/io"
 
 fn main() {

@@ -1,4 +1,4 @@
-// erro: o empréstimo q não pode ser reatribuído
+// error: the borrow q can't be reassigned
 import "std/io"
 struct Ponto { x int; y int }
 fn f(p &Ponto, r &Ponto) {

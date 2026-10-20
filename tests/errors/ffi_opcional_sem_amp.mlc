@@ -1,4 +1,4 @@
-// erro: argumento 1 de f (?&int: nil ou um empréstimo): esperado &int; para emprestar, escreva &x
+// error: argument 1 of f (?&int: nil or a borrow): expected &int; to borrow, write &x
 extern "C" type Msg
 extern "C" fn f(p ?&int, s ?&[]int, m ?&?*Msg) int32
 extern "C" fn done(m *Msg)

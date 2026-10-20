@@ -1,4 +1,4 @@
-// erro: campo raio de Circulo: esperado float64, encontrado string
+// error: field raio of Circulo: expected float64, found string
 enum Forma {
     Circulo(raio float64)
     Vazio

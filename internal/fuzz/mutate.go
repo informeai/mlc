@@ -1,8 +1,8 @@
-// Package fuzz ataca o verificador de posse de propósito (veja
-// docs/verification.md). Esta é a fase 2: mutações que sabidamente criam um
-// bug de posse num programa que o verificador aceita. O verificador precisa
-// recusar o mutante; se aceitar, o mutante roda sob os sanitizers e o
-// contador de alocações, e um erro ali é um buraco no verificador.
+// Package fuzz attacks the ownership checker on purpose (see
+// docs/verification.md). This is phase 2: mutations known to create an
+// ownership bug in a program the checker accepts. The checker must
+// refuse the mutant; if it accepts it, the mutant runs under the sanitizers and the
+// allocation counter, and an error there is a hole in the checker.
 package fuzz
 
 import (
@@ -15,30 +15,30 @@ import (
 	"mlc/internal/token"
 )
 
-// Mutant é o programa com uma mutação aplicada.
+// Mutant is the program with one mutation applied.
 type Mutant struct {
-	Kind string // o nome da mutação (Kinds)
-	Line int    // a linha do original onde ela foi aplicada
-	Desc string // o que foi feito, para o relatório
+	Kind string // the mutation's name (Kinds)
+	Line int    // the line of the original where it was applied
+	Desc string // what was done, for the report
 	Src  []byte
 }
 
-// As mutações. Cada uma cria um bug de posse se o trecho mutado roda.
+// The mutations. Each one creates an ownership bug if the mutated piece runs.
 const (
-	DropRelease   = "apaga a liberação"     // vazamento (ou trava, thread esquecida)
-	DupRelease    = "duplica a liberação"   // free duplo, uso depois de consumir
-	EarlyRelease  = "libera antes do uso"   // uso depois de free
-	UseAfter      = "usa depois de liberar" // uso depois de free
-	CondRelease   = "libera só num caminho" // vazamento no outro caminho
-	DupMove       = "move duas vezes"       // uso depois de mover
-	UseAfterMove  = "usa depois de mover"   // uso depois de mover
-	BorrowToMove  = "troca &x por x"        // move onde era empréstimo
-	condName      = "mlc_mutacao"
-	mutatedMarker = "// mutação: "
+	DropRelease   = "deletes the free"       // leak (or a lock, a forgotten thread)
+	DupRelease    = "duplicates the free"    // double free, use after consuming
+	EarlyRelease  = "frees before the use"   // use after free
+	UseAfter      = "uses after freeing"     // use after free
+	CondRelease   = "frees on only one path" // leak on the other path
+	DupMove       = "moves twice"            // use after move
+	UseAfterMove  = "uses after moving"      // use after move
+	BorrowToMove  = "replaces &x with x"     // a move where there was a borrow
+	condName      = "mlc_mutation"
+	mutatedMarker = "// mutation: "
 )
 
-// Mutants devolve os mutantes de um programa já checado (f é a AST do
-// arquivo principal, info o resultado do checker).
+// Mutants returns the mutants of an already checked program (f is the main
+// file's AST, info the checker's result).
 func Mutants(src []byte, f *ast.File, info *checker.Info) []Mutant {
 	m := &mutator{lines: strings.Split(string(src), "\n"), info: info}
 	for _, fn := range f.Funcs {
@@ -55,7 +55,7 @@ type mutator struct {
 	out   []Mutant
 }
 
-// block visita os comandos de um bloco e os blocos de dentro.
+// block visits the statements of a block and the blocks inside.
 func (m *mutator) block(b *ast.Block) {
 	for i, s := range b.Stmts {
 		m.stmt(b, i, s)
@@ -86,7 +86,7 @@ func (m *mutator) ifStmt(s *ast.IfStmt) {
 	}
 }
 
-// stmt aplica as mutações que cabem no comando i do bloco b.
+// stmt applies the mutations that fit statement i of block b.
 func (m *mutator) stmt(b *ast.Block, i int, s ast.Stmt) {
 	line := s.Pos().Line
 	if !m.simpleLine(line) {
@@ -94,10 +94,10 @@ func (m *mutator) stmt(b *ast.Block, i int, s ast.Stmt) {
 	}
 	text := strings.TrimSpace(m.lines[line-1])
 	if v := m.release(s); v != "" {
-		m.add(DropRelease, line, "apaga "+text, m.replace(line))
-		m.add(DupRelease, line, "repete "+text, m.replace(line, m.lines[line-1], m.lines[line-1]))
+		m.add(DropRelease, line, "deletes "+text, m.replace(line))
+		m.add(DupRelease, line, "repeats "+text, m.replace(line, m.lines[line-1], m.lines[line-1]))
 		indent := indentOf(m.lines[line-1])
-		m.add(CondRelease, line, "põe "+text+" dentro de um if", m.replace(line,
+		m.add(CondRelease, line, "puts "+text+" inside an if", m.replace(line,
 			indent+condName+" := 0",
 			indent+"if "+condName+" == 1 {",
 			indent+"    "+text,
@@ -105,53 +105,53 @@ func (m *mutator) stmt(b *ast.Block, i int, s ast.Stmt) {
 		if i > 0 {
 			prev := b.Stmts[i-1]
 			if pl := prev.Pos().Line; pl == line-1 && m.simpleLine(pl) && mentions(prev, v) && !declares(prev) {
-				m.add(EarlyRelease, line, "troca "+text+" com a linha de cima, que usa "+v, m.swap(pl, line))
+				m.add(EarlyRelease, line, "swaps "+text+" with the line above, which uses "+v, m.swap(pl, line))
 			}
 		}
-		// repete depois da liberação o último uso de v no mesmo bloco
+		// repeats v's last use in the same block after the free
 		for j := i - 1; j >= 0; j-- {
 			prev := b.Stmts[j]
 			pl := prev.Pos().Line
 			if m.simpleLine(pl) && mentions(prev, v) && !declares(prev) && m.release(prev) == "" {
 				use := strings.TrimSpace(m.lines[pl-1])
-				m.add(UseAfter, line, "repete "+use+" depois de "+text, m.replace(line, m.lines[line-1], indentOf(m.lines[line-1])+use))
+				m.add(UseAfter, line, "repeats "+use+" after "+text, m.replace(line, m.lines[line-1], indentOf(m.lines[line-1])+use))
 				break
 			}
 		}
 		return
 	}
 	if v := m.moves(s); v != "" {
-		m.add(DupMove, line, "repete "+text+" (move "+v+" de novo)", m.replace(line, m.lines[line-1], m.lines[line-1]))
-		// o próximo comando do bloco que usa v, antes do move
+		m.add(DupMove, line, "repeats "+text+" (moves "+v+" again)", m.replace(line, m.lines[line-1], m.lines[line-1]))
+		// the block's next statement that uses v, before the move
 		for j := i + 1; j < len(b.Stmts); j++ {
 			next := b.Stmts[j]
 			nl := next.Pos().Line
 			if m.simpleLine(nl) && mentions(next, v) && !declares(next) {
 				use := strings.TrimSpace(m.lines[nl-1])
-				m.add(UseAfterMove, line, "põe "+use+" logo depois de "+text, m.replace(line, m.lines[line-1], indentOf(m.lines[line-1])+use))
+				m.add(UseAfterMove, line, "puts "+use+" right after "+text, m.replace(line, m.lines[line-1], indentOf(m.lines[line-1])+use))
 				break
 			}
 		}
 	}
 	if v, ok := m.borrowArg(s); ok {
 		mut := strings.Replace(m.lines[line-1], "&"+v, v, 1)
-		m.add(BorrowToMove, line, "troca &"+v+" por "+v+" em "+text, m.replace(line, mut))
+		m.add(BorrowToMove, line, "replaces &"+v+" with "+v+" in "+text, m.replace(line, mut))
 	}
 }
 
 func (m *mutator) add(kind string, line int, desc string, lines []string) {
-	src := mutatedMarker + kind + ", linha " + fmt.Sprint(line) + ": " + desc + "\n" + strings.Join(lines, "\n")
+	src := mutatedMarker + kind + ", line " + fmt.Sprint(line) + ": " + desc + "\n" + strings.Join(lines, "\n")
 	m.out = append(m.out, Mutant{Kind: kind, Line: line, Desc: desc, Src: []byte(src)})
 }
 
-// replace devolve as linhas do programa com a linha n trocada por with
-// (nenhuma: a linha some). A primeira linha do mutante é o comentário com a
-// mutação, então as linhas dos erros ficam uma abaixo das do original.
+// replace returns the program's lines with line n replaced by with
+// (none: the line goes away). The mutant's first line is the comment with the
+// mutation, so the errors' lines are one below the original's.
 func (m *mutator) replace(n int, with ...string) []string {
 	out := append([]string{}, m.lines[:n-1]...)
 	out = append(out, with...)
 	if len(with) == 0 {
-		out = append(out, "") // mantém a numeração das linhas de baixo
+		out = append(out, "") // keeps the numbering of the lines below
 	}
 	return append(out, m.lines[n:]...)
 }
@@ -162,8 +162,8 @@ func (m *mutator) swap(a, b int) []string {
 	return out
 }
 
-// simpleLine diz se a linha n tem um comando inteiro, sem bloco: só esses
-// são movidos, apagados ou repetidos.
+// simpleLine says whether line n has a whole statement, without a block: only those
+// are moved, deleted or repeated.
 func (m *mutator) simpleLine(n int) bool {
 	if n < 1 || n > len(m.lines) {
 		return false
@@ -175,9 +175,9 @@ func (m *mutator) simpleLine(n int) bool {
 	return strings.Count(l, "(") == strings.Count(l, ")")
 }
 
-// release devolve a variável que o comando libera ou consome: free(x),
-// drop(x), thread.join(t), x.close(), g.unlock(), um método com receptor *T
-// (x.free(), g.wait()). "" se não é uma liberação.
+// release returns the variable the statement frees or consumes: free(x),
+// drop(x), thread.join(t), x.close(), g.unlock(), a method with a *T receiver
+// (x.free(), g.wait()). "" if it isn't a release.
 func (m *mutator) release(s ast.Stmt) string {
 	es, ok := s.(*ast.ExprStmt)
 	if !ok {
@@ -213,9 +213,9 @@ func (m *mutator) release(s ast.Stmt) string {
 	return ""
 }
 
-// moves devolve a variável dona que o comando move para uma chamada:
-// v.push(x), tx.send(x), f(x) com o parâmetro de f dono (*T, []T). "" se não
-// move nada (io.print(x) só lê).
+// moves returns the owning variable the statement moves into a call:
+// v.push(x), tx.send(x), f(x) with f's parameter an owner (*T, []T). "" if it doesn't
+// move anything (io.print(x) only reads).
 func (m *mutator) moves(s ast.Stmt) string {
 	es, ok := s.(*ast.ExprStmt)
 	if !ok {
@@ -237,7 +237,7 @@ func (m *mutator) moves(s ast.Stmt) string {
 	default:
 		params = k.Func.Params
 		if k.Func.Method && !k.Indirect && len(params) > 0 {
-			params = params[1:] // o receptor
+			params = params[1:] // the receiver
 		}
 	}
 	for i, a := range call.Args {
@@ -255,8 +255,8 @@ func (m *mutator) moves(s ast.Stmt) string {
 	return ""
 }
 
-// borrowArg acha um argumento &x, com x dono, numa chamada: trocar por x
-// move o dono para quem só devia emprestar.
+// borrowArg finds an argument &x, with x an owner, in a call: replacing it with x
+// moves the owner to something that should only borrow.
 func (m *mutator) borrowArg(s ast.Stmt) (string, bool) {
 	var name string
 	ast.Inspect(s, func(n ast.Node) bool {
@@ -283,7 +283,7 @@ func (m *mutator) borrowArg(s ast.Stmt) (string, bool) {
 	return name, name != ""
 }
 
-// root é a variável na raiz de x, x.campo, x[i] ou *x.
+// root is the variable at the root of x, x.field, x[i] or *x.
 func root(e ast.Expr) string {
 	for {
 		switch x := e.(type) {
@@ -308,8 +308,8 @@ func recvRoot(call *ast.CallExpr) string {
 	return ""
 }
 
-// path escreve x, x.a ou x.a.b ("" para outra expressão; *x e x[i] viram
-// o caminho de x).
+// path writes x, x.a or x.a.b ("" for another expression; *x and x[i] become
+// x's path).
 func path(e ast.Expr) string {
 	switch x := e.(type) {
 	case *ast.Ident:
@@ -326,8 +326,8 @@ func path(e ast.Expr) string {
 	return root(e)
 }
 
-// mentions diz se o comando usa o caminho p: ele mesmo, algo dentro dele
-// (p.campo) ou o objeto que o contém (usar w inteiro usa w.results).
+// mentions says whether the statement uses the path p: itself, something inside it
+// (p.field) or the object that contains it (using w whole uses w.results).
 func mentions(s ast.Stmt, p string) bool {
 	found := false
 	ast.Inspect(s, func(n ast.Node) bool {
@@ -348,13 +348,13 @@ func mentions(s ast.Stmt, p string) bool {
 			return false
 		}
 		_, isSel := n.(*ast.SelectorExpr)
-		return !isSel // um caminho a.b é olhado inteiro, sem descer para a
+		return !isSel // a path a.b is looked at whole, without going down to a
 	})
 	return found
 }
 
-// declares diz se o comando declara uma variável (repeti-lo seria erro de
-// nome repetido, não de posse).
+// declares says whether the statement declares a variable (repeating it would be a
+// repeated-name error, not an ownership one).
 func declares(s ast.Stmt) bool {
 	_, ok := s.(*ast.VarDecl)
 	return ok
