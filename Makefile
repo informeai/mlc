@@ -1,6 +1,6 @@
 BIN := bin/mlc
 
-.PHONY: build test test-std check fmt clean
+.PHONY: build test test-std check sanitize mutate fmt clean
 
 # make (ou make build): gera o compilador em bin/mlc
 build:
@@ -24,6 +24,26 @@ check: build
 	@test -z "$$($(BIN) fmt -l $(MLC_SRC))" || { echo "arquivos sem mlc fmt:"; $(BIN) fmt -l $(MLC_SRC); exit 1; }
 	go vet ./...
 	go test ./...
+
+# make sanitize: roda os programas de teste (tests/run, tests/panic, tests/ffi
+# e os testes da std) sob AddressSanitizer + UndefinedBehaviorSanitizer e
+# depois sob ThreadSanitizer. Todo programa que o checker aceita precisa rodar
+# limpo (veja docs/verificacao.md).
+SANITIZE_TESTS := 'TestRun|TestPanic|TestStdLibrary|TestFFIOutHandle'
+
+sanitize:
+	MLC_SANITIZE=address go test ./internal/driver -run $(SANITIZE_TESTS) -count=1
+	MLC_SANITIZE=thread go test ./internal/driver -run $(SANITIZE_TESTS) -count=1
+
+# make mutate: aplica mutações que criam bugs de posse (apagar ou repetir um
+# free, liberar antes do uso, mover duas vezes...) aos programas de teste. O
+# verificador precisa recusar cada mutante; um mutante aceito roda sob
+# AddressSanitizer e o contador de alocações, e um erro ali é um buraco no
+# verificador (o mutante fica em MUTATE_OUT). Veja docs/verificacao.md.
+MUTATE_OUT ?= /tmp/mlc-mutate
+
+mutate:
+	@MLC_MUTATE=1 MLC_MUTATE_OUT=$(MUTATE_OUT) go test ./internal/fuzz -run 'TestMutate$$' -count=1 -timeout 90m > /dev/null; status=$$?; cat $(MUTATE_OUT)/relatorio.txt; exit $$status
 
 # make fmt: formata o Go (gofmt) e o MLC (mlc fmt)
 fmt: build

@@ -49,6 +49,9 @@ bin/mlc fmt -l .                         # só lista os que mudariam
 bin/mlc test std                         # roda os testes dos *_test.mlc (aqui, os da std)
 bin/mlc test -bench . std                # e mede os benchmarks (fn bench_*)
 bin/mlc doc http.Message                 # a documentação de um tipo, função ou módulo
+bin/mlc run -sanitize address prog.mlc   # roda sob AddressSanitizer + UBSan (thread: ThreadSanitizer)
+make sanitize                            # a suíte sob os sanitizers
+make mutate                              # mutantes com bugs de posse: o verificador precisa recusar
 make test                                # roda os testes
 make check                               # gofmt, mlc fmt -l, go vet e testes
 ```
@@ -228,8 +231,8 @@ A ideia do MLC é que quem programa entenda e saiba **quanto e onde** está aloc
 - [x] **HTTP/1.1:** `std/http` com servidor e cliente sobre `net.Conn` (ou qualquer `http.Stream`), sem alocação: `Message` com buffer fixo, `Content-Length`, `chunked`, keep-alive, consulta decodificada, `Builder` com `Content-Length` automático; `sync.group` como limite de conexões simultâneas (`add` espera uma vaga, `reap`). Sem TLS (use um proxy). Veja [docs/biblioteca.md](docs/biblioteca.md#stdhttp)
 - [x] **Pilha conferida:** o checker estima a pilha de cada função (quadro mais a maior pilha das funções chamadas) e recusa um `thread.spawn` ou um `main` que não cabe, com a variável que mais pesa e a constante sugerida; funções de quadro grande conferem na entrada se cabem no que resta da pilha e dão panic em vez de pular a página de guarda (recursão, valores `fn`, tamanho calculado). Veja [docs/memoria.md](docs/memoria.md#pilha)
 - [ ] **Testar o verificador de propósito:** oráculo em tempo de execução (AddressSanitizer, UndefinedBehaviorSanitizer, ThreadSanitizer e o contador de alocações) sobre a suíte, mutação de programas corretos, gerador de programas focado em posse, enumeração exaustiva de programas pequenos contra um modelo de referência, e testes metamórficos e de cobertura. Veja [docs/verificacao.md](docs/verificacao.md)
-  - [ ] fase 1: oráculo sobre a suíte atual (`-sanitize`, `make sanitize`)
-  - [ ] fase 2: mutação de programas corretos (`make mutate`)
+  - [x] fase 1: oráculo sobre a suíte atual (`-sanitize address|thread`, `make sanitize`): a suíte inteira passa sob AddressSanitizer + UBSan e ThreadSanitizer
+  - [x] fase 2: mutação de programas corretos (`make mutate`): 1.944 mutantes de 116 programas, todos recusados ou sem bug; achou e corrigiu um buraco (empréstimo de um enum com donos já liberado)
   - [ ] fase 3: gerador de programas focado em posse (`make fuzz`)
   - [ ] fase 4: enumeração exaustiva com um modelo de referência
   - [ ] fase 5: metamórficos, cobertura, casos difíceis conhecidos e `go test -fuzz`

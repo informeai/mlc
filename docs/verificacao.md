@@ -1,6 +1,6 @@
 # Como testar o verificador
 
-Plano para atacar o verificador de posse e de empréstimos (`internal/checker/ownership.go`, `borrows.go` e o que eles usam) de propósito, antes de chamar a linguagem de beta. Nada aqui está feito ainda; cada fase diz o que entregar e quando ela está pronta.
+Plano para atacar o verificador de posse e de empréstimos (`internal/checker/ownership.go`, `borrows.go` e o que eles usam) de propósito, antes de chamar a linguagem de beta. Cada fase diz o que entregar e quando ela está pronta. **As fases 1 e 2 estão feitas** (`make sanitize` e `make mutate`); as outras continuam como plano.
 
 ## O que procurar
 
@@ -31,7 +31,7 @@ Os sanitizers pedem compilar o C gerado com flags próprias (`-fsanitize=address
 mlc test -cflags "-fsanitize=address,undefined -g" -ldflags "-fsanitize=address,undefined" std
 ```
 
-A fase 1 acrescenta um atalho (`-sanitize address|thread`) sobre esse mesmo mecanismo e roda a suíte inteira assim.
+A fase 1 acrescentou o atalho `-sanitize address|thread` sobre esse mesmo mecanismo (`mlc test -sanitize address std`), e o `make sanitize` roda a suíte inteira assim.
 
 Cada problema achado em qualquer fase vira um teste permanente: em `tests/errors` (se o programa devia ser recusado) ou em `tests/run` (se devia ser aceito e o C gerado estava errado), com o menor exemplo que reproduz o caso.
 
@@ -47,6 +47,8 @@ Cada problema achado em qualquer fase vira um teste permanente: em `tests/errors
 **Pronto quando:** toda a suíte passa sob os sanitizers, e o `make sanitize` está documentado no `CLAUDE.md` como parte de "antes de considerar um marco pronto".
 
 **Esforço:** pequeno. Parte do trabalho já foi feito à mão nos testes de concorrência.
+
+**Feito.** `-sanitize address` liga `-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -g` (o UBSan encerra o programa em vez de só avisar); `-sanitize thread` liga `-fsanitize=thread -g`. Nos testes do driver, `MLC_SANITIZE=address` (ou `thread`) compila todos os programas assim, e o `make sanitize` roda `TestRun`, `TestPanic`, `TestStdLibrary` e `TestFFIOutHandle` sob os dois. A suíte inteira passa sob os dois. O único problema achado foi do próprio teste: `tests/panic/pilha_recursao.mlc` tinha um buffer que o clang otimizava para quase nada, e a recursão passava de 70 mil níveis, mais do que a pilha-sombra do ThreadSanitizer aguenta; o teste agora usa o buffer inteiro.
 
 ## Fase 2: mutação de programas corretos
 
@@ -76,6 +78,27 @@ Cada problema achado em qualquer fase vira um teste permanente: em `tests/errors
 **Pronto quando:** o relatório não mostra nenhum buraco, e cada buraco achado no caminho virou teste.
 
 **Esforço:** pequeno a médio.
+
+**Feito.** `internal/fuzz/mutate.go` acha, na AST e com o resultado do checker, as liberações (`free`, `drop`, `thread.join`, `close`, `unlock` e todo método com receptor `*T`), os moves (argumento dono para um parâmetro `*T` ou `[]T`, `tx.send(x)`) e os empréstimos de donos (`&x`), e gera os mutantes:
+
+| Mutação | O que faz |
+|---|---|
+| apaga a liberação | tira a linha |
+| duplica a liberação | repete a linha |
+| libera antes do uso | troca a liberação com a linha de cima, quando ela usa o mesmo caminho |
+| usa depois de liberar | repete, depois da liberação, o último uso do caminho no bloco |
+| libera só num caminho | põe a liberação dentro de um `if` que o checker não sabe decidir |
+| move duas vezes | repete a chamada que move |
+| usa depois de mover | põe, logo depois do move, o próximo uso da variável |
+| troca &x por x | o empréstimo vira move |
+
+`internal/fuzz/run.go` decide cada mutante: o checker recusa (certo), ou o mutante aceito é compilado com `-sanitize address` e rodado (com os `.args` e `.in` do teste, e cada teste de um `_test.mlc`) com timeout de 20 s. AddressSanitizer, UBSan, "erro interno" (sobrou alocação), outro sinal ou travar é **buraco**; panic e teste que falha são comportamento seguro. O `make mutate` (uns 15 segundos) muta `tests/run`, `tests/panic`, `tests/ffi` e os testes da `std`, escreve o relatório em `MUTATE_OUT/relatorio.txt` (padrão `/tmp/mlc-mutate`) e guarda ali cada mutante aceito e cada buraco, para reproduzir. `TestMutantsSmall` roda a cada `go test` e confere que os mutantes de um programa pequeno são todos recusados.
+
+**Resultado:** 116 programas, 1.944 mutantes, nenhum buraco, e um único aceito, que está certo (`free` de um `?*T` que é sempre `nil`, posto dentro de um `if`).
+
+**Buraco achado no caminho:** `&e` de um enum com donos não conferia se `e` já tinha sido liberado ou movido (`free(e)` seguido de `describe(&e)` compilava). O oráculo não pegou porque `describe` só lia o tamanho do slice, que fica no próprio enum, e não a memória liberada; apareceu na lista de aceitos. Corrigido em `borrowArg` e guardado em `tests/errors/enum_emprestado_depois_de_free.mlc` e `enum_emprestado_depois_de_mover.mlc`. A lição: **o oráculo só pega o bug que toca a memória**, então os mutantes "aceitos sem bug" de mutações que sempre criam bug (as de uso depois de liberar ou mover) devem ser lidos, não descartados.
+
+**O que fica para depois:** só o arquivo principal de cada programa é mutado (os módulos da `std` não, porque vêm embutidos no compilador); faltam as mutações de tirar o `if h != nil` e de comandos de várias linhas.
 
 ## Fase 3: gerador de programas focado em posse
 

@@ -1192,9 +1192,9 @@ func (o *ownChecker) borrowArg(a ast.Expr) (pathKey, bool) {
 		return pathKey{}, false
 	}
 	var obj pathKey
-	if isPointerType(pathType(k)) || isSlice(pathType(k)) {
-		// &p empresta o objeto apontado por p; &s, o slice s (que não pode
-		// ter sido liberado)
+	if isPointerType(pathType(k)) || IsOwner(pathType(k)) {
+		// &p empresta o objeto apontado por p; &s, o slice s; &e, o enum
+		// com donos e (nenhum deles pode ter sido liberado ou movido)
 		o.reach(k, u.X.Pos())
 		o.check(k, u.X.Pos(), true)
 		obj = k

@@ -24,7 +24,7 @@ import (
 const usage = `mlc — compilador da linguagem MLC (My Lang C)
 
 Uso:
-  mlc build [-o saida] [-emit-c] [-I dir] [-L dir] [-cflags "..."] [-ldflags "..."] arquivo.mlc
+  mlc build [-o saida] [-emit-c] [-I dir] [-L dir] [-cflags "..."] [-ldflags "..."] [-sanitize address|thread] arquivo.mlc
                                                compila para um executável
   mlc run [-I dir] [-L dir] [-cflags "..."] [-ldflags "..."] arquivo.mlc [argumentos]
                                                compila e executa
@@ -32,6 +32,8 @@ Uso:
       -L: pasta onde procurar as bibliotecas de C de link "nome"
       -cflags "...": flags a mais para compilar o C (-O3, -march=native, -fsanitize=address)
       -ldflags "...": flags a mais para ligar (-framework Cocoa, -Wl,-rpath,/opt/lib)
+      -sanitize address|thread: roda sob AddressSanitizer + UndefinedBehaviorSanitizer,
+          ou sob ThreadSanitizer (uso depois de free, free duplo, data race...)
       (também valem as variáveis CC, CFLAGS e LDFLAGS; as opções vêm depois e ganham)
   mlc test [-v] [-run texto] [-bench texto] [-I dir] [-L dir] [-cflags "..."] [-ldflags "..."] [arquivos ou pastas]
                                                roda os testes dos arquivos *_test.mlc
@@ -99,9 +101,9 @@ func build(args []string) int {
 	var libDirs, importDirs dirList
 	fs.Var(&libDirs, "L", "pasta onde procurar as bibliotecas de C (pode repetir)")
 	fs.Var(&importDirs, "I", "pasta onde procurar os imports (pode repetir)")
-	cflags, ldflags := ccFlags(fs)
+	cflags, ldflags, sanitize := ccFlags(fs)
 	fs.Parse(args)
-	opts := driver.Options{LibDirs: libDirs, ImportDirs: importDirs, CFlags: driver.SplitFlags(*cflags), LDFlags: driver.SplitFlags(*ldflags)}
+	opts := driver.Options{LibDirs: libDirs, ImportDirs: importDirs, CFlags: driver.SplitFlags(*cflags), LDFlags: driver.SplitFlags(*ldflags), Sanitize: *sanitize}
 	if fs.NArg() != 1 {
 		fmt.Fprint(os.Stderr, usage)
 		return 2
@@ -138,7 +140,7 @@ func run(args []string) int {
 	var libDirs, importDirs dirList
 	fs.Var(&libDirs, "L", "pasta onde procurar as bibliotecas de C (pode repetir)")
 	fs.Var(&importDirs, "I", "pasta onde procurar os imports (pode repetir)")
-	cflags, ldflags := ccFlags(fs)
+	cflags, ldflags, sanitize := ccFlags(fs)
 	fs.Parse(args) // para no primeiro argumento que não é opção: o arquivo
 	args = fs.Args()
 	if len(args) < 1 {
@@ -159,7 +161,7 @@ func run(args []string) int {
 	defer os.RemoveAll(dir)
 
 	exe := filepath.Join(dir, strings.TrimSuffix(filepath.Base(path), ".mlc"))
-	opts := driver.Options{LibDirs: libDirs, ImportDirs: importDirs, CFlags: driver.SplitFlags(*cflags), LDFlags: driver.SplitFlags(*ldflags)}
+	opts := driver.Options{LibDirs: libDirs, ImportDirs: importDirs, CFlags: driver.SplitFlags(*cflags), LDFlags: driver.SplitFlags(*ldflags), Sanitize: *sanitize}
 	if err := driver.BuildOpts(path, src, exe, os.ReadFile, opts); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -188,9 +190,9 @@ func testCmd(args []string) int {
 	var libDirs, importDirs dirList
 	fs.Var(&libDirs, "L", "pasta onde procurar as bibliotecas de C (pode repetir)")
 	fs.Var(&importDirs, "I", "pasta onde procurar os imports (pode repetir)")
-	cflags, ldflags := ccFlags(fs)
+	cflags, ldflags, sanitize := ccFlags(fs)
 	fs.Parse(args)
-	opts := driver.Options{LibDirs: libDirs, ImportDirs: importDirs, CFlags: driver.SplitFlags(*cflags), LDFlags: driver.SplitFlags(*ldflags)}
+	opts := driver.Options{LibDirs: libDirs, ImportDirs: importDirs, CFlags: driver.SplitFlags(*cflags), LDFlags: driver.SplitFlags(*ldflags), Sanitize: *sanitize}
 	bc := benchConfig{filter: *bench, target: time.Duration(*benchTime) * time.Millisecond}
 	paths := fs.Args()
 	if len(paths) == 0 {
@@ -451,9 +453,10 @@ func printErrors(errs []token.Error) {
 
 // ccFlags registra -cflags e -ldflags: flags a mais para o compilador C,
 // depois das do mlc e das variáveis CFLAGS e LDFLAGS.
-func ccFlags(fs *flag.FlagSet) (cflags, ldflags *string) {
+func ccFlags(fs *flag.FlagSet) (cflags, ldflags, sanitize *string) {
 	cflags = fs.String("cflags", "", "flags a mais para compilar o C (separadas por espaço), depois das do mlc e de CFLAGS")
 	ldflags = fs.String("ldflags", "", "flags a mais para ligar o programa (separadas por espaço), depois de LDFLAGS")
+	sanitize = fs.String("sanitize", "", "compila com sanitizers: address (AddressSanitizer e UndefinedBehaviorSanitizer) ou thread (ThreadSanitizer)")
 	return
 }
 

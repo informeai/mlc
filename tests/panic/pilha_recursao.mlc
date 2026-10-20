@@ -4,7 +4,9 @@ import "std/io"
 // antes de passar da página de guarda, em vez de escrever em memória alheia.
 fn deep(n int) int {
     var buf [4000]byte
-    buf[n % 4000] = byte(n % 256)
+    for i := 0; i < len(buf); i++ { // usa o buffer inteiro: o C não pode tirá-lo da pilha
+        buf[i] = byte((i + n) % 256)
+    }
     if n == 0 {
         return 0
     }

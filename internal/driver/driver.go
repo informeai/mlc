@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"mlc/internal/ast"
 	"mlc/internal/checker"
 	"mlc/internal/codegen"
 	"mlc/internal/token"
@@ -68,6 +69,21 @@ func compileInfo(file string, src []byte, read Loader, opts Options) (string, *c
 	return codegen.Generate(file, srcs[len(srcs)-1].AST, info), info, nil
 }
 
+// Check checa o programa (sintaxe, tipos e posse) sem gerar C, e devolve a
+// AST do arquivo principal e o resultado do checker.
+func Check(file string, src []byte, read Loader, opts Options) (*ast.File, *checker.Info, error) {
+	srcs, errs := load(file, src, read, opts.ImportDirs...)
+	if len(errs) > 0 {
+		return nil, nil, Errors(errs)
+	}
+	srcs[len(srcs)-1].Test = IsTestFile(file)
+	info, errs := checker.CheckProgram(srcs)
+	if len(errs) > 0 {
+		return nil, nil, Errors(errs)
+	}
+	return srcs[len(srcs)-1].AST, info, nil
+}
+
 // IsTestFile diz se file é um arquivo de teste (nome_test.mlc): em vez de
 // main, ele declara funções fn test_*(), que o mlc test roda.
 func IsTestFile(file string) bool {
@@ -84,6 +100,25 @@ type Options struct {
 	ImportDirs []string // -I: pastas onde procurar os imports (além de lib/ e MLC_PATH)
 	CFlags     []string // -cflags: flags a mais para a compilação do C (depois das do ambiente, CFLAGS)
 	LDFlags    []string // -ldflags: flags a mais para a ligação (depois das do ambiente, LDFLAGS)
+	Sanitize   string   // -sanitize: "address" (ASan + UBSan) ou "thread" (TSan); "" sem sanitizers
+}
+
+// SanitizeFlags devolve as flags de compilação e de ligação de um sanitizer:
+// address liga o AddressSanitizer (uso depois de free, free duplo, acesso
+// fora dos limites) e o UndefinedBehaviorSanitizer (comportamento indefinido
+// do C, que encerra o programa em vez de só avisar); thread liga o
+// ThreadSanitizer (data races). Os dois não podem ir juntos.
+func SanitizeFlags(kind string) (cflags, ldflags []string, err error) {
+	switch kind {
+	case "":
+		return nil, nil, nil
+	case "address":
+		f := []string{"-fsanitize=address,undefined", "-fno-sanitize-recover=all", "-fno-omit-frame-pointer", "-g"}
+		return f, []string{"-fsanitize=address,undefined"}, nil
+	case "thread":
+		return []string{"-fsanitize=thread", "-g"}, []string{"-fsanitize=thread"}, nil
+	}
+	return nil, nil, fmt.Errorf("-sanitize %q: use address (AddressSanitizer e UndefinedBehaviorSanitizer) ou thread (ThreadSanitizer)", kind)
 }
 
 // SplitFlags separa uma lista de flags escrita como texto ("-O3
@@ -191,6 +226,12 @@ func buildC(csrc string, links []string, out string, opts Options) error {
 	// as flags de quem compila: do ambiente, depois da linha de comando
 	userC := append(SplitFlags(os.Getenv("CFLAGS")), opts.CFlags...)
 	userLD := append(SplitFlags(os.Getenv("LDFLAGS")), opts.LDFlags...)
+	sanC, sanLD, err := SanitizeFlags(opts.Sanitize)
+	if err != nil {
+		return err
+	}
+	userC = append(sanC, userC...)
+	userLD = append(sanLD, userLD...)
 	var objs []string
 	for _, name := range []string{"program", "mlc_runtime"} {
 		obj := filepath.Join(dir, name+".o")

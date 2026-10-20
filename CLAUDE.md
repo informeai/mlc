@@ -23,4 +23,4 @@ A ideia do MLC é que quem programa **entenda e saiba quanto e onde está alocan
 - O verificador de posse (`internal/checker/ownership.go`) precisa continuar conservador: na dúvida, recusa o programa.
 - Ordem de avaliação: sempre da esquerda para a direita, escrita explicitamente no C gerado.
 - Os `.mlc` de `std/`, `tests/run`, `tests/panic` e `tests/testing` ficam formatados com `mlc fmt` (`make fmt`).
-- Antes de considerar um marco pronto: `make check` limpo (gofmt, `mlc fmt -l`, go vet e testes), e `README.md`, `docs/gramatica.md` e `docs/memoria.md` atualizados.
+- Antes de considerar um marco pronto: `make check` limpo (gofmt, `mlc fmt -l`, go vet e testes), e `README.md`, `docs/gramatica.md` e `docs/memoria.md` atualizados. Mudança no checker, no gerador ou no runtime também passa por `make sanitize` (a suíte sob AddressSanitizer + UBSan e ThreadSanitizer) e `make mutate` (mutantes que criam bugs de posse precisam ser recusados); veja `docs/verificacao.md`.

@@ -16,6 +16,11 @@ const testsDir = "../../tests"
 
 func init() { extraCFlags = []string{"-Werror"} }
 
+// sanitize é o sanitizer dos testes de execução (MLC_SANITIZE=address ou
+// thread, como no make sanitize): todo programa que o checker aceita precisa
+// rodar limpo sob eles (veja docs/verificacao.md).
+var sanitize = os.Getenv("MLC_SANITIZE")
+
 // buildAndRun compila tests/<dir>/<name> e executa o binário.
 func buildAndRun(t *testing.T, path string) (stdout, stderr string, code int) {
 	t.Helper()
@@ -24,7 +29,7 @@ func buildAndRun(t *testing.T, path string) (stdout, stderr string, code int) {
 		t.Fatal(err)
 	}
 	exe := filepath.Join(t.TempDir(), "prog")
-	if err := BuildWith(filepath.Base(path), src, exe, dirLoader(path)); err != nil {
+	if err := BuildOpts(filepath.Base(path), src, exe, dirLoader(path), Options{Sanitize: sanitize}); err != nil {
 		t.Fatalf("build falhou:\n%v", err)
 	}
 	var out, errOut bytes.Buffer
@@ -331,7 +336,7 @@ func TestStdLibrary(t *testing.T) {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			src := []byte(readExpected(t, path))
 			exe := filepath.Join(t.TempDir(), "prog")
-			prog, err := BuildTest("std/"+filepath.Base(path), src, exe, os.ReadFile, Options{})
+			prog, err := BuildTest("std/"+filepath.Base(path), src, exe, os.ReadFile, Options{Sanitize: sanitize})
 			if err != nil {
 				t.Fatalf("build falhou:\n%v", err)
 			}
@@ -351,7 +356,7 @@ func TestFFIOutHandle(t *testing.T) {
 	dir := counterLib(t)
 	path := filepath.Join(testsDir, "ffi", "out_handle.mlc")
 	exe := filepath.Join(dir, "prog")
-	if err := BuildOpts(filepath.Base(path), []byte(readExpected(t, path)), exe, dirLoader(path), Options{LibDirs: []string{dir}}); err != nil {
+	if err := BuildOpts(filepath.Base(path), []byte(readExpected(t, path)), exe, dirLoader(path), Options{LibDirs: []string{dir}, Sanitize: sanitize}); err != nil {
 		t.Fatalf("build falhou:\n%v", err)
 	}
 	out, err := exec.Command(exe).CombinedOutput()

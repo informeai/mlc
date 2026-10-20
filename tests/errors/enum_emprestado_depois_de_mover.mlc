@@ -1,0 +1,23 @@
+// erro: e já foi liberada ou movida (linha 21)
+// &e depois de mover e para outra variável.
+enum E {
+    Vazio
+    Nome(b []byte)
+}
+
+fn qual(e &E) int {
+    match *e {
+        Vazio => return 0
+        Nome(b) => return len(b)
+    }
+}
+
+fn guarda(e E) {
+    free(e)
+}
+
+fn main() {
+    e := E.Nome(alloc([]byte, 3))
+    guarda(e)
+    qual(&e)
+}
