@@ -576,6 +576,16 @@ void mlc_std_fs_dir_close(mlc_dir *d, const char *file, int line) {
 }
 
 /* stat: tamanho, se é diretório e a data de modificação (ms desde 1970). */
+/* is_link diz se o caminho é um link simbólico (lstat: sem seguir o link). */
+bool mlc_std_fs_is_link(mlc_sl_byte *path, const char *file, int line) {
+    (void)file;
+    (void)line;
+    char p[4096];
+    struct stat st;
+    if (!mlc_cpath(p, sizeof p, path)) return false;
+    return lstat(p, &st) == 0 && S_ISLNK(st.st_mode);
+}
+
 int64_t mlc_std_fs_stat_raw(mlc_sl_byte *path, int64_t *size, bool *is_dir, int64_t *modified, const char *file, int line) {
     (void)file;
     (void)line;
@@ -1593,6 +1603,10 @@ void mlc_std_http_fail(mlc_str msg, const char *file, int line) { mlc_std_proces
 
 void mlc_std_url_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
 
+void mlc_std_csv_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
+
+void mlc_std_fs_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
+
 /* os.error_text: o texto de um código de erro da biblioteca. Os códigos
  * abaixo de 1000 são os do sistema (errno), com os mais comuns em português;
  * os de 1000 em diante são do MLC e valem em todos os sistemas. */
@@ -1603,6 +1617,7 @@ static const char *mlc_error_text(int64_t code) {
     case 1001: return "o diretório não está vazio";
     case 1002: return "longo demais para o buffer";
     case 1003: return "fim dos dados";
+    case 1004: return "diretórios aninhados demais";
     case 2001: return "conexão recusada: ninguém escuta nessa porta";
     case 2002: return "o nome do servidor não foi encontrado";
     case 2003: return "a porta já está em uso";
@@ -1612,6 +1627,8 @@ static const char *mlc_error_text(int64_t code) {
     case 3002: return "cabeçalho HTTP grande demais";
     case 3003: return "esquema de URL sem suporte (https precisa de TLS)";
     case 3101: return "URL inválida";
+    case 3201: return "linha de configuração inválida (esperado chave=valor)";
+    case 3301: return "aspas erradas num campo de CSV";
     case 4001: return "erro de SQL";
     case 4005: return "o banco está travado por outro processo";
     case 4008: return "o banco foi aberto só para leitura";

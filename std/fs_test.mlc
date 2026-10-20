@@ -1,4 +1,5 @@
 import "std/fs"
+import "std/process"
 import "std/str"
 import "std/testing"
 
@@ -224,4 +225,183 @@ fn test_dirs() {
         Ok(_) => testing.check(!fs.exists(&p[:n]), "diretório apagado")
         Err(code) => testing.eq_int(code, 0)
     }
+}
+
+// ---------- árvores ----------
+
+fn write(base &[]byte, rel string, text string) {
+    var p [512]byte
+    n := str.copy_bytes(&p, base)
+    n += str.copy(&p[n:], "/")
+    n += str.copy(&p[n:], rel)
+    var d [64]byte
+    k := str.copy(&d, text)
+    match fs.write_file(&p[:n], &d[:k]) {
+        Ok(_) => {}
+        Err(code) => testing.eq_int(code, 0)
+    }
+}
+
+fn make_tree(base &[]byte) {
+    var p [512]byte
+    n := str.copy_bytes(&p, base)
+    n += str.copy(&p[n:], "/src/pkg/sub")
+    match fs.mkdir_all(&p[:n]) {
+        Ok(_) => {}
+        Err(code) => testing.eq_int(code, 0)
+    }
+    match fs.mkdir_all(&p[:n]) {
+        Ok(_) => {} // de novo: já existe, não é erro
+        Err(code) => testing.eq_int(code, 0)
+    }
+    write(base, "a.json", "{}")
+    write(base, "b.txt", "texto")
+    write(base, "src/main.mlc", "fn main() {}")
+    write(base, "src/pkg/util.mlc", "x")
+    write(base, "src/pkg/sub/deep.mlc", "y")
+    write(base, "src/pkg/sub/notas.md", "z")
+}
+
+struct Count {
+    files int
+    dirs int
+    bytes int
+    mlc int
+}
+
+fn count_all(c &Count, path &[]byte, info &fs.Info) int {
+    if info.is_dir {
+        c.dirs++
+    } else {
+        c.files++
+        c.bytes += info.size
+    }
+    return fs.CONTINUE
+}
+
+fn count_mlc(c &Count, path &[]byte, info &fs.Info) int {
+    if !info.is_dir {
+        c.mlc++
+    }
+    return fs.CONTINUE
+}
+
+fn skip_pkg(c &Count, path &[]byte, info &fs.Info) int {
+    if info.is_dir && fs.glob_match("**/pkg", path) {
+        return fs.SKIP
+    }
+    return count_all(c, path, info)
+}
+
+fn stop_first(c &Count, path &[]byte, info &fs.Info) int {
+    c.files++
+    return fs.STOP
+}
+
+fn test_walk_and_glob() {
+    var base [256]byte
+    n := fs.temp_path("mlc-arvore-", &base)
+    make_tree(&base[:n])
+
+    var c Count
+    match fs.walk(&base[:n], &c, count_all) {
+        Ok(_) => {}
+        Err(code) => testing.eq_int(code, 0)
+    }
+    testing.eq_int(c.files, 6)
+    testing.eq_int(c.dirs, 4) // a raiz, src, pkg, sub
+    testing.eq_int(c.bytes, 2 + 5 + 12 + 1 + 1 + 1)
+
+    var g Count
+    fs.glob(&base[:n], "**/*.mlc", &g, count_mlc)
+    testing.eq_int(g.mlc, 3)
+    var g2 Count
+    fs.glob(&base[:n], "*.json", &g2, count_mlc)
+    testing.eq_int(g2.mlc, 1) // * não desce em diretórios
+    var g3 Count
+    fs.glob(&base[:n], "src/*/sub/*", &g3, count_mlc)
+    testing.eq_int(g3.mlc, 2)
+
+    var s Count
+    fs.walk(&base[:n], &s, skip_pkg)
+    testing.eq_int(s.files, 3) // a.json, b.txt, src/main.mlc
+
+    var one Count
+    fs.walk(&base[:n], &one, stop_first)
+    testing.eq_int(one.files, 1)
+
+    match fs.remove_all(&base[:n]) {
+        Ok(_) => {}
+        Err(code) => testing.eq_int(code, 0)
+    }
+    testing.check(!fs.exists(&base[:n]), "apagou tudo")
+    match fs.remove_all(&base[:n]) {
+        Ok(_) => {} // o que não existe não é erro
+        Err(code) => testing.eq_int(code, 0)
+    }
+}
+
+// remove_all e walk não seguem links: o que o link aponta fica
+fn test_links_not_followed() {
+    var keep [256]byte
+    kn := fs.temp_path("mlc-alvo-", &keep)
+    make_tree(&keep[:kn])
+    var base [256]byte
+    n := fs.temp_path("mlc-com-link-", &base)
+    fs.mkdir_all(&base[:n])
+    var link [300]byte
+    ln := str.copy_bytes(&link, &base[:n])
+    ln += str.copy(&link[ln:], "/atalho")
+    c := process.cmd("ln")
+    c.arg("-s")
+    c.arg_bytes(&keep[:kn])
+    c.arg_bytes(&link[:ln])
+    status := 0
+    var out [64]byte
+    c.run(&out, &status)
+    testing.eq_int(status, 0)
+    testing.check(fs.is_link(&link[:ln]), "is_link")
+
+    var cnt Count
+    fs.walk(&base[:n], &cnt, count_all)
+    testing.eq_int(cnt.files + cnt.dirs, 2) // a raiz e o link, sem entrar nele
+
+    fs.remove_all(&base[:n])
+    testing.check(!fs.exists(&base[:n]), "apagou o diretório com o link")
+    var probe [300]byte
+    pn := str.copy_bytes(&probe, &keep[:kn])
+    pn += str.copy(&probe[pn:], "/src/main.mlc")
+    testing.check(fs.exists(&probe[:pn]), "o alvo do link ficou intacto")
+    fs.remove_all(&keep[:kn])
+}
+
+fn test_glob_match() {
+    var p [64]byte
+    n := str.copy(&p, "src/pkg/util.mlc")
+    testing.check(fs.glob_match("src/pkg/util.mlc", &p[:n]), "igual")
+    testing.check(fs.glob_match("src/*/util.mlc", &p[:n]), "*")
+    testing.check(!fs.glob_match("src/*.mlc", &p[:n]), "* não passa de /")
+    testing.check(fs.glob_match("**/*.mlc", &p[:n]), "**")
+    testing.check(fs.glob_match("src/**/util.mlc", &p[:n]), "**/ no meio")
+    testing.check(fs.glob_match("src/**", &p[:n]), "** no fim")
+    testing.check(fs.glob_match("src/pkg/util.ml?", &p[:n]), "?")
+    testing.check(fs.glob_match("src/pkg/[tu]til.mlc", &p[:n]), "classe")
+    testing.check(fs.glob_match("src/pkg/[a-z]til.mlc", &p[:n]), "faixa")
+    testing.check(!fs.glob_match("src/pkg/[!u]til.mlc", &p[:n]), "negação")
+    n = str.copy(&p, "util.mlc")
+    testing.check(fs.glob_match("**/util.mlc", &p[:n]), "**/ casa com nada")
+    testing.check(!fs.glob_match("*.json", &p[:n]), "extensão errada")
+    n = str.copy(&p, "a[b")
+    testing.check(fs.glob_match("a[b", &p[:n]), "[ sem ] é literal")
+}
+
+fn test_temp_path() {
+    var a [256]byte
+    var b [256]byte
+    n := fs.temp_path("x-", &a)
+    m := fs.temp_path("x-", &b)
+    testing.check(!str.eq_bytes(&a[:n], &b[:m]), "nomes diferentes")
+    var d [256]byte
+    k := fs.temp_dir(&d)
+    testing.check(k > 0 && str.eq_bytes(&a[:k], &d[:k]), "na pasta temporária")
 }

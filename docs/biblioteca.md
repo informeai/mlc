@@ -576,6 +576,36 @@ if d != nil {
 ```
 | `NOT_FOUND` (2), `DENIED` (13), `TOO_BIG` (1000) | códigos de erro; os demais são o `errno` do sistema |
 
+#### Árvores de diretórios
+
+| Declaração | O que faz |
+|---|---|
+| `walk(&root, &ctx, visit) Result` | visita `root` e tudo dentro, em profundidade; `visit(&ctx, &path, &info)` devolve `CONTINUE`, `SKIP` (não entra no diretório) ou `STOP` |
+| `glob(&root, pattern, &ctx, visit) Result` | o mesmo, só com quem casa com o padrão (o caminho a partir de `root`) |
+| `glob_match(pattern, &path) bool` | `*` (sem `/`), `?`, `[abc]`, `[a-z]`, `[!x]`, `**` (qualquer coisa, inclusive `/`; `**/` também casa com nada) |
+| `mkdir_all(&path)` | cria o diretório e os pais (como `mkdir -p`); o que já existe não é erro |
+| `remove_all(&path)` | apaga tudo (como `rm -r`); o que não existe não é erro |
+| `is_link(&path) bool` | link simbólico (o `Info` de `walk` e `glob` também tem `is_link`) |
+| `temp_dir(&dst)`, `temp_path(prefix, &dst)` | a pasta temporária (`TMPDIR` ou `/tmp`) e um caminho novo nela, com 16 dígitos aleatórios de `rand.secure` |
+
+```mlc
+struct Total {
+    bytes int
+}
+
+fn soma(t &Total, path &[]byte, info &fs.Info) int {
+    if !info.is_dir {
+        t.bytes += info.size
+    }
+    return fs.CONTINUE
+}
+
+var t Total
+fs.glob(&pasta, "**/*.log", &t, soma)
+```
+
+Links simbólicos não são seguidos: `walk` visita o link mas não entra num diretório apontado por ele (nada de ciclos), e `remove_all` apaga o link, não o que ele aponta. A profundidade máxima é `MAX_DEPTH` (64), e passar disso dá `TOO_DEEP`.
+
 ### `std/bufio`
 
 Leitura com buffer de qualquer `io.Reader`. O `bufio.Reader` guarda um buffer fixo de 4096 bytes dentro dele mesmo (na pilha, se for uma variável local): nada aloca. A fonte **não fica guardada**: cada chamada a recebe emprestada, então quem abriu o arquivo continua dono dele e o fecha quando quiser (o verificador cobra o `close` como sempre).
@@ -615,6 +645,61 @@ if f != nil {
 | `TOO_LONG` (1002) | a linha (ou o pedaço até `delim`) não coube: `dst` fica cheio e o resto vem na próxima chamada |
 
 O fim dos dados é `Err(io.EOF)`, e continua valendo nas chamadas seguintes. Os erros da fonte chegam como vieram, depois dos dados que já estavam no buffer. Use sempre a mesma fonte com o mesmo `Reader`: os bytes no buffer são dela.
+
+### `std/config`
+
+Configuração em arquivo: `.env` e INI. O texto fica num buffer de 16 KB dentro da `Config`, com até 256 entradas; os valores são copiados para buffers de quem chama.
+
+```mlc
+var cfg config.Config
+match config.load_str(".env", &cfg) {
+    Ok(_) => {}
+    Err(code) => io.eprintf("config: linha {} inválida\n", cfg.bad_line)
+}
+porta := 8080
+cfg.int("PORT", &porta)              // fica o padrão se não existe
+var url [256]byte
+n := cfg.env("DATABASE_URL", &url)   // a variável de ambiente, se existir, ganha do arquivo
+```
+
+| Declaração | O que faz |
+|---|---|
+| `load(&path, &c)`, `load_str(path, &c)`, `c.parse(&text)` | lê o arquivo (ou o texto); `Err(BAD_LINE)` com `c.bad_line` |
+| `c.get(key, &dst) int`, `c.has(key)`, `c.is(key, s)` | o valor (-1 se não existe); numa seção, a chave é `"seção.chave"` |
+| `c.int(key, &out) bool`, `c.bool(key, &out) bool` | convertem; sem a chave, `out` fica com o padrão que você pôs |
+| `c.env(key, &dst) int` | a variável de ambiente `key`, ou o valor do arquivo |
+| `c.len()`, `c.key(i, &dst)`, `c.value_at(i, &dst)` | para listar tudo |
+
+O formato: `chave=valor` por linha; `#` e `;` no começo da linha são comentários; `export ` antes da chave é aceito; `[seção]` começa uma seção. Entre aspas duplas, o valor aceita `\n \t \\ \"` e pode ter `#`; entre aspas simples, fica como está; sem aspas, ` #` ou ` ;` começa um comentário. Uma chave repetida vale pela última vez. `c.bool` aceita `true/false`, `1/0`, `yes/no` e `on/off`.
+
+### `std/csv`
+
+CSV (RFC 4180). O leitor lê em fluxo de qualquer `io.Reader`, um registro por vez, com os campos num buffer de 16 KB: um arquivo de gigabytes passa com memória fixa. O escritor monta as linhas num buffer de 16 KB, com aspas onde precisa.
+
+```mlc
+r := csv.new[fs.File]()
+r.sep = ';'                          // o Excel em português usa ;
+for {
+    match r.next(&f) {
+        Ok(n) => {
+            var nome [128]byte
+            k := r.field(0, &nome)
+            preco := 0
+            r.int(2, &preco)
+        }
+        Err(code) => break           // io.EOF no fim; BAD_QUOTE ou TOO_LONG
+    }
+}
+```
+
+| Declaração | O que faz |
+|---|---|
+| `new[R]()`, `r.sep` | o leitor (separador `,`, ou outro) |
+| `r.next(&src) Result` | o próximo registro: quantos campos; `Err(io.EOF)` no fim |
+| `r.field(i, &dst) int`, `r.is(i, s)`, `r.int(i, &out)`, `r.float(i, &out)`, `r.len()`, `r.line` | os campos (o primeiro é 0) e a linha do registro |
+| `Writer` com `w.sep`, `w.crlf`, `w.add(&s)`, `add_str`, `add_int`, `add_float`, `w.end()`, `w.reset()` | escreve em `&w.buf[:w.n]` |
+
+Campos entre aspas podem ter o separador, quebras de linha e aspas (`""`); linhas vazias são puladas.
 
 ### `std/path`
 

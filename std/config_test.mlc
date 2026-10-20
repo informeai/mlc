@@ -1,0 +1,117 @@
+import "std/config"
+import "std/fs"
+import "std/os"
+import "std/str"
+import "std/testing"
+
+fn parse(c &config.Config, text string) {
+    var b [4096]byte
+    n := str.copy(&b, text)
+    match c.parse(&b[:n]) {
+        Ok(_) => {}
+        Err(code) => testing.eq_int(code, 0)
+    }
+}
+
+fn test_env_file() {
+    var c config.Config
+    parse(&c, "# comentário\nPORT=8080\n  NOME = Loja do Zé  \nexport DEBUG=true\nVAZIO=\nSENHA=\"a#b \\\"c\\\"\\nd\"\nRAW='sem \\n escape'\nCOM=valor # comentário\nPORT=9090\r\n")
+    var v [64]byte
+    n := c.get("NOME", &v)
+    testing.eq_str(&v[:n], "Loja do Zé")
+    porta := 0
+    testing.check(c.int("PORT", &porta), "int")
+    testing.eq_int(porta, 9090) // a última vez vale
+    debug := false
+    testing.check(c.bool("DEBUG", &debug), "bool")
+    testing.check(debug, "true")
+    testing.eq_int(c.get("VAZIO", &v), 0)
+    n = c.get("SENHA", &v)
+    testing.eq_str(&v[:n], "a#b \"c\"\nd")
+    n = c.get("RAW", &v)
+    testing.eq_str(&v[:n], "sem \\n escape")
+    n = c.get("COM", &v)
+    testing.eq_str(&v[:n], "valor")
+    testing.eq_int(c.get("FALTA", &v), -1)
+    padrao := 42
+    testing.check(!c.int("FALTA", &padrao), "não existe")
+    testing.eq_int(padrao, 42) // o padrão fica
+    testing.check(!c.int("NOME", &padrao), "não é número")
+    testing.check(c.is("DEBUG", "true"), "is")
+}
+
+fn test_ini_sections() {
+    var c config.Config
+    parse(&c, "nome = app\n\n[db]\npath = loja.db\ntimeout = 5 ; segundos\n\n[ http ]\nport=80\n")
+    var v [64]byte
+    n := c.get("nome", &v)
+    testing.eq_str(&v[:n], "app")
+    n = c.get("db.path", &v)
+    testing.eq_str(&v[:n], "loja.db")
+    t := 0
+    testing.check(c.int("db.timeout", &t), "; no fim é comentário")
+    testing.eq_int(t, 5)
+    testing.check(c.int("http.port", &t), "seção com espaços")
+    testing.eq_int(t, 80)
+    testing.eq_int(c.get("path", &v), -1) // sem a seção não acha
+    testing.eq_int(c.len(), 4)
+    n = c.key(1, &v)
+    testing.eq_str(&v[:n], "db.path")
+}
+
+fn test_bad_lines() {
+    var c config.Config
+    var b [64]byte
+    n := str.copy(&b, "A=1\nsem igual\n")
+    match c.parse(&b[:n]) {
+        Ok(_) => testing.fail("devia falhar")
+        Err(code) => testing.eq_int(code, config.BAD_LINE)
+    }
+    testing.eq_int(c.bad_line, 2)
+    n = str.copy(&b, "A=\"sem fim\n")
+    match c.parse(&b[:n]) {
+        Ok(_) => testing.fail("aspas abertas")
+        Err(code) => testing.eq_int(code, config.BAD_LINE)
+    }
+    n = str.copy(&b, "[secao\n")
+    match c.parse(&b[:n]) {
+        Ok(_) => testing.fail("seção sem ]")
+        Err(_) => testing.eq_int(c.bad_line, 1)
+    }
+}
+
+fn test_load_and_env() {
+    var path [64]byte
+    pn := str.copy(&path, "/tmp/mlc_config_test.env")
+    var data [64]byte
+    dn := str.copy(&data, "APP_NOME=arquivo\nAPP_MODO=dev\n")
+    fs.write_file(&path[:pn], &data[:dn])
+    var c config.Config
+    match config.load(&path[:pn], &c) {
+        Ok(k) => testing.eq_int(k, 2)
+        Err(code) => testing.eq_int(code, 0)
+    }
+    var v [64]byte
+    k := str.copy(&v, "ambiente")
+    os.setenv("APP_NOME", &v[:k])
+    n := c.env("APP_NOME", &v)
+    testing.eq_str(&v[:n], "ambiente") // o ambiente ganha
+    n = c.env("APP_MODO", &v)
+    testing.eq_str(&v[:n], "dev")
+    fs.remove_file(&path[:pn])
+    match config.load_str("/tmp/nao_existe_mlc.env", &c) {
+        Ok(_) => testing.fail("não existe")
+        Err(code) => testing.eq_int(code, fs.NOT_FOUND)
+    }
+}
+
+fn test_parse_flag() {
+    var b [8]byte
+    f := false
+    n := str.copy(&b, "ON")
+    testing.check(config.parse_flag(&b[:n], &f) && f, "ON")
+    n = str.copy(&b, "No")
+    testing.check(config.parse_flag(&b[:n], &f) && !f, "No")
+    n = str.copy(&b, "talvez")
+    testing.check(!config.parse_flag(&b[:n], &f), "talvez")
+}

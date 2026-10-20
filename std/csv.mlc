@@ -1,0 +1,321 @@
+// CSV (RFC 4180): ler e escrever planilhas em texto. O leitor lê em fluxo,
+// de qualquer io.Reader (um arquivo de gigabytes passa com memória fixa): um
+// registro por vez, com os campos num buffer de 16 KB dentro dele. O
+// escritor monta as linhas num buffer de 16 KB, com as aspas onde precisa.
+//
+//     r := csv.new[fs.File]()
+//     r.sep = ';'                        // o Excel em português usa ;
+//     for {
+//         match r.next(&f) {
+//             Ok(n) => {
+//                 var nome [128]byte
+//                 k := r.field(0, &nome)
+//                 preco := 0
+//                 r.int(2, &preco)
+//                 ...
+//             }
+//             Err(code) => break             // io.EOF no fim; BAD_QUOTE, TOO_LONG
+//         }
+//     }
+//
+//     var w csv.Writer
+//     w.sep = ','
+//     w.add_str("nome")
+//     w.add_str("descrição, com vírgula")    // vira "descrição, com vírgula"
+//     w.add_int(1250)
+//     w.end()                                // fim da linha
+//     f.write(&w.buf[:w.n])
+//     w.reset()
+//
+// Campos entre aspas podem ter o separador, quebras de linha e aspas
+// (escritas como ""). Linhas vazias são puladas. \r\n e \n terminam um
+// registro.
+import "std/bufio"
+import "std/io"
+import "std/result"
+import "std/str"
+
+// BAD_QUOTE é o erro de um campo com aspas que não fecham, ou com algo
+// depois da aspa de fechamento (Reader.line diz a linha).
+pub const BAD_QUOTE = 3301
+
+// TOO_LONG é o erro de um registro que não cabe em 16 KB ou tem mais de
+// MAX_FIELDS campos.
+pub const TOO_LONG = 1002
+
+// MAX_FIELDS é quantos campos um registro pode ter.
+pub const MAX_FIELDS = 256
+
+// Reader lê registros de uma fonte R.
+pub struct Reader[R ref + io.Reader] {
+    input bufio.Reader[R]
+    sep byte // o separador (',' em new)
+    buf [16384]byte
+    n int
+    at [256]int
+    size [256]int
+    count int
+    line int // a linha do registro atual (a primeira é 1)
+}
+
+// new cria um leitor com o separador ','.
+pub fn new[R ref + io.Reader]() Reader[R] {
+    r := Reader[R]{}
+    r.sep = ','
+    return r
+}
+
+// next lê o próximo registro e devolve quantos campos ele tem; Err(io.EOF)
+// no fim dos dados.
+pub fn (r &Reader[R]) next(src &R) result.Result[int, int] {
+    r.n = 0
+    r.count = 0
+    started := false
+    quoted := false // dentro de um campo com aspas
+    after := false  // logo depois da aspa que fecha um campo
+    field_at := 0
+    for {
+        c := byte(0)
+        eof := false
+        match r.input.read_byte(src) {
+            Ok(b) => c = b
+            Err(code) => {
+                if code != io.EOF {
+                    return result.Result.Err(code)
+                }
+                eof = true
+            }
+        }
+        if eof {
+            if quoted {
+                return result.Result.Err(BAD_QUOTE)
+            }
+            if !started {
+                return result.Result.Err(io.EOF)
+            }
+            return r.finish(field_at)
+        }
+        if !started {
+            r.line++
+            if c == '\n' || c == '\r' {
+                continue // linha vazia
+            }
+            started = true
+        }
+        if quoted {
+            if c == '"' {
+                quoted = false
+                after = true
+                continue
+            }
+            if !r.put(c) {
+                return result.Result.Err(TOO_LONG)
+            }
+            if c == '\n' {
+                r.line++
+            }
+            continue
+        }
+        if c == '"' {
+            if after {
+                // "" dentro do campo: uma aspa
+                if !r.put('"') {
+                    return result.Result.Err(TOO_LONG)
+                }
+                quoted = true
+                after = false
+                continue
+            }
+            if r.n != field_at {
+                return result.Result.Err(BAD_QUOTE) // aspa no meio de um campo sem aspas
+            }
+            quoted = true
+            continue
+        }
+        if c == r.sep {
+            if !r.end_field(field_at) {
+                return result.Result.Err(TOO_LONG)
+            }
+            field_at = r.n
+            after = false
+            continue
+        }
+        if c == '\r' {
+            continue // o \n que vem depois termina o registro
+        }
+        if c == '\n' {
+            return r.finish(field_at)
+        }
+        if after {
+            return result.Result.Err(BAD_QUOTE) // texto depois da aspa que fecha
+        }
+        if !r.put(c) {
+            return result.Result.Err(TOO_LONG)
+        }
+    }
+}
+
+fn (r &Reader[R]) put(c byte) bool {
+    if r.n == len(r.buf) {
+        return false
+    }
+    r.buf[r.n] = c
+    r.n++
+    return true
+}
+
+fn (r &Reader[R]) end_field(field_at int) bool {
+    if r.count == MAX_FIELDS {
+        return false
+    }
+    r.at[r.count] = field_at
+    r.size[r.count] = r.n - field_at
+    r.count++
+    return true
+}
+
+fn (r &Reader[R]) finish(field_at int) result.Result[int, int] {
+    if !r.end_field(field_at) {
+        return result.Result.Err(TOO_LONG)
+    }
+    return result.Result.Ok(r.count)
+}
+
+// len devolve quantos campos o registro atual tem.
+pub fn (r &Reader[R]) len() int {
+    return r.count
+}
+
+// field copia o campo i (o primeiro é 0) para dst; -1 se o registro não
+// tem esse campo.
+pub fn (r &Reader[R]) field(i int, dst &[]byte) int {
+    if i < 0 || i >= r.count {
+        return -1
+    }
+    return str.copy_bytes(dst, &r.buf[r.at[i]:r.at[i] + r.size[i]])
+}
+
+// is diz se o campo i é igual a s.
+pub fn (r &Reader[R]) is(i int, s string) bool {
+    return i >= 0 && i < r.count && str.eq(&r.buf[r.at[i]:r.at[i] + r.size[i]], s)
+}
+
+// int lê o campo i como inteiro; false (sem mexer em out) se ele não existe
+// ou não é um número.
+pub fn (r &Reader[R]) int(i int, out &int) bool {
+    if i < 0 || i >= r.count {
+        return false
+    }
+    v := 0
+    if !str.parse_int(&r.buf[r.at[i]:r.at[i] + r.size[i]], &v) {
+        return false
+    }
+    *out = v
+    return true
+}
+
+// float lê o campo i como real (com ponto decimal).
+pub fn (r &Reader[R]) float(i int, out &float64) bool {
+    if i < 0 || i >= r.count {
+        return false
+    }
+    v := 0.0
+    if !str.parse_float(&r.buf[r.at[i]:r.at[i] + r.size[i]], &v) {
+        return false
+    }
+    *out = v
+    return true
+}
+
+// ---------- escrita ----------
+
+// Writer monta linhas de CSV: o texto é &w.buf[:w.n]. O valor zero usa ','
+// como separador e \n no fim da linha (crlf = true usa \r\n, como pede a
+// RFC).
+pub struct Writer {
+    buf [16384]byte
+    n int
+    sep byte
+    crlf bool
+    fields int // campos na linha atual
+}
+
+// add acrescenta um campo, com aspas se ele tiver o separador, aspas,
+// quebra de linha ou espaço nas pontas.
+pub fn (w &Writer) add(s &[]byte) {
+    sep := w.sep
+    if sep == 0 {
+        sep = ','
+    }
+    if w.fields > 0 {
+        w.put(sep)
+    }
+    w.fields++
+    quote := len(s) > 0 && (s[0] == ' ' || s[len(s) - 1] == ' ')
+    for i := 0; i < len(s) && !quote; i++ {
+        quote = s[i] == sep || s[i] == '"' || s[i] == '\n' || s[i] == '\r'
+    }
+    if !quote {
+        for i := 0; i < len(s); i++ {
+            w.put(s[i])
+        }
+        return
+    }
+    w.put('"')
+    for i := 0; i < len(s); i++ {
+        if s[i] == '"' {
+            w.put('"')
+        }
+        w.put(s[i])
+    }
+    w.put('"')
+}
+
+// add_str acrescenta um campo fixo do programa.
+pub fn (w &Writer) add_str(s string) {
+    var b [1024]byte
+    if len(s) > len(b) {
+        fail("csv.Writer.add_str: texto maior que 1 KB; use add com um buffer seu")
+    }
+    n := str.copy(&b, s)
+    w.add(&b[:n])
+}
+
+// add_int acrescenta um inteiro.
+pub fn (w &Writer) add_int(v int) {
+    var b [24]byte
+    n := str.put_int(&b, v)
+    w.add(&b[:n])
+}
+
+// add_float acrescenta um real (o menor texto que o representa).
+pub fn (w &Writer) add_float(v float64) {
+    var b [40]byte
+    n := str.put_float(&b, v)
+    w.add(&b[:n])
+}
+
+// end termina a linha.
+pub fn (w &Writer) end() {
+    if w.crlf {
+        w.put('\r')
+    }
+    w.put('\n')
+    w.fields = 0
+}
+
+// reset esvazia o buffer (depois de escrever o texto em algum lugar).
+pub fn (w &Writer) reset() {
+    w.n = 0
+    w.fields = 0
+}
+
+fn (w &Writer) put(c byte) {
+    if w.n == len(w.buf) {
+        fail("csv.Writer: o buffer de 16 KB encheu; escreva e chame reset antes")
+    }
+    w.buf[w.n] = c
+    w.n++
+}
+
+extern fn fail(msg string)

@@ -1,0 +1,141 @@
+import "std/csv"
+import "std/io"
+import "std/result"
+import "std/str"
+import "std/testing"
+
+// Text é uma fonte falsa: entrega o texto em pedaços de step bytes.
+struct Text {
+    data [2048]byte
+    n int
+    pos int
+    step int
+}
+
+fn (t &Text) read(dst &[]byte) result.Result[int, int] {
+    k := t.n - t.pos
+    if k > t.step {
+        k = t.step
+    }
+    if k > len(dst) {
+        k = len(dst)
+    }
+    for i := 0; i < k; i++ {
+        dst[i] = t.data[t.pos + i]
+    }
+    t.pos += k
+    return result.Result.Ok(k)
+}
+
+impl io.Reader for Text
+
+fn text(s string, step int) Text {
+    t := Text{}
+    t.n = str.copy(&t.data, s)
+    t.step = step
+    return t
+}
+
+fn want_record(r &csv.Reader[Text], src &Text, fields int) {
+    match r.next(src) {
+        Ok(n) => testing.eq_int(n, fields)
+        Err(code) => testing.eq_int(code, 0)
+    }
+}
+
+fn test_simple_and_quoted() {
+    src := text("nome,preco,obs\r\ncafé,1250,\"com, vírgula\"\n\n\"aspas \"\"dentro\"\"\",7,\"duas\nlinhas\"\nfim,,\n", 3)
+    r := csv.new[Text]()
+    var f [64]byte
+    want_record(&r, &src, 3)
+    testing.check(r.is(0, "nome") && r.is(2, "obs"), "cabeçalho")
+    want_record(&r, &src, 3)
+    n := r.field(0, &f)
+    testing.eq_str(&f[:n], "café")
+    preco := 0
+    testing.check(r.int(1, &preco), "int")
+    testing.eq_int(preco, 1250)
+    n = r.field(2, &f)
+    testing.eq_str(&f[:n], "com, vírgula")
+    want_record(&r, &src, 3) // a linha vazia foi pulada
+    n = r.field(0, &f)
+    testing.eq_str(&f[:n], "aspas \"dentro\"")
+    n = r.field(2, &f)
+    testing.eq_str(&f[:n], "duas\nlinhas")
+    want_record(&r, &src, 3)
+    testing.eq_int(r.line, 6) // o registro de duas linhas ocupa a 4 e a 5
+    testing.eq_int(r.field(1, &f), 0)
+    testing.eq_int(r.field(2, &f), 0)
+    testing.eq_int(r.field(3, &f), -1)
+    match r.next(&src) {
+        Ok(_) => testing.fail("devia acabar")
+        Err(code) => testing.eq_int(code, io.EOF)
+    }
+}
+
+fn test_semicolon_and_no_final_newline() {
+    src := text("a;b;3,5\nx;\"y;z\";1.25", 64)
+    r := csv.new[Text]()
+    r.sep = ';'
+    want_record(&r, &src, 3)
+    testing.check(r.is(2, "3,5"), "vírgula decimal fica no texto")
+    want_record(&r, &src, 3)
+    testing.check(r.is(1, "y;z"), "separador entre aspas")
+    v := 0.0
+    testing.check(r.float(2, &v), "float")
+    testing.eq_float(v, 1.25)
+}
+
+fn test_bad_quotes() {
+    src := text("a,\"sem fim\n", 64)
+    r := csv.new[Text]()
+    match r.next(&src) {
+        Ok(_) => testing.fail("aspas abertas")
+        Err(code) => testing.eq_int(code, csv.BAD_QUOTE)
+    }
+    src2 := text("a,\"x\"y\n", 64)
+    r2 := csv.new[Text]()
+    match r2.next(&src2) {
+        Ok(_) => testing.fail("texto depois da aspa")
+        Err(code) => testing.eq_int(code, csv.BAD_QUOTE)
+    }
+    src3 := text("a,b\"c\n", 64)
+    r3 := csv.new[Text]()
+    match r3.next(&src3) {
+        Ok(_) => testing.fail("aspa no meio")
+        Err(code) => testing.eq_int(code, csv.BAD_QUOTE)
+    }
+}
+
+fn test_writer() {
+    var w csv.Writer
+    w.add_str("nome")
+    w.add_str("descrição, com vírgula")
+    w.add_str("diz \"oi\"")
+    w.add_str(" espaço")
+    w.add_int(-12)
+    w.add_float(2.5)
+    w.end()
+    w.add_str("")
+    w.add_str("x")
+    w.end()
+    testing.eq_str(&w.buf[:w.n], "nome,\"descrição, com vírgula\",\"diz \"\"oi\"\"\",\" espaço\",-12,2.5\n,x\n")
+    // e de volta pelo leitor
+    src := Text{}
+    src.n = str.copy_bytes(&src.data, &w.buf[:w.n])
+    src.step = 5
+    r := csv.new[Text]()
+    want_record(&r, &src, 6)
+    var f [64]byte
+    n := r.field(2, &f)
+    testing.eq_str(&f[:n], "diz \"oi\"")
+    n = r.field(3, &f)
+    testing.eq_str(&f[:n], " espaço")
+    w.reset()
+    w.sep = ';'
+    w.crlf = true
+    w.add_str("a;b")
+    w.add_str("c")
+    w.end()
+    testing.eq_str(&w.buf[:w.n], "\"a;b\";c\r\n")
+}
