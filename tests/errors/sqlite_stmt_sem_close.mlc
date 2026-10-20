@@ -1,0 +1,15 @@
+// erro: vazamento
+// O verificador cobra o close de cada consulta preparada (e do banco).
+import "std/sqlite"
+
+fn main() {
+    err := 0
+    db := sqlite.open_str(":memory:", &err)
+    if db != nil {
+        st := db.prepare_str("SELECT 1", &err)
+        if st != nil {
+            st.next()
+        }
+        db.close()
+    }
+}

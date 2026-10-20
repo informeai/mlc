@@ -8,6 +8,7 @@
 #include "mlc_runtime.h"
 
 #include <dirent.h>
+#include <dlfcn.h> /* std/sqlite: a biblioteca é carregada só quando usada */
 #include <errno.h>
 #include <fcntl.h>
 #include <spawn.h>
@@ -1611,6 +1612,13 @@ static const char *mlc_error_text(int64_t code) {
     case 3002: return "cabeçalho HTTP grande demais";
     case 3003: return "esquema de URL sem suporte (https precisa de TLS)";
     case 3101: return "URL inválida";
+    case 4001: return "erro de SQL";
+    case 4005: return "o banco está travado por outro processo";
+    case 4008: return "o banco foi aberto só para leitura";
+    case 4014: return "não foi possível abrir o arquivo do banco";
+    case 4019: return "restrição do banco violada (UNIQUE, NOT NULL, FOREIGN KEY ou CHECK)";
+    case 4021: return "uso errado da API do SQLite";
+    case 4900: return "a biblioteca do SQLite não foi encontrada neste sistema";
     case EPERM: return "operação não permitida";
     case ENOENT: return "não existe";
     case EIO: return "erro de entrada e saída";
@@ -1639,6 +1647,7 @@ static const char *mlc_error_text(int64_t code) {
     case ENOTCONN: return "não conectado";
     case EADDRNOTAVAIL: return "endereço não disponível nesta máquina";
     }
+    if (code > 4000 && code < 4900) return "erro do SQLite (o texto vem de db.error)";
     return NULL;
 }
 
@@ -1997,3 +2006,321 @@ void mlc_std_sync_wait_raw(mlc_group *g, const char *file, int line) {
     }
     mlc_free(g);
 }
+
+/* std/sqlite. A biblioteca do SQLite é carregada na primeira chamada
+ * (dlopen), então só quem usa o módulo precisa dela, e ninguém precisa de
+ * flags de ligação. MLC_SQLITE_LIB escolhe o arquivo; sem ela, tenta os
+ * nomes do macOS e do Linux. Os erros do SQLite viram 4000 + o código dele
+ * (4019 é SQLITE_CONSTRAINT), para não se misturar com os do sistema. O
+ * texto entra com cópia (SQLITE_TRANSIENT): o MLC só empresta durante a
+ * chamada. E o texto que sai é copiado para o buffer de quem chama. */
+
+typedef struct sqlite3 sqlite3;
+typedef struct sqlite3_stmt sqlite3_stmt;
+
+static struct {
+    int (*open_v2)(const char *, sqlite3 **, int, const char *);
+    int (*close_v2)(sqlite3 *);
+    int (*exec)(sqlite3 *, const char *, void *, void *, char **);
+    void (*free)(void *);
+    int (*prepare_v2)(sqlite3 *, const char *, int, sqlite3_stmt **, const char **);
+    int (*finalize)(sqlite3_stmt *);
+    int (*step)(sqlite3_stmt *);
+    int (*reset)(sqlite3_stmt *);
+    int (*clear_bindings)(sqlite3_stmt *);
+    int (*bind_int64)(sqlite3_stmt *, int, int64_t);
+    int (*bind_double)(sqlite3_stmt *, int, double);
+    int (*bind_text)(sqlite3_stmt *, int, const char *, int, void (*)(void *));
+    int (*bind_blob)(sqlite3_stmt *, int, const void *, int, void (*)(void *));
+    int (*bind_null)(sqlite3_stmt *, int);
+    int (*bind_parameter_count)(sqlite3_stmt *);
+    int (*column_count)(sqlite3_stmt *);
+    int (*column_type)(sqlite3_stmt *, int);
+    int64_t (*column_int64)(sqlite3_stmt *, int);
+    double (*column_double)(sqlite3_stmt *, int);
+    const unsigned char *(*column_text)(sqlite3_stmt *, int);
+    const void *(*column_blob)(sqlite3_stmt *, int);
+    int (*column_bytes)(sqlite3_stmt *, int);
+    const char *(*column_name)(sqlite3_stmt *, int);
+    int64_t (*changes64)(sqlite3 *);
+    int (*changes)(sqlite3 *);
+    int64_t (*last_insert_rowid)(sqlite3 *);
+    const char *(*errmsg)(sqlite3 *);
+    int (*busy_timeout)(sqlite3 *, int);
+    const char *(*libversion)(void);
+    int loaded; /* 1: carregou; -1: não achou */
+} mlc_sq;
+
+static pthread_once_t mlc_sq_once = PTHREAD_ONCE_INIT;
+
+static void mlc_sq_load(void) {
+    const char *names[] = {getenv("MLC_SQLITE_LIB"), "libsqlite3.dylib", "/usr/lib/libsqlite3.dylib",
+                           "libsqlite3.so.0", "libsqlite3.so", NULL};
+    void *h = NULL;
+    for (int i = 0; i < (int)(sizeof names / sizeof names[0]) && h == NULL; i++) {
+        if (names[i] != NULL && names[i][0] != 0) h = dlopen(names[i], RTLD_NOW | RTLD_LOCAL);
+    }
+    mlc_sq.loaded = -1;
+    if (h == NULL) return;
+#define MLC_SQ(field, sym)                         \
+    *(void **)&mlc_sq.field = dlsym(h, sym);       \
+    if (mlc_sq.field == NULL) return
+    MLC_SQ(open_v2, "sqlite3_open_v2");
+    MLC_SQ(close_v2, "sqlite3_close_v2");
+    MLC_SQ(exec, "sqlite3_exec");
+    MLC_SQ(free, "sqlite3_free");
+    MLC_SQ(prepare_v2, "sqlite3_prepare_v2");
+    MLC_SQ(finalize, "sqlite3_finalize");
+    MLC_SQ(step, "sqlite3_step");
+    MLC_SQ(reset, "sqlite3_reset");
+    MLC_SQ(clear_bindings, "sqlite3_clear_bindings");
+    MLC_SQ(bind_int64, "sqlite3_bind_int64");
+    MLC_SQ(bind_double, "sqlite3_bind_double");
+    MLC_SQ(bind_text, "sqlite3_bind_text");
+    MLC_SQ(bind_blob, "sqlite3_bind_blob");
+    MLC_SQ(bind_null, "sqlite3_bind_null");
+    MLC_SQ(bind_parameter_count, "sqlite3_bind_parameter_count");
+    MLC_SQ(column_count, "sqlite3_column_count");
+    MLC_SQ(column_type, "sqlite3_column_type");
+    MLC_SQ(column_int64, "sqlite3_column_int64");
+    MLC_SQ(column_double, "sqlite3_column_double");
+    MLC_SQ(column_text, "sqlite3_column_text");
+    MLC_SQ(column_blob, "sqlite3_column_blob");
+    MLC_SQ(column_bytes, "sqlite3_column_bytes");
+    MLC_SQ(column_name, "sqlite3_column_name");
+    MLC_SQ(changes, "sqlite3_changes");
+    MLC_SQ(last_insert_rowid, "sqlite3_last_insert_rowid");
+    MLC_SQ(errmsg, "sqlite3_errmsg");
+    MLC_SQ(busy_timeout, "sqlite3_busy_timeout");
+    MLC_SQ(libversion, "sqlite3_libversion");
+#undef MLC_SQ
+    *(void **)&mlc_sq.changes64 = dlsym(h, "sqlite3_changes64"); /* 3.37+: opcional */
+    mlc_sq.loaded = 1;
+}
+
+static int mlc_sq_ready(void) {
+    pthread_once(&mlc_sq_once, mlc_sq_load);
+    return mlc_sq.loaded == 1;
+}
+
+#define MLC_SQ_ERR(rc) (4000 + ((rc) & 0xFF)) /* o código primário, sem o estendido */
+#define MLC_SQ_TRANSIENT ((void (*)(void *))(intptr_t)-1)
+
+/* copia o texto C s para dst e devolve o tamanho (ou -1000 - n se não
+ * coube: quem chama decide) */
+static int64_t mlc_sq_copy(mlc_sl_byte *dst, const void *s, int64_t n) {
+    if (n > dst->len) return -1000 - n;
+    if (n > 0) memcpy(dst->ptr, s, (size_t)n);
+    return n;
+}
+
+bool mlc_std_sqlite_available(const char *file, int line) {
+    (void)file;
+    (void)line;
+    return mlc_sq_ready();
+}
+
+int64_t mlc_std_sqlite_version_raw(mlc_sl_byte *dst, const char *file, int line) {
+    (void)file;
+    (void)line;
+    if (!mlc_sq_ready()) return -1;
+    const char *v = mlc_sq.libversion();
+    return mlc_sq_copy(dst, v, (int64_t)strlen(v));
+}
+
+void *mlc_std_sqlite_open_raw(mlc_sl_byte *path, int64_t flags, int64_t *err, const char *file, int line) {
+    if (!mlc_sq_ready()) {
+        *err = 4900;
+        return NULL;
+    }
+    char name[4096];
+    if (path->len >= (int64_t)sizeof name) mlc_panic(file, line, "sqlite.open: caminho longo demais");
+    memcpy(name, path->ptr, (size_t)path->len);
+    name[path->len] = 0;
+    sqlite3 *db = NULL;
+    int rc = mlc_sq.open_v2(name, &db, (int)flags, NULL);
+    if (rc != 0) {
+        *err = MLC_SQ_ERR(rc);
+        if (db != NULL) mlc_sq.close_v2(db);
+        return NULL;
+    }
+    mlc_sq.busy_timeout(db, 5000); /* espera um lock até 5 s em vez de falhar na hora */
+    mlc_live_allocs++;             /* o handle conta como alocação: o close desconta */
+    *err = 0;
+    return db;
+}
+
+void mlc_std_sqlite_close_raw(void *db, const char *file, int line) {
+    (void)file;
+    (void)line;
+    mlc_sq.close_v2(db);
+    mlc_live_allocs--;
+}
+
+int64_t mlc_std_sqlite_exec_raw(void *db, mlc_sl_byte *sql, mlc_sl_byte *msg, int64_t *msg_n, const char *file, int line) {
+    char *text = malloc((size_t)sql->len + 1);
+    if (text == NULL) mlc_panic(file, line, "sqlite.exec: memória esgotada");
+    memcpy(text, sql->ptr, (size_t)sql->len);
+    text[sql->len] = 0;
+    char *err = NULL;
+    int rc = mlc_sq.exec(db, text, NULL, NULL, &err);
+    free(text);
+    *msg_n = 0;
+    if (err != NULL) {
+        int64_t n = (int64_t)strlen(err);
+        if (n > msg->len) n = msg->len;
+        memcpy(msg->ptr, err, (size_t)n);
+        *msg_n = n;
+        mlc_sq.free(err);
+    }
+    return rc == 0 ? 0 : MLC_SQ_ERR(rc);
+}
+
+int64_t mlc_std_sqlite_errmsg_raw(void *db, mlc_sl_byte *dst, const char *file, int line) {
+    (void)file;
+    (void)line;
+    const char *m = mlc_sq.errmsg(db);
+    int64_t n = (int64_t)strlen(m);
+    if (n > dst->len) n = dst->len;
+    memcpy(dst->ptr, m, (size_t)n);
+    return n;
+}
+
+void *mlc_std_sqlite_prepare_raw(void *db, mlc_sl_byte *sql, int64_t *err, const char *file, int line) {
+    (void)file;
+    (void)line;
+    sqlite3_stmt *st = NULL;
+    if (sql->len > 0x7FFFFFFF) mlc_panic(file, line, "sqlite.prepare: SQL longo demais");
+    int rc = mlc_sq.prepare_v2(db, (const char *)sql->ptr, (int)sql->len, &st, NULL);
+    if (rc != 0 || st == NULL) {
+        *err = rc != 0 ? MLC_SQ_ERR(rc) : 4021; /* SQL vazio: SQLITE_MISUSE */
+        if (st != NULL) mlc_sq.finalize(st);
+        return NULL;
+    }
+    mlc_live_allocs++;
+    *err = 0;
+    return st;
+}
+
+void mlc_std_sqlite_finalize_raw(void *st, const char *file, int line) {
+    (void)file;
+    (void)line;
+    mlc_sq.finalize(st);
+    mlc_live_allocs--;
+}
+
+int64_t mlc_std_sqlite_step_raw(void *st, const char *file, int line) {
+    (void)file;
+    (void)line;
+    int rc = mlc_sq.step(st);
+    if (rc == 100 || rc == 101) return rc; /* SQLITE_ROW, SQLITE_DONE */
+    return MLC_SQ_ERR(rc);
+}
+
+int64_t mlc_std_sqlite_reset_raw(void *st, const char *file, int line) {
+    (void)file;
+    (void)line;
+    int rc = mlc_sq.reset(st);
+    mlc_sq.clear_bindings(st);
+    return rc == 0 ? 0 : MLC_SQ_ERR(rc);
+}
+
+static int mlc_sq_index(void *st, int64_t i, const char *what, const char *file, int line) {
+    int n = mlc_sq.bind_parameter_count(st);
+    if (i < 1 || i > n) {
+        char msg[128];
+        snprintf(msg, sizeof msg, "sqlite.%s: parâmetro %" PRId64 " fora de 1..%d", what, i, n);
+        mlc_panic(file, line, msg);
+    }
+    return (int)i;
+}
+
+int64_t mlc_std_sqlite_bind_int_raw(void *st, int64_t i, int64_t v, const char *file, int line) {
+    int rc = mlc_sq.bind_int64(st, mlc_sq_index(st, i, "bind_int", file, line), v);
+    return rc == 0 ? 0 : MLC_SQ_ERR(rc);
+}
+
+int64_t mlc_std_sqlite_bind_float_raw(void *st, int64_t i, double v, const char *file, int line) {
+    int rc = mlc_sq.bind_double(st, mlc_sq_index(st, i, "bind_float", file, line), v);
+    return rc == 0 ? 0 : MLC_SQ_ERR(rc);
+}
+
+int64_t mlc_std_sqlite_bind_text_raw(void *st, int64_t i, mlc_sl_byte *s, const char *file, int line) {
+    int rc = mlc_sq.bind_text(st, mlc_sq_index(st, i, "bind_text", file, line), (const char *)s->ptr, (int)s->len, MLC_SQ_TRANSIENT);
+    return rc == 0 ? 0 : MLC_SQ_ERR(rc);
+}
+
+int64_t mlc_std_sqlite_bind_blob_raw(void *st, int64_t i, mlc_sl_byte *s, const char *file, int line) {
+    int rc = mlc_sq.bind_blob(st, mlc_sq_index(st, i, "bind_blob", file, line), s->ptr, (int)s->len, MLC_SQ_TRANSIENT);
+    return rc == 0 ? 0 : MLC_SQ_ERR(rc);
+}
+
+int64_t mlc_std_sqlite_bind_null_raw(void *st, int64_t i, const char *file, int line) {
+    int rc = mlc_sq.bind_null(st, mlc_sq_index(st, i, "bind_null", file, line));
+    return rc == 0 ? 0 : MLC_SQ_ERR(rc);
+}
+
+static int mlc_sq_col(void *st, int64_t i, const char *file, int line) {
+    int n = mlc_sq.column_count(st);
+    if (i < 0 || i >= n) {
+        char msg[128];
+        snprintf(msg, sizeof msg, "sqlite: coluna %" PRId64 " fora de 0..%d", i, n - 1);
+        mlc_panic(file, line, msg);
+    }
+    return (int)i;
+}
+
+int64_t mlc_std_sqlite_column_count_raw(void *st, const char *file, int line) {
+    (void)file;
+    (void)line;
+    return mlc_sq.column_count(st);
+}
+
+int64_t mlc_std_sqlite_column_type_raw(void *st, int64_t i, const char *file, int line) {
+    return mlc_sq.column_type(st, mlc_sq_col(st, i, file, line));
+}
+
+int64_t mlc_std_sqlite_column_int_raw(void *st, int64_t i, const char *file, int line) {
+    return mlc_sq.column_int64(st, mlc_sq_col(st, i, file, line));
+}
+
+double mlc_std_sqlite_column_float_raw(void *st, int64_t i, const char *file, int line) {
+    return mlc_sq.column_double(st, mlc_sq_col(st, i, file, line));
+}
+
+int64_t mlc_std_sqlite_column_text_raw(void *st, int64_t i, mlc_sl_byte *dst, const char *file, int line) {
+    int c = mlc_sq_col(st, i, file, line);
+    const unsigned char *t = mlc_sq.column_text(st, c); /* antes de column_bytes, como pede o SQLite */
+    int n = mlc_sq.column_bytes(st, c);
+    if (t == NULL) return 0;
+    return mlc_sq_copy(dst, t, n);
+}
+
+int64_t mlc_std_sqlite_column_blob_raw(void *st, int64_t i, mlc_sl_byte *dst, const char *file, int line) {
+    int c = mlc_sq_col(st, i, file, line);
+    const void *b = mlc_sq.column_blob(st, c);
+    int n = mlc_sq.column_bytes(st, c);
+    if (b == NULL) return 0;
+    return mlc_sq_copy(dst, b, n);
+}
+
+int64_t mlc_std_sqlite_column_name_raw(void *st, int64_t i, mlc_sl_byte *dst, const char *file, int line) {
+    const char *name = mlc_sq.column_name(st, mlc_sq_col(st, i, file, line));
+    if (name == NULL) return 0;
+    int64_t n = (int64_t)strlen(name);
+    return mlc_sq_copy(dst, name, n);
+}
+
+int64_t mlc_std_sqlite_changes_raw(void *db, const char *file, int line) {
+    (void)file;
+    (void)line;
+    return mlc_sq.changes64 != NULL ? mlc_sq.changes64(db) : mlc_sq.changes(db);
+}
+
+int64_t mlc_std_sqlite_last_insert_id_raw(void *db, const char *file, int line) {
+    (void)file;
+    (void)line;
+    return mlc_sq.last_insert_rowid(db);
+}
+
+void mlc_std_sqlite_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }

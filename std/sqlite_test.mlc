@@ -1,0 +1,166 @@
+import "std/os"
+import "std/sqlite"
+import "std/str"
+import "std/testing"
+
+fn open_mem() ?*sqlite.DB {
+    err := 0
+    db := sqlite.open_str(":memory:", &err)
+    testing.eq_int(err, 0)
+    return db
+}
+
+fn test_available() {
+    testing.check(sqlite.available(), "o sistema tem o SQLite")
+    var v [32]byte
+    n := sqlite.version(&v)
+    testing.check(n > 0 && v[0] == '3', "versão 3")
+}
+
+fn test_insert_and_select() {
+    db := open_mem()
+    if db == nil {
+        return
+    }
+    testing.eq_int(db.exec_str("CREATE TABLE item (id INTEGER PRIMARY KEY, nome TEXT NOT NULL, preco INTEGER, peso REAL)"), 0)
+    err := 0
+    st := db.prepare_str("INSERT INTO item (nome, preco, peso) VALUES (?, ?, ?)", &err)
+    if st != nil {
+        testing.eq_int(db.begin(), 0)
+        st.bind_str(1, "café")
+        st.bind_int(2, 1250)
+        st.bind_float(3, 0.5)
+        testing.eq_int(st.run(), 0)
+        testing.eq_int(db.last_insert_id(), 1)
+        var nome [16]byte
+        k := str.copy(&nome, "açúcar")
+        st.bind_text(1, &nome[:k])
+        st.bind_int(2, 800)
+        st.bind_null(3)
+        testing.eq_int(st.run(), 0)
+        testing.eq_int(db.commit(), 0)
+        st.close()
+    }
+    testing.eq_int(db.changes(), 1)
+
+    q := db.prepare_str("SELECT id, nome, preco, peso FROM item WHERE preco > ? ORDER BY id", &err)
+    if q != nil {
+        q.bind_int(1, 0)
+        testing.eq_int(q.columns(), 4)
+        var col [16]byte
+        cn := q.column_name(1, &col)
+        testing.eq_str(&col[:cn], "nome")
+        var nome [64]byte
+        rows := 0
+        for q.next() {
+            rows++
+            n := q.text(1, &nome)
+            if rows == 1 {
+                testing.eq_int(q.int(0), 1)
+                testing.eq_str(&nome[:n], "café")
+                testing.eq_int(q.int(2), 1250)
+                testing.eq_float(q.float(3), 0.5)
+                testing.eq_int(q.kind(3), sqlite.FLOAT)
+                testing.eq_int(q.text_len(1), 5)
+            } else {
+                testing.eq_str(&nome[:n], "açúcar")
+                testing.check(q.is_null(3), "peso NULL")
+            }
+        }
+        testing.eq_int(rows, 2)
+        // de novo, com outro parâmetro
+        q.reset()
+        q.bind_int(1, 1000)
+        rows = 0
+        for q.next() {
+            rows++
+        }
+        testing.eq_int(rows, 1)
+        q.close()
+    }
+    db.close()
+}
+
+fn test_errors() {
+    db := open_mem()
+    if db == nil {
+        return
+    }
+    db.exec_str("CREATE TABLE u (email TEXT UNIQUE NOT NULL)")
+    err := 0
+    st := db.prepare_str("INSERT INTO u (email) VALUES (?)", &err)
+    if st != nil {
+        st.bind_str(1, "a@x")
+        testing.eq_int(st.run(), 0)
+        st.bind_str(1, "a@x")
+        testing.eq_int(st.run(), sqlite.CONSTRAINT) // UNIQUE
+        st.bind_null(1)
+        testing.eq_int(st.run(), sqlite.CONSTRAINT) // NOT NULL
+        st.close()
+    }
+    var msg [128]byte
+    testing.check(db.error(&msg) > 0, "mensagem do SQLite")
+    var text [128]byte
+    n := os.error_text(sqlite.CONSTRAINT, &text)
+    testing.eq_str(&text[:n], "restrição do banco violada (UNIQUE, NOT NULL, FOREIGN KEY ou CHECK)")
+    // SQL errado
+    bad := db.prepare_str("SELEC 1", &err)
+    testing.check(bad == nil, "SQL inválido")
+    testing.eq_int(err, sqlite.ERROR)
+    if bad != nil {
+        bad.close()
+    }
+    testing.eq_int(db.exec_str("INSERT INTO nada VALUES (1)"), sqlite.ERROR)
+    db.close()
+}
+
+fn test_rollback() {
+    db := open_mem()
+    if db == nil {
+        return
+    }
+    db.exec_str("CREATE TABLE t (n INTEGER)")
+    db.begin()
+    db.exec_str("INSERT INTO t VALUES (1)")
+    db.rollback()
+    err := 0
+    q := db.prepare_str("SELECT count(*) FROM t", &err)
+    if q != nil {
+        testing.check(q.next(), "uma linha")
+        testing.eq_int(q.int(0), 0)
+        q.close()
+    }
+    db.close()
+}
+
+fn test_bad_index() {
+    testing.expect_panic()
+    db := open_mem()
+    if db == nil {
+        return
+    }
+    err := 0
+    st := db.prepare_str("SELECT ?", &err)
+    if st != nil {
+        st.bind_int(2, 1) // só há um ?
+        st.close()
+    }
+    db.close()
+}
+
+fn test_text_too_small() {
+    testing.expect_panic()
+    db := open_mem()
+    if db == nil {
+        return
+    }
+    err := 0
+    q := db.prepare_str("SELECT 'um texto comprido'", &err)
+    if q != nil {
+        q.next()
+        var small [4]byte
+        q.text(0, &small)
+        q.close()
+    }
+    db.close()
+}

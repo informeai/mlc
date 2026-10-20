@@ -775,6 +775,59 @@ Um grupo de threads esperadas de uma vez. Veja [concorrencia.md](concorrencia.md
 | `g.len() int` | quantas threads estão no grupo |
 | `g.wait()` | espera todas, na ordem em que entraram, e libera o grupo (o verificador cobra) |
 
+### `std/sqlite`
+
+Banco de dados num arquivo, com SQL e transações. A biblioteca do sistema é carregada na primeira chamada (`dlopen`), então quem não usa o módulo não precisa dela, e quem usa não precisa de flags de ligação. `MLC_SQLITE_LIB` escolhe outro arquivo; `available()` diz se ela foi achada.
+
+O banco (`DB`) e a consulta preparada (`Stmt`) são handles: o verificador cobra o `close` de cada um. O texto entra emprestado (o SQLite guarda uma cópia) e sai copiado para buffers de quem chama, então nada aloca do lado do MLC.
+
+```mlc
+err := 0
+db := sqlite.open_str("loja.db", &err)          // ":memory:" para um banco só na memória
+if db == nil {
+    return
+}
+db.exec_str("CREATE TABLE IF NOT EXISTS item (id INTEGER PRIMARY KEY, nome TEXT, preco INTEGER)")
+
+st := db.prepare_str("INSERT INTO item (nome, preco) VALUES (?, ?)", &err)
+if st != nil {
+    db.begin()
+    st.bind_str(1, "café")
+    st.bind_int(2, 1250)                          // dinheiro em centavos
+    st.run()                                      // 0, ou sqlite.CONSTRAINT...
+    db.commit()
+    st.close()
+}
+
+q := db.prepare_str("SELECT id, nome FROM item WHERE preco > ?", &err)
+if q != nil {
+    q.bind_int(1, 1000)
+    var nome [256]byte
+    for q.next() {
+        n := q.text(1, &nome)
+        io.printf("{} {:s}\n", q.int(0), &nome[:n])
+    }
+    q.close()
+}
+db.close()
+```
+
+| Declaração | O que faz |
+|---|---|
+| `open(&path, &err)`, `open_str(path, &err)`, `open_read_only(&path, &err)` | abre (ou cria) o banco; espera até 5 s por um lock de outro processo |
+| `db.exec(&sql)`, `db.exec_str(sql)` | comandos sem resultado; devolve 0 ou o código do erro |
+| `db.prepare(&sql, &err)`, `db.prepare_str(sql, &err)` | compila um comando com `?` |
+| `db.begin()`, `commit()`, `rollback()` | transação |
+| `db.changes()`, `db.last_insert_id()`, `db.error(&dst)` | linhas mudadas, o último id, a mensagem do último erro |
+| `st.bind_int`, `bind_float`, `bind_text`, `bind_str`, `bind_blob`, `bind_null` | os parâmetros (o primeiro `?` é 1); panic com um índice que não existe |
+| `st.next() bool` | a próxima linha do resultado |
+| `st.run() int` | roda um INSERT, UPDATE ou DELETE e volta ao começo |
+| `st.reset()` | volta ao começo e limpa os parâmetros |
+| `st.int(i)`, `float(i)`, `text(i, &dst)`, `blob(i, &dst)`, `text_len(i)`, `kind(i)`, `is_null(i)` | as colunas da linha atual (a primeira é 0); `text` dá panic se não couber |
+| `st.columns()`, `st.column_name(i, &dst)` | as colunas do resultado |
+
+Os erros são 4000 mais o código do SQLite: `ERROR` (4001), `BUSY` (4005), `CANTOPEN` (4014), `CONSTRAINT` (4019), `MISUSE` (4021), e `UNAVAILABLE` (4900) quando a biblioteca não existe. `os.error_text` dá o texto, e `db.error(&buf)` a mensagem do SQLite. Use sempre parâmetros (`?`) para os valores, nunca SQL montado com texto de fora: é o que impede injeção de SQL.
+
 ### `std/http`
 
 HTTP/1.1 sobre qualquer `http.Stream` (a interface `read` + `write`, implementada por `net.Conn`; nos testes, por uma conexão falsa). O servidor lê pedidos e escreve respostas, o cliente escreve pedidos e lê respostas. **Nada aloca:** a mensagem recebida (`Message`) guarda um buffer fixo de 8 KB dentro dela, onde ficam o cabeçalho e o começo do corpo; a que sai (`Builder`) monta o cabeçalho num buffer de 4 KB; o corpo vai e vem por buffers de quem chama. Os textos (método, caminho, campos) são copiados para buffers seus ou comparados sem cópia.

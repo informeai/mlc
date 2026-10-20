@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"mlc/internal/ast"
@@ -266,6 +267,9 @@ func buildC(csrc string, links []string, out string, opts Options) error {
 		args = append(args, "-l"+l)
 	}
 	args = append(args, "-lm") // libm, para std/math
+	if runtime.GOOS == "linux" {
+		args = append(args, "-ldl") // dlopen, para std/sqlite (glibc antiga)
+	}
 	if output, err := exec.Command(cc, args...).CombinedOutput(); err != nil {
 		return &LinkError{Output: string(output), Flags: strings.Join(userLD, " ")}
 	}
