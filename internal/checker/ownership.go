@@ -46,6 +46,25 @@ const (
 
 // closerOf devolve o nome do método que consome um handle da biblioteca
 // padrão (receptor *T, sem outros parâmetros): close, ou wait no sync.Group.
+// hasFreeMethod diz se t é *S com S tendo um método free que consome o
+// ponteiro (fn (x *S) free()).
+func hasFreeMethod(t Type) bool {
+	p, ok := t.(*Pointer)
+	if !ok {
+		return false
+	}
+	st, ok := p.Elem.(*Struct)
+	if !ok {
+		return false
+	}
+	m := st.Methods["free"]
+	if m == nil || !m.Method || len(m.Params) != 1 {
+		return false
+	}
+	_, owner := m.Params[0].Type.(*Pointer)
+	return owner
+}
+
 func closerOf(s *Struct) string {
 	if s.Methods["close"] != nil {
 		return "close"
@@ -389,8 +408,12 @@ func (o *ownChecker) leaks(ls []*Local, pos token.Pos, where string) {
 			continue
 		}
 		if s == sLive {
-			o.errorf(pos, "vazamento: %s ainda é dona da memória (linha %d) %s; libere com free(%s) ou passe a posse adiante",
-				l.Name, o.origin[k].Line, where, l.Name)
+			how := "free(" + l.Name + ")"
+			if hasFreeMethod(l.Type) {
+				how = l.Name + ".free()" // vec, map, arena...: o free libera também o que está dentro
+			}
+			o.errorf(pos, "vazamento: %s ainda é dona da memória (linha %d) %s; libere com %s ou passe a posse adiante",
+				l.Name, o.origin[k].Line, where, how)
 		} else {
 			o.errorf(pos, "vazamento: %s pode ainda ser dona da memória (linha %d) %s, dependendo do caminho",
 				l.Name, o.origin[k].Line, where)

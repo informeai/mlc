@@ -1607,6 +1607,8 @@ void mlc_std_csv_fail(mlc_str msg, const char *file, int line) { mlc_std_process
 
 void mlc_std_fs_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
 
+void mlc_std_arena_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
+
 /* os.error_text: o texto de um código de erro da biblioteca. Os códigos
  * abaixo de 1000 são os do sistema (errno), com os mais comuns em português;
  * os de 1000 em diante são do MLC e valem em todos os sistemas. */

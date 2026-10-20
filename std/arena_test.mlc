@@ -1,0 +1,83 @@
+import "std/arena"
+import "std/str"
+import "std/testing"
+
+fn test_pieces() {
+    a := arena.new(16)
+    nome := a.copy_str("café")
+    var src [8]byte
+    k := str.copy(&src, "xyz")
+    outro := a.copy(&src[:k])
+    zeros := a.alloc(4)
+    testing.check(a.eq(nome, "café"), "copy_str")
+    testing.check(a.eq(outro, "xyz"), "copy")
+    testing.eq_int(a.len(zeros), 4)
+    testing.eq_int(int(a.get(zeros, 3)), 0)
+    a.set(zeros, 0, 'A')
+    testing.eq_int(int(a.get(zeros, 0)), 65)
+    var out [16]byte
+    n := a.text(nome, &out)
+    testing.eq_str(&out[:n], "café")
+    a.check(outro)
+    testing.eq_str(&a.buf[outro.at:outro.at + outro.n], "xyz") // acesso direto
+    testing.eq_int(a.in_use(), 5 + 3 + 4)
+    a.free()
+}
+
+fn test_grows_and_keeps_spans() {
+    a := arena.new(4)
+    first := a.copy_str("abc")
+    for i := 0; i < 100; i++ {
+        a.copy_str("0123456789")
+    }
+    testing.check(a.capacity() >= 1003, "cresceu")
+    testing.check(a.eq(first, "abc"), "o pedaço de antes do crescimento continua valendo")
+    a.free()
+}
+
+fn test_reserve_commit() {
+    a := arena.new(8)
+    a.reserve(32)
+    k := str.format(&a.buf[a.used:a.used + 32], "id={}", 42)
+    s := a.commit(k)
+    testing.check(a.eq(s, "id=42"), "escrito direto")
+    a.free()
+}
+
+fn test_reset_reuses() {
+    a := arena.new(64)
+    a.copy_str("pedido 1")
+    testing.eq_int(a.high_water(), 8)
+    a.reset()
+    testing.eq_int(a.in_use(), 0)
+    z := a.alloc(8)
+    testing.eq_int(int(a.get(z, 0)), 0) // zerado, sem os dados velhos
+    testing.eq_int(a.capacity(), 64)
+    a.free()
+}
+
+fn test_stale_span_panics() {
+    testing.expect_panic()
+    a := arena.new(64)
+    s := a.copy_str("velho")
+    a.reset()
+    a.copy_str("novo!")
+    a.eq(s, "novo!") // o pedaço é de antes do reset: panic
+    a.free()
+}
+
+fn test_fixed_limit_panics() {
+    testing.expect_panic()
+    a := arena.new_fixed(8)
+    a.copy_str("12345678")
+    a.copy_str("9") // passa do limite
+    a.free()
+}
+
+fn test_fixed_fits() {
+    a := arena.new_fixed(8)
+    a.copy_str("1234")
+    a.copy_str("5678")
+    testing.eq_int(a.capacity(), 8)
+    a.free()
+}

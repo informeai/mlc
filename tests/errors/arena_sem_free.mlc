@@ -1,0 +1,8 @@
+// erro: libere com a.free()
+// A arena é um dono: o verificador cobra o free.
+import "std/arena"
+
+fn main() {
+    a := arena.new(64)
+    a.copy_str("x")
+}

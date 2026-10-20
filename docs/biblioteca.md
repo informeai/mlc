@@ -174,6 +174,35 @@ b.free()
 
 O texto é `&b.data[:b.len]` (os campos são públicos): um método não pode devolver esse sub-slice, porque a visão é criada na hora.
 
+### `std/arena`
+
+Memória de rascunho para uma tarefa (um pedido HTTP, um arquivo, um lote): um `alloc` no começo, os pedaços saem dela em sequência sem um `alloc` cada, `reset` devolve tudo para a próxima tarefa, e `free` no fim. O custo de alocação fica constante, e esquecer de liberar um pedaço não existe: o `reset` leva todos.
+
+```mlc
+a := arena.new(64 * 1024)               // o único alloc
+for ... cada pedido ... {
+    nome := a.copy(&campo)              // um pedaço (Span)
+    if a.eq(nome, "admin") { ... }
+    a.reserve(64)
+    k := str.format(&a.buf[a.used:a.used + 64], "id={}", id)
+    chave := a.commit(k)                // escrito direto na arena
+    ...
+    a.reset()                           // tudo de volta; o buffer fica
+}
+a.free()
+```
+
+Um pedaço é uma `Span`: a posição, o tamanho e a geração da arena. Não é um empréstimo, então a arena pode crescer (`realloc`, dobrando) sem invalidar nada. Cada `reset` muda a geração, e usar uma `Span` de antes do `reset` dá panic: é o uso depois de liberar, pego na execução, em vez de ler os dados de outra tarefa. Para ler o buffer direto, confira antes com `a.check(s)` e use `&a.buf[s.at:s.at + s.n]`.
+
+| Declaração | O que faz |
+|---|---|
+| `new(cap) *Arena`, `new_fixed(cap) *Arena`, `a.free()` | cria (a fixa nunca cresce: passar do limite dá panic) e libera |
+| `a.alloc(n) Span`, `a.copy(&src) Span`, `a.copy_str(s) Span` | um pedaço zerado ou copiado |
+| `a.reserve(n)`, `a.commit(n) Span` | escrever direto em `&a.buf[a.used:]` e transformar em pedaço |
+| `a.check(s)`, `a.len(s)`, `a.text(s, &dst)`, `a.eq(s, texto)`, `a.get(s, i)`, `a.set(s, i, b)` | usar um pedaço (todos conferem a geração) |
+| `a.reset()` | devolve tudo; os pedaços de antes deixam de valer |
+| `a.in_use()`, `a.capacity()`, `a.high_water()` | o uso, o tamanho do buffer e o máximo já usado (o tamanho certo para o próximo `new`) |
+
 ### `std/vec`
 
 Vetor que cresce, para quando o tamanho não é conhecido de antemão. É a parte da biblioteca que aloca, e cada alocação é visível:
