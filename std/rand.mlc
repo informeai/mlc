@@ -1,7 +1,18 @@
-// Números pseudoaleatórios (splitmix64). Não servem para criptografia.
+// Números aleatórios. Dois tipos, para usos diferentes:
 //
-//     r := rand.new(uint64(time.now_ms()))
-//     dado := r.range(1, 7)
+//   - Rand (splitmix64): rápido e previsível. A mesma semente dá a mesma
+//     sequência, o que serve para simulações, jogos e testes. Não serve
+//     para segurança: quem vê alguns números adivinha os próximos.
+//
+//         r := rand.new(uint64(time.now_ms()))
+//         dado := r.range(1, 7)
+//
+//   - secure: os bytes vêm do sistema operacional (a fonte criptográfica do
+//     kernel). É o que se usa para tokens, chaves, senhas temporárias e
+//     identificadores que não podem ser adivinhados (std/uuid).
+//
+//         var token [32]byte
+//         rand.secure(&token)            // depois: encoding.hex ou base64_url
 
 // Rand é um gerador: um estado de 64 bits, sem alocação.
 pub struct Rand {
@@ -37,3 +48,46 @@ pub fn (r &Rand) range(lo int, hi int) int {
 pub fn (r &Rand) float() float64 {
     return float64(r.next() >> 11) / 9007199254740992.0 // 53 bits / 2^53
 }
+
+// ---------- aleatório seguro ----------
+
+// secure preenche dst com bytes aleatórios do sistema operacional, próprios
+// para criptografia. Se o sistema não entregar (não acontece nos sistemas
+// suportados), é panic: não existe alternativa segura.
+pub extern fn secure(dst &[]byte)
+
+// secure_u64 devolve um uint64 aleatório seguro.
+pub fn secure_u64() uint64 {
+    var b [8]byte
+    secure(&b)
+    var v uint64 = 0
+    for i := 0; i < 8; i++ {
+        v = (v << 8) | uint64(b[i])
+    }
+    return v
+}
+
+// secure_int_n devolve um inteiro seguro em [0, n), sem viés: os valores do
+// fim do intervalo de uint64 que fariam alguns restos saírem mais vezes são
+// sorteados de novo. n precisa ser maior que zero.
+pub fn secure_int_n(n int) int {
+    if n <= 0 {
+        fail("rand.secure_int_n: n precisa ser maior que zero")
+    }
+    m := uint64(n)
+    limit := 0xFFFF_FFFF_FFFF_FFFF - (0xFFFF_FFFF_FFFF_FFFF % m + 1) % m
+    for {
+        v := secure_u64()
+        if v <= limit {
+            return int(v % m)
+        }
+    }
+}
+
+// seeded cria um Rand com semente segura: rápido como o Rand, mas com uma
+// sequência diferente a cada execução.
+pub fn seeded() Rand {
+    return new(secure_u64())
+}
+
+extern fn fail(msg string)

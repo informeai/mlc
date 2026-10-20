@@ -1,0 +1,48 @@
+import "std/str"
+import "std/testing"
+import "std/uuid"
+
+fn test_v4_format() {
+    id := uuid.v4()
+    testing.eq_int(id.version(), 4)
+    var buf [36]byte
+    n := id.text(&buf)
+    testing.eq_int(n, uuid.TEXT_LEN)
+    testing.check(buf[8] == '-' && buf[13] == '-' && buf[18] == '-' && buf[23] == '-', "hífens")
+    testing.check(buf[14] == '4', "versão no texto")
+    testing.check(buf[19] == '8' || buf[19] == '9' || buf[19] == 'a' || buf[19] == 'b', "variante RFC")
+    var back uuid.UUID
+    testing.check(uuid.parse(&buf, &back), "parse")
+    testing.check(back.equal(&id), "ida e volta")
+    other := uuid.v4()
+    testing.check(!other.equal(&id), "dois v4 diferentes")
+}
+
+fn test_v7_time_order() {
+    a := uuid.v7_at(1700000000000)
+    b := uuid.v7_at(1700000000001)
+    testing.eq_int(a.version(), 7)
+    testing.eq_int(a.ms(), 1700000000000)
+    var ta [36]byte
+    var tb [36]byte
+    a.text(&ta)
+    b.text(&tb)
+    testing.check(str.eq_bytes(&ta[:13], &ta[:13]), "prefixo")
+    // o texto de um v7 mais novo vem depois na ordem
+    testing.check(ta[11] < tb[11] || ta[12] < tb[12], "ordem pelo tempo")
+    testing.eq_str(&ta[:13], "018bcfe5-6800")
+}
+
+fn test_parse_errors() {
+    var u uuid.UUID
+    var buf [40]byte
+    n := str.copy(&buf, "018BCFE5-6800-7ABC-8DEF-0123456789AB")
+    testing.check(uuid.parse(&buf[:n], &u), "maiúsculas")
+    testing.eq_int(u.version(), 7)
+    n = str.copy(&buf, "018bcfe5x6800-7abc-8def-0123456789ab")
+    testing.check(!uuid.parse(&buf[:n], &u), "sem hífen")
+    n = str.copy(&buf, "018bcfe5-6800-7abc-8def-0123456789a")
+    testing.check(!uuid.parse(&buf[:n], &u), "curto")
+    n = str.copy(&buf, "018bcfe5-6800-7abc-8def-0123456789ag")
+    testing.check(!uuid.parse(&buf[:n], &u), "dígito inválido")
+}

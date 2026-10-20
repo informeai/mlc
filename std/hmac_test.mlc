@@ -1,0 +1,76 @@
+import "std/encoding"
+import "std/hmac"
+import "std/str"
+import "std/testing"
+
+fn hex_of(mac &[]byte) [64]byte {
+    var out [64]byte
+    encoding.hex(&out, mac)
+    return out
+}
+
+fn check(key &[]byte, data &[]byte, want string) {
+    var mac [32]byte
+    hmac.sha256(key, data, &mac)
+    out := hex_of(&mac)
+    testing.eq_str(&out, want)
+}
+
+// os vetores da RFC 4231 (casos 1, 2, 3, 6 e 7)
+fn test_rfc4231() {
+    var key [131]byte
+    var data [160]byte
+    for i := 0; i < 20; i++ {
+        key[i] = 0x0B
+    }
+    n := str.copy(&data, "Hi There")
+    check(&key[:20], &data[:n], "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7")
+
+    k := str.copy(&key, "Jefe")
+    n = str.copy(&data, "what do ya want for nothing?")
+    check(&key[:k], &data[:n], "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843")
+
+    for i := 0; i < 20; i++ {
+        key[i] = 0xAA
+    }
+    for i := 0; i < 50; i++ {
+        data[i] = 0xDD
+    }
+    check(&key[:20], &data[:50], "773ea91e36800e46854db8ebd09181a72959098b3ef8c122d9635514ced565fe")
+
+    for i := 0; i < 131; i++ {
+        key[i] = 0xAA // chave maior que um bloco: entra o SHA-256 dela
+    }
+    n = str.copy(&data, "Test Using Larger Than Block-Size Key - Hash Key First")
+    check(&key, &data[:n], "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54")
+}
+
+// em pedaços dá o mesmo que de uma vez
+fn test_streaming() {
+    var key [4]byte
+    k := str.copy(&key, "Jefe")
+    var data [64]byte
+    n := str.copy(&data, "what do ya want for nothing?")
+    h := hmac.new(&key[:k])
+    h.write(&data[:4])
+    h.write(&data[4:10])
+    h.write(&data[10:n])
+    var mac [32]byte
+    h.sum(&mac)
+    out := hex_of(&mac)
+    testing.eq_str(&out, "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843")
+}
+
+fn test_verify_and_equal() {
+    var key [16]byte
+    k := str.copy(&key, "segredo")
+    var body [32]byte
+    n := str.copy(&body, "{\"evento\":\"pago\"}")
+    var mac [32]byte
+    hmac.sha256(&key[:k], &body[:n], &mac)
+    testing.check(hmac.verify(&key[:k], &body[:n], &mac), "assinatura certa")
+    mac[31] ^= 1
+    testing.check(!hmac.verify(&key[:k], &body[:n], &mac), "um bit trocado")
+    testing.check(!hmac.verify(&key[:k], &body[:n], &mac[:16]), "tamanho errado")
+    testing.check(hmac.equal(&body[:0], &key[:0]), "vazios são iguais")
+}

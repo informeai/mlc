@@ -284,7 +284,23 @@ Gerador pseudoaleatório (splitmix64) **com estado explícito**: não há gerado
 | `r.range(lo int, hi int) int` | inteiro em `[lo, hi)` |
 | `r.float() float64` | real em `[0, 1)` |
 
-Para uma semente diferente a cada execução, use `uint64(time.now_ms())`.
+Para uma semente diferente a cada execução, use `rand.seeded()` (ou `uint64(time.now_ms())`).
+
+O `Rand` é previsível: quem vê alguns números adivinha os próximos. Para segurança (tokens, chaves, senhas temporárias, identificadores que não podem ser adivinhados), use os bytes do sistema operacional:
+
+| Declaração | O que faz |
+|---|---|
+| `secure(dst &[]byte)` | preenche `dst` com bytes da fonte criptográfica do kernel (`getentropy`); panic se o sistema não entregar |
+| `secure_u64() uint64` | um `uint64` seguro |
+| `secure_int_n(n int) int` | inteiro seguro em `[0, n)`, sem viés (os valores que favoreceriam alguns restos são sorteados de novo) |
+| `seeded() Rand` | um `Rand` com semente segura |
+
+```mlc
+var token [32]byte
+rand.secure(&token)
+var texto [64]byte
+n := encoding.base64_url(&texto, &token)   // para uma URL ou um cookie
+```
 
 ### `std/hash`
 
@@ -312,6 +328,40 @@ n := encoding.hex(&txt, &digest)        // "ba7816bf..."
 ```
 
 O SHA-256 serve para integridade e identificadores, mas não é criptografia completa: assinaturas, senhas e cifras pedem uma biblioteca de C pela FFI.
+
+### `std/hmac`
+
+HMAC-SHA256 (RFC 2104) em MLC, sobre o `hash.sha256`: a assinatura de uma mensagem com uma chave secreta. É o que confere um webhook (Stripe, GitHub), assina um token (JWT com HS256) ou um cookie de sessão. Nada aloca.
+
+| Declaração | O que faz |
+|---|---|
+| `sha256(key, data, dst &[]byte)` | o HMAC de uma vez, em `dst` (`SIZE` = 32 bytes) |
+| `verify(key, data, mac &[]byte) bool` | confere uma assinatura, em tempo constante |
+| `equal(a, b &[]byte) bool` | compara em tempo constante: o tempo não depende de onde está a primeira diferença |
+| `new(key) Hmac`, `h.write(data)`, `h.sum(dst)` | o mesmo em pedaços |
+
+```mlc
+if !hmac.verify(&segredo, &corpo, &assinatura) {
+    http.respond_str(&c, 401, "text/plain", "assinatura inválida\n")
+    return
+}
+```
+
+Para conferir uma assinatura ou um token, use `verify` ou `equal`, nunca `str.eq_bytes`: uma comparação comum para no primeiro byte diferente, e o tempo que ela leva diz a quem ataca quantos bytes ele já acertou. A chave pode ter qualquer tamanho; uma maior que 64 bytes é trocada pelo SHA-256 dela, como manda a RFC. Testado com os vetores da RFC 4231.
+
+### `std/uuid`
+
+UUIDs (RFC 9562), identificadores de 128 bits que não se repetem, sem um servidor central. O `UUID` é um valor de 16 bytes; o texto (36 caracteres) vai para um buffer de quem chama. Os bits aleatórios vêm de `rand.secure`.
+
+| Declaração | O que faz |
+|---|---|
+| `v4() UUID` | aleatório (122 bits) |
+| `v7() UUID`, `v7_at(ms) UUID` | ordenado pelo tempo: os 48 bits de cima são os milissegundos desde 1970 |
+| `u.text(dst) int` | escreve `0192a3c4-5d6e-7f80-9a1b-2c3d4e5f6a7b` (`TEXT_LEN` = 36) |
+| `parse(s, &u) bool` | lê o texto (hex maiúsculo ou minúsculo) |
+| `u.version() int`, `u.ms() int`, `u.equal(&o) bool` | a versão, o horário de um v7, igualdade |
+
+Para chave de banco, prefira `v7`: UUIDs criados depois ficam depois na ordem, então o índice cresce no fim em vez de espalhado, e as inserções ficam bem mais rápidas.
 
 ### `std/binary`
 

@@ -25,6 +25,9 @@
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
+#if defined(__APPLE__) || defined(__linux__)
+#include <sys/random.h> /* getentropy */
+#endif
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -707,6 +710,25 @@ int64_t mlc_std_process_run_raw(mlc_sl_byte *args, int64_t count, mlc_sl_byte *o
     return overflow ? -1000 : got;
 }
 
+/* std/rand: bytes aleatórios do sistema operacional (getentropy, a fonte
+ * criptográfica do kernel), em pedaços de até 256 bytes, o limite dela. Se
+ * o sistema não entregar, é panic: não existe alternativa segura. */
+void mlc_std_rand_secure(mlc_sl_byte *dst, const char *file, int line) {
+    int64_t done = 0;
+    while (done < dst->len) {
+        size_t n = (size_t)(dst->len - done);
+        if (n > 256) n = 256;
+#if defined(__APPLE__) || defined(__linux__)
+        if (getentropy(dst->ptr + done, n) != 0) mlc_panic(file, line, "rand.secure: o sistema não entregou bytes aleatórios");
+#else
+        FILE *f = fopen("/dev/urandom", "rb");
+        if (f == NULL || fread(dst->ptr + done, 1, n, f) != n) mlc_panic(file, line, "rand.secure: o sistema não entregou bytes aleatórios");
+        fclose(f);
+#endif
+        done += (int64_t)n;
+    }
+}
+
 /* std/time */
 int64_t mlc_std_time_now_ms(const char *file, int line) {
     (void)file;
@@ -867,6 +889,14 @@ void mlc_stack_overflow(int64_t need, const char *file, int line) {
 
 /* std/map */
 void mlc_std_map_fail(mlc_str msg, const char *file, int line) {
+    mlc_std_vec_fail(msg, file, line);
+}
+
+void mlc_std_uuid_fail(mlc_str msg, const char *file, int line) {
+    mlc_std_vec_fail(msg, file, line);
+}
+
+void mlc_std_rand_fail(mlc_str msg, const char *file, int line) {
     mlc_std_vec_fail(msg, file, line);
 }
 
