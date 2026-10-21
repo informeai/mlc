@@ -1,0 +1,7 @@
+// error: leak: p still owns the memory (line 3) at the end of the function; free it with free(p) or pass ownership along
+struct Point { x int; y int }
+fn f(p *Point) {
+}
+fn main() {
+    f(alloc(Point))
+}

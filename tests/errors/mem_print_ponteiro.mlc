@@ -1,8 +1,0 @@
-// error: io.print doesn't write pointers (*Ponto); write the pointee: *p or p.field
-import "std/io"
-struct Ponto { x int; y int }
-fn main() {
-    p := alloc(Ponto)
-    io.print(p)
-    free(p)
-}

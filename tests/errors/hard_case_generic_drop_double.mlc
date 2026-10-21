@@ -1,0 +1,39 @@
+// error: x freed twice: it was already freed or moved (line 33) (checked with an owning T, like twice[[]byte])
+// Hard case (phase 5 of the verification plan): generic code that frees twice (checked with an owning T, even instantiated with int).
+struct Box {
+    v int
+}
+
+struct Pair {
+    a ?*Box
+    b ?*Box
+}
+
+enum Opt {
+    Nothing
+    Has(b ?*Box)
+}
+
+extern "C" fn rand() int32
+
+fn flip() bool {
+    return rand() % 2 == 0
+}
+
+fn consume(b *Box) int {
+    n := b.v
+    free(b)
+    return n
+}
+
+fn sink(n int) {
+}
+
+fn twice[T owned](x T) {
+    drop(x)
+    drop(x)
+}
+
+fn main() {
+    twice(1)
+}

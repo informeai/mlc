@@ -1,0 +1,57 @@
+// Returned and stored borrows: v.at(i), m.get(&k), functions that
+// return part of what they received, and x := &a[i].
+import "std/io"
+import "std/str"
+import "std/vec"
+import "std/map"
+
+struct Point {
+    x int
+    y int
+}
+
+impl auto io.Display for Point
+
+// returns the larger field, borrowed from the received point
+fn largest_field(p &Point) &int {
+    if p.x > p.y {
+        return &p.x
+    }
+    return &p.y
+}
+
+fn main() {
+    pts := vec.new[Point](2)
+    pts.push(Point{x: 1, y: 2})
+    pts.push(Point{x: 5, y: 3})
+    q := pts.at(1)
+    q.y = 30
+    io.print(*q, q.x)
+    io.print(*pts.at(0), pts.at(1).y, pts.len())
+    m := largest_field(pts.last())
+    *m += 100
+    io.print(*pts.last())
+    pts.free()
+
+    count_all := map.new[[]byte, int](4)
+    k := alloc([]byte, 3)
+    str.copy(&k, "abc")
+    search := alloc([]byte, 3)
+    str.copy(&search, "abc")
+    count_all.put(k, 1)
+    n := count_all.get(&search)
+    *n += 41
+    io.print(*count_all.get(&search))
+    for i := count_all.next(0); i >= 0; i = count_all.next(i + 1) {
+        key := count_all.key_ref(i)
+        io.write(key)
+        io.print(":", *count_all.value_ref(i))
+    }
+    free(search)
+    count_all.free()
+
+    var a [3]int = [3]int{1, 2, 3}
+    r := &a[1]
+    *r = 20
+    io.print(a)
+}

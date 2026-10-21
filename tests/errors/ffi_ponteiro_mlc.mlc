@@ -1,9 +1,0 @@
-// error: parameter p of guarda (*P): MLC memory can't be handed to C (it wouldn't know how to free it); lend it with &
-struct P {
-    x int
-}
-
-extern "C" fn guarda(p *P)
-
-fn main() {
-}

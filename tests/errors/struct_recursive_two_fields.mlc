@@ -1,0 +1,12 @@
+// error: struct T contains itself by value (T → T); that will be possible with pointers
+// Found by the robustness fuzz: with two fields closing the cycle, the
+// size of [2]T went into infinite recursion.
+struct T {
+    t T
+    d T
+}
+
+fn main() {
+    var x [2]T
+    x[0].d = x[1].t
+}

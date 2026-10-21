@@ -1,0 +1,5 @@
+// error: parameter s of store_it ([]byte): an owning slice can't be handed to C; lend it with &[]T
+extern "C" fn store_it(s []byte)
+
+fn main() {
+}

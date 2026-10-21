@@ -1,7 +1,0 @@
-// error: a struct literal in the header of if, for or match needs parentheses: (Type{...})
-struct Ponto { x int }
-fn main() {
-    p := Ponto{}
-    if p == Ponto{x: 1} {
-    }
-}

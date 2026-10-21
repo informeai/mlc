@@ -1,0 +1,8 @@
+// error: field radius of Circle: expected float64, found string
+enum Shape {
+    Circle(radius float64)
+    Empty
+}
+fn main() {
+    x := Shape.Circle("one")
+}

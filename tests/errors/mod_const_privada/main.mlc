@@ -1,6 +1,0 @@
-// error: geometria.MAX isn't public (declare it with pub const)
-import "std/io"
-import "geometria"
-fn main() {
-    io.print(geometria.MAX)
-}

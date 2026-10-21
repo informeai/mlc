@@ -1,0 +1,4 @@
+// error: import "../outside": the path can't have . or .. (it's relative to the main file's folder)
+import "../outside"
+fn main() {
+}

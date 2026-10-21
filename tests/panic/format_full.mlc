@@ -1,0 +1,10 @@
+import "std/io"
+import "std/str"
+
+fn main() {
+    b := alloc([]byte, 4)
+    n := str.format(&b, "{}", 12)
+    io.write_line(&b[:n])
+    str.format(&b, "{} and {}", 12, 34)
+    free(b)
+}

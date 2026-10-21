@@ -1,0 +1,8 @@
+// error: a value of type *Point is never nil
+import "std/io"
+struct Point { x int; y int }
+fn main() {
+    p := alloc(Point)
+    io.print(p == nil)
+    free(p)
+}

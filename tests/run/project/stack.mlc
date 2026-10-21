@@ -1,0 +1,44 @@
+pub struct Node {
+    value_ int
+    next_ ?*Node
+}
+
+pub struct Stack {
+    top ?*Node
+    size_ int
+}
+
+pub fn new_one() *Stack {
+    return alloc(Stack)
+}
+
+pub fn push_item(p &Stack, v int) {
+    n := alloc(Node)
+    n.value_ = v
+    n.next_ = p.top
+    p.top = n
+    p.size_++
+}
+
+pub fn pop_item(p &Stack) int {
+    n := p.top
+    if n == nil {
+        p.top = nil
+        return -1
+    }
+    v := n.value_
+    p.top = n.next_
+    free(n)
+    p.size_--
+    return v
+}
+
+pub fn release(p *Stack) {
+    cur := p.top
+    for cur != nil {
+        next_ := cur.next_
+        free(cur)
+        cur = next_
+    }
+    free(p)
+}

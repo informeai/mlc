@@ -1,0 +1,10 @@
+// error: argument 1 of sum_: expected &Point; to borrow, write &p
+struct Point { x int; y int }
+fn sum_(p &Point) int {
+    return p.x + p.y
+}
+fn main() {
+    p := alloc(Point)
+    sum_(p)
+    free(p)
+}

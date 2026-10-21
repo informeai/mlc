@@ -1,0 +1,8 @@
+// error: leak: a still owns the memory (line 6) at the end of the function; free it with a.free() or pass ownership along
+// The arena is an owner: the checker requires the free.
+import "std/arena"
+
+fn main() {
+    a := arena.new(64)
+    a.copy_str("x")
+}

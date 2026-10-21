@@ -1,0 +1,7 @@
+// error: a borrow (&Point) can't be freed: only the owner frees
+struct Point { x int; y int }
+fn f(p &Point) {
+    free(p)
+}
+fn main() {
+}

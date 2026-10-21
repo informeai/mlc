@@ -1,3 +1,0 @@
-// error: function main not declared
-fn outra() {
-}

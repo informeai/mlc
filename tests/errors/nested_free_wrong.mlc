@@ -1,0 +1,14 @@
+// error: List has owning fields and doesn't know how to free itself inside vec.new: declare fn (x *List) free() freeing the fields and x itself
+import "std/vec"
+
+struct List {
+    names []byte
+}
+
+fn (l &List) free() {
+}
+
+fn main() {
+    v := vec.new[?*List](1)
+    v.free()
+}

@@ -1,9 +1,0 @@
-// error: type Forma used as a value (to create a value: Forma.Variant)
-import "std/io"
-enum Forma {
-    Circulo(raio float64)
-    Vazio
-}
-fn main() {
-    io.print(Forma)
-}

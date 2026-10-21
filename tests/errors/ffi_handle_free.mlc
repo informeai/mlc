@@ -1,7 +1,7 @@
 // error: ?*FILE is a C handle: release it with the C function that closes it, not with free
 extern "C" type FILE
 
-extern "C" fn fopen(caminho string, modo string) ?*FILE
+extern "C" fn fopen(trail string, mode string) ?*FILE
 extern "C" fn fclose(f *FILE) int32
 
 fn main() {

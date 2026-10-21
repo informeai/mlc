@@ -1,0 +1,99 @@
+// Nested owners: a vector of vectors, a map of lists, a slice of slices and a
+// tree (like JSON) whose nodes know how to free themselves with fn (v *Value) free().
+import "std/io"
+import "std/str"
+import "std/vec"
+import "std/map"
+
+// a JSON tree: each value keeps its children in a vector of ?*Value
+struct Value {
+    kind int // 0 number, 1 text, 2 list
+    num int
+    text_ []byte
+    items_ ?*vec.Vec[?*Value]
+}
+
+fn (v *Value) free() {
+    free(v.text_)
+    if v.items_ != nil {
+        v.items_.free()
+    }
+    v.items_ = nil
+    free(v)
+}
+
+fn number_(n int) ?*Value {
+    return alloc(Value{kind: 0, num: n, text_: alloc([]byte, 0), items_: nil})
+}
+
+fn text_(s string) ?*Value {
+    t := alloc([]byte, len(s))
+    str.copy(&t, s)
+    return alloc(Value{kind: 1, num: 0, text_: t, items_: nil})
+}
+
+fn sum_(v &Value) int {
+    match v.kind {
+        0 => return v.num
+        1 => return len(v.text_)
+        _ => {
+            total := 0
+            if v.items_ != nil {
+                for i := 0; i < v.items_.len(); i++ {
+                    total += sum_(v.items_.at(i))
+                }
+            }
+            return total
+        }
+    }
+}
+
+fn main() {
+    // vector of vectors
+    grid := vec.new[?*vec.Vec[int]](2)
+    for l := 0; l < 3; l++ {
+        line_ := vec.new[int](2)
+        for c := 0; c < 4; c++ {
+            line_.push(l * 10 + c)
+        }
+        grid.push(line_)
+    }
+    middle := grid.at(1)
+    io.print("grid[1][2] =", middle.get(2))
+    grid.free() // frees each line (the Vec's free) and the grid
+
+    // map from text to a list of texts
+    groups := map.new[[]byte, ?*vec.Vec[[]byte]](4)
+    k := alloc([]byte, 6)
+    str.copy(&k, "fruits")
+    list := vec.new[[]byte](2)
+    m := alloc([]byte, 4)
+    str.copy(&m, "pear")
+    list.push(m)
+    groups.put(k, list)
+    io.print("groups:", groups.len())
+    groups.free()
+
+    // slice of slices
+    table_ := vec.new[[][]byte](1)
+    lines := alloc([][]byte, 2)
+    a := alloc([]byte, 1)
+    old := replace(&lines[0], a)
+    free(old)
+    table_.push(lines)
+    table_.free()
+
+    // tree
+    root := alloc(Value{kind: 2, num: 0, text_: alloc([]byte, 0), items_: vec.new[?*Value](2)})
+    if root.items_ != nil {
+        root.items_.push(number_(40))
+        root.items_.push(text_("hi"))
+        sub := alloc(Value{kind: 2, num: 0, text_: alloc([]byte, 0), items_: vec.new[?*Value](1)})
+        if sub.items_ != nil {
+            sub.items_.push(number_(100))
+        }
+        root.items_.push(sub)
+    }
+    io.print("sum of the tree:", sum_(&root))
+    root.free()
+}

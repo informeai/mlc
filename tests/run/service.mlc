@@ -1,0 +1,87 @@
+import "std/log"
+import "std/net"
+import "std/signal"
+import "std/str"
+import "std/sync"
+import "std/thread"
+
+// A service with a clean shutdown: the accept loop wakes up every 20 ms
+// (set_timeout) to check whether a stop request arrived (TERM or
+// Ctrl+C); each connection is handled in a thread of the group, with its own
+// handle of the logger. Here the client, after two connections, sends TERM
+// to the process itself, as a "docker stop" would. (The client waits for
+// each connection's response before the next, so the output comes out in order.)
+
+struct Conn {
+    c *net.Conn
+    lg *log.Logger
+    id int
+}
+
+fn handle(ctx *Conn) {
+    c := ctx.c // moves the fields out; then the object can be freed
+    lg := ctx.lg
+    id := ctx.id
+    free(ctx)
+    var buf [64]byte
+    match c.read(&buf) {
+        Ok(n) => {
+            lg.info("connection {}: {:s}", id, &buf[:n])
+            c.write(&buf[:n])
+        }
+        Err(code) => lg.error("connection {}: error {}", id, code)
+    }
+    c.close()
+    lg.close()
+}
+
+fn client(port int) {
+    var h [16]byte
+    hn := str.copy(&h, "127.0.0.1")
+    for i := 0; i < 2; i++ {
+        err := 0
+        c := net.connect(&h[:hn], port, &err)
+        if c != nil {
+            var msg [16]byte
+            k := str.format(&msg, "hello {}", i)
+            c.write(&msg[:k])
+            var back [16]byte
+            c.read(&back)
+            c.close()
+        }
+    }
+    signal.raise(signal.TERM)
+}
+
+fn main() {
+    lg := log.new(log.STDOUT, log.INFO)
+    lg.set_time(false) // the same output on every run
+    signal.listen_shutdown()
+    var h [16]byte
+    hn := str.copy(&h, "127.0.0.1")
+    err := 0
+    l := net.listen(&h[:hn], 0, &err)
+    if l == nil {
+        lg.error("listen failed: {}", err)
+        lg.close()
+        return
+    }
+    l.set_timeout(20)
+    cl := thread.spawn(client, l.port(), thread.STACK_64KB)
+    workers := sync.group(16) // at most 16 connections at the same time
+    id := 0
+    for !signal.received(signal.TERM) && !signal.received(signal.INT) {
+        c := l.accept(&err)
+        if c == nil {
+            continue // TIMEOUT: goes back to checking the signals
+        }
+        id++
+        workers.add(thread.spawn(handle, alloc(Conn{c: c, lg: lg.clone(), id: id}), thread.STACK_64KB))
+    }
+    lg.info("stop request: waiting for the connections")
+    workers.wait()
+    thread.join(cl)
+    l.close()
+    lg.info("stopped")
+    lg.close()
+}

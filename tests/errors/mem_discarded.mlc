@@ -1,0 +1,8 @@
+// error: leak: the owning pointer returned here is discarded; store it in a variable
+struct Point { x int; y int }
+fn fresh() *Point {
+    return alloc(Point)
+}
+fn main() {
+    fresh()
+}

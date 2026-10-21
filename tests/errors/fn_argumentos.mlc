@@ -1,9 +1,0 @@
-// error: the function fn(int) int expects 1 argument(s), got 2
-fn dobro(x int) int {
-    return x * 2
-}
-
-fn main() {
-    f := dobro
-    f(1, 2)
-}

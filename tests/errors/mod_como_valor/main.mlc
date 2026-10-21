@@ -1,6 +1,0 @@
-// error: module geometria used as a value
-import "std/io"
-import "geometria"
-fn main() {
-    io.print(geometria)
-}

@@ -1,0 +1,16 @@
+// error: b is already a borrow: pass b directly, without &
+// Checker coverage (phase 5): an ownership rule no test triggered.
+struct Box {
+    v int
+}
+
+fn peek(b &Box) int {
+    return b.v
+}
+
+fn another(b &Box) int {
+    return peek(&b)
+}
+
+fn main() {
+}

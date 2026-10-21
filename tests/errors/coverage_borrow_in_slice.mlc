@@ -1,0 +1,10 @@
+// error: &T can only be a parameter type: a borrow can't be stored in a slice
+// Checker coverage (phase 5): an ownership rule no test triggered.
+struct Box {
+    v int
+}
+
+fn main() {
+    s := alloc([]&Box, 2)
+    free(s)
+}

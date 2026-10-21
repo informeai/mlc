@@ -1,0 +1,11 @@
+// error: leak: p still owns the memory (line 5) at the continue; free it with free(p) or pass ownership along
+struct Point { x int; y int }
+fn main() {
+    for i := 0; i < 3; i++ {
+        p := alloc(Point)
+        if i == 1 {
+            continue
+        }
+        free(p)
+    }
+}

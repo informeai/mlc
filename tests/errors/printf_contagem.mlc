@@ -1,6 +1,0 @@
-// error: the format has 2 {} and the call passes 1 value(s)
-import "std/io"
-
-fn main() {
-    io.printf("{} e {}\n", 1)
-}

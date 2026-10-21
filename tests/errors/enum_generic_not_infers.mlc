@@ -1,0 +1,8 @@
+// error: couldn't infer T in Outcome.Failure: write Outcome[int].Failure(...)
+enum Outcome[T any] {
+    Ok(value_ T)
+    Failure(errcode int)
+}
+fn main() {
+    r := Outcome.Failure(1)
+}

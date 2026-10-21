@@ -1,0 +1,7 @@
+// error: a struct literal in the header of if, for or match needs parentheses: (Type{...})
+struct Point { x int }
+fn main() {
+    p := Point{}
+    if p == Point{x: 1} {
+    }
+}

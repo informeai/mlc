@@ -1,6 +1,0 @@
-// error: & can only appear as a call argument, to borrow: f(&x)
-struct Ponto { x int; y int }
-fn main() {
-    s := Ponto{}
-    var ok bool = &s == &s
-}

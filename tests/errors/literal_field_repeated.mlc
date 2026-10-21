@@ -1,0 +1,6 @@
+// error: repeated field x in the literal
+import "std/io"
+struct Point { x int; y int }
+fn main() {
+    io.print(Point{x: 1, x: 2, y: 3})
+}

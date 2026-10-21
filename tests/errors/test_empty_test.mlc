@@ -1,0 +1,4 @@
+// error: test file without tests: declare functions fn test_name() (or fn bench_name(b &testing.B))
+fn helper() int {
+    return 1
+}

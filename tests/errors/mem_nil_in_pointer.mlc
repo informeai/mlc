@@ -1,0 +1,5 @@
+// error: declaration of p: nil only fits in ?*Point, not in *Point (a *T pointer is never nil)
+struct Point { x int; y int }
+fn main() {
+    var p *Point = nil
+}

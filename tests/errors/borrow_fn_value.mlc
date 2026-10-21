@@ -1,0 +1,15 @@
+// error: take_it returns a borrow and can't be used as a value in this version
+import "std/io"
+import "std/vec"
+
+struct P {
+    x int
+}
+
+fn take_it(p &P) &P {
+    return p
+}
+
+fn main() {
+    f := take_it
+}

@@ -1,0 +1,1 @@
+panic: stack_recursion.mlc:5: stack overflow: the function's frame (about 4 KB) doesn't fit in what's left of this thread's stack (ask for a larger stack in thread.spawn, or put the large buffers on the heap with alloc)

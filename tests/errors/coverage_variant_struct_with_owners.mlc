@@ -1,0 +1,16 @@
+// error: a struct with owners only exists behind a pointer: use ?*Pair
+// Checker coverage (phase 5): an ownership rule no test triggered.
+struct Box {
+    v int
+}
+
+struct Pair {
+    a ?*Box
+}
+
+enum E {
+    Has(p Pair)
+}
+
+fn main() {
+}

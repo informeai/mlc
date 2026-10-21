@@ -1,9 +1,0 @@
-import "std/io"
-
-fn divide(a int, b int) int {
-    return a / b
-}
-
-fn main() {
-    io.print(divide(10, 0))
-}

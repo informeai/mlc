@@ -1,0 +1,15 @@
+// error: struct C contains itself by value (C → D → C); that will be possible with pointers
+// An array keeps its elements by value: [2]D inside C, with C inside
+// D, is infinite too.
+struct C {
+    d [2]D
+}
+
+struct D {
+    c C
+}
+
+fn main() {
+    c := alloc(C)
+    free(c)
+}

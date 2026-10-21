@@ -1,4 +1,0 @@
-// error: fn main can only exist in the main file; outro.mlc is imported
-import "outro"
-fn main() {
-}

@@ -1,9 +1,0 @@
-// error: leak: p still owns the memory (line 4) at the return; free it with free(p) or pass ownership along
-struct Ponto { x int; y int }
-fn f() int {
-    p := alloc(Ponto)
-    return p.x
-}
-fn main() {
-    f()
-}

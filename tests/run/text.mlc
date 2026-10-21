@@ -1,0 +1,101 @@
+import "std/io"
+import "std/str"
+
+const SIZE = 16
+
+// joins "name has N years" into a buffer the caller lent; returns
+// how many bytes it used
+fn sentence(buf &[]byte, name_ &[]byte, age int) int {
+    n := 0
+    n += str.copy_bytes(&buf[n:], name_)
+    n += str.copy(&buf[n:], " has ")
+    n += str.put_int(&buf[n:], age)
+    n += str.copy(&buf[n:], " years")
+    return n
+}
+
+// how much room the sentence needs: the programmer sees the size before allocating
+fn sentence_len(name_len int, age int) int {
+    return name_len + len(" has ") + str.int_len(age) + len(" years")
+}
+
+fn count_vowels(s &[]byte) int {
+    total := 0
+    for c in s {
+        match c {
+            'a', 'e', 'i', 'o', 'u' => total++
+            _ => {}
+        }
+    }
+    return total
+}
+
+fn uppercase(s &[]byte) {
+    for i := 0; i < len(s); i++ {
+        if s[i] >= 'a' && s[i] <= 'z' {
+            s[i] = byte(int(s[i]) - 32)
+        }
+    }
+}
+
+fn main() {
+    name_ := alloc([]byte, SIZE)
+    line_ := alloc([]byte, SIZE)
+
+    io.print("name?")
+    n := io.read_line(&name_)
+    io.print("age?")
+    m := io.read_line(&line_)
+
+    var age int
+    if !str.parse_int(&line_[:m], &age) {
+        io.print("invalid age")
+        age = 0
+    }
+
+    // the sentence's buffer is allocated with the exact size
+    needs := sentence_len(n, age)
+    buf := alloc([]byte, needs)
+    k := sentence(&buf, &name_[:n], age)
+    io.write_line(&buf[:k])
+    io.print("bytes:", k, "from", len(buf))
+
+    io.print("vowels in the name:", count_vowels(&name_[:n]))
+    uppercase(&name_[:n])
+    io.write_line(&name_[:n])
+
+    if str.eq(&name_[:n], "ANA") {
+        io.print("hi, Ana!")
+    }
+
+    // the third line is invalid
+    m = io.read_line(&line_)
+    if !str.parse_int(&line_[:m], &age) {
+        io.write(&line_[:m])
+        io.print(" isn't a number")
+    }
+
+    // reads the rest, growing the buffer with realloc when the line doesn't fit
+    used := 0
+    for {
+        read_n := io.read_line(&line_[used:])
+        if read_n < 0 {
+            break
+        }
+        used += read_n
+        if used == len(line_) {
+            line_ = realloc(line_, len(line_) * 2)
+            io.print("grew to", len(line_))
+            continue
+        }
+        io.write(&line_[:used])
+        io.print(" (", used, "bytes )")
+        used = 0
+    }
+
+    io.print('A', byte(66), int('C'))
+
+    free(name_)
+    free(line_)
+    free(buf)
+}

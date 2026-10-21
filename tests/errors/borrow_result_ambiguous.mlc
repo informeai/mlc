@@ -1,0 +1,14 @@
+// error: two_ returns &P and takes more than one borrow: there's no way to know which one the result comes from (take only one, or make a method with a & receiver)
+import "std/io"
+import "std/vec"
+
+struct P {
+    x int
+}
+
+fn two_(a &P, b &P) &P {
+    return a
+}
+
+fn main() {
+}

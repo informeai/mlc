@@ -1,0 +1,7 @@
+// error: free(p): p.items_ may still own memory; free or move p.items_ first
+struct Stack { items_ []int; top int }
+fn main() {
+    p := alloc(Stack)
+    p.items_ = alloc([]int, 4)
+    free(p)
+}

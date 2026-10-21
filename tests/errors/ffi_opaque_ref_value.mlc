@@ -1,0 +1,14 @@
+// error: T has the ref constraint and can only appear borrowed (&T): the type may have owners and not be copyable
+extern "C" type FILE
+
+extern "C" fn fopen(trail string, mode string) ?*FILE
+extern "C" fn fclose(f *FILE) int32
+
+// an opaque C type can be the argument of [T ref], but the generic never
+// uses T by value
+fn copy_of[T ref](x &T) T {
+    return *x
+}
+
+fn main() {
+}

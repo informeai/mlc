@@ -1,0 +1,72 @@
+import "std/cmp"
+import "std/deque"
+import "std/heap"
+import "std/io"
+
+// Breadth-first search in a maze (deque as a queue) and an event
+// scheduler (heap as a priority queue).
+const W = 7
+const H = 5
+const MAZE = "S.#....\n.##.##.\n...#...\n.#...#.\n.#.#..E" // lines of W, with \n
+
+fn bfs() int {
+    var dist [35]int
+    for i := 0; i < W * H; i++ {
+        dist[i] = -1
+    }
+    q := deque.new[int](8)
+    q.push_back(0)
+    dist[0] = 0
+    result := -1
+    for q.len() > 0 {
+        p := q.pop_front()
+        x := p % W
+        y := p / W
+        if MAZE[y * (W + 1) + x] == 'E' {
+            result = dist[p]
+            break
+        }
+        var dx [4]int = [4]int{1, -1, 0, 0}
+        var dy [4]int = [4]int{0, 0, 1, -1}
+        for k := 0; k < 4; k++ {
+            nx := x + dx[k]
+            ny := y + dy[k]
+            if nx < 0 || nx >= W || ny < 0 || ny >= H {
+                continue
+            }
+            n := ny * W + nx
+            if MAZE[ny * (W + 1) + nx] != '#' && dist[n] < 0 {
+                dist[n] = dist[p] + 1
+                q.push_back(n)
+            }
+        }
+    }
+    q.free()
+    return result
+}
+
+struct Event {
+    at int
+    id int
+}
+
+fn (e &Event) cmp(o &Event) int {
+    return e.at.cmp(&o.at)
+}
+
+impl cmp.Ord for Event
+
+fn main() {
+    io.printf("shortest path: {} steps\n", bfs())
+
+    events := heap.new[Event](4)
+    var at [5]int = [5]int{300, 100, 250, 50, 100}
+    for i := 0; i < 5; i++ {
+        events.push(Event{at: at[i], id: i})
+    }
+    for events.len() > 0 {
+        e := events.pop()
+        io.printf("t={:>3} event {}\n", e.at, e.id)
+    }
+    events.free()
+}

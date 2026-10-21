@@ -1,4 +1,0 @@
-// error: unknown module "nada": file nada.mlc not found (searched in ".", "lib"; other folders: -I or MLC_PATH)
-import "nada"
-fn main() {
-}

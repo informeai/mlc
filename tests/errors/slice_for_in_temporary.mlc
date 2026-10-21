@@ -1,0 +1,10 @@
+// error: for in walks a variable or field: store the slice in a variable first
+import "std/io"
+fn make_it() []int {
+    return alloc([]int, 2)
+}
+fn main() {
+    for v in make_it() {
+        io.print(v)
+    }
+}

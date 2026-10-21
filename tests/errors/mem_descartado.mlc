@@ -1,8 +1,0 @@
-// error: leak: the owning pointer returned here is discarded; store it in a variable
-struct Ponto { x int; y int }
-fn novo() *Ponto {
-    return alloc(Ponto)
-}
-fn main() {
-    novo()
-}

@@ -1,0 +1,12 @@
+// error: p.items_ was already freed or moved (line 9)
+struct Stack { items_ []int }
+fn sum_(s &[]int) int {
+    return len(s)
+}
+fn main() {
+    p := alloc(Stack)
+    p.items_ = alloc([]int, 2)
+    free(p.items_)
+    sum_(&p.items_)
+    free(p)
+}

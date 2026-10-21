@@ -1,0 +1,69 @@
+// Owners in generics: Vec[T owned] keeps []byte and ?*Node; push moves
+// inside, take/pop return ownership, set puts back in place, free frees everything.
+import "std/io"
+import "std/str"
+import "std/vec"
+
+struct Node {
+    v int
+}
+
+// keeps the larger of two owners and frees the other
+fn larger_stays[T owned](a T, b T, a_larger bool) T {
+    if a_larger {
+        drop(b)
+        return a
+    }
+    drop(a)
+    return b
+}
+
+fn main() {
+    names := vec.new[[]byte](1)
+    line_ := alloc([]byte, 64)
+    for {
+        n := io.read_line(&line_)
+        if n < 0 {
+            break
+        }
+        copy_ := alloc([]byte, n)
+        str.copy_bytes(&copy_, &line_[:n])
+        names.push(copy_)
+    }
+    for i := 0; i < names.len(); i++ {
+        name_ := names.take(i)
+        io.write_line(&name_)
+        names.set(i, name_)
+    }
+    last_ := names.pop()
+    io.print("last:", last_, "left", names.len())
+    free(last_)
+    free(line_)
+    names.free()
+
+    nodes := vec.new[?*Node](2)
+    nodes.push(alloc(Node{v: 1}))
+    nodes.push(nil)
+    nodes.push(alloc(Node{v: 3}))
+    nodes.swap(0, 2)
+    p := nodes.take(0)
+    if p != nil {
+        io.print("first:", p.v)
+    }
+    nodes.set(0, p)
+    nodes.clear()
+    io.print("empty:", nodes.len())
+    nodes.free()
+
+    x := larger_stays(alloc([]byte, 3), alloc([]byte, 5), false)
+    io.print(len(x))
+    free(x)
+    io.print(larger_stays(1, 2, true))
+
+    // a copyable T keeps get
+    ns := vec.new[int](2)
+    ns.push(10)
+    ns.push(20)
+    io.print(ns.get(1), ns.put(0, 7), ns.get(0))
+    ns.free()
+}

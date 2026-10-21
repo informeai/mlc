@@ -1,5 +1,0 @@
-// error: two imports with the same name texto ("texto" and "util/texto")
-import "texto"
-import "util/texto"
-fn main() {
-}

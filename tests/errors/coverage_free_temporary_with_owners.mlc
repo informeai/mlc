@@ -1,0 +1,17 @@
+// error: free of a temporary object with owning fields: store it in a variable and free the fields first
+// Checker coverage (phase 5): an ownership rule no test triggered.
+struct Box {
+    v int
+}
+
+struct Pair {
+    a ?*Box
+}
+
+fn pair() *Pair {
+    return alloc(Pair{a: alloc(Box{v: 1})})
+}
+
+fn main() {
+    free(pair())
+}

@@ -1,6 +1,0 @@
-// error: the method forma.Q.segredo isn't public (declare it with pub fn)
-import "forma"
-fn main() {
-    q := forma.Q{n: 1}
-    q.segredo()
-}

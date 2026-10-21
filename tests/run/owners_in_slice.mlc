@@ -1,0 +1,101 @@
+import "std/io"
+
+struct Item {
+    name_ string
+    weight int
+}
+
+struct Backpack {
+    items_ []?*Item
+    used int
+}
+
+fn new_item(name_ string, weight int) *Item {
+    return alloc(Item{name_: name_, weight: weight})
+}
+
+fn store_it(m &Backpack, it *Item) {
+    if m.used == len(m.items_) {
+        m.items_ = realloc(m.items_, len(m.items_) * 2 + 1)
+    }
+    old_ := replace(&m.items_[m.used], it)
+    free(old_) // it was nil: free(nil) does nothing
+    m.used++
+}
+
+fn total_weight(m &Backpack) int {
+    total := 0
+    for i := 0; i < m.used; i++ {
+        it := take(&m.items_[i]) // takes it out to use it...
+        if it != nil {
+            total += it.weight
+        }
+        old_ := replace(&m.items_[i], it) // ...and puts it back
+        free(old_)
+    }
+    return total
+}
+
+fn empty_out(m *Backpack) {
+    for it in drain(m.items_) {
+        if it == nil {
+            continue
+        }
+        io.print("taking", it.name_)
+        free(it)
+    }
+    free(m.items_) // accepted: drain took every element out
+    free(m)
+}
+
+fn matrix(n int) [][]int {
+    m := alloc([][]int, n)
+    for i := 0; i < n; i++ {
+        line_ := alloc([]int, n)
+        for j := 0; j < n; j++ {
+            line_[j] = i * n + j
+        }
+        old_ := replace(&m[i], line_)
+        free(old_)
+    }
+    return m
+}
+
+fn main() {
+    m := alloc(Backpack)
+    store_it(&m, new_item("rope", 3))
+    store_it(&m, new_item("lantern", 2))
+    store_it(&m, new_item("water", 5))
+    io.print("items:", m.used, "capacity:", len(m.items_), "weight:", total_weight(&m))
+
+    // takes one out of the middle and puts another in its place
+    rope := take(&m.items_[0])
+    if rope != nil {
+        io.print("took", rope.name_)
+        free(rope)
+    }
+    io.print("empty now:", m.items_[0] == nil)
+    old_ := replace(&m.items_[0], new_item("knife", 1))
+    free(old_)
+    io.print("weight:", total_weight(&m))
+    empty_out(m)
+
+    t := matrix(3)
+    t[1][1] = 100
+    io.print(t[0], t[1], t[2], len(t[2]))
+    sum_ := 0
+    for i := 0; i < len(t); i++ {
+        for j := 0; j < len(t[i]); j++ {
+            sum_ += t[i][j]
+        }
+    }
+    io.print("sum:", sum_)
+    for line_ in drain(t) {
+        free(line_)
+    }
+    free(t)
+
+    // a freshly allocated slice of owners: all nil, can be freed directly
+    empty_ := alloc([]?*Item, 4)
+    free(empty_)
+}

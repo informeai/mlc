@@ -1,9 +1,0 @@
-// error: s[i] may be nil and can't be borrowed directly: take it out with take(&s[i]) and put it back with replace(&s[i], v)
-struct Item { peso int }
-fn ve(it &Item) {
-}
-fn main() {
-    s := alloc([]?*Item, 2)
-    ve(&s[0])
-    free(s)
-}

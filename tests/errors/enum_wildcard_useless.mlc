@@ -1,0 +1,14 @@
+// error: the _ arm is never executed: every variant of Shape is already covered
+enum Shape {
+    Circle(radius float64)
+    Empty
+}
+fn f(x Shape) {
+    match x {
+        Circle(_) => {}
+        Empty => {}
+        _ => {}
+    }
+}
+fn main() {
+}

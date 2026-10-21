@@ -1,0 +1,17 @@
+// error: the field m of Msg is an owner: give it a name (to free or move it), instead of _
+enum E {
+    Msg(m []byte)
+    Nothing
+}
+
+fn text_() []byte {
+    return alloc([]byte, 2)
+}
+
+fn main() {
+    e := E.Msg(text_())
+    match e {
+        Msg(_) => {}
+        Nothing => {}
+    }
+}

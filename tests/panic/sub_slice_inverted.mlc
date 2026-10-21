@@ -1,0 +1,10 @@
+fn size_(s &[]int) int {
+    return len(s)
+}
+
+fn main() {
+    s := alloc([]int, 3)
+    a := 2
+    size_(&s[a:1])
+    free(s)
+}

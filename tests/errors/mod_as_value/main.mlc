@@ -1,0 +1,6 @@
+// error: module geometry used as a value
+import "std/io"
+import "geometry"
+fn main() {
+    io.print(geometry)
+}

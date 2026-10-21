@@ -1,0 +1,8 @@
+// error: thread.Thread comes from thread.spawn, not from alloc
+// Checker coverage (phase 5): an ownership rule no test triggered.
+import "std/thread"
+
+fn main() {
+    t := alloc(thread.Thread)
+    thread.join(t)
+}

@@ -1,0 +1,7 @@
+// error: the name Point is already a type (struct)
+import "std/io"
+struct Point { x int }
+fn main() {
+    Point := 1
+    io.print(Point)
+}

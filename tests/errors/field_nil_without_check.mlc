@@ -1,0 +1,11 @@
+// error: p.next_ may be nil here: check with if p.next_ != nil before using the pointee
+import "std/io"
+struct Node {
+    value_ int
+    next_ ?*Node
+}
+fn show_it(p &Node) {
+    io.print(p.next_.value_)
+}
+fn main() {
+}

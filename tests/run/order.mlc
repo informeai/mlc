@@ -1,0 +1,38 @@
+import "std/io"
+
+struct Pair {
+    x int
+    y int
+}
+
+fn mark(name_ string, v int) int {
+    io.print(name_)
+    return v
+}
+
+fn sum_(x int, y int) int {
+    return x + y
+}
+
+fn text_(name_ string) string {
+    io.print(name_)
+    return name_
+}
+
+fn main() {
+    io.print("arguments:", sum_(mark("a", 1), mark("b", 2)))
+    io.print("operands:", mark("c", 3) * mark("d", 4))
+    io.print("literal:", Pair{x: mark("e", 5), y: mark("f", 6)})
+    io.print("comparison:", mark("g", 7) < mark("h", 8))
+    io.print("strings:", text_("i") == text_("j"))
+    io.print("nested:", sum_(sum_(mark("k", 1), mark("l", 2)), sum_(mark("m", 3), mark("n", 4))))
+    io.print("short-circuit:", mark("o", 0) == 1 && mark("never", 0) == 0)
+
+    total := 0
+    for i := 0; mark("p", i) < 2; i = sum_(i, mark("q", 1)) {
+        total += i
+    }
+    io.print("for:", total)
+}
+
+impl auto io.Display for Pair

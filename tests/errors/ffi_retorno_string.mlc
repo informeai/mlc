@@ -1,5 +1,0 @@
-// error: return of nome (string): a C function only returns numbers, bool or a handle (?*X, with X an extern "C" type)
-extern "C" fn nome() string
-
-fn main() {
-}

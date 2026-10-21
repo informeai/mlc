@@ -1,0 +1,96 @@
+import "std/io"
+import "std/sort"
+
+// Functions as values: fn(T) R is a function's address, without capture (it doesn't
+// allocate, has no owner). The arguments' ownership follows the fn's types.
+
+fn twice_(x int) int {
+    return x * 2
+}
+
+fn square(x int) int {
+    return x * x
+}
+
+fn larger[T ordered](a T, b T) T {
+    if a > b {
+        return a
+    }
+    return b
+}
+
+fn apply(f fn(int) int, x int) int {
+    return f(x)
+}
+
+fn sum_into(goal &int, v int) {
+    *goal += v
+}
+
+struct Button {
+    name_ string
+    click fn(int) int
+}
+
+fn choose(n int) fn(int) int {
+    if n > 0 {
+        return twice_
+    }
+    return square
+}
+
+fn main() {
+    f := twice_
+    var g fn(int) int = square
+    io.print(f(3), g(3), apply(twice_, 10), apply(g, 10), choose(1) (5), choose(0) (5))
+    var ops[2] fn(int) int = [2]fn(int) int{twice_, square}
+    s := alloc([]fn(int) int, 2)
+    s[0] = square
+    s[1] = twice_
+    io.print(ops[0](7), ops[1](7), s[0](4), s[1](4))
+    b := Button{name_: "ok", click: twice_}
+    io.print(b.name_, b.click(21))
+    m := larger[int]
+    io.print(m(3, 9))
+    total := 0
+    h := sum_into
+    h(&total, 5)
+    h(&total, 7)
+    io.print(total)
+    free(s)
+
+    var ps [4]Person = [4]Person{Person{name_: "ana", age: 30}, Person{name_: "bia", age: 12}, Person{name_: "caio", age: 45}, Person{name_: "davi", age: 20}}
+    sort.sort_by(&ps, by_age)
+    io.print(ps, sort.is_sorted_by(&ps, by_age))
+    sort.sort_by(&ps, by_name_desc)
+    io.print(ps)
+
+    c := consumes
+    n := alloc(Node{v: 3})
+    io.print(c(n)) // n was moved by the call through the fn value
+}
+
+struct Person {
+    name_ string
+    age int
+}
+
+impl auto io.Display for Person
+
+fn by_age(a &Person, b &Person) bool {
+    return a.age < b.age
+}
+
+fn by_name_desc(a &Person, b &Person) bool {
+    return a.name_[0] > b.name_[0]
+}
+
+struct Node {
+    v int
+}
+
+fn consumes(p *Node) int {
+    v := p.v
+    free(p)
+    return v
+}

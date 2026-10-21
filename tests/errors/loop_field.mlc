@@ -1,0 +1,12 @@
+// error: leak: p.next_ still owns the memory (line 9) (on some path) and would be overwritten; free it or pass ownership first
+struct Node {
+    value_ int
+    next_ ?*Node
+}
+fn main() {
+    p := alloc(Node)
+    for i := 0; i < 3; i++ {
+        p.next_ = alloc(Node)
+    }
+    free(p)
+}

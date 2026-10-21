@@ -1,6 +1,0 @@
-// error: slice elements start zeroed (nil), so they can't be *T: use []?*T
-struct Item { peso int }
-fn main() {
-    s := alloc([]*Item, 2)
-    free(s)
-}

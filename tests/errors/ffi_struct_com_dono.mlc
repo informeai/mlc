@@ -1,9 +1,0 @@
-// error: parameter p of usa (&P): a struct lent to C can only have numeric or bool fields
-struct P {
-    nome []byte
-}
-
-extern "C" fn usa(p &P)
-
-fn main() {
-}

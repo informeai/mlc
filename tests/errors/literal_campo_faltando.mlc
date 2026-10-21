@@ -1,6 +1,0 @@
-// error: field y not initialized (list every field, or use Ponto{} for the zero value)
-import "std/io"
-struct Ponto { x int; y int }
-fn main() {
-    io.print(Ponto{x: 1})
-}

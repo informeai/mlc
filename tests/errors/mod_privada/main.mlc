@@ -1,5 +1,0 @@
-// error: geometria.valida isn't public (declare it with pub fn)
-import "geometria"
-fn main() {
-    geometria.valida(1)
-}

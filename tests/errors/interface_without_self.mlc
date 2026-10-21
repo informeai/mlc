@@ -1,0 +1,14 @@
+// error: the first parameter of Area.a must be self &Self (in this version the receiver is always borrowed)
+// Found by the robustness fuzz: an interface method without self brought
+// the compiler down when checking an impl.
+interface Area {
+    fn a() int
+}
+
+struct Q {
+}
+
+impl Area for Q
+
+fn main() {
+}

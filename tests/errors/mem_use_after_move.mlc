@@ -1,0 +1,8 @@
+// error: p was already freed or moved (line 5)
+struct Point { x int; y int }
+fn main() {
+    p := alloc(Point)
+    q := p
+    p.x = 1
+    free(q)
+}

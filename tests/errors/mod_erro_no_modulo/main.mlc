@@ -1,4 +1,0 @@
-// error: return: expected int, found bool
-import "geometria"
-fn main() {
-}

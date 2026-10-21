@@ -1,5 +1,0 @@
-// error: elemento 1: expected int, found string
-import "std/io"
-fn main() {
-    io.print([2]int{1, "dois"})
-}

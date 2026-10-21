@@ -1,0 +1,8 @@
+// error: argument 1 of sum_: expected &[]int, found &[3]bool
+fn sum_(s &[]int) int {
+    return len(s)
+}
+fn main() {
+    a := [3]bool{}
+    sum_(&a)
+}

@@ -1,5 +1,0 @@
-// error: arrays of pointers aren't supported yet: the elements can't be owners or borrows
-struct No { x int }
-fn main() {
-    var a [3]?*No
-}

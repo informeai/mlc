@@ -1,0 +1,4 @@
+INFO  connection 1: hello 0
+INFO  connection 2: hello 1
+INFO  stop request: waiting for the connections
+INFO  stopped

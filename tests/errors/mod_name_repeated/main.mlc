@@ -1,0 +1,5 @@
+// error: two imports with the same name text ("text" and "util/text")
+import "text"
+import "util/text"
+fn main() {
+}

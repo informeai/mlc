@@ -1,5 +1,0 @@
-// error: the standard library has no module "std/nada"
-import "std/nada"
-
-fn main() {
-}

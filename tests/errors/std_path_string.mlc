@@ -1,0 +1,7 @@
+// error: argument 1 of fs.exists: expected &[]byte, found string
+import "std/fs"
+
+fn main() {
+    if fs.exists("file.txt") {
+    }
+}

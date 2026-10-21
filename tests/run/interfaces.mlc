@@ -1,132 +1,132 @@
 import "std/io"
 
-// Interfaces estáticas: restrição de genérico, sem tabela de métodos.
-interface Medida {
-    fn tamanho(self &Self) int
-    fn escala(self &Self, k int) int
+// Static interfaces: a generic constraint, without a method table.
+interface Measure {
+    fn size_(self &Self) int
+    fn scale(self &Self, k int) int
 }
 
-struct Quadrado {
-    lado int
+struct Square {
+    side int
 }
 
-fn (q &Quadrado) tamanho() int {
-    return q.lado * q.lado
+fn (q &Square) size_() int {
+    return q.side * q.side
 }
 
-fn (q &Quadrado) escala(k int) int {
-    return q.tamanho() * k
+fn (q &Square) scale(k int) int {
+    return q.size_() * k
 }
 
-// forma de uma linha: os métodos da struct cumprem a interface
-impl Medida for Quadrado
+// one-line form: the struct's methods satisfy the interface
+impl Measure for Square
 
-impl auto io.Display for Quadrado
+impl auto io.Display for Square
 
-// forma com bloco: tipos embutidos não têm métodos próprios
-impl Medida for int {
-    fn (x &int) tamanho() int {
+// form with a block: built-in types don't have methods of their own
+impl Measure for int {
+    fn (x &int) size_() int {
         return *x
     }
-    fn (x &int) escala(k int) int {
+    fn (x &int) scale(k int) int {
         return *x * k
     }
 }
 
-// impl genérico: um slice mede a soma dos elementos
-impl[T Medida] Medida for []T {
-    fn (s &[]T) tamanho() int {
+// generic impl: a slice measures the sum of its elements
+impl[T Measure] Measure for []T {
+    fn (s &[]T) size_() int {
         total := 0
         for i := 0; i < len(s); i++ {
-            total += s[i].tamanho()
+            total += s[i].size_()
         }
         return total
     }
-    fn (s &[]T) escala(k int) int {
+    fn (s &[]T) scale(k int) int {
         return len(s) * k
     }
 }
 
-fn maior[T Medida](a &T, b &T) int {
-    if a.tamanho() > b.tamanho() {
-        return a.tamanho()
+fn larger[T Measure](a &T, b &T) int {
+    if a.size_() > b.size_() {
+        return a.size_()
     }
-    return b.tamanho()
+    return b.size_()
 }
 
-fn soma_escala[T Medida](itens &[]T, k int) int {
+fn scaled_sum[T Measure](items_ &[]T, k int) int {
     total := 0
-    for i := 0; i < len(itens); i++ {
-        total += itens[i].escala(k)
+    for i := 0; i < len(items_); i++ {
+        total += items_[i].scale(k)
     }
     return total
 }
 
-// Display escrito à mão
-struct Fracao {
+// Display written by hand
+struct Fraction {
     num int
     den int
 }
 
-fn (f &Fracao) write(w &io.Writer) {
+fn (f &Fraction) write(w &io.Writer) {
     w.put_int(f.num)
     w.put_byte('/')
     w.put_int(f.den)
 }
 
-impl io.Display for Fracao
+impl io.Display for Fraction
 
-// Display gerado
-struct Ponto {
+// generated Display
+struct Point {
     x int
     y int
 }
 
-impl auto io.Display for Ponto
+impl auto io.Display for Point
 
-enum Forma {
-    Circulo(raio float64)
-    Retangulo(l float64, a float64)
-    Vazio
+enum Shape {
+    Circle(radius float64)
+    Rectangle(l float64, a float64)
+    Empty
 }
 
-impl auto io.Display for Forma
+impl auto io.Display for Shape
 
-struct Par[A any, B any] {
+struct Pair[A any, B any] {
     a A
     b B
 }
 
-impl auto io.Display for Par
+impl auto io.Display for Pair
 
-fn mostra[T io.Display](x &T) {
+fn show_it[T io.Display](x &T) {
     io.printf("<{}>\n", x)
 }
 
 fn main() {
-    q := Quadrado{lado: 3}
-    r := Quadrado{lado: 4}
+    q := Square{side: 3}
+    r := Square{side: 4}
     n := 7
-    io.print(maior(&q, &r), maior(&n, &n), q.escala(2), n.escala(3))
-    s := alloc([]Quadrado, 2)
+    io.print(larger(&q, &r), larger(&n, &n), q.scale(2), n.scale(3))
+    s := alloc([]Square, 2)
     s[0] = q
     s[1] = r
-    io.print(s.tamanho(), soma_escala(&s, 10))
+    io.print(s.size_(), scaled_sum(&s, 10))
     var a [3]int = [3]int{1, 2, 3}
-    io.print(a.tamanho(), soma_escala(&a, 2))
+    io.print(a.size_(), scaled_sum(&a, 2))
 
-    f := Fracao{num: 1, den: 3}
-    p := Ponto{x: 1, y: -2}
-    io.print(f, p, Forma.Circulo(1.5), Forma.Retangulo(2.0, 3.0), Forma.Vazio)
-    io.print(Par[int, string]{a: 1, b: "um"}, Par[Ponto, bool]{a: p, b: true})
-    mostra(&f)
-    mostra(&p)
-    io.printf("{} + {} = {}; chaves: {{ e }}\n", 1, 2, 1 + 2)
-    io.printf("sem valores\n")
-    io.print(s, a, "texto", 'b', int8(-8), uint64(18446744073709551615), float32(0.25), 1e21)
+    f := Fraction{num: 1, den: 3}
+    p := Point{x: 1, y: -2}
+    io.print(f, p, Shape.Circle(1.5), Shape.Rectangle(2.0, 3.0), Shape.Empty)
+    io.print(Pair[int, string]{a: 1, b: "one"}, Pair[Point, bool]{a: p, b: true})
+    show_it(&f)
+    show_it(&p)
+    io.printf("{} + {} = {}; braces: {{ and }}\n", 1, 2, 1 + 2)
+    io.printf("no values\n")
+    io.print(s, a, "text", 'b', int8(-8), uint64(18446744073709551615), float32(0.25), 1e21)
     var m [2][2]int = [2][2]int{[2]int{1, 2}, [2]int{3, 4}}
     io.print(m)
     io.print()
-    io.eprint("isto vai para o erro padrão")
+    io.eprint("this goes to standard error")
     free(s)
 }

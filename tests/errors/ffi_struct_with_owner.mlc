@@ -1,0 +1,9 @@
+// error: parameter p of use_it (&P): a struct lent to C can only have numeric or bool fields
+struct P {
+    name_ []byte
+}
+
+extern "C" fn use_it(p &P)
+
+fn main() {
+}

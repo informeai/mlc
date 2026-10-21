@@ -1,0 +1,14 @@
+// error: alloc(Pair) zeroes the memory, but Pair.a is a *T pointer and can't be nil; use alloc(Pair{...}) with every field
+// Checker coverage (phase 5): an ownership rule no test triggered.
+struct Box {
+    v int
+}
+
+struct Pair {
+    a *Box
+}
+
+fn main() {
+    p := alloc(Pair)
+    free(p)
+}

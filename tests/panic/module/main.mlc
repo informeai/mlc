@@ -1,0 +1,7 @@
+import "std/io"
+import "account"
+
+fn main() {
+    io.print(account.split_it(10, 2))
+    io.print(account.split_it(1, 0))
+}

@@ -1,0 +1,10 @@
+import "std/io"
+
+fn double_it(n int) int {
+    return n * 2
+}
+
+fn main() {
+    io.print("before")
+    io.print(double_it(9223372036854775807))
+}

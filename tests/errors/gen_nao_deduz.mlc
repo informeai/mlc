@@ -1,7 +1,0 @@
-// error: couldn't infer T in vazio: write the types, like vazio[int](...)
-fn vazio[T any]() int {
-    return 0
-}
-fn main() {
-    vazio()
-}

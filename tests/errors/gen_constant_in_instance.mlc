@@ -1,0 +1,9 @@
+// error: constant 300 doesn't fit in int8 (-128 to 127) (in the instance plus[int8])
+import "std/io"
+fn plus[T number](x T) T {
+    return x + 300
+}
+fn main() {
+    var a int8 = 1
+    io.print(plus(a))
+}

@@ -1,0 +1,15 @@
+import "std/io"
+
+// s[i] = f(): the index is computed (and checked) before the right side,
+// also when s is an array [N]T.
+fn advance(p &int) int {
+    *p += 1
+    return 7
+}
+
+fn main() {
+    var a [3]int
+    i := 0
+    a[i] = advance(&i)
+    io.print(a, i)
+}

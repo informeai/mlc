@@ -1,7 +1,0 @@
-// error: the name geometria is an imported module
-import "std/io"
-import "geometria"
-fn main() {
-    geometria := 1
-    io.print(geometria)
-}

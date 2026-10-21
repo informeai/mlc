@@ -1,0 +1,8 @@
+// error: Node contains owning pointers and can only be used through a pointer: use *Node, ?*Node or &Node
+struct Node {
+    value_ int
+    next_ ?*Node
+}
+fn main() {
+    var n Node
+}

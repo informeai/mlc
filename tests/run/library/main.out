@@ -1,0 +1,39 @@
+math: 3 2.5 4 9
+10 0 7
+4 1024 2 3 3
+1000 1 1 1
+1 0
+true true false
+sort: false
+true -20 -19 20
+20 -20
+-20 20
+-1 0.5 2.5 3 9
+Hello, World 42
+text: 5 7 -1
+true true true false
+2 true true false
+6 6 15
+HELLO, WORLD 42
+hello, world 42
+vec: 10 11 1 100
+100 9 -1
+0
+3 4 2
+rand: true true
+os: true
+error 2
+error 2
+PATH has text: true
+fs: false
+ok 7
+ok 7
+true
+ok 14
+too large: true
+line 1
+line 1
+ok 0
+doesn't exist: true
+error 2
+time: true true

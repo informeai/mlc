@@ -1,0 +1,46 @@
+import "std/io"
+import "util/numbers"
+
+pub const SQUARE_SIDES = 4
+
+pub struct Point {
+    x int
+    y int
+}
+
+pub struct Rectangle {
+    corner Point
+    width_ int
+    height int
+}
+
+pub fn area(r Rectangle) int {
+    return r.width_ * r.height
+}
+
+pub fn perimeter(r Rectangle) int {
+    return numbers.twice_(r.width_ + r.height)
+}
+
+// private: only this file sees it
+fn validate(r Rectangle) bool {
+    return r.width_ > 0 && r.height > 0
+}
+
+pub fn square(side int) Rectangle {
+    r := Rectangle{corner: Point{x: 0, y: 0}, width_: side, height: side}
+    if !validate(r) {
+        r.width_ = 1
+        r.height = 1
+    }
+    return r
+}
+
+// the same name as a function of main.mlc: in C, the names don't collide
+pub fn describe_it() int {
+    return 1
+}
+
+impl auto io.Display for Rectangle
+
+impl auto io.Display for Point

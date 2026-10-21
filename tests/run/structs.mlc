@@ -1,103 +1,103 @@
 import "std/io"
 
-const LIMITE = 3
-const SAUDACAO string = "olá"
-const GRANDE = 1000 * 1000
-const NEGATIVO = -LIMITE * 2
-const ATIVO = LIMITE > 2 && !false
+const LIMIT = 3
+const GREETING string = "hello"
+const LARGE = 1000 * 1000
+const NEGATIVE = -LIMIT * 2
+const ACTIVE = LIMIT > 2 && !false
 
-struct Ponto {
+struct Point {
     x int
     y int
 }
 
-// a ordem de declaração não importa: Retangulo usa Ponto, declarado antes,
-// e Linha usa Ponto também
-struct Linha { a Ponto; b Ponto }
+// declaration order doesn't matter: Rectangle uses Point, declared before,
+// and Line uses Point too
+struct Line { a Point; b Point }
 
-struct Retangulo {
-    canto Ponto
-    largura int
-    altura int
-    nome string
+struct Rectangle {
+    corner Point
+    width_ int
+    height int
+    name_ string
 }
 
-struct Vazio {}
+struct Empty {}
 
-struct Palavras {
+struct Words {
     default int
     char string
 }
 
-fn area(r Retangulo) int {
-    return r.largura * r.altura
+fn area(r Rectangle) int {
+    return r.width_ * r.height
 }
 
-fn move(p Ponto, dx int, dy int) Ponto {
+fn move(p Point, dx int, dy int) Point {
     p.x += dx
     p.y += dy
     return p
 }
 
-fn categoria(n int) string {
+fn category(n int) string {
     match n {
-        LIMITE => return "limite"
+        LIMIT => return "limit"
         0 => return "zero"
-        _ => return "outro"
+        _ => return "other"
     }
 }
 
 fn main() {
-    p := Ponto{x: 1, y: 2}
+    p := Point{x: 1, y: 2}
     io.print(p.x, p.y, p)
 
     q := move(p, 10, 20)
     io.print(p, q)
 
-    r := Retangulo{
-        canto: Ponto{x: 0, y: 0},
-        largura: 4,
-        altura: LIMITE,
-        nome: "quadro",
+    r := Rectangle{
+        corner: Point{x: 0, y: 0},
+        width_: 4,
+        height: LIMIT,
+        name_: "frame",
     }
-    r.canto.x = 7
-    r.canto.y++
-    io.print(area(r), r.canto, r.nome)
+    r.corner.x = 7
+    r.corner.y++
+    io.print(area(r), r.corner, r.name_)
     io.print(r)
 
-    var z Retangulo
-    io.print(z, z.nome == "")
+    var z Rectangle
+    io.print(z, z.name_ == "")
 
-    io.print(p == Ponto{x: 1, y: 2}, p != q)
-    if (p == Ponto{x: 1, y: 2}) {
-        io.print("igual")
+    io.print(p == Point{x: 1, y: 2}, p != q)
+    if (p == Point{x: 1, y: 2}) {
+        io.print("equal")
     }
 
-    const local = LIMITE + 1
-    io.print(local, SAUDACAO, GRANDE, NEGATIVO, ATIVO)
-    io.print(categoria(3), categoria(0), categoria(9))
+    const local = LIMIT + 1
+    io.print(local, GREETING, LARGE, NEGATIVE, ACTIVE)
+    io.print(category(3), category(0), category(9))
 
-    v := Vazio{}
-    io.print(v, v == Vazio{})
+    v := Empty{}
+    io.print(v, v == Empty{})
 
-    l := Linha{a: Ponto{}, b: move(Ponto{}, 1, 1)}
+    l := Line{a: Point{}, b: move(Point{}, 1, 1)}
     io.print(l, l.b.x + l.b.y)
 
-    kw := Palavras{default: 1, char: "c"}
+    kw := Words{default: 1, char: "c"}
     io.print(kw)
 
-    for i := 0; i < LIMITE; i++ {
-        r.largura += i
+    for i := 0; i < LIMIT; i++ {
+        r.width_ += i
     }
-    io.print(r.largura)
+    io.print(r.width_)
 }
 
-impl auto io.Display for Ponto
+impl auto io.Display for Point
 
-impl auto io.Display for Retangulo
+impl auto io.Display for Rectangle
 
-impl auto io.Display for Palavras
+impl auto io.Display for Words
 
-impl auto io.Display for Vazio
+impl auto io.Display for Empty
 
-impl auto io.Display for Linha
+impl auto io.Display for Line

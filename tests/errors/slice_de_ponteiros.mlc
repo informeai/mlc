@@ -1,6 +1,0 @@
-// error: slice elements start zeroed (nil), so they can't be *T: use []?*T
-struct No { x int }
-fn f(s []*No) {
-}
-fn main() {
-}

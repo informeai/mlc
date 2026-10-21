@@ -1,0 +1,9 @@
+import "std/io"
+
+fn split_it(a int, b int) int {
+    return a / b
+}
+
+fn main() {
+    io.print(split_it(10, 0))
+}

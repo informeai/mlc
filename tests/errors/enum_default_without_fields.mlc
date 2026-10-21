@@ -1,0 +1,13 @@
+// error: Circle has 1 field(s): write Circle(...) giving each one a name (or _)
+enum Shape {
+    Circle(radius float64)
+    Empty
+}
+fn f(x Shape) {
+    match x {
+        Circle => {}
+        Empty => {}
+    }
+}
+fn main() {
+}

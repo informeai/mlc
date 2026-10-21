@@ -1,0 +1,6 @@
+// error: unknown constraint "number_" (use any, comparable, ordered, number, integer, owned or an interface)
+fn f[T number_](x T) T {
+    return x
+}
+fn main() {
+}

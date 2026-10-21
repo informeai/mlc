@@ -1,1 +1,0 @@
-panic: pilha_thread.mlc:4: stack overflow: the function's frame (about 489 KB) doesn't fit in what's left of this thread's stack (ask for a larger stack in thread.spawn, or put the large buffers on the heap with alloc)

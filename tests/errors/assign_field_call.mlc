@@ -1,0 +1,8 @@
+// error: can't assign to this expression (only to variables, fields and *p)
+struct Point { x int }
+fn f() Point {
+    return Point{}
+}
+fn main() {
+    f().x = 1
+}

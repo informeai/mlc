@@ -1,0 +1,8 @@
+// error: larger is generic: to use it as a value, write the types, like larger[int]
+fn larger[T ordered](a T, b T) T {
+    return a
+}
+
+fn main() {
+    f := larger
+}

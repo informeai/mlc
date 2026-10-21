@@ -1,0 +1,11 @@
+// error: struct A contains itself by value (A → A); that will be possible with pointers
+// Found by the robustness fuzz: the alloc of a struct that contains
+// itself brought the compiler down (infinite recursion).
+struct A {
+    a A
+}
+
+fn main() {
+    a := alloc(A)
+    free(a)
+}

@@ -1,0 +1,10 @@
+// error: free(p): p.next_ may still own memory; free or move p.next_ first
+struct Node {
+    value_ int
+    next_ ?*Node
+}
+fn main() {
+    p := alloc(Node)
+    p.next_ = alloc(Node)
+    free(p)
+}

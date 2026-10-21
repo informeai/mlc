@@ -1,4 +1,0 @@
-// error: import "geometria.mlc": write it without the extension: import "geometria"
-import "geometria.mlc"
-fn main() {
-}

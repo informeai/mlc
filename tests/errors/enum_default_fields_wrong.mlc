@@ -1,0 +1,13 @@
+// error: Circle has 1 field(s), the pattern names 2
+enum Shape {
+    Circle(radius float64)
+    Empty
+}
+fn f(x Shape) {
+    match x {
+        Circle(a, b) => {}
+        Empty => {}
+    }
+}
+fn main() {
+}

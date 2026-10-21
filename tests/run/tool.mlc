@@ -1,0 +1,58 @@
+// A small command-line tool: reads options with std/args, builds
+// the output in a bytes.Buf and checks the UTF-8 with std/utf8. Run with the
+// arguments of tool.args.
+import "std/args"
+import "std/bytes"
+import "std/io"
+import "std/str"
+import "std/text"
+import "std/utf8"
+
+fn main() {
+    a := args.new()
+    verbose := false
+    width := 10
+    var sep [8]byte
+    sep_n := str.copy(&sep, ",")
+    var word [256]byte
+    out := bytes.new(16)
+    for a.next() {
+        ok := false
+        if a.is("-v", "--verbose") {
+            verbose = true
+        } else if a.int_value("-w", "--width", &width, &ok) {
+            if !ok {
+                io.print("invalid width")
+            }
+        } else if a.value("-s", "--sep", &sep, &sep_n) {
+            if sep_n < 0 {
+                io.print("the separator is missing")
+                sep_n = 0
+            }
+        } else if a.is_option() {
+            n := a.text(&word)
+            io.printf("unknown option: {:s}\n", &word[:n])
+        } else {
+            n := a.text(&word)
+            if out.len > 0 {
+                out.push_bytes(&sep[:sep_n])
+            }
+            out.push_bytes(&word[:n])
+            if verbose {
+                io.printf("{:<8s}| {} characters, {} bytes\n", &word[:n], utf8.count(&word[:n]), n)
+            }
+        }
+    }
+    io.printf("verbose={} width={}\n", verbose, width)
+    io.write_line(&out.data[:out.len])
+
+    // walks the result's fields
+    pos := 0
+    k := 0
+    for pos <= out.len {
+        text.split_next(&out.data[:out.len], sep[0], &pos)
+        k++
+    }
+    io.print("fields:", k)
+    out.free()
+}

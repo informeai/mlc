@@ -1,0 +1,17 @@
+// error: v appears again in the statement where v.at borrows part of it: use the borrow in a statement of its own (x := ...)
+import "std/io"
+import "std/vec"
+
+struct P {
+    x int
+}
+
+fn use_it(p &P, w &vec.Vec[P]) {
+}
+
+fn main() {
+    v := vec.new[P](1)
+    v.push(P{x: 1})
+    use_it(v.at(0), &v)
+    v.free()
+}

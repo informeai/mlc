@@ -1,0 +1,46 @@
+import "std/io"
+import "geometry"
+import "stack"
+import "util/numbers"
+
+fn describe_it() int {
+    return 2
+}
+
+fn kind(lados int) string {
+    match lados {
+        geometry.SQUARE_SIDES => return "quadrilateral"
+        3 => return "triangle"
+        _ => return "other"
+    }
+}
+
+fn main() {
+    r := geometry.Rectangle{
+        corner: geometry.Point{x: 1, y: 2},
+        width_: 3,
+        height: 4,
+    }
+    io.print("area:", geometry.area(r), "perimeter:", geometry.perimeter(r))
+    q := geometry.square(5)
+    io.print("square:", q, geometry.area(q))
+    io.print(kind(geometry.SQUARE_SIDES), kind(3))
+    io.print("larger:", numbers.larger(7, 9), "double:", numbers.twice_(21))
+    io.print("describe:", describe_it(), geometry.describe_it())
+
+    var p geometry.Point
+    p.x = 10
+    io.print(p)
+
+    pt := alloc(geometry.Point)
+    pt.y = 7
+    io.print(*pt)
+    free(pt)
+
+    s := stack.new_one()
+    for i := 1; i <= 3; i++ {
+        stack.push_item(&s, i * 10)
+    }
+    io.print("stack:", s.size_, stack.pop_item(&s), stack.pop_item(&s), s.size_)
+    stack.release(s)
+}

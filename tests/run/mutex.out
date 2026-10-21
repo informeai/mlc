@@ -1,5 +1,5 @@
-saldo: 80000 operações: 8000
-consumido: 5050
-contador: 20000 20000 true false 8
-sinal: 1
-valor: 5
+balance: 80000 operations: 8000
+consumed: 5050
+counter: 20000 20000 true false 8
+signal: 1
+value: 5

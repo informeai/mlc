@@ -1,7 +1,0 @@
-// error: methods can only be declared in the struct's file, with receiver S, &S or *S
-import "forma"
-fn (q forma.Q) dobro() int {
-    return 2
-}
-fn main() {
-}

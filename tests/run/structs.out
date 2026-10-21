@@ -1,12 +1,12 @@
 1 2 {1 2}
 {1 2} {11 22}
-12 {7 1} quadro
-{{7 1} 4 3 quadro}
+12 {7 1} frame
+{{7 1} 4 3 frame}
 {{0 0} 0 0 } true
 true true
-igual
-4 olá 1000000 -6 true
-limite zero outro
+equal
+4 hello 1000000 -6 true
+limit zero other
 {} true
 {{0 0} {1 1}} 2
 {1 c}

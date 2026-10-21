@@ -1,0 +1,6 @@
+// error: slice elements start zeroed (nil), so they can't be *T: use []?*T
+struct Node { x int }
+fn f(s []*Node) {
+}
+fn main() {
+}

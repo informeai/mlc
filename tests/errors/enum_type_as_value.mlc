@@ -1,0 +1,9 @@
+// error: type Shape used as a value (to create a value: Shape.Variant)
+import "std/io"
+enum Shape {
+    Circle(radius float64)
+    Empty
+}
+fn main() {
+    io.print(Shape)
+}

@@ -1,0 +1,156 @@
+import "std/http"
+import "std/io"
+import "std/log"
+import "std/net"
+import "std/signal"
+import "std/str"
+import "std/sync"
+import "std/thread"
+
+// An HTTP service with routes, one thread per connection (with keep-alive), logging
+// and a clean shutdown. The client, in a thread, makes a few requests and
+// then sends TERM to the process itself.
+
+struct Conn {
+    c *net.Conn
+    lg *log.Logger
+}
+
+fn route(c &net.Conn, m &http.Message, lg &log.Logger) {
+    if m.path_is("/health") {
+        if !m.method_is("GET") {
+            http.respond_str(c, 405, "text/plain", "use GET\n")
+            return
+        }
+        http.respond_str(c, 200, "text/plain", "ok\n")
+        return
+    }
+    if m.method_is("GET") && m.path_is("/sum") {
+        var tmp [32]byte
+        a := 0
+        b := 0
+        k := m.query_param("a", &tmp)
+        ok := k >= 0 && str.parse_int(&tmp[:k], &a)
+        k = m.query_param("b", &tmp)
+        ok = ok && k >= 0 && str.parse_int(&tmp[:k], &b)
+        if !ok {
+            http.respond_str(c, 400, "application/json", "{\"error\":\"a and b must be numbers\"}\n")
+            return
+        }
+        var body [64]byte
+        n := str.format(&body, "{{\"sum\":{}}}\n", a + b)
+        http.respond(c, 200, "application/json", &body[:n])
+        return
+    }
+    if m.method_is("POST") && m.path_is("/echo") {
+        var body [256]byte
+        match m.read_all(c, &body) {
+            Ok(n) => {
+                lg.info("echo of {} bytes", n)
+                http.respond(c, 200, "text/plain", &body[:n])
+            }
+            Err(code) => {
+                if code == http.TOO_BIG {
+                    http.respond_str(c, 413, "text/plain", "too large\n")
+                }
+            }
+        }
+        return
+    }
+    http.respond_str(c, 404, "text/plain", "not found\n")
+}
+
+fn serve(ctx *Conn) {
+    c := ctx.c
+    lg := ctx.lg
+    free(ctx)
+    var m http.Message
+    for {
+        match m.read_request(&c) {
+            Ok(_) => {}
+            Err(code) => {
+                if code != io.EOF {
+                    http.respond_str(&c, 400, "text/plain", "bad request\n")
+                    lg.warn("bad request: {}", code)
+                }
+                break
+            }
+        }
+        var path [256]byte
+        p := m.path(&path)
+        lg.info("{:s}", &path[:p])
+        route(&c, &m, &lg)
+        if !m.keep_alive() {
+            break
+        }
+    }
+    c.close()
+    lg.close()
+}
+
+// call makes a request and writes the response's code and body.
+fn call(c &net.Conn, method string, target string, body string) {
+    var b http.Builder
+    b.request(method, target)
+    b.header("Host", "localhost")
+    b.send_str(c, body)
+    var m http.Message
+    match m.read_response(c) {
+        Ok(_) => {}
+        Err(code) => {
+            io.printf("error {}\n", code)
+            return
+        }
+    }
+    var out [256]byte
+    match m.read_all(c, &out) {
+        Ok(n) => io.printf("{} {} {}: {} {:s}", method, target, m.status(), http.status_text(m.status()), &out[:n])
+        Err(code) => io.printf("error {}\n", code)
+    }
+}
+
+fn client(port int) {
+    var h [16]byte
+    hn := str.copy(&h, "127.0.0.1")
+    err := 0
+    c := net.connect(&h[:hn], port, &err)
+    if c != nil {
+        call(&c, "GET", "/health", "")
+        call(&c, "GET", "/sum?a=40&b=2", "")
+        call(&c, "GET", "/sum?a=x", "")
+        call(&c, "POST", "/echo", "echoing\n")
+        call(&c, "DELETE", "/health", "")
+        call(&c, "GET", "/nothing", "")
+        c.close()
+    }
+    signal.raise(signal.TERM)
+}
+
+fn main() {
+    lg := log.new(log.STDERR, log.WARN) // only warnings and errors (the test's output stays on stdout)
+    signal.listen_shutdown()
+    var h [16]byte
+    hn := str.copy(&h, "127.0.0.1")
+    err := 0
+    l := net.listen(&h[:hn], 0, &err)
+    if l == nil {
+        lg.error("listen failed: {}", err)
+        lg.close()
+        return
+    }
+    l.set_timeout(20)
+    cl := thread.spawn(client, l.port(), thread.STACK_64KB)
+    workers := sync.group(64) // at most 64 connections at the same time
+    for !signal.received(signal.TERM) && !signal.received(signal.INT) {
+        c := l.accept(&err)
+        if c == nil {
+            continue
+        }
+        workers.add(thread.spawn(serve, alloc(Conn{c: c, lg: lg.clone()}), thread.STACK_64KB))
+    }
+    workers.wait()
+    thread.join(cl)
+    l.close()
+    lg.close()
+    io.print("stopped")
+}

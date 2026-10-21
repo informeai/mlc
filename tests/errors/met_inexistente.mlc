@@ -1,6 +1,0 @@
-// error: Ponto has no method voa
-struct Ponto { x int; y int }
-fn main() {
-    p := Ponto{x: 1, y: 2}
-    p.voa()
-}

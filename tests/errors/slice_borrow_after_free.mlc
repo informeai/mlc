@@ -1,0 +1,9 @@
+// error: s was already freed or moved (line 7)
+fn sum_(s &[]int) int {
+    return len(s)
+}
+fn main() {
+    s := alloc([]int, 3)
+    free(s)
+    sum_(&s)
+}

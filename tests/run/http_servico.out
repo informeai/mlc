@@ -1,7 +1,0 @@
-GET /health 200: OK ok
-GET /soma?a=40&b=2 200: OK {"soma":42}
-GET /soma?a=x 400: Bad Request {"erro":"a e b precisam ser números"}
-POST /eco 200: OK ecoando
-DELETE /health 405: Method Not Allowed use GET
-GET /nada 404: Not Found não encontrado
-encerrado

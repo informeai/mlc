@@ -1,6 +1,0 @@
-// error: slices of slices of owners aren't supported yet ([][]T only with a simple T)
-struct No { x int }
-fn f(s [][]?*No) {
-}
-fn main() {
-}

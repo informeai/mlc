@@ -1,0 +1,35 @@
+// A growing vector: the reallocation is visible in grows(), written in MLC.
+pub struct Vector[T any] {
+    items_ []T
+    size int
+}
+
+pub fn fresh[T any](cap int) *Vector[T] {
+    v := alloc(Vector[T]{items_: alloc([]T, cap), size: 0})
+    return v
+}
+
+pub fn (v &Vector[T]) add_to(x T) {
+    if v.size == len(v.items_) {
+        v.grows()
+    }
+    v.items_[v.size] = x
+    v.size++
+}
+
+fn (v &Vector[T]) grows() {
+    v.items_ = realloc(v.items_, len(v.items_) * 2 + 1)
+}
+
+pub fn (v &Vector[T]) take_it(i int) T {
+    return v.items_[i]
+}
+
+pub fn (v &Vector[T]) size_() int {
+    return v.size
+}
+
+pub fn (v *Vector[T]) release() {
+    free(v.items_)
+    free(v)
+}

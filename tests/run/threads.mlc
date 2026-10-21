@@ -2,7 +2,7 @@ import "std/io"
 import "std/str"
 import "std/thread"
 
-// o contexto de uma thread: tudo que ela usa vai junto, por posse
+// a thread's context: everything it uses goes along, by ownership
 struct Job {
     data []int
     from int
@@ -23,7 +23,7 @@ fn partial_sum(j *Job) int {
     return t
 }
 
-// aloca e libera muito, ao mesmo tempo que as outras threads
+// allocates and frees a lot, at the same time as the other threads
 fn churn(rounds int) int {
     kept := 0
     for i := 0; i < rounds; i++ {
@@ -34,14 +34,14 @@ fn churn(rounds int) int {
     return kept
 }
 
-// str.format em várias threads ao mesmo tempo: o resultado volta por posse
+// str.format in several threads at the same time: the result comes back by ownership
 fn label(n int) []byte {
     b := alloc([]byte, str.format_len("worker-{:03}", n))
     str.format(&b, "worker-{:03}", n)
     return b
 }
 
-// uma thread que cria outras
+// a thread that creates others
 fn parent(n int) int {
     a := thread.spawn(churn, n, thread.STACK_64KB)
     b := thread.spawn(churn, n * 2, thread.STACK_64KB)
@@ -50,12 +50,12 @@ fn parent(n int) int {
 
 fn quiet(n int) {
     if n < 0 {
-        io.print("nunca")
+        io.print("never")
     }
 }
 
 fn main() {
-    // soma em 4 partes
+    // sum in 4 parts
     const PARTS = 4
     ts := alloc([]?*thread.Thread[int], PARTS)
     for p := 0; p < PARTS; p++ {
@@ -76,9 +76,9 @@ fn main() {
         }
     }
     free(ts)
-    io.print("soma:", total)
+    io.print("sum:", total)
 
-    // 8 threads alocando ao mesmo tempo
+    // 8 threads allocating at the same time
     cs := alloc([]?*thread.Thread[int], 8)
     for i := 0; i < len(cs); i++ {
         old := replace(&cs[i], thread.spawn(churn, 20000, thread.STACK_64KB))
@@ -95,12 +95,12 @@ fn main() {
     free(cs)
     io.print("bytes:", bytes)
 
-    // resultados donos, na ordem do join
+    // owning results, in join order
     ls := alloc([]?*thread.Thread[[]byte], 3)
     for i := 0; i < len(ls); i++ {
         old := replace(&ls[i], thread.spawn(label, i * 7, thread.STACK_64KB))
         if old != nil {
-            lost := thread.join(old) // o resultado é dono: precisa ser liberado
+            lost := thread.join(old) // the result is an owner: it must be freed
             free(lost)
         }
     }
@@ -114,7 +114,7 @@ fn main() {
     free(ls)
 
     p := thread.spawn(parent, 100, thread.STACK_256KB)
-    io.print("aninhadas:", thread.join(p))
+    io.print("nested:", thread.join(p))
     q := thread.spawn(quiet, 1, thread.STACK_16KB)
     thread.join(q)
 }

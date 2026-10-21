@@ -1,0 +1,11 @@
+// error: free expects an owning pointer, found Point
+// Checker coverage (phase 5): an ownership rule no test triggered.
+struct Point {
+    x int
+}
+
+fn main() {
+    var p Point
+    p.x = 1
+    free(p)
+}

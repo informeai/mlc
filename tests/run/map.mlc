@@ -1,0 +1,125 @@
+// std/map: a word counter with []byte keys (allocated in plain sight),
+// a map from text to text and a stress test against a direct table.
+import "std/io"
+import "std/str"
+import "std/text"
+import "std/map"
+import "std/rand"
+import "std/hash"
+
+fn show_it(k &[]byte, v &int) {
+    if *v > 1 {
+        io.write(k)
+        io.printf(": {}\n", *v)
+    }
+}
+
+fn count_line(count_all &map.Map[[]byte, int], line_ &[]byte) {
+    i := 0
+    for i < len(line_) {
+        end_ := text.field_end(line_, ' ', i)
+        if end_ > i {
+            count_word(count_all, &line_[i:end_])
+        }
+        i = end_ + 1
+    }
+}
+
+fn count_word(count_all &map.Map[[]byte, int], word_ &[]byte) {
+    n := count_all.get_or(word_, 0)
+    if !count_all.set(word_, n + 1) {
+        copy_ := alloc([]byte, len(word_)) // the new key is allocated here, in plain sight
+        str.copy_bytes(&copy_, word_)
+        count_all.put(copy_, 1)
+    }
+}
+
+fn main() {
+    count_all := map.new[[]byte, int](4)
+    line_ := alloc([]byte, 256)
+    for {
+        n := io.read_line(&line_)
+        if n < 0 {
+            break
+        }
+        count_line(&count_all, &line_[:n])
+    }
+    io.print("distinct words:", count_all.len())
+    count_all.each(show_it)
+    free(line_)
+    count_all.free()
+
+    // text to text: owning keys and values
+    names := map.new[[]byte, []byte](2)
+    k := alloc([]byte, 3)
+    str.copy(&k, "ana")
+    v := alloc([]byte, 5)
+    str.copy(&v, "maria")
+    names.put(k, v)
+    k2 := alloc([]byte, 3)
+    str.copy(&k2, "ana")
+    v2 := alloc([]byte, 4)
+    str.copy(&v2, "lime")
+    names.put(k2, v2) // repeated key: the new key and the old value are freed
+    search := alloc([]byte, 3)
+    str.copy(&search, "ana")
+    taken := alloc([]byte, 0)
+    value_ := names.take_or(&search, taken)
+    io.write_line(&value_)
+    io.print(names.len())
+    free(value_)
+    free(search)
+    names.free()
+
+    // stress: the map against a direct table
+    m := map.new[int, int](1)
+    ref := alloc([]int, 500) // ref[k] = value + 1, or 0 if the key isn't there
+    r := rand.new(1)
+    for step_ := 0; step_ < 20000; step_++ {
+        key := r.int_n(500)
+        if r.int_n(3) == 0 {
+            m.remove(&key)
+            ref[key] = 0
+        } else {
+            m.put(key, step_)
+            ref[key] = step_ + 1
+        }
+    }
+    errs := 0
+    total := 0
+    for key := 0; key < 500; key++ {
+        got := m.get_or(&key, -1)
+        if got + 1 != ref[key] {
+            errs++
+        }
+        if ref[key] != 0 {
+            total++
+        }
+    }
+    io.print("stress:", errs, "errors,", m.len() == total)
+    free(ref)
+    m.free()
+
+    grid := map.new[Point, string](4)
+    grid.put(Point{x: 1, y: 2}, "one-two")
+    grid.put(Point{x: 2, y: 1}, "two-one")
+    q := Point{x: 2, y: 1}
+    io.print(grid.get_or(&q, "?"), grid.len())
+    grid.free()
+}
+
+// a struct key: implements hash.Hash by hand
+struct Point {
+    x int
+    y int
+}
+
+fn (p &Point) hash() uint64 {
+    return hash.mix64(uint64(p.x) *% 31 +% uint64(p.y))
+}
+
+fn (p &Point) eq(o &Point) bool {
+    return p.x == o.x && p.y == o.y
+}
+
+impl hash.Hash for Point

@@ -1,0 +1,7 @@
+// error: an owning element can't be copied or moved directly: use take(&s[i]) (leaves an empty slot) (checked with an owning T, like first_[[]byte])
+fn first_[T owned](s &[]T) T {
+    return s[0]
+}
+
+fn main() {
+}

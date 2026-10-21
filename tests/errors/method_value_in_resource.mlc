@@ -1,0 +1,7 @@
+// error: Node contains owning pointers and can't be copied: use the receiver &Node or *Node
+struct Node { next_ ?*Node }
+fn (n Node) empty_() bool {
+    return true
+}
+fn main() {
+}

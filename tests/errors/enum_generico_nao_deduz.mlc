@@ -1,8 +1,0 @@
-// error: couldn't infer T in Resultado.Erro: write Resultado[int].Erro(...)
-enum Resultado[T any] {
-    Ok(valor T)
-    Erro(codigo int)
-}
-fn main() {
-    r := Resultado.Erro(1)
-}

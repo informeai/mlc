@@ -1,9 +1,0 @@
-// error: s may have already been freed or moved (line 7), depending on the path
-struct Item { peso int }
-fn main() {
-    s := alloc([]?*Item, 2)
-    for x in drain(s) {
-        free(x)
-        free(s)
-    }
-}

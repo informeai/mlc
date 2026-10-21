@@ -1,0 +1,8 @@
+// error: the elements of []?*Item are owners and can't be copied: use for x in drain(s) to empty the slice
+struct Item { weight int }
+fn main() {
+    s := alloc([]?*Item, 2)
+    for x in s {
+    }
+    free(s)
+}

@@ -1,0 +1,8 @@
+// error: s[i] may be nil and can't be used directly: take it out with take(&s[i]) and put it back with replace(&s[i], v)
+import "std/io"
+struct Item { weight int }
+fn main() {
+    s := alloc([]?*Item, 2)
+    io.print(s[0].weight)
+    free(s)
+}

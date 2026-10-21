@@ -1,0 +1,11 @@
+// error: a literal of Node, which contains owning pointers, can only appear inside alloc(...)
+struct Node {
+    value_ int
+    next_ ?*Node
+}
+fn main() {
+    p := alloc(Node)
+    p.next_ = nil
+    n := Node{value_: 1, next_: nil}
+    free(p)
+}

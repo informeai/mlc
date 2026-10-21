@@ -1,0 +1,17 @@
+// error: x.head was moved out of the borrow (line 12) and must receive a value before the end of the scope of x
+struct Node {
+    v int
+}
+
+struct List {
+    head ?*Node
+}
+
+fn forget(l &List) {
+    x := l
+    c := x.head
+    free(c)
+}
+
+fn main() {
+}

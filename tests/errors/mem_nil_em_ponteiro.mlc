@@ -1,5 +1,0 @@
-// error: declaration of p: nil only fits in ?*Ponto, not in *Ponto (a *T pointer is never nil)
-struct Ponto { x int; y int }
-fn main() {
-    var p *Ponto = nil
-}

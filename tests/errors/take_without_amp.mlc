@@ -1,0 +1,7 @@
+// error: take takes a borrowed element: take(&s[i]...)
+struct Item { weight int }
+fn main() {
+    s := alloc([]?*Item, 2)
+    x := take(s[0])
+    free(s)
+}

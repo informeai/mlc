@@ -1,0 +1,8 @@
+// error: an owning element can't be copied or moved directly: use take(&s[i]) (leaves an empty slot)
+struct Item { weight int }
+fn main() {
+    s := alloc([]?*Item, 2)
+    x := s[0]
+    free(x)
+    free(s)
+}

@@ -1,8 +1,0 @@
-// error: impl io.Display for geo.Ponto must be in the file of geo.Ponto or of io.Display
-import "std/io"
-import "geo"
-
-impl auto io.Display for geo.Ponto
-
-fn main() {
-}

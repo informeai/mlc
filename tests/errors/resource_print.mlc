@@ -1,0 +1,11 @@
+// error: a value of type Node contains owning pointers and can't be copied; use it through a pointer (*Node)
+import "std/io"
+struct Node {
+    value_ int
+    next_ ?*Node
+}
+fn main() {
+    p := alloc(Node)
+    io.print(*p)
+    free(p)
+}

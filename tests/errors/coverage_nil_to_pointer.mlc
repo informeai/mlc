@@ -1,0 +1,17 @@
+// error: the value may be nil here, but o argumento 1 of eat expects *Box
+// Checker coverage (phase 5): an ownership rule no test triggered.
+struct Box {
+    v int
+}
+
+fn eat(b *Box) {
+    free(b)
+}
+
+fn maybe() ?*Box {
+    return nil
+}
+
+fn main() {
+    eat(maybe())
+}

@@ -1,5 +1,0 @@
-// error: geometria.volume doesn't exist
-import "geometria"
-fn main() {
-    geometria.volume()
-}

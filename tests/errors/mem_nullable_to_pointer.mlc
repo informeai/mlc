@@ -1,0 +1,9 @@
+// error: q may be nil here, but o argumento 1 of destroy expects *Point; check with if q != nil first
+struct Point { x int; y int }
+fn destroy(p *Point) {
+    free(p)
+}
+fn main() {
+    var q ?*Point = nil
+    destroy(q)
+}

@@ -1,0 +1,8 @@
+// error: leak: the temporary owning pointer is lost here; store it in a variable first
+import "std/io"
+fn make_it() []int {
+    return alloc([]int, 2)
+}
+fn main() {
+    io.print(make_it()[0])
+}

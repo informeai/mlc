@@ -1,0 +1,18 @@
+// error: & can only appear as a call argument, to borrow: f(&x)
+enum E {
+    Msg(m []byte)
+    Nothing
+}
+
+fn text_() []byte {
+    return alloc([]byte, 2)
+}
+
+fn main() {
+    e := E.Msg(text_())
+    match *(&e) {
+        Msg(m) => {}
+        Nothing => {}
+    }
+    free(e)
+}

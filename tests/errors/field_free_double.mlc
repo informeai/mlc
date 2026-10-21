@@ -1,0 +1,12 @@
+// error: p.next_ freed twice: it was already freed or moved (line 9)
+struct Node {
+    value_ int
+    next_ ?*Node
+}
+fn main() {
+    p := alloc(Node)
+    p.next_ = alloc(Node)
+    free(p.next_)
+    free(p.next_)
+    free(p)
+}

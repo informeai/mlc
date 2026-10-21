@@ -1,9 +1,0 @@
-// error: FILE is an opaque C type: the values come from C functions, not from alloc
-extern "C" type FILE
-
-extern "C" fn fopen(caminho string, modo string) ?*FILE
-extern "C" fn fclose(f *FILE) int32
-
-fn main() {
-    p := alloc(FILE)
-}

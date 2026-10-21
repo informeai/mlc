@@ -1,0 +1,10 @@
+// error: missing ',' after the field y (in a multi-line literal, every field ends with a comma)
+import "std/io"
+struct Point { x int; y int }
+fn main() {
+    p := Point{
+        x: 1,
+        y: 2
+    }
+    io.print(p)
+}

@@ -1,8 +1,0 @@
-// error: argument 1 of soma: expected &[]int, found &[3]bool
-fn soma(s &[]int) int {
-    return len(s)
-}
-fn main() {
-    a := [3]bool{}
-    soma(&a)
-}

@@ -1,0 +1,11 @@
+// error: q may be nil here: check with if q != nil before using the pointee
+import "std/io"
+struct Point { x int; y int }
+fn main() {
+    var q ?*Point = alloc(Point)
+    if q != nil {
+        free(q)
+        q = nil
+        io.print(q.x)
+    }
+}

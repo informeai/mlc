@@ -1,0 +1,5 @@
+// error: Point isn't generic
+struct Point { x int }
+fn main() {
+    var p Point[int]
+}

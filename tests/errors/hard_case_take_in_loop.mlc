@@ -1,0 +1,48 @@
+// error: free(s): the elements of s may still own memory; empty it first with for x in drain(s)
+// Hard case (phase 5 of the verification plan): CONSERVATIVE: the loop takes every element out with take, but the checker doesn't know they all left; the right way is for x in drain(s).
+struct Box {
+    v int
+}
+
+struct Pair {
+    a ?*Box
+    b ?*Box
+}
+
+enum Opt {
+    Nothing
+    Has(b ?*Box)
+}
+
+extern "C" fn rand() int32
+
+fn flip() bool {
+    return rand() % 2 == 0
+}
+
+fn consume(b *Box) int {
+    n := b.v
+    free(b)
+    return n
+}
+
+fn sink(n int) {
+}
+
+fn main() {
+    s := alloc([]?*Box, 3)
+    for i := 0; i < len(s); i++ {
+        old := replace(&s[i], alloc(Box{v: i}))
+        free(old)
+    }
+    acc := 0
+    for i := 0; i < len(s); i++ {
+        e := take(&s[i])
+        if e != nil {
+            acc += e.v
+        }
+        free(e)
+    }
+    free(s)
+    sink(acc)
+}

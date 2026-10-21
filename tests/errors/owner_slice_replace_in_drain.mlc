@@ -1,0 +1,11 @@
+// error: s is being emptied by a for in drain(s) and can't be borrowed or receive elements
+struct Item { weight int }
+fn main() {
+    s := alloc([]?*Item, 2)
+    for x in drain(s) {
+        free(x)
+        old_ := replace(&s[0], alloc(Item))
+        free(old_)
+    }
+    free(s)
+}

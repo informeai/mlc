@@ -189,7 +189,7 @@ func dirLoader(path string) Loader {
 }
 
 // testName names the test by the file, or by the folder in a multi-file
-// program (projeto/main.mlc becomes projeto).
+// program (project/main.mlc becomes project).
 func testName(path string) string {
 	if filepath.Base(path) == "main.mlc" {
 		return filepath.Base(filepath.Dir(path))
@@ -290,12 +290,12 @@ func TestTestRunner(t *testing.T) {
 	}{
 		{"test_passes", Passed, nil},
 		{"test_fails", Failed, []string{
-			"saída do teste\n",
-			"runner_test.mlc:17: different text\n    got:      \"oi\\n\"\n    expected: \"ola\"\n",
+			"the test's output\n",
+			"runner_test.mlc:17: different text\n    got:      \"hi\\n\"\n    expected: \"hello\"\n",
 			"runner_test.mlc:18: got 3, expected 4\n",
 			"runner_test.mlc:19: got 255 (0xff), expected 256 (0x100)\n",
 			"runner_test.mlc:20: got 0.30000000000000004, expected 0.3\n",
-			"runner_test.mlc:22: explícito\n",
+			"runner_test.mlc:22: explicit\n",
 		}},
 		{"test_panics", Panicked, []string{"panic: runner_test.mlc:29: index 5 out of bounds (length 2)"}},
 		{"test_expected_panic", Passed, []string{"expected panic: runner_test.mlc:37:"}},
@@ -319,7 +319,7 @@ func TestTestRunner(t *testing.T) {
 				t.Errorf("%s: the output doesn't contain %q:\n%s", w.name, frag, r.Output)
 			}
 		}
-		if w.name == "test_fails" && strings.Contains(string(r.Output), "nunca aparece") {
+		if w.name == "test_fails" && strings.Contains(string(r.Output), "never shows up") {
 			t.Errorf("a true check shouldn't show up")
 		}
 	}

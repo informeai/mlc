@@ -1,0 +1,7 @@
+// error: the borrow p can't be reassigned
+struct Point { x int; y int }
+fn f(p &Point, q &Point) {
+    p = q
+}
+fn main() {
+}

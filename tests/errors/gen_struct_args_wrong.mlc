@@ -1,0 +1,5 @@
+// error: Pair expects 2 type argument(s), got 1
+struct Pair[A any, B any] { a A; b B }
+fn main() {
+    var p Pair[int]
+}

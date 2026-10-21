@@ -1,7 +1,0 @@
-// error: Ponto already has a field x; the method needs another name
-struct Ponto { x int; y int }
-fn (p Ponto) x() int {
-    return 1
-}
-fn main() {
-}

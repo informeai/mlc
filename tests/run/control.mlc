@@ -1,0 +1,66 @@
+import "std/io"
+
+fn categorize(n int) string {
+    if n < 0 {
+        return "negative"
+    } else if n == 0 {
+        return "zero"
+    } else if n < 10 {
+        return "small"
+    } else {
+        return "large"
+    }
+}
+
+fn first_multiple(n int, from_ int) int {
+    i := n
+    for {
+        if i % from_ == 0 {
+            return i
+        }
+        i++
+    }
+}
+
+fn main() {
+    io.print(categorize(-5), categorize(0), categorize(7), categorize(42))
+    io.print(first_multiple(10, 7))
+
+    var empty_ string
+    var zero int
+    var falsy bool
+    io.print("[", empty_, "]", zero, falsy)
+
+    x := 1
+    {
+        x := x + 10
+        io.print("inside:", x)
+    }
+    io.print("outside:", x)
+
+    n := 1
+    for n < 100 {
+        n *= 3
+    }
+    io.print(n)
+
+    var msg = "hi"
+    msg = "bye"
+    io.print(msg)
+
+    total := 0
+    for i := 0; i < 10; i++ {
+        if i % 2 == 0 {
+            continue
+        }
+        total += i
+    }
+    total -= 5
+    total /= 2
+    total %= 7
+    io.print(total)
+
+    for j := 3; j > 0; j-- {
+        io.print("j", j)
+    }
+}

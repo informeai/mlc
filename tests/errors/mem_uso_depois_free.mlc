@@ -1,8 +1,0 @@
-// error: p was already freed or moved (line 6)
-import "std/io"
-struct Ponto { x int; y int }
-fn main() {
-    p := alloc(Ponto)
-    free(p)
-    io.print(p.x)
-}

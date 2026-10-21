@@ -1,0 +1,7 @@
+// error: the receiver must name the 1 type parameter(s) of Vector, like Vector[T]
+struct Vector[T any] { items_ []T }
+fn (v &Vector) size_() int {
+    return 0
+}
+fn main() {
+}

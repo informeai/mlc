@@ -1,0 +1,10 @@
+// error: method Point.sum_ already declared on line 3
+struct Point { x int; y int }
+fn (p Point) sum_() int {
+    return p.x + p.y
+}
+fn (p &Point) sum_() int {
+    return 0
+}
+fn main() {
+}

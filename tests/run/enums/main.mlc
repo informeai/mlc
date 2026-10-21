@@ -1,97 +1,97 @@
 import "std/io"
-import "cor"
+import "color"
 
-enum Forma {
-    Circulo(raio float64)
-    Retangulo(largura float64, altura float64)
-    Vazio
+enum Shape {
+    Circle(radius float64)
+    Rectangle(width_ float64, height float64)
+    Empty
 }
 
-enum Resultado[T any] {
-    Ok(valor T)
-    Erro(codigo int)
+enum Outcome[T any] {
+    Ok(value_ T)
+    Failure(errcode int)
 }
 
-struct Figura {
-    nome string
-    forma Forma
+struct Figure {
+    name_ string
+    shape Shape
 }
 
-fn area(f Forma) float64 {
+fn area(f Shape) float64 {
     match f {
-        Circulo(r) => return 3.0 * r * r
-        Retangulo(l, a) => return l * a
-        Vazio => return 0.0
+        Circle(r) => return 3.0 * r * r
+        Rectangle(l, a) => return l * a
+        Empty => return 0.0
     }
 }
 
-fn divide(a int, b int) Resultado[int] {
+fn split_it(a int, b int) Outcome[int] {
     if b == 0 {
-        return Resultado.Erro(1) // T deduzido do tipo de retorno
+        return Outcome.Failure(1) // T inferred from the return type
     }
-    return Resultado.Ok(a / b) // T deduzido do valor
+    return Outcome.Ok(a / b) // T inferred from the value
 }
 
-fn raiz_inteira(n int) Resultado[int] {
+fn int_sqrt(n int) Outcome[int] {
     if n < 0 {
-        return Resultado[int].Erro(2) // tipo explícito
+        return Outcome[int].Failure(2) // explicit type
     }
     r := 0
     for (r + 1) * (r + 1) <= n {
         r++
     }
-    return Resultado.Ok(r)
+    return Outcome.Ok(r)
 }
 
-fn mostra(r Resultado[int]) {
+fn show_it(r Outcome[int]) {
     match r {
         Ok(v) => io.print("ok:", v)
-        Erro(c) => io.print("erro:", c)
+        Failure(c) => io.print("error:", c)
     }
 }
 
 fn main() {
-    formas := alloc([]Forma, 3)
-    formas[0] = Forma.Circulo(2.0)
-    formas[1] = Forma.Retangulo(3.0, 4.0)
-    formas[2] = Forma.Vazio
+    shapes := alloc([]Shape, 3)
+    shapes[0] = Shape.Circle(2.0)
+    shapes[1] = Shape.Rectangle(3.0, 4.0)
+    shapes[2] = Shape.Empty
     total := 0.0
-    for f in formas {
+    for f in shapes {
         total += area(f)
     }
-    io.print("área total:", total)
-    io.print(formas)
-    free(formas)
+    io.print("total area:", total)
+    io.print(shapes)
+    free(shapes)
 
-    mostra(divide(10, 3))
-    mostra(divide(1, 0))
-    mostra(raiz_inteira(50))
-    mostra(raiz_inteira(-4))
+    show_it(split_it(10, 3))
+    show_it(split_it(1, 0))
+    show_it(int_sqrt(50))
+    show_it(int_sqrt(-4))
 
-    fig := Figura{nome: "placa", forma: Forma.Retangulo(2.0, 0.5)}
-    io.print(fig, area(fig.forma))
+    fig := Figure{name_: "plate", shape: Shape.Rectangle(2.0, 0.5)}
+    io.print(fig, area(fig.shape))
 
-    var vazia Forma // valor zero: a primeira variante, zerada
-    io.print(vazia)
+    var blank Shape // zero value: the first variant, zeroed
+    io.print(blank)
 
-    // match dentro de laço, com break saindo do for
-    passos := 0
+    // match inside a loop, with break leaving the for
+    steps := 0
     for i := 0; i < 10; i++ {
-        match divide(10, 5 - i) {
-            Erro(_) => break
-            Ok(_) => passos++
+        match split_it(10, 5 - i) {
+            Failure(_) => break
+            Ok(_) => steps++
         }
     }
-    io.print("passos antes do erro:", passos)
+    io.print("steps before the error:", steps)
 
-    c := cor.Cor.Rgb(10, 20, 30)
-    io.print(cor.nome(c), cor.nome(cor.Cor.Azul), c)
+    c := color.Color.Rgb(10, 20, 30)
+    io.print(color.name_(c), color.name_(color.Color.Blue), c)
     match c {
-        Rgb(r, g, b) => io.print("soma:", int(r) + int(g) + int(b))
-        _ => io.print("básica")
+        Rgb(r, g, b) => io.print("sum:", int(r) + int(g) + int(b))
+        _ => io.print("basic")
     }
 }
 
-impl auto io.Display for Forma
+impl auto io.Display for Shape
 
-impl auto io.Display for Figura
+impl auto io.Display for Figure

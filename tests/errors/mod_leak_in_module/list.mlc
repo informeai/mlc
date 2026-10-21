@@ -1,0 +1,4 @@
+pub fn make_it() {
+    n := alloc(1)
+    *n += 1
+}

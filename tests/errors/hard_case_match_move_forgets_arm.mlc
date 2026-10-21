@@ -1,0 +1,44 @@
+// error: leak: b may still own the memory (line 37) at the end of the match arm, depending on the path
+// Hard case (phase 5 of the verification plan): one path of the match arm forgets the data.
+struct Box {
+    v int
+}
+
+struct Pair {
+    a ?*Box
+    b ?*Box
+}
+
+enum Opt {
+    Nothing
+    Has(b ?*Box)
+}
+
+extern "C" fn rand() int32
+
+fn flip() bool {
+    return rand() % 2 == 0
+}
+
+fn consume(b *Box) int {
+    n := b.v
+    free(b)
+    return n
+}
+
+fn sink(n int) {
+}
+
+fn main() {
+    e := Opt.Has(alloc(Box{v: 1}))
+    var stored ?*Box
+    match e {
+        Nothing => {}
+        Has(b) => {
+            if flip() {
+                stored = b
+            }
+        }
+    }
+    free(stored)
+}

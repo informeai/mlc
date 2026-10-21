@@ -1,0 +1,14 @@
+// error: p is borrowed and moved in the same call
+struct Node {
+    value_ int
+    next_ ?*Node
+}
+fn f(a &Node, b ?*Node) {
+    free(b)
+}
+fn main() {
+    p := alloc(Node)
+    p.next_ = alloc(Node)
+    f(&p, p.next_)
+    free(p)
+}

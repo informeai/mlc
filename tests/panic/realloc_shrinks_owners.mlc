@@ -1,0 +1,7 @@
+struct Item { weight int }
+
+fn main() {
+    s := alloc([]?*Item, 3)
+    s = realloc(s, 1)
+    free(s)
+}

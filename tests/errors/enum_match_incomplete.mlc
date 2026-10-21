@@ -1,0 +1,12 @@
+// error: a match on Shape must cover every variant (missing: Empty) or have a _ arm
+enum Shape {
+    Circle(radius float64)
+    Empty
+}
+fn f(x Shape) {
+    match x {
+        Circle(_) => {}
+    }
+}
+fn main() {
+}

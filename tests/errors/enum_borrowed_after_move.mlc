@@ -1,0 +1,23 @@
+// error: e was already freed or moved (line 21)
+// &e after moving e into another variable.
+enum E {
+    Empty
+    Name(b []byte)
+}
+
+fn which(e &E) int {
+    match *e {
+        Empty => return 0
+        Name(b) => return len(b)
+    }
+}
+
+fn store_it(e E) {
+    free(e)
+}
+
+fn main() {
+    e := E.Name(alloc([]byte, 3))
+    store_it(e)
+    which(&e)
+}

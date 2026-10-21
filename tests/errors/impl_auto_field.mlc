@@ -1,0 +1,18 @@
+// error: impl auto io.Display for Pixel: the field c (Color) doesn't implement io.Display
+import "std/io"
+
+struct Color {
+    r byte
+}
+
+struct Pixel {
+    x int
+    c Color
+}
+
+impl auto io.Display for Pixel
+
+fn main() {
+    p := Pixel{x: 1, c: Color{r: 2}}
+    io.print(p)
+}

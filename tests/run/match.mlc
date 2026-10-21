@@ -4,48 +4,48 @@ fn classify(n int) string {
     var r = ""
     match n {
         0 => r = "zero"
-        1, 2, 3 => r = "pequeno"
-        -1 => r = "menos um"
+        1, 2, 3 => r = "small"
+        -1 => r = "minus one"
         _ => {
             if n < 0 {
-                r = "negativo"
+                r = "negative"
             } else {
-                r = "grande"
+                r = "large"
             }
         }
     }
     return r
 }
 
-fn codigo(cor string) int {
-    match cor {
-        "vermelho" => return 1
-        "verde", "azul" => return 2
+fn errcode(color string) int {
+    match color {
+        "red" => return 1
+        "green", "blue" => return 2
         "" => return 0
         _ => return -1
     }
 }
 
-fn sim_nao(b bool) string {
+fn yes_no(b bool) string {
     match b {
-        true => return "sim"
-        false => return "não"
+        true => return "yes"
+        false => return "no"
     }
 }
 
-fn extremo(n int) string {
+fn extreme(n int) string {
     match n {
-        -9223372036854775808 => return "mínimo"
-        9223372036854775807 => return "máximo"
-        _ => return "meio"
+        -9223372036854775808 => return "minimum"
+        9223372036854775807 => return "maximum"
+        _ => return "middle"
     }
 }
 
 fn main() {
     io.print(classify(0), classify(2), classify(-1), classify(-7), classify(99))
-    io.print(codigo("vermelho"), codigo("azul"), codigo(""), codigo("roxo"))
-    io.print(sim_nao(true), sim_nao(1 > 2))
-    io.print(extremo(-9223372036854775807 - 1), extremo(9223372036854775807), extremo(0))
+    io.print(errcode("red"), errcode("blue"), errcode(""), errcode("purple"))
+    io.print(yes_no(true), yes_no(1 > 2))
+    io.print(extreme(-9223372036854775807 - 1), extreme(9223372036854775807), extreme(0))
 
     total := 0
     for i := 0; i < 10; i++ {
@@ -56,7 +56,7 @@ fn main() {
     }
     io.print("total:", total)
 
-    // break dentro de match sobre int sai do for (no C vira goto)
+    // break inside a match on int leaves the for (in C it becomes goto)
     n := 0
     for {
         n++
@@ -65,30 +65,30 @@ fn main() {
             _ => {}
         }
     }
-    io.print("parou em", n)
+    io.print("stopped at", n)
 
-    // break dentro de match sobre string (cadeia de if no C)
-    palavras := 0
+    // break inside a match on string (an if chain in C)
+    words := 0
     for j := 0; j < 100; j++ {
         p := "x"
         if j == 3 {
-            p = "fim"
+            p = "end"
         }
         match p {
-            "fim" => break
-            _ => palavras++
+            "end" => break
+            _ => words++
         }
     }
-    io.print("palavras:", palavras)
+    io.print("words:", words)
 
-    // match dentro de match, com break do for de fora
-    achou := -1
+    // match inside match, with a break of the outer for
+    found := -1
     for a := 0; a < 5; a++ {
         match a % 2 {
             0 => {
                 match a {
                     4 => {
-                        achou = a
+                        found = a
                         break
                     }
                     _ => {}
@@ -97,16 +97,16 @@ fn main() {
             _ => continue
         }
     }
-    io.print("achou:", achou)
+    io.print("found:", found)
 
     s := "abc"
     io.print(s == "abc", s != "abc", "" == "", "ab" == "abc")
 
-    match codigo("verde") {
-        _ => io.print("só o curinga")
+    match errcode("green") {
+        _ => io.print("only the wildcard")
     }
     match s {
-        _ => io.print("curinga em string")
+        _ => io.print("wildcard on string")
     }
-    match 1 { 2 => io.print("nunca"); _ => io.print("uma linha") }
+    match 1 { 2 => io.print("never"); _ => io.print("a line") }
 }

@@ -1,9 +1,9 @@
-fn soma(s &[]int) int {
+fn sum_(s &[]int) int {
     return len(s)
 }
 
 fn main() {
     a := [3]int{}
     b := 5
-    soma(&a[1:b])
+    sum_(&a[1:b])
 }

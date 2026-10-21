@@ -1,0 +1,6 @@
+// error: slices of Node aren't supported yet: Node contains owning pointers, and the elements can't be owners
+struct Node { next_ ?*Node }
+fn f(s []Node) {
+}
+fn main() {
+}

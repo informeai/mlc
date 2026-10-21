@@ -1,0 +1,126 @@
+import "std/chan"
+import "std/io"
+import "std/str"
+import "std/thread"
+import "std/vec"
+
+// a worker takes the two ends it needs, by ownership
+struct Worker {
+    jobs *chan.Receiver[int]
+    results *chan.Sender[int]
+}
+
+fn (w *Worker) free() {
+    w.jobs.close()
+    w.results.close()
+    free(w)
+}
+
+fn work(w *Worker) {
+    for {
+        match w.jobs.recv() {
+            Got(n) => w.results.send(n * n)
+            Closed => break
+        }
+    }
+    w.free()
+}
+
+fn produce(tx *chan.Sender[[]byte]) {
+    for i := 0; i < 5; i++ {
+        b := alloc([]byte, str.format_len("request {}", i))
+        str.format(&b, "request {}", i)
+        if !tx.send(b) {
+            break // nobody receives anymore: the value was already freed by the channel
+        }
+    }
+    tx.close()
+}
+
+fn main() {
+    // several workers, a channel of tasks and one of results
+    jobs := chan.new[int](8)
+    // the results are only read after every task is sent: the channel
+    // must fit them all, otherwise the workers stop and the sending hangs
+    results := chan.new[int](128)
+    feed := jobs.sender()
+    ws := alloc([]?*thread.Thread, 4)
+    for i := 0; i < len(ws); i++ {
+        w := alloc(Worker{jobs: jobs.clone(), results: results.sender()})
+        old := replace(&ws[i], thread.spawn(work, w, thread.STACK_64KB))
+        if old != nil {
+            thread.join(old)
+        }
+    }
+    jobs.close() // the workers have their own ends
+    for n := 1; n <= 100; n++ {
+        feed.send(n)
+    }
+    feed.close() // the workers receive Closed and finish
+    total := 0
+    count := 0
+    for {
+        match results.recv() {
+            Got(r) => {
+                total += r
+                count++
+            }
+            Closed => break // every worker closed its Sender
+        }
+    }
+    results.close()
+    for t in drain(ws) {
+        if t != nil {
+            thread.join(t)
+        }
+    }
+    free(ws)
+    io.print("results:", count, "sum of the squares:", total)
+
+    // the consumer stops early: the producer notices through send's false
+    rx := chan.new[[]byte](1)
+    t := thread.spawn(produce, rx.sender(), thread.STACK_64KB)
+    match rx.recv() {
+        Got(b) => {
+            io.write_line(&b)
+            free(b)
+        }
+        Closed => io.print("nothing")
+    }
+    rx.close() // what's in the channel, and what the producer still sends, is freed
+    thread.join(t)
+
+    // with no Sender, recv returns Closed right away
+    empty := chan.new[int](1)
+    match empty.recv() {
+        Got(n) => io.print("got", n)
+        Closed => io.print("empty and without a Sender: Closed")
+    }
+    empty.close()
+
+    // values left in the channel are freed on the last close
+    left := chan.new[[]byte](4)
+    lt := left.sender()
+    lt.send(alloc([]byte, 10))
+    lt.send(alloc([]byte, 20))
+    lt.close()
+    left.close()
+
+    // ends inside a Vec: the Vec's free closes each one (drop)
+    hub := chan.new[int](4)
+    senders := vec.new[?*chan.Sender[int]](2)
+    senders.push(hub.sender())
+    senders.push(hub.sender())
+    s := senders.at(0)
+    s.send(7)
+    senders.free()
+    match hub.recv() {
+        Got(n) => io.print("from the vec:", n)
+        Closed => io.print("nothing")
+    }
+    match hub.recv() {
+        Got(n) => io.print("other:", n)
+        Closed => io.print("the vec's Senders were closed: Closed")
+    }
+    hub.close()
+}

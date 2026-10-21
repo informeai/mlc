@@ -14,7 +14,7 @@ The idea of MLC is that whoever programs **understands and knows how much and wh
 - Runtime and library functions exposed in the language are always in English (`io.print`, `alloc`, `free`, `realloc`, `len`, `str.copy`).
 - Library functions don't allocate: they write into buffers borrowed from the caller (see `docs/text.md`).
 - Compiler messages, runtime panics and the tools' output are in English.
-- Identifiers and comments in the compiler (Go), runtime (C) and standard library code are in English. The programs in `tests/` still have Portuguese names and content.
+- Identifiers and comments in the compiler (Go), runtime (C) and standard library code are in English.
 - Documentation (`README.md`, `docs/*.md`, `editors/*/README.md`) is in English, including the names of the files in `docs/`.
 - Commits without a co-author line.
 

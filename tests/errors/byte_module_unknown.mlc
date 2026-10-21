@@ -1,0 +1,4 @@
+// error: unknown module "text": file text.mlc not found (searched in ".", "lib"; other folders: -I or MLC_PATH)
+import "text"
+fn main() {
+}

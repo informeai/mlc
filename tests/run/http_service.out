@@ -1,0 +1,7 @@
+GET /health 200: OK ok
+GET /sum?a=40&b=2 200: OK {"sum":42}
+GET /sum?a=x 400: Bad Request {"error":"a and b must be numbers"}
+POST /echo 200: OK echoing
+DELETE /health 405: Method Not Allowed use GET
+GET /nothing 404: Not Found not found
+stopped

@@ -1,0 +1,10 @@
+// error: l.next_ was moved out of the borrow (line 7) and must receive a value before leaving the function
+struct Node {
+    value_ int
+    next_ ?*Node
+}
+fn steal(l &Node) ?*Node {
+    return l.next_
+}
+fn main() {
+}

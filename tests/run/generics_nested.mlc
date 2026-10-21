@@ -1,0 +1,56 @@
+import "std/io"
+
+// Two parameters called T, in different functions, are different types:
+// each generic that calls another generic (or uses Crate[T]) has its own instance.
+struct Crate[T any] {
+    value_ T
+}
+
+fn wrap[T any](x T) Crate[T] {
+    return Crate[T]{value_: x}
+}
+
+fn swap_[T any](s &[]T, i int, j int) {
+    t := s[i]
+    s[i] = s[j]
+    s[j] = t
+}
+
+fn invert[T any](s &[]T) {
+    for i := 0; i < len(s) / 2; i++ {
+        swap_(s, i, len(s) - 1 - i)
+    }
+}
+
+fn first_larger[T ordered](s &[]T) {
+    m := 0
+    for i := 1; i < len(s); i++ {
+        if s[i] > s[m] {
+            m = i
+        }
+    }
+    swap_(s, 0, m)
+}
+
+fn twice_[T number](x T) T {
+    c := wrap(x)
+    return c.value_ + c.value_
+}
+
+fn text_[T any](x T) Crate[T] {
+    c := wrap(x)
+    return c
+}
+
+fn main() {
+    var a [4]int = [4]int{3, 9, 1, 5}
+    first_larger(&a)
+    io.print(a[0], a[1], a[2], a[3])
+    invert(&a)
+    io.print(a[0], a[1], a[2], a[3])
+    var f [3]float64 = [3]float64{0.5, 2.5, 1.5}
+    invert(&f)
+    first_larger(&f)
+    io.print(f[0], f[1], f[2])
+    io.print(twice_(21), twice_(1.25), text_("hi").value_)
+}

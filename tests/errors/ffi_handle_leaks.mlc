@@ -1,0 +1,14 @@
+// error: leak: the C handle f (line 10) may still be open at the end of the function; pass it to the C function that closes it
+import "std/io"
+
+extern "C" type FILE
+
+extern "C" fn fopen(trail string, mode string) ?*FILE
+extern "C" fn fclose(f *FILE) int32
+
+fn main() {
+    f := fopen("x", "r")
+    if f != nil {
+        io.print("opened")
+    }
+}

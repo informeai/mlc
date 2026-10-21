@@ -1,0 +1,15 @@
+// error: leak: st (sqlite.Stmt, line 9) may still be open at the end of the block; close it with st.close()
+// The checker requires the close of each prepared statement (and of the database).
+import "std/sqlite"
+
+fn main() {
+    err := 0
+    db := sqlite.open_str(":memory:", &err)
+    if db != nil {
+        st := db.prepare_str("SELECT 1", &err)
+        if st != nil {
+            st.next()
+        }
+        db.close()
+    }
+}

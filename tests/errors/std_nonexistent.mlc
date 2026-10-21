@@ -1,0 +1,5 @@
+// error: the standard library has no module "std/nothing"
+import "std/nothing"
+
+fn main() {
+}

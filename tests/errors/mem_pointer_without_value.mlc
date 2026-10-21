@@ -1,0 +1,5 @@
+// error: var p *Point needs an initial value: a *T pointer is never nil (use ?*Point to start with nil)
+struct Point { x int; y int }
+fn main() {
+    var p *Point
+}

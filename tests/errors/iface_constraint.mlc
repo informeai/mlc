@@ -1,0 +1,17 @@
+// error: Q doesn't implement Area, required by T in larger (declare impl Area for Q)
+interface Area {
+    fn area(self &Self) int
+}
+
+struct Q {
+    l int
+}
+
+fn larger[T Area](a &T) int {
+    return a.area()
+}
+
+fn main() {
+    q := Q{l: 1}
+    larger(&q)
+}

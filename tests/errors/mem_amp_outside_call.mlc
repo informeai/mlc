@@ -1,0 +1,6 @@
+// error: & can only appear as a call argument, to borrow: f(&x)
+struct Point { x int; y int }
+fn main() {
+    s := Point{}
+    var ok bool = &s == &s
+}

@@ -1,0 +1,8 @@
+// error: io.print doesn't write pointers (*Point); write the pointee: *p or p.field
+import "std/io"
+struct Point { x int; y int }
+fn main() {
+    p := alloc(Point)
+    io.print(p)
+    free(p)
+}

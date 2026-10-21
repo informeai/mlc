@@ -1,0 +1,1 @@
+panic: byte_outside.mlc:6: value 300 doesn't fit in byte (0 to 255)

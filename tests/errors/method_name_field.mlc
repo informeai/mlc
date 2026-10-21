@@ -1,0 +1,7 @@
+// error: Point already has a field x; the method needs another name
+struct Point { x int; y int }
+fn (p Point) x() int {
+    return 1
+}
+fn main() {
+}

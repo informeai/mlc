@@ -1,6 +1,0 @@
-// error: operator < doesn't apply to T and T
-fn menor[T any](a T, b T) bool {
-    return a < b
-}
-fn main() {
-}

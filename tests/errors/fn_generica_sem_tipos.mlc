@@ -1,8 +1,0 @@
-// error: maior is generic: to use it as a value, write the types, like maior[int]
-fn maior[T ordered](a T, b T) T {
-    return a
-}
-
-fn main() {
-    f := maior
-}

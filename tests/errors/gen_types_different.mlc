@@ -1,0 +1,10 @@
+// error: argument 2 of larger[int]: expected int, found float64
+import "std/io"
+fn larger[T ordered](a T, b T) T {
+    return a
+}
+fn main() {
+    x := 1
+    y := 2.5
+    io.print(larger(x, y))
+}

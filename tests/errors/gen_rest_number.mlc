@@ -1,0 +1,6 @@
+// error: operator % doesn't apply to T (only to integers)
+fn rest[T number](a T, b T) T {
+    return a % b
+}
+fn main() {
+}

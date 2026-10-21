@@ -1,0 +1,7 @@
+// error: methods can only be declared in the struct's file, with receiver S, &S or *S
+import "shape"
+fn (q shape.Q) twice_() int {
+    return 2
+}
+fn main() {
+}

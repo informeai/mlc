@@ -1,0 +1,11 @@
+// error: string doesn't satisfy ordered, required by T in larger
+import "std/io"
+fn larger[T ordered](a T, b T) T {
+    if a > b {
+        return a
+    }
+    return b
+}
+fn main() {
+    io.print(larger("a", "b"))
+}

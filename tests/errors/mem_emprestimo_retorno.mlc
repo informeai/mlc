@@ -1,8 +1,0 @@
-// error: the returned borrow comes from p, which stops existing at the end of the function; it must come from q
-struct Ponto { x int; y int }
-fn f(q &Ponto) &Ponto {
-    p := Ponto{x: q.x, y: 0}
-    return &p
-}
-fn main() {
-}

@@ -84,7 +84,7 @@ for i := 0; i < 8; i++ {
 g.wait()                                // waits for all of them and frees the group
 ```
 
-The capacity is the limit of live threads in the group: when it's full, `add` collects the ones that already finished and, if none did, waits for the oldest one. In a server, `sync.group(64)` means "at most 64 connections at the same time", and the `accept` loop waits for a slot (see `tests/run/http_servico.mlc`). `g.reap()` collects the ones that finished without waiting for the others.
+The capacity is the limit of live threads in the group: when it's full, `add` collects the ones that already finished and, if none did, waits for the oldest one. In a server, `sync.group(64)` means "at most 64 connections at the same time", and the `accept` loop waits for a slot (see `tests/run/http_service.mlc`). `g.reap()` collects the ones that finished without waiting for the others.
 
 The checker requires the `wait`, as it requires each thread's `join`, and `add` only accepts `*thread.Thread` (no result): an owned result can't disappear without anyone receiving it.
 

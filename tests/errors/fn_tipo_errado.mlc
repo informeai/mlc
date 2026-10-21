@@ -1,8 +1,0 @@
-// error: declaration of f: expected fn(int) int, found fn(int) bool
-fn par(x int) bool {
-    return x % 2 == 0
-}
-
-fn main() {
-    var f fn(int) int = par
-}

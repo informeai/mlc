@@ -872,7 +872,7 @@ l.close()
 
 A connection is an `io.Reader`: `bufio.new[net.Conn]()` reads lines from it (text protocols, like HTTP and SMTP).
 
-Writing to a connection the other side closed returns `RESET`, instead of ending the program with `SIGPIPE`. `tests/run/servidor.mlc` has a complete service: one thread per connection, request and response in JSON.
+Writing to a connection the other side closed returns `RESET`, instead of ending the program with `SIGPIPE`. `tests/run/server.mlc` has a complete service: one thread per connection, request and response in JSON.
 
 ### `std/signal`
 
@@ -1107,9 +1107,9 @@ match r.read_all(&c, &body) { ... }              // r.status() is the code
 
 The body can come with `Content-Length`, `Transfer-Encoding: chunked` or, in a response without a size, until the connection closes. `1xx`, `204` and `304` responses have no body. Left out of this version: `Expect: 100-continue`, HTTP/2 and responses to `HEAD` in the client. HTTPS comes from [`std/tls`](#stdtls), or from putting the service behind a proxy (nginx, Caddy or the cloud load balancer).
 
-`tests/run/http_servico.mlc` has a complete service: routes, JSON, one thread per connection (at most 64 at a time, through `sync.group`), logging and a clean shutdown on `TERM`.
+`tests/run/http_service.mlc` has a complete service: routes, JSON, one thread per connection (at most 64 at a time, through `sync.group`), logging and a clean shutdown on `TERM`.
 
-`tests/run/http_rotas.mlc` builds the equivalent of an `http.ListenAndServe` by hand: handlers `fn(&net.Conn, &http.Message, &Ctx)` in a fixed route table (`Router`, with a prefix for `/items/{id}`, 404 and 405), the keep-alive loop with a timeout, 431 for a large header, 413 for a large body and `skip_body` after each handler.
+`tests/run/http_routes.mlc` builds the equivalent of an `http.ListenAndServe` by hand: handlers `fn(&net.Conn, &http.Message, &Ctx)` in a fixed route table (`Router`, with a prefix for `/items/{id}`, 404 and 405), the keep-alive loop with a timeout, 431 for a large header, 413 for a large body and `skip_body` after each handler.
 
 #### Router
 

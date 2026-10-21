@@ -1,0 +1,6 @@
+// error: slices of slices of owners aren't supported yet ([][]T only with a simple T)
+struct Node { x int }
+fn f(s [][]?*Node) {
+}
+fn main() {
+}

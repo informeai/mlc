@@ -1,0 +1,13 @@
+// error: free of a temporary slice whose elements may be owners: store it in a variable and empty it with for x in drain(s)
+// Checker coverage (phase 5): an ownership rule no test triggered.
+struct Box {
+    v int
+}
+
+fn list() []?*Box {
+    return alloc([]?*Box, 2)
+}
+
+fn main() {
+    free(list())
+}

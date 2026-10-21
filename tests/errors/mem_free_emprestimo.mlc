@@ -1,7 +1,0 @@
-// error: a borrow (&Ponto) can't be freed: only the owner frees
-struct Ponto { x int; y int }
-fn f(p &Ponto) {
-    free(p)
-}
-fn main() {
-}

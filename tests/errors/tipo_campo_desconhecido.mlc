@@ -1,4 +1,0 @@
-// error: unknown type Foo
-struct Ponto { x Foo }
-fn main() {
-}

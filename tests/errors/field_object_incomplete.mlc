@@ -1,0 +1,17 @@
+// error: p can't be moved: p.next_ was moved out (line 14) and didn't receive a new value
+struct Node {
+    value_ int
+    next_ ?*Node
+}
+fn destroy(p *Node) {
+    x := p.next_
+    free(x)
+    free(p)
+}
+fn main() {
+    p := alloc(Node)
+    p.next_ = alloc(Node)
+    x := p.next_
+    destroy(p)
+    free(x)
+}

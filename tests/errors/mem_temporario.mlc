@@ -1,9 +1,0 @@
-// error: leak: the temporary owning pointer is lost here; store it in a variable first
-import "std/io"
-struct Ponto { x int; y int }
-fn novo() *Ponto {
-    return alloc(Ponto)
-}
-fn main() {
-    io.print(novo().x)
-}

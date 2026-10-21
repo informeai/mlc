@@ -1,0 +1,13 @@
+// error: p may be nil here: check with if p != nil before using the pointee
+struct Point { x int; y int }
+fn (p &Point) move() {
+    p.x++
+}
+fn maybe_() ?*Point {
+    return nil
+}
+fn main() {
+    p := maybe_()
+    p.move()
+    free(p)
+}

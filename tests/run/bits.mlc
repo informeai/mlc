@@ -3,9 +3,9 @@ import "std/hash"
 import "std/rand"
 import "std/str"
 
-// Operadores de bits, deslocamentos, aritmética que dá a volta e literais
-// em outras bases. Os valores de hash e de rand conferem com as
-// implementações de referência.
+// Bit operators, shifts, wrapping arithmetic and literals
+// in other bases. The hash and rand values match the
+// reference implementations.
 fn main() {
     a := 0b1100
     b := 0xA

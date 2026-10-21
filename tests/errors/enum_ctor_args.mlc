@@ -1,8 +1,8 @@
-// error: Forma.Circulo expects 1 value(s), got 2
-enum Forma {
-    Circulo(raio float64)
-    Vazio
+// error: Shape.Circle expects 1 value(s), got 2
+enum Shape {
+    Circle(radius float64)
+    Empty
 }
 fn main() {
-    x := Forma.Circulo(1.0, 2.0)
+    x := Shape.Circle(1.0, 2.0)
 }

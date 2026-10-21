@@ -1,0 +1,5 @@
+// error: the enum Nothing needs at least one variant
+enum Nothing {
+}
+fn main() {
+}

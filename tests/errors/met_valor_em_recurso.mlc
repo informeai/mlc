@@ -1,7 +1,0 @@
-// error: No contains owning pointers and can't be copied: use the receiver &No or *No
-struct No { prox ?*No }
-fn (n No) vazio() bool {
-    return true
-}
-fn main() {
-}

@@ -1,0 +1,18 @@
+import "std/io"
+pub enum Color {
+    Red
+    Green
+    Blue
+    Rgb(r byte, g byte, b byte)
+}
+
+pub fn name_(c Color) string {
+    match c {
+        Red => return "red"
+        Green => return "green"
+        Blue => return "blue"
+        Rgb(_, _, _) => return "custom"
+    }
+}
+
+impl auto io.Display for Color

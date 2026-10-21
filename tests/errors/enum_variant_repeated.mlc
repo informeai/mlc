@@ -1,0 +1,14 @@
+// error: repeated variant Empty (already appears on line 8)
+enum Shape {
+    Circle(radius float64)
+    Empty
+}
+fn f(x Shape) {
+    match x {
+        Empty => {}
+        Circle(_) => {}
+        Empty => {}
+    }
+}
+fn main() {
+}

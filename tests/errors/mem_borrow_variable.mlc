@@ -1,0 +1,10 @@
+// error: the borrow q can't be reassigned
+import "std/io"
+struct Point { x int; y int }
+fn f(p &Point, r &Point) {
+    q := p
+    q = r
+    io.print(q.x)
+}
+fn main() {
+}

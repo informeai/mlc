@@ -1,0 +1,83 @@
+import "std/io"
+import "collection"
+
+struct Pair[A any, B any] {
+    first_ A
+    second B
+}
+
+fn (p Pair[A, B]) swap_() Pair[B, A] {
+    return Pair[B, A]{first_: p.second, second: p.first_}
+}
+
+fn larger[T ordered](a T, b T) T {
+    if a > b {
+        return a
+    }
+    return b
+}
+
+fn sum_[T number](s &[]T) T {
+    total := T(0)
+    for x in s {
+        total += x
+    }
+    return total
+}
+
+fn gcd[T integer](a T, b T) T {
+    for b != 0 {
+        r := a % b
+        a = b
+        b = r
+    }
+    return a
+}
+
+// a generic calling a generic
+fn max_of_three[T ordered](a T, b T, c T) T {
+    return larger(larger(a, b), c)
+}
+
+fn equal_all[T comparable](a T, b T) bool {
+    return a == b
+}
+
+struct Point {
+    x int
+    y int
+}
+
+fn main() {
+    io.print(larger(3, 7), larger(2.5, 1.5), larger[int8](-3, -9))
+    io.print(max_of_three(4, 9, 2))
+
+    v := [4]float64{1.5, 2.5, 3.0, 4.0}
+    w := [3]int{1, 2, 3}
+    io.print(sum_(&v), sum_[int](&w))
+    io.print(gcd(48, 18), gcd[uint16](100, 75))
+
+    p := Pair[int, string]{first_: 1, second: "one"}
+    q := p.swap_()
+    io.print(p, q, q.first_)
+
+    io.print(equal_all(Point{x: 1, y: 2}, Point{x: 1, y: 2}), equal_all("a", "b"))
+
+    nums := collection.fresh[int](1)
+    for i := 1; i <= 5; i++ {
+        nums.add_to(i * i)
+    }
+    io.print("vector:", nums.size_(), nums.take_it(0), nums.take_it(4))
+    nums.release()
+
+    points := collection.fresh[Point](2)
+    points.add_to(Point{x: 1, y: 2})
+    points.add_to(Point{x: 3, y: 4})
+    points.add_to(Point{x: 5, y: 6})
+    io.print("points:", points.size_(), points.take_it(2))
+    points.release()
+}
+
+impl auto io.Display for Point
+
+impl auto io.Display for Pair

@@ -1,0 +1,6 @@
+// error: methods only exist on structs: int isn't a struct of this file
+fn (n int) twice_() int {
+    return n * 2
+}
+fn main() {
+}

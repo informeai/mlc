@@ -1,0 +1,4 @@
+// error: unknown module "nothing": file nothing.mlc not found (searched in ".", "lib"; other folders: -I or MLC_PATH)
+import "nothing"
+fn main() {
+}

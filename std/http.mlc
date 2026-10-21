@@ -6,7 +6,7 @@
 // and goes through the caller's buffers.
 //
 // Server (one connection; the accept loop and the threads are up to the
-// caller, see tests/run/http_servico.mlc):
+// caller, see tests/run/http_service.mlc):
 //
 //     var m http.Message
 //     for {

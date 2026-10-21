@@ -1,0 +1,46 @@
+// Hard case (phase 5 of the verification plan): reading a field and freeing another field of the same object.
+struct Box {
+    v int
+}
+
+struct Pair {
+    a ?*Box
+    b ?*Box
+}
+
+enum Opt {
+    Nothing
+    Has(b ?*Box)
+}
+
+extern "C" fn rand() int32
+
+fn flip() bool {
+    return rand() % 2 == 0
+}
+
+fn consume(b *Box) int {
+    n := b.v
+    free(b)
+    return n
+}
+
+fn sink(n int) {
+}
+
+fn peek(b &Box) int {
+    return b.v
+}
+
+fn main() {
+    p := alloc(Pair{a: alloc(Box{v: 1}), b: alloc(Box{v: 2})})
+    acc := 0
+    if p.a != nil {
+        acc += p.a.v
+    }
+    free(p.b)
+    p.b = nil
+    free(p.a)
+    free(p)
+    sink(acc)
+}

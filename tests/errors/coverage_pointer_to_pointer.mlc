@@ -1,0 +1,11 @@
+// error: pointer to pointer isn't supported
+// Checker coverage (phase 5): an ownership rule no test triggered.
+struct Box {
+    v int
+}
+
+fn main() {
+    b := alloc(Box{v: 1})
+    p := alloc(b)
+    free(p)
+}

@@ -1,0 +1,7 @@
+// error: leak: p still owns the memory (line 4) and would be overwritten; free it or pass ownership first
+struct Point { x int; y int }
+fn main() {
+    p := alloc(Point)
+    p = alloc(Point)
+    free(p)
+}

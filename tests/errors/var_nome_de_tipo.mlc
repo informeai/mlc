@@ -1,7 +1,0 @@
-// error: the name Ponto is already a type (struct)
-import "std/io"
-struct Ponto { x int }
-fn main() {
-    Ponto := 1
-    io.print(Ponto)
-}

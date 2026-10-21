@@ -1,9 +1,0 @@
-// error: p is borrowed and moved in the same call
-struct Ponto { x int; y int }
-fn f(a &Ponto, b *Ponto) {
-    free(b)
-}
-fn main() {
-    p := alloc(Ponto)
-    f(&p, p)
-}

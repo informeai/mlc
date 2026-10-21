@@ -1,0 +1,6 @@
+// error: type Point used as a value (to create a value: Point{...}; in the header of if, for or match, in parentheses)
+import "std/io"
+struct Point { x int }
+fn main() {
+    io.print(Point)
+}

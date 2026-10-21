@@ -1,8 +1,0 @@
-// error: the element taken out by drain needs a name, to be freed or moved
-struct Item { peso int }
-fn main() {
-    s := alloc([]?*Item, 2)
-    for _ in drain(s) {
-    }
-    free(s)
-}

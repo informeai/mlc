@@ -1,0 +1,8 @@
+ok 123
+error 0 Empty
+  empty
+error 12 BadDigit(1, [110 111 116 32 97 32 100 105 103 105 116])
+  position 1
+error 6 TooLong([49 50 51 52 53 54])
+5
+3

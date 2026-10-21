@@ -1,0 +1,46 @@
+// error: pick returns &Box and takes more than one borrow: there's no way to know which one the result comes from (take only one, or make a method with a & receiver)
+// Hard case (phase 5 of the verification plan): a function that returns one of two borrows (there's no way to know which one).
+struct Box {
+    v int
+}
+
+struct Pair {
+    a ?*Box
+    b ?*Box
+}
+
+enum Opt {
+    Nothing
+    Has(b ?*Box)
+}
+
+extern "C" fn rand() int32
+
+fn flip() bool {
+    return rand() % 2 == 0
+}
+
+fn consume(b *Box) int {
+    n := b.v
+    free(b)
+    return n
+}
+
+fn sink(n int) {
+}
+
+fn pick(a &Box, b &Box) &Box {
+    if flip() {
+        return a
+    }
+    return b
+}
+
+fn main() {
+    x := alloc(Box{v: 1})
+    y := alloc(Box{v: 2})
+    r := pick(&x, &y)
+    free(y)
+    sink(r.v)
+    free(x)
+}

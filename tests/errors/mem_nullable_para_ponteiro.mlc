@@ -1,9 +1,0 @@
-// error: q may be nil here, but o argumento 1 of destroi expects *Ponto; check with if q != nil first
-struct Ponto { x int; y int }
-fn destroi(p *Ponto) {
-    free(p)
-}
-fn main() {
-    var q ?*Ponto = nil
-    destroi(q)
-}

@@ -1,0 +1,11 @@
+// error: q may be nil here: check with if q != nil before using the pointee
+import "std/io"
+struct Point { x int; y int }
+fn maybe_() ?*Point {
+    return nil
+}
+fn main() {
+    q := maybe_()
+    io.print(q.x)
+    free(q)
+}

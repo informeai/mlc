@@ -1,0 +1,5 @@
+// error: extern fn is only allowed in the standard library; to call a C function, declare extern "C" fn
+extern fn secret() int
+
+fn main() {
+}

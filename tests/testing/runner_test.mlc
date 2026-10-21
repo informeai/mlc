@@ -1,5 +1,5 @@
-// Exercita o mlc test: cada teste aqui tem um resultado conhecido, conferido
-// por TestTestRunner (internal/driver/driver_test.go).
+// Exercises mlc test: each test here has a known result, checked
+// by TestTestRunner (internal/driver/driver_test.go).
 import "std/io"
 import "std/str"
 import "std/testing"
@@ -7,19 +7,19 @@ import "std/testing"
 fn test_passes() {
     testing.eq_int(1 + 1, 2)
     testing.eq_bool(true, true)
-    testing.check(true, "nunca aparece")
+    testing.check(true, "never shows up")
 }
 
 fn test_fails() {
-    io.print("saída do teste")
+    io.print("the test's output")
     b := alloc([]byte, 8)
-    n := str.copy(&b, "oi\n")
-    testing.eq_str(&b[:n], "ola")
-    testing.eq_int(3, 4) // as falhas não interrompem o teste
+    n := str.copy(&b, "hi\n")
+    testing.eq_str(&b[:n], "hello")
+    testing.eq_int(3, 4) // failures don't interrupt the test
     testing.eq_uint(255, 256)
     testing.eq_float(0.1 + 0.2, 0.3)
     testing.near(0.1 + 0.2, 0.3, 1e-9)
-    testing.fail("explícito")
+    testing.fail("explicit")
     free(b)
 }
 
@@ -56,7 +56,7 @@ fn bench_sum(b &testing.B) {
     for i := 0; i < b.n; i++ {
         total += i
     }
-    testing.check(total >= 0, "nunca falha")
+    testing.check(total >= 0, "never fails")
 }
 
 fn bench_panics(b &testing.B) {

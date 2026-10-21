@@ -1,8 +1,0 @@
-// error: Forma.Circulo has 1 field(s): write Forma.Circulo(...)
-enum Forma {
-    Circulo(raio float64)
-    Vazio
-}
-fn main() {
-    x := Forma.Circulo
-}

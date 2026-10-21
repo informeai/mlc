@@ -1,6 +1,0 @@
-// error: field y: expected int, found string
-import "std/io"
-struct Ponto { x int; y int }
-fn main() {
-    io.print(Ponto{x: 1, y: "dois"})
-}

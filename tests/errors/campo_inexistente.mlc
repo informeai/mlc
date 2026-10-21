@@ -1,7 +1,0 @@
-// error: Ponto has no field z
-import "std/io"
-struct Ponto { x int; y int }
-fn main() {
-    p := Ponto{x: 1, y: 2}
-    io.print(p.z)
-}

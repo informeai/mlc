@@ -1,4 +1,0 @@
-// error: unknown module "texto": file texto.mlc not found (searched in ".", "lib"; other folders: -I or MLC_PATH)
-import "texto"
-fn main() {
-}

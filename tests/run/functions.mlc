@@ -1,0 +1,22 @@
+import "std/io"
+
+fn sum_(a int, b int) int {
+    return a + b
+}
+
+fn positive(n int) bool {
+    return n > 0
+}
+
+fn greeting() string {
+    return "hello, \"world\"?"
+}
+
+fn main() {
+    io.print("sum:", sum_(40, 2))
+    io.print(2 + 3 * 4, (2 + 3) * 4, -7 / 2, -7 % 2)
+    io.print(1 < 2, 1 == 2 || !false, positive(-1))
+    io.print(greeting())
+    io.print()
+    io.print(9223372036854775807)
+}

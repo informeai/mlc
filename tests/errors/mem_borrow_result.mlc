@@ -1,0 +1,8 @@
+// error: the returned borrow comes from p, which stops existing at the end of the function; it must come from q
+struct Point { x int; y int }
+fn f(q &Point) &Point {
+    p := Point{x: q.x, y: 0}
+    return &p
+}
+fn main() {
+}

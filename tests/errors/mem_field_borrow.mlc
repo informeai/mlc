@@ -1,0 +1,7 @@
+// error: a borrow (&T) can't be stored in fields, slices or arrays: only in parameters, variables and return values
+struct Node {
+    value_ int
+    next_ &Node
+}
+fn main() {
+}

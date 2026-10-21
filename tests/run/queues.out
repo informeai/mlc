@@ -1,0 +1,6 @@
+shortest path: 10 steps
+t= 50 event 3
+t=100 event 4
+t=100 event 1
+t=250 event 2
+t=300 event 0

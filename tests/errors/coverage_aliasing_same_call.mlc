@@ -1,0 +1,16 @@
+// error: x is borrowed and moved in the same call
+// Checker coverage (phase 5): an ownership rule no test triggered.
+struct Box {
+    v int
+}
+
+fn consume(a *Box, b &Box) int {
+    n := a.v + b.v
+    free(a)
+    return n
+}
+
+fn main() {
+    x := alloc(Box{v: 1})
+    consume(x, &x)
+}

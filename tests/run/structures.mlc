@@ -1,0 +1,137 @@
+import "std/io"
+
+// ---------- linked list ----------
+
+struct Node {
+    value_ int
+    next_ ?*Node
+}
+
+struct List {
+    head ?*Node
+    size_ int
+}
+
+fn push(l &List, v int) {
+    n := alloc(Node)
+    n.value_ = v
+    n.next_ = l.head // moves the head to the new node...
+    l.head = n       // ...and the new node becomes the head
+    l.size_++
+}
+
+fn pop(l &List) int {
+    n := l.head
+    if n == nil {
+        l.head = nil // the borrowed field must get a value back
+        return -1
+    }
+    v := n.value_
+    l.head = n.next_
+    free(n) // accepted: n's only owning field was already moved
+    l.size_--
+    return v
+}
+
+fn sum_list(n &Node) int {
+    total := n.value_
+    if n.next_ != nil {
+        total += sum_list(&n.next_)
+    }
+    return total
+}
+
+fn free_list(l *List) {
+    cur := l.head
+    for cur != nil {
+        next_ := cur.next_
+        free(cur)
+        cur = next_
+    }
+    free(l)
+}
+
+// ---------- binary tree ----------
+
+struct Tree {
+    value_ int
+    left_ ?*Tree
+    dir ?*Tree
+}
+
+fn insert(a ?*Tree, v int) *Tree {
+    if a == nil {
+        return alloc(Tree{value_: v, left_: nil, dir: nil})
+    }
+    if v < a.value_ {
+        a.left_ = insert(a.left_, v)
+    } else {
+        a.dir = insert(a.dir, v)
+    }
+    return a
+}
+
+fn in_order(a &Tree) {
+    if a.left_ != nil {
+        in_order(&a.left_)
+    }
+    io.print(a.value_)
+    if a.dir != nil {
+        in_order(&a.dir)
+    }
+}
+
+fn height(a ?*Tree) int {
+    if a == nil {
+        return 0
+    }
+    // a is the owner here: the fields are borrowed, not moved
+    e := 0
+    d := 0
+    if a.left_ != nil && a.left_.value_ >= 0 {
+        e = 1
+    }
+    if a.dir != nil {
+        d = 1
+    }
+    free_tree(a)
+    return e + d
+}
+
+fn free_tree(a ?*Tree) {
+    if a == nil {
+        return
+    }
+    free_tree(a.left_)
+    free_tree(a.dir)
+    free(a)
+}
+
+fn main() {
+    l := alloc(List)
+    for i := 1; i <= 5; i++ {
+        push(&l, i * 10)
+    }
+    io.print("size:", l.size_)
+    if l.head != nil {
+        io.print("sum:", sum_list(&l.head))
+    }
+    io.print("pop:", pop(&l), pop(&l))
+    io.print("size:", l.size_)
+    free_list(l)
+
+    var root ?*Tree = nil
+    values_ := 0
+    for v := 50; values_ < 7; values_++ {
+        root = insert(root, v)
+        v = (v * 37 + 11) % 100
+    }
+    if root != nil {
+        in_order(&root)
+    }
+    io.print("children of the root:", height(root))
+
+    blank := alloc(List)
+    io.print("empty pop:", pop(&blank))
+    free_list(blank)
+}

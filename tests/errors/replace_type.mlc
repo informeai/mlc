@@ -1,0 +1,7 @@
+// error: the value of replace: expected ?*Item, found integer constant
+struct Item { weight int }
+fn main() {
+    s := alloc([]?*Item, 2)
+    old_ := replace(&s[0], 5)
+    free(s)
+}

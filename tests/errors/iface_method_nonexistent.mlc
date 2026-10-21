@@ -1,0 +1,11 @@
+// error: T has no method perimeter: the constraint Area doesn't declare it
+interface Area {
+    fn area(self &Self) int
+}
+
+fn f[T Area](a &T) int {
+    return a.perimeter()
+}
+
+fn main() {
+}

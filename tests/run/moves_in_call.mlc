@@ -1,0 +1,12 @@
+import "std/io"
+
+fn consumes(s []int, n int) int {
+    free(s)
+    return n
+}
+
+fn main() {
+    s := alloc([]int, 4)
+    // len(s) is read before s is passed along
+    io.print(consumes(s, len(s)))
+}

@@ -1,0 +1,4 @@
+// error: module geometry wasn't imported
+fn main() {
+    var p geometry.Point
+}

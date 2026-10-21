@@ -1,0 +1,6 @@
+// error: the method shape.Q.secret isn't public (declare it with pub fn)
+import "shape"
+fn main() {
+    q := shape.Q{n: 1}
+    q.secret()
+}

@@ -1,7 +1,0 @@
-// error: leak: p still owns the memory (line 4) and would be overwritten; free it or pass ownership first
-struct Ponto { x int; y int }
-fn main() {
-    p := alloc(Ponto)
-    p = alloc(Ponto)
-    free(p)
-}

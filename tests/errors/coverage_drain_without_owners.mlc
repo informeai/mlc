@@ -1,0 +1,9 @@
+// error: drain is for slices of owners; to walk []int, use for x in s
+// Checker coverage (phase 5): an ownership rule no test triggered.
+fn main() {
+    s := alloc([]int, 2)
+    for x in drain(s) {
+        s[0] = x
+    }
+    free(s)
+}

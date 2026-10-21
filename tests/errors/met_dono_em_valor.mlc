@@ -1,9 +1,0 @@
-// error: the method Ponto.destroi takes ownership of the receiver (*Ponto): call it on an owning pointer
-struct Ponto { x int; y int }
-fn (p *Ponto) destroi() {
-    free(p)
-}
-fn main() {
-    p := Ponto{x: 1, y: 2}
-    p.destroi()
-}

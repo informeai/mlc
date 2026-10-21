@@ -1,0 +1,4 @@
+// error: return: expected int, found bool
+import "geometry"
+fn main() {
+}

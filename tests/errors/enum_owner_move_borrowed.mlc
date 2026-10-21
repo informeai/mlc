@@ -1,0 +1,23 @@
+// error: return: expected []byte, found &[]byte
+enum E {
+    Msg(m []byte)
+    Nothing
+}
+
+fn text_() []byte {
+    return alloc([]byte, 2)
+}
+
+fn take_out(e &E) []byte {
+    match *e {
+        Msg(m) => return m
+        Nothing => return text_()
+    }
+}
+
+fn main() {
+    e := E.Nothing
+    b := take_out(&e)
+    free(b)
+    free(e)
+}

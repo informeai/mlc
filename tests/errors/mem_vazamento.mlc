@@ -1,7 +1,0 @@
-// error: leak: p still owns the memory (line 5) at the end of the function; free it with free(p) or pass ownership along
-import "std/io"
-struct Ponto { x int; y int }
-fn main() {
-    p := alloc(Ponto)
-    io.print(p.x)
-}

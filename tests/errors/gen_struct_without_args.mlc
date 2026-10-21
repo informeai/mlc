@@ -1,0 +1,5 @@
+// error: Pair is generic: write the type arguments, like Pair[int]
+struct Pair[A any, B any] { a A; b B }
+fn main() {
+    var p Pair
+}

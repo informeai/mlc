@@ -1,0 +1,7 @@
+// error: a variant holds ?*T, not *T (the enum's zero value is nil): use ?*int
+enum Crate {
+    Full(p *int)
+    Blank
+}
+fn main() {
+}

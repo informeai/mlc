@@ -1,0 +1,10 @@
+// error: p was already freed or moved (line 9)
+struct Point { x int; y int }
+fn take_it(p *Point) int {
+    free(p)
+    return 1
+}
+fn main() {
+    p := alloc(Point)
+    p.x = take_it(p)
+}

@@ -1,0 +1,4 @@
+// error: repeated field x in Point
+struct Point { x int; x int }
+fn main() {
+}

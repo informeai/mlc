@@ -1,0 +1,5 @@
+// error: geometry.Point isn't public (declare it with pub struct)
+import "geometry"
+fn main() {
+    var p geometry.Point
+}

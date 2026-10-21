@@ -1,0 +1,11 @@
+// error: p was already freed or moved (line 9)
+import "std/io"
+struct Point { x int; y int }
+fn (p *Point) destroy() {
+    free(p)
+}
+fn main() {
+    p := alloc(Point)
+    p.destroy()
+    io.print(p.x)
+}

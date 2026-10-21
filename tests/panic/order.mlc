@@ -1,0 +1,15 @@
+import "std/io"
+
+fn mark(name_ string, v int) int {
+    io.print(name_)
+    return v
+}
+
+fn sum_(x int, y int) int {
+    return x + y
+}
+
+fn main() {
+    zero := mark("before", 0)
+    io.print(sum_(10 / zero, mark("after", 1)))
+}

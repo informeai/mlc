@@ -1,4 +1,0 @@
-pub struct Q { n int }
-fn (q Q) segredo() int {
-    return q.n
-}

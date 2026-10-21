@@ -1,0 +1,8 @@
+// error: Shape has no variant Square
+enum Shape {
+    Circle(radius float64)
+    Empty
+}
+fn main() {
+    x := Shape.Square(1.0)
+}

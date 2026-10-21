@@ -1,0 +1,80 @@
+import "std/io"
+
+// methods with their own type parameters, besides the struct's
+struct Grid[T any] {
+    cells [6]T
+    width int
+}
+
+fn (g &Grid[T]) each_cell[C ref](ctx &C, f fn(&C, int, int, &T)) {
+    for i := 0; i < len(g.cells); i++ {
+        f(ctx, i % g.width, i / g.width, &g.cells[i])
+    }
+}
+
+// another type parameter, which becomes the result
+fn (g &Grid[T]) map_first[R any](f fn(&T) R) R {
+    return f(&g.cells[0])
+}
+
+struct Stats {
+    total int
+    max_x int
+    seen int
+}
+
+fn tally(s &Stats, x int, y int, v &int) {
+    s.total += *v * (y + 1)
+    if x > s.max_x {
+        s.max_x = x
+    }
+    s.seen++
+}
+
+fn double(v &int) int {
+    return *v * 2
+}
+
+fn describe(v &int) bool {
+    return *v > 0
+}
+
+// a generic method on an ordinary struct
+struct Clock {
+    ticks int
+}
+
+fn (c &Clock) run[C ref](ctx &C, n int, step fn(&C, int)) {
+    for i := 0; i < n; i++ {
+        c.ticks++
+        step(ctx, c.ticks)
+    }
+}
+
+struct Log {
+    sum int
+    last int
+}
+
+fn record(l &Log, t int) {
+    l.sum += t
+    l.last = t
+}
+
+fn main() {
+    var g Grid[int]
+    g.cells = [6]int{1, 2, 3, 4, 5, 6}
+    g.width = 3
+    var s Stats
+    g.each_cell(&s, tally) // C inferred: Stats
+    io.print(s.total, s.max_x, s.seen)
+    io.print(g.map_first(double), g.map_first(describe)) // R inferred from the function's result
+    var s2 Stats
+    g.each_cell[Stats](&s2, tally) // or written
+    io.print(s2.total)
+
+    c := Clock{ticks: 0}
+    var l Log
+    c.run(&l, 4, record)
+    io.print(c.ticks, l.sum, l.last)
+}

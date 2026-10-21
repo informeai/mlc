@@ -1,8 +1,0 @@
-// error: a value of type *Ponto is never nil
-import "std/io"
-struct Ponto { x int; y int }
-fn main() {
-    p := alloc(Ponto)
-    io.print(p == nil)
-    free(p)
-}

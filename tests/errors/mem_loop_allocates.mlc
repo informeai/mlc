@@ -1,0 +1,9 @@
+// error: leak: q still owns the memory (line 6) (on some path) and would be overwritten; free it or pass ownership first
+struct Point { x int; y int }
+fn main() {
+    var q ?*Point = nil
+    for i := 0; i < 3; i++ {
+        q = alloc(Point)
+    }
+    free(q)
+}

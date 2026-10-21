@@ -1,0 +1,107 @@
+import "std/io"
+
+struct Point {
+    x int
+    y int
+}
+
+fn fresh(x int, y int) *Point {
+    p := alloc(Point)
+    p.x = x
+    p.y = y
+    return p
+}
+
+fn sum_(p &Point) int {
+    return p.x + p.y
+}
+
+fn double_it(p &Point) {
+    p.x *= 2
+    p.y *= 2
+}
+
+// passes along a received borrow, without &
+fn doubled_sum(p &Point) int {
+    double_it(p)
+    return sum_(p)
+}
+
+fn destroy(p *Point) {
+    io.print("destroying", p.x, p.y)
+    free(p)
+}
+
+fn maybe_(n int) ?*Point {
+    if n > 0 {
+        return fresh(n, n)
+    }
+    return nil
+}
+
+fn main() {
+    p := fresh(1, 2)
+    double_it(&p)
+    io.print(sum_(&p), *p)
+    destroy(p)
+
+    n := alloc(41)
+    *n += 1
+    io.print(*n)
+    free(n)
+
+    v := alloc(Point{x: 3, y: 4})
+    copy_ := *v
+    v.x = 100
+    io.print(copy_, *v)
+    free(v)
+
+    local := Point{x: 5, y: 6}
+    double_it(&local)
+    io.print(local, sum_(&local), doubled_sum(&local))
+
+    for i := 0; i < 3; i++ {
+        q := maybe_(i)
+        if q != nil {
+            io.print("has", q.x)
+            free(q)
+        } else {
+            io.print("nil")
+        }
+    }
+
+    var r ?*Point = nil
+    r = fresh(7, 8)
+    if r == nil {
+        io.print("shouldn't")
+    } else {
+        destroy(r)
+    }
+
+    a := fresh(1, 1)
+    for j := 0; j < 3; j++ {
+        free(a)
+        a = fresh(j, j)
+    }
+    io.print(a.x)
+    b := a
+    free(b)
+
+    s := alloc("text")
+    io.print(*s)
+    free(s)
+
+    // free of a nil ?*T does nothing
+    var empty_ ?*Point
+    free(empty_)
+
+    c := fresh(9, 9)
+    for {
+        if c.x > 0 {
+            break
+        }
+    }
+    destroy(c)
+}
+
+impl auto io.Display for Point

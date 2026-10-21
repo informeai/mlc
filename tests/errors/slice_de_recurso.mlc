@@ -1,6 +1,0 @@
-// error: slices of No aren't supported yet: No contains owning pointers, and the elements can't be owners
-struct No { prox ?*No }
-fn f(s []No) {
-}
-fn main() {
-}

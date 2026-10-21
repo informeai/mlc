@@ -1,0 +1,20 @@
+// error: the returned borrow comes from a temporary value; it must come from a
+// Checker coverage (phase 5): an ownership rule no test triggered.
+struct Box {
+    v int
+}
+
+fn first(a &Box, b &Box) &Box {
+    return a
+}
+
+fn make() *Box {
+    return alloc(Box{v: 1})
+}
+
+fn pick(a &Box) &Box {
+    return first(a, &*make())
+}
+
+fn main() {
+}

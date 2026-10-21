@@ -1,4 +1,0 @@
-pub fn faz() {
-    n := alloc(1)
-    *n += 1
-}

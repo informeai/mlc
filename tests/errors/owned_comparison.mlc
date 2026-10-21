@@ -1,0 +1,7 @@
+// error: values of an owned T can't be compared (T may be an owner)
+fn equal[T owned](a T, b T) bool {
+    return a == b
+}
+
+fn main() {
+}

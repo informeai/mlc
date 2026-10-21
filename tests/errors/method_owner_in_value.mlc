@@ -1,0 +1,9 @@
+// error: the method Point.destroy takes ownership of the receiver (*Point): call it on an owning pointer
+struct Point { x int; y int }
+fn (p *Point) destroy() {
+    free(p)
+}
+fn main() {
+    p := Point{x: 1, y: 2}
+    p.destroy()
+}

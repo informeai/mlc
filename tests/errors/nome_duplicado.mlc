@@ -1,6 +1,0 @@
-// error: the name Ponto is already used by a struct or constant
-struct Ponto { x int }
-fn Ponto() {
-}
-fn main() {
-}

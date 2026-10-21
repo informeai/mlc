@@ -1,11 +1,11 @@
 import "std/io"
 
-struct Ponto {
+struct Point {
     x int
     y int
 }
 
-fn soma(s &[]int) int {
+fn sum_(s &[]int) int {
     total := 0
     for v in s {
         total += v
@@ -13,45 +13,45 @@ fn soma(s &[]int) int {
     return total
 }
 
-// soma recursiva: empresta o resto do slice a cada chamada
-fn soma_rec(s &[]int) int {
+// recursive sum: borrows the rest of the slice on each call
+fn sum_rec(s &[]int) int {
     if len(s) == 0 {
         return 0
     }
-    return s[0] + soma_rec(&s[1:])
+    return s[0] + sum_rec(&s[1:])
 }
 
-fn zera(s &[]int) {
+fn reset_it(s &[]int) {
     for i := 0; i < len(s); i++ {
         s[i] = 0
     }
 }
 
-// cresce dobrando a capacidade: quem chama vê cada realloc acontecer
-fn primos_ate(limite int) []int {
-    var primos []int
-    usados := 0
-    for n := 2; n <= limite; n++ {
-        primo := true
-        for i := 0; i < usados; i++ {
-            if n % primos[i] == 0 {
-                primo = false
+// grows doubling the capacity: the caller sees each realloc happen
+fn primes_up_to(limit int) []int {
+    var primes []int
+    used := 0
+    for n := 2; n <= limit; n++ {
+        is_prime := true
+        for i := 0; i < used; i++ {
+            if n % primes[i] == 0 {
+                is_prime = false
                 break
             }
         }
-        if primo {
-            if usados == len(primos) {
-                novo := len(primos) * 2
-                if novo == 0 {
-                    novo = 2
+        if is_prime {
+            if used == len(primes) {
+                fresh := len(primes) * 2
+                if fresh == 0 {
+                    fresh = 2
                 }
-                primos = realloc(primos, novo)
+                primes = realloc(primes, fresh)
             }
-            primos[usados] = n
-            usados++
+            primes[used] = n
+            used++
         }
     }
-    return realloc(primos, usados) // encolhe para o tamanho exato
+    return realloc(primes, used) // shrinks to the exact size
 }
 
 fn main() {
@@ -69,20 +69,20 @@ fn main() {
     for i := 0; i < len(t); i++ {
         t[i] = i + 1
     }
-    io.print(soma(&t[1:4]), soma(&t[:2]), soma(&t[4:]), soma(&t[:]), soma(&t[3:3]))
-    io.print(soma_rec(&t))
-    zera(&t[2:4])
+    io.print(sum_(&t[1:4]), sum_(&t[:2]), sum_(&t[4:]), sum_(&t[:]), sum_(&t[3:3]))
+    io.print(sum_rec(&t))
+    reset_it(&t[2:4])
     io.print(t)
 
-    p := primos_ate(30)
+    p := primes_up_to(30)
     io.print(p, len(p))
 
-    pontos := alloc([]Ponto, 1)
-    pontos = realloc(pontos, 3)
-    pontos[2] = Ponto{x: 7, y: 8}
-    io.print(pontos)
+    points := alloc([]Point, 1)
+    points = realloc(points, 3)
+    points[2] = Point{x: 7, y: 8}
+    io.print(points)
 
-    // realloc para zero esvazia; de vazio, aloca de novo
+    // realloc to zero empties; from empty, allocates again
     s = realloc(s, 0)
     io.print(s, len(s))
     s = realloc(s, 1)
@@ -91,7 +91,7 @@ fn main() {
     free(s)
     free(t)
     free(p)
-    free(pontos)
+    free(points)
 }
 
-impl auto io.Display for Ponto
+impl auto io.Display for Point

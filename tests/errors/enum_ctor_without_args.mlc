@@ -1,0 +1,8 @@
+// error: Shape.Circle has 1 field(s): write Shape.Circle(...)
+enum Shape {
+    Circle(radius float64)
+    Empty
+}
+fn main() {
+    x := Shape.Circle
+}

@@ -1,0 +1,7 @@
+// error: the name geometry is an imported module
+import "std/io"
+import "geometry"
+fn main() {
+    geometry := 1
+    io.print(geometry)
+}

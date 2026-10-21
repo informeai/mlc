@@ -1,10 +1,10 @@
-aberto: 0 6 7 1
-falhou: -1 true
+open: 0 6 7 1
+failed: -1 true
 a: 11
 b: 21
-campo: 101 1
-peek com nil: 0 peek com &v: 1 42
-soma: 10 7 0
-sem destino: -2
-aberto pelo ponteiro opcional: 8
-abertos no fim: 0
+field: 101 1
+peek with nil: 0 peek with &v: 1 42
+sum: 10 7 0
+without a destination: -2
+opened through the optional pointer: 8
+open at the end: 0

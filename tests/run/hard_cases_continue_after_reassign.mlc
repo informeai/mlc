@@ -1,0 +1,44 @@
+// Hard case (phase 5 of the verification plan): continue after freeing and giving a new value.
+struct Box {
+    v int
+}
+
+struct Pair {
+    a ?*Box
+    b ?*Box
+}
+
+enum Opt {
+    Nothing
+    Has(b ?*Box)
+}
+
+extern "C" fn rand() int32
+
+fn flip() bool {
+    return rand() % 2 == 0
+}
+
+fn consume(b *Box) int {
+    n := b.v
+    free(b)
+    return n
+}
+
+fn sink(n int) {
+}
+
+fn main() {
+    x := alloc(Box{v: 1})
+    acc := 0
+    for i := 0; i < 4; i++ {
+        if flip() {
+            free(x)
+            x = alloc(Box{v: i})
+            continue
+        }
+        acc += x.v
+    }
+    free(x)
+    sink(acc)
+}

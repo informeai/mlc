@@ -1,6 +1,0 @@
-// error: leak: x still owns the memory (line 2) at the end of the function; free it with free(x) or pass ownership along (checked with an owning T, like esquece[[]byte])
-fn esquece[T owned](x T) {
-}
-
-fn main() {
-}

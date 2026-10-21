@@ -1,5 +1,5 @@
-// Parâmetros de saída (&?*X): a função de C escreve um handle na variável.
-// Ligado com tests/ffi/counter.c por TestFFIOutHandle.
+// Out parameters (&?*X): the C function writes a handle into the variable.
+// Linked with tests/ffi/counter.c by TestFFIOutHandle.
 import "std/io"
 
 link "counter"
@@ -12,7 +12,7 @@ extern "C" fn counter_next(c &Counter) int32
 extern "C" fn counter_close(c *Counter)
 extern "C" fn counter_live() int32
 
-// parâmetros que o C aceita como NULL
+// parameters C accepts as NULL
 extern "C" fn counter_peek(c &Counter, out ?&int32) int32
 extern "C" fn counter_sum(data ?&[]int, n int) int
 extern "C" fn counter_maybe_open(start int32, out ?&?*Counter) int32
@@ -26,13 +26,13 @@ fn main() {
     var c ?*Counter = nil
     rc := counter_open(5, &c)
     if c != nil {
-        io.print("aberto:", rc, counter_next(&c), counter_next(&c), counter_live())
+        io.print("open:", rc, counter_next(&c), counter_next(&c), counter_live())
         counter_close(c)
     }
 
-    // depois de fechado, a mesma variável recebe outro handle
+    // after it's closed, the same variable receives another handle
     rc = counter_open(-1, &c)
-    io.print("falhou:", rc, c == nil)
+    io.print("failed:", rc, c == nil)
     if c != nil {
         counter_close(c)
     }
@@ -49,12 +49,12 @@ fn main() {
         counter_close(b)
     }
 
-    // num campo
+    // in a field
     conn := alloc(Conn{c: nil, uses: 0})
     counter_open(100, &conn.c)
     if conn.c != nil {
         conn.uses++
-        io.print("campo:", counter_next(&conn.c), conn.uses)
+        io.print("field:", counter_next(&conn.c), conn.uses)
         counter_close(conn.c)
     }
     free(conn)
@@ -66,27 +66,27 @@ fn main() {
             counter_close(h)
         }
     }
-    // ?&T: nil vira NULL; um empréstimo, o ponteiro de sempre
+    // ?&T: nil becomes NULL; a borrow, the usual pointer
     var p ?*Counter = nil
     counter_open(42, &p)
     if p != nil {
         var v int32 = 0
-        io.print("peek com nil:", counter_peek(&p, nil), "peek com &v:", counter_peek(&p, &v), v)
+        io.print("peek with nil:", counter_peek(&p, nil), "peek with &v:", counter_peek(&p, &v), v)
         counter_close(p)
     }
     nums := alloc([]int, 4)
     for i := 0; i < len(nums); i++ {
         nums[i] = i + 1
     }
-    io.print("soma:", counter_sum(&nums, len(nums)), counter_sum(&nums[2:], 2), counter_sum(nil, 0))
+    io.print("sum:", counter_sum(&nums, len(nums)), counter_sum(&nums[2:], 2), counter_sum(nil, 0))
     free(nums)
-    io.print("sem destino:", counter_maybe_open(1, nil))
+    io.print("without a destination:", counter_maybe_open(1, nil))
     var q ?*Counter = nil
-    counter_maybe_open(7, &q) // ?&?*X: o handle opcional precisa ser fechado como qualquer outro
+    counter_maybe_open(7, &q) // ?&?*X: the optional handle must be closed like any other
     if q != nil {
-        io.print("aberto pelo ponteiro opcional:", counter_next(&q))
+        io.print("opened through the optional pointer:", counter_next(&q))
         counter_close(q)
     }
 
-    io.print("abertos no fim:", counter_live())
+    io.print("open at the end:", counter_live())
 }

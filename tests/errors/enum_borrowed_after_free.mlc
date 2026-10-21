@@ -1,0 +1,21 @@
+// error: e was already freed or moved (line 19)
+// Found by mutation (make mutate): &e of an enum with owners didn't check
+// whether e had already been freed.
+enum E {
+    Empty
+    Name(b []byte)
+}
+
+fn which(e &E) int {
+    match *e {
+        Empty => return 0
+        Name(b) => return len(b)
+    }
+}
+
+fn main() {
+    e := E.Name(alloc([]byte, 3))
+    which(&e)
+    free(e)
+    which(&e)
+}

@@ -1,0 +1,11 @@
+// error: copy_ was already freed or moved (line 8)
+import "std/map"
+import "std/io"
+
+fn main() {
+    m := map.new[[]byte, int](4)
+    copy_ := alloc([]byte, 2)
+    m.put(copy_, 1)
+    io.print(len(copy_))
+    m.free()
+}

@@ -1,1 +1,0 @@
-panic: put_int_nao_cabe.mlc:5: str.put_int: the text (6 bytes) doesn't fit in the destination (3 bytes)

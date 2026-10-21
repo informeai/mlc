@@ -1,7 +1,7 @@
-// error: match doesn't apply to Ponto (only integers, bool and string)
-struct Ponto { x int }
+// error: match doesn't apply to Point (only integers, bool and string)
+struct Point { x int }
 fn main() {
-    match (Ponto{}) {
+    match (Point{}) {
         _ => {}
     }
 }

@@ -1,0 +1,9 @@
+// error: replace takes a borrowed element: replace(&s[i]...)
+// Found by the robustness fuzz: an operator other than & before s[i]
+// brought the compiler down.
+fn main() {
+    s := alloc([]?*int, 2)
+    old := replace(!s[0], nil)
+    free(old)
+    free(s)
+}

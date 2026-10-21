@@ -1,0 +1,12 @@
+// error: vec.Vec[?*Node].get requires T any (?*Node is an owner, and the method copies): use the methods that move ownership, like take or put
+import "std/vec"
+
+struct Node {
+    v int
+}
+
+fn main() {
+    v := vec.new[?*Node](1)
+    p := v.get(0)
+    v.free()
+}

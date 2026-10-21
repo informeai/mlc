@@ -1,0 +1,9 @@
+// error: p is borrowed and moved in the same call
+struct Point { x int; y int }
+fn f(a &Point, b *Point) {
+    free(b)
+}
+fn main() {
+    p := alloc(Point)
+    f(&p, p)
+}

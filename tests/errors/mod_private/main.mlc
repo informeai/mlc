@@ -1,0 +1,5 @@
+// error: geometry.validate isn't public (declare it with pub fn)
+import "geometry"
+fn main() {
+    geometry.validate(1)
+}

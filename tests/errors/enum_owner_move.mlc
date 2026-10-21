@@ -1,0 +1,16 @@
+// error: e freed twice: it was already freed or moved (line 13)
+enum E {
+    Msg(m []byte)
+    Nothing
+}
+
+fn text_() []byte {
+    return alloc([]byte, 2)
+}
+
+fn main() {
+    e := E.Msg(text_())
+    f := e
+    free(f)
+    free(e)
+}

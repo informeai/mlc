@@ -1,0 +1,43 @@
+// error: p can't be moved: p.a was moved out (line 40) and didn't receive a new value
+// Hard case (phase 5 of the verification plan): moving the whole object after moving one of its fields out.
+struct Box {
+    v int
+}
+
+struct Pair {
+    a ?*Box
+    b ?*Box
+}
+
+enum Opt {
+    Nothing
+    Has(b ?*Box)
+}
+
+extern "C" fn rand() int32
+
+fn flip() bool {
+    return rand() % 2 == 0
+}
+
+fn consume(b *Box) int {
+    n := b.v
+    free(b)
+    return n
+}
+
+fn sink(n int) {
+}
+
+fn store_it(p *Pair) {
+    free(p.a)
+    free(p.b)
+    free(p)
+}
+
+fn main() {
+    p := alloc(Pair{a: alloc(Box{v: 1}), b: alloc(Box{v: 2})})
+    a := p.a
+    store_it(p)
+    free(a)
+}

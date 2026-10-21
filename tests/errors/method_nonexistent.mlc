@@ -1,0 +1,6 @@
+// error: Point has no method fly
+struct Point { x int; y int }
+fn main() {
+    p := Point{x: 1, y: 2}
+    p.fly()
+}

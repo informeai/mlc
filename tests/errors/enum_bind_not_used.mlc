@@ -1,0 +1,13 @@
+// error: r declared and not used
+enum Shape {
+    Circle(radius float64)
+    Empty
+}
+fn f(x Shape) {
+    match x {
+        Circle(r) => {}
+        Empty => {}
+    }
+}
+fn main() {
+}

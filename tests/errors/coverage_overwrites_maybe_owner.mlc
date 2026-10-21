@@ -1,0 +1,23 @@
+// error: leak: h.b still owns the memory (line 18) (on some path) and would be overwritten; free it or pass ownership first
+// Checker coverage (phase 5): an ownership rule no test triggered.
+struct Box {
+    v int
+}
+
+struct Holder {
+    b ?*Box
+}
+
+fn flip() bool {
+    return true
+}
+
+fn main() {
+    h := alloc(Holder{})
+    if flip() {
+        h.b = alloc(Box{v: 1})
+    }
+    h.b = alloc(Box{v: 2})
+    free(h.b)
+    free(h)
+}

@@ -1,0 +1,13 @@
+// error: structs that contain owning pointers can't be compared with ==
+import "std/io"
+struct Node {
+    value_ int
+    next_ ?*Node
+}
+fn main() {
+    p := alloc(Node)
+    q := alloc(Node)
+    io.print(*p == *q)
+    free(p)
+    free(q)
+}

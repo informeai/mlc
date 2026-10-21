@@ -1,0 +1,9 @@
+// error: Point.move expects 2 argument(s), got 1
+struct Point { x int; y int }
+fn (p &Point) move(dx int, dy int) {
+    p.x += dx
+}
+fn main() {
+    p := Point{x: 1, y: 2}
+    p.move(1)
+}

@@ -1,8 +1,0 @@
-// error: *mutex.Mutex[int] is a mutex: close it with close(), not with free
-// Cobertura do verificador (fase 5): regra de posse que nenhum teste disparava.
-import "std/mutex"
-
-fn main() {
-    m := mutex.new(1)
-    free(m)
-}

@@ -1,5 +1,5 @@
-// FFI: funções da libc e da libm declaradas com extern "C" fn, buffers
-// emprestados, e um handle de C (FILE) que o verificador obriga a fechar.
+// FFI: libc and libm functions declared with extern "C" fn, borrowed
+// buffers, and a C handle (FILE) the checker forces you to close.
 import "std/io"
 import "std/str"
 import "std/fs"
@@ -13,7 +13,7 @@ extern "C" fn abs(x int32) int32
 extern "C" fn toupper(c int32) int32
 extern "C" fn memcmp(a &[]byte, b &[]byte, n uint64) int32
 extern "C" fn cbrt(x float64) float64
-extern "C" fn fopen(caminho string, modo string) ?*FILE
+extern "C" fn fopen(trail string, mode string) ?*FILE
 extern "C" fn fputs(s string, f &FILE) int32
 extern "C" fn fclose(f *FILE) int32
 extern "C" fn puts(s string) int32
@@ -28,23 +28,23 @@ fn main() {
     free(a)
     free(b)
 
-    f := fopen("mlc_ffi_teste.tmp", "w")
+    f := fopen("mlc_ffi_test.tmp", "w")
     if f != nil {
-        fputs("escrito pelo C\n", &f)
+        fputs("written by C\n", &f)
         io.print("fclose:", fclose(f))
     }
-    caminho := alloc([]byte, 32)
-    n := str.copy(&caminho, "mlc_ffi_teste.tmp")
+    trail := alloc([]byte, 32)
+    n := str.copy(&trail, "mlc_ffi_test.tmp")
     buf := alloc([]byte, 64)
-    match fs.read_file(&caminho[:n], &buf) {
+    match fs.read_file(&trail[:n], &buf) {
         Ok(m) => io.write(&buf[:m])
-        Err(code) => io.print("erro", code)
+        Err(code) => io.print("error", code)
     }
-    match fs.remove_file(&caminho[:n]) {
-        Ok(_) => io.print("removido")
-        Err(code) => io.print("erro", code)
+    match fs.remove_file(&trail[:n]) {
+        Ok(_) => io.print("removed")
+        Err(code) => io.print("error", code)
     }
-    free(caminho)
+    free(trail)
     free(buf)
-    puts("puts do C")
+    puts("C's puts")
 }

@@ -1,0 +1,28 @@
+a
+b
+arguments: 3
+c
+d
+operands: 12
+e
+f
+literal: {5 6}
+g
+h
+comparison: true
+i
+j
+strings: false
+k
+l
+m
+n
+nested: 10
+o
+short-circuit: false
+p
+q
+p
+q
+p
+for: 1

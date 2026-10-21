@@ -1,0 +1,5 @@
+// error: return of name_ (string): a C function only returns numbers, bool or a handle (?*X, with X an extern "C" type)
+extern "C" fn name_() string
+
+fn main() {
+}

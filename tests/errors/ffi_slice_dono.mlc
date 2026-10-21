@@ -1,5 +1,0 @@
-// error: parameter s of guarda ([]byte): an owning slice can't be handed to C; lend it with &[]T
-extern "C" fn guarda(s []byte)
-
-fn main() {
-}

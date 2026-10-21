@@ -1,0 +1,19 @@
+// error: p was already freed or moved (line 17)
+import "std/io"
+
+struct Node {
+    v int
+}
+
+fn consumes(p *Node) int {
+    v := p.v
+    free(p)
+    return v
+}
+
+fn main() {
+    f := consumes
+    p := alloc(Node{v: 3})
+    io.print(f(p))
+    io.print(p.v)
+}

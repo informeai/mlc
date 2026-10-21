@@ -1,0 +1,7 @@
+// error: return of opens (*H): a C function may return NULL: the return type must be ?*H
+extern "C" type H
+
+extern "C" fn opens() *H
+
+fn main() {
+}

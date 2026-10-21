@@ -1,0 +1,6 @@
+// error: field y not initialized (list every field, or use Point{} for the zero value)
+import "std/io"
+struct Point { x int; y int }
+fn main() {
+    io.print(Point{x: 1})
+}

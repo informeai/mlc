@@ -1,5 +1,0 @@
-// error: the enum Nada needs at least one variant
-enum Nada {
-}
-fn main() {
-}

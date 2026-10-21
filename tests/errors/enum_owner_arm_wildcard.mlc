@@ -1,0 +1,17 @@
+// error: the _ arm would take out the variant Msg, which holds owners, without freeing them: handle Msg in its own arm
+enum E {
+    Msg(m []byte)
+    Nothing
+}
+
+fn text_() []byte {
+    return alloc([]byte, 2)
+}
+
+fn main() {
+    e := E.Msg(text_())
+    match e {
+        Nothing => {}
+        _ => {}
+    }
+}

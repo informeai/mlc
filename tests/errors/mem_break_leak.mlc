@@ -1,0 +1,10 @@
+// error: leak: p still owns the memory (line 6) at the break; free it with free(p) or pass ownership along
+import "std/io"
+struct Point { x int; y int }
+fn main() {
+    for {
+        p := alloc(Point)
+        io.print(p.x)
+        break
+    }
+}

@@ -1,8 +1,0 @@
-// error: struct Caixa[int] contains itself by value; use a pointer
-struct Caixa[T any] {
-    v T
-    dentro Caixa[T]
-}
-fn main() {
-    var c Caixa[int]
-}

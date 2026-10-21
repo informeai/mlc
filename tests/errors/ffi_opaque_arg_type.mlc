@@ -1,0 +1,16 @@
+// error: FILE doesn't satisfy any, required by T in show (FILE is an opaque C type and only exists behind a pointer: the generic needs the ref constraint, which uses T only borrowed, like [T ref])
+extern "C" type FILE
+
+extern "C" fn fopen(trail string, mode string) ?*FILE
+extern "C" fn fclose(f *FILE) int32
+
+fn show[T any](x &T) {
+}
+
+fn main() {
+    f := fopen("/dev/null", "r")
+    if f != nil {
+        show(&f)
+        fclose(f)
+    }
+}

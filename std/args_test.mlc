@@ -2,7 +2,7 @@ import "std/args"
 import "std/testing"
 
 // The test program runs without arguments (mlc test passes only the test's
-// index, which the runtime hides); tests/run/ferramenta tests the options.
+// index, which the runtime hides); tests/run/tool tests the options.
 fn test_no_arguments() {
     a := args.new()
     testing.check(!a.next(), "no arguments")

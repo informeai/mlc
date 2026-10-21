@@ -1,0 +1,15 @@
+// error: fresh returns &P without taking any borrow: the result would point to something that stops existing
+import "std/io"
+import "std/vec"
+
+struct P {
+    x int
+}
+
+fn fresh() &P {
+    var p P
+    return &p
+}
+
+fn main() {
+}

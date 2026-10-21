@@ -1,1 +1,0 @@
-panic: fn_nulo.mlc:9: call of a null fn value (the zero value of an fn: the variable or field didn't receive a function)

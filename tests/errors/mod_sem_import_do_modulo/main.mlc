@@ -1,4 +1,0 @@
-// error: module geometria wasn't imported
-fn main() {
-    var p geometria.Ponto
-}

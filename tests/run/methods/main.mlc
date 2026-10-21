@@ -1,0 +1,87 @@
+import "std/io"
+import "shape"
+
+struct Counter {
+    value_ int
+    step_ int
+}
+
+fn (c Counter) current() int {
+    return c.value_
+}
+
+fn (c &Counter) advance() {
+    c.value_ += c.step_
+}
+
+fn (c &Counter) advance_n(n int) {
+    for i := 0; i < n; i++ {
+        c.advance() // a method calling a method, through the borrow
+    }
+}
+
+struct Stack {
+    items_ []int
+    top int
+}
+
+fn new_stack(cap int) *Stack {
+    p := alloc(Stack)
+    p.items_ = alloc([]int, cap)
+    return p
+}
+
+fn (p &Stack) push_item(v int) {
+    p.items_[p.top] = v
+    p.top++
+}
+
+fn (p &Stack) pop_item() int {
+    p.top--
+    return p.items_[p.top]
+}
+
+fn (p &Stack) blank() bool {
+    return p.top == 0
+}
+
+// takes ownership: after p.release(), using p is a compile error
+fn (p *Stack) release() {
+    free(p.items_)
+    free(p)
+}
+
+fn main() {
+    c := Counter{value_: 0, step_: 3}
+    c.advance()
+    c.advance_n(2)
+    io.print("counter:", c.current(), c)
+
+    p := new_stack(4)
+    p.push_item(10)
+    p.push_item(20)
+    p.push_item(30)
+    sum_ := 0
+    for !p.blank() {
+        sum_ += p.pop_item()
+    }
+    io.print("sum:", sum_)
+    p.release()
+
+    r := shape.Rectangle{width_: 3, height: 4}
+    io.print("area:", r.area(), r.describe_it())
+    r.scale(2)
+    io.print("scaled:", r, r.area())
+
+    empty_ := shape.Rectangle{width_: 0, height: 5}
+    io.print(empty_.describe_it())
+
+    h := alloc(shape.Rectangle)
+    h.width_ = 2
+    h.height = 5
+    h.scale(3) // a method by borrow, called on an owning pointer
+    io.print("on the heap:", h.area())
+    free(h)
+}
+
+impl auto io.Display for Counter

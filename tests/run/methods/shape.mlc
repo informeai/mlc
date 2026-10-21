@@ -1,0 +1,28 @@
+import "std/io"
+pub struct Rectangle {
+    width_ int
+    height int
+}
+
+pub fn (r Rectangle) area() int {
+    return r.width_ * r.height
+}
+
+pub fn (r &Rectangle) scale(k int) {
+    r.width_ *= k
+    r.height *= k
+}
+
+// private: only this file calls it
+fn (r Rectangle) is_valid() bool {
+    return r.width_ > 0 && r.height > 0
+}
+
+pub fn (r Rectangle) describe_it() string {
+    if r.is_valid() {
+        return "valid"
+    }
+    return "invalid"
+}
+
+impl auto io.Display for Rectangle

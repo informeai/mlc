@@ -1,0 +1,7 @@
+// error: couldn't infer T in empty_: write the types, like empty_[int](...)
+fn empty_[T any]() int {
+    return 0
+}
+fn main() {
+    empty_()
+}
