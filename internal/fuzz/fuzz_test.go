@@ -21,7 +21,7 @@ func noImports(string) ([]byte, error) { return nil, os.ErrNotExist }
 
 // checkGen passes the program through the checker.
 func checkGen(p *Program) error {
-	_, _, err := driver.Check("gerado.mlc", p.Source(), noImports, driver.Options{})
+	_, _, err := driver.Check("generated.mlc", p.Source(), noImports, driver.Options{})
 	return err
 }
 
@@ -207,7 +207,7 @@ func fuzzOne(seed int64, withBug bool, exe string) finding {
 // oracle found ("" if nothing).
 func runGen(p *Program, exe string) string {
 	opts := driver.Options{Sanitize: "address"}
-	if err := driver.BuildOpts("gerado.mlc", p.Source(), exe, noImports, opts); err != nil {
+	if err := driver.BuildOpts("generated.mlc", p.Source(), exe, noImports, opts); err != nil {
 		return "accepted, but the C doesn't compile: " + firstLine(err.Error())
 	}
 	t := &Target{}
@@ -234,7 +234,7 @@ func (s *fuzzStats) add(f finding, out string) {
 			s.validRan++
 		}
 		if f.checker != nil {
-			m := normalize.ReplaceAllString(strings.TrimPrefix(firstLine(f.checker.Error()), "gerado.mlc:"), "N")
+			m := normalize.ReplaceAllString(strings.TrimPrefix(firstLine(f.checker.Error()), "generated.mlc:"), "N")
 			if s.fp[m] == 0 {
 				s.fpSeed[m] = f.p.Seed
 			}
@@ -258,14 +258,14 @@ func (s *fuzzStats) add(f finding, out string) {
 	if detail == "" {
 		detail = "the checker accepted, and execution didn't show the bug"
 	}
-	file := filepath.Join(out, fmt.Sprintf("achado_%d.mlc", f.p.Seed))
+	file := filepath.Join(out, fmt.Sprintf("finding_%d.mlc", f.p.Seed))
 	if f.p.Bug != "" {
-		file = filepath.Join(out, fmt.Sprintf("achado_%d_bug.mlc", f.p.Seed))
+		file = filepath.Join(out, fmt.Sprintf("finding_%d_bug.mlc", f.p.Seed))
 	}
 	src := f.reduced.Source()
-	src = append([]byte(fmt.Sprintf("// achado: %s\n", detail)), src...)
+	src = append([]byte(fmt.Sprintf("// finding: %s\n", detail)), src...)
 	os.WriteFile(file, src, 0o644)
-	s.holeLines = append(s.holeLines, fmt.Sprintf("BURACO semente %d (%s): %s\n    reduzido de %d para %d comandos: %s", f.p.Seed, what, detail, count(f.p.Body), count(f.reduced.Body), file))
+	s.holeLines = append(s.holeLines, fmt.Sprintf("HOLE seed %d (%s): %s\n    reduced from %d to %d statements: %s", f.p.Seed, what, detail, count(f.p.Body), count(f.reduced.Body), file))
 }
 
 func (s *fuzzStats) report(first, last int64, out string) string {

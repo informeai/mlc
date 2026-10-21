@@ -64,8 +64,8 @@ fn main() {
     uppercase(&name_[:n])
     io.write_line(&name_[:n])
 
-    if str.eq(&name_[:n], "ANA") {
-        io.print("hi, Ana!")
+    if str.eq(&name_[:n], "ANN") {
+        io.print("hi, Ann!")
     }
 
     // the third line is invalid

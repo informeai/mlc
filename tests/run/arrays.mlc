@@ -56,7 +56,7 @@ fn main() {
     io.write_line(&buf[:k])
 
     p := Game{name_: [8]byte{}, points: [3]int{10, 20, 30}}
-    n := str.copy(&p.name_, "ana")
+    n := str.copy(&p.name_, "ann")
     p.points[1] += 5
     io.write(&p.name_[:n])
     io.print("", sum_(&p.points))

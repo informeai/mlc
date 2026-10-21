@@ -22,9 +22,9 @@ fn test_insert_and_select() {
     if db == nil {
         return
     }
-    testing.eq_int(db.exec_str("CREATE TABLE item (id INTEGER PRIMARY KEY, nome TEXT NOT NULL, preco INTEGER, peso REAL)"), 0)
+    testing.eq_int(db.exec_str("CREATE TABLE item (id INTEGER PRIMARY KEY, name TEXT NOT NULL, price INTEGER, weight REAL)"), 0)
     err := 0
-    st := db.prepare_str("INSERT INTO item (nome, preco, peso) VALUES (?, ?, ?)", &err)
+    st := db.prepare_str("INSERT INTO item (name, price, weight) VALUES (?, ?, ?)", &err)
     if st != nil {
         testing.eq_int(db.begin(), 0)
         st.bind_str(1, "café")
@@ -32,9 +32,9 @@ fn test_insert_and_select() {
         st.bind_float(3, 0.5)
         testing.eq_int(st.run(), 0)
         testing.eq_int(db.last_insert_id(), 1)
-        var nome [16]byte
-        k := str.copy(&nome, "açúcar")
-        st.bind_text(1, &nome[:k])
+        var name [16]byte
+        k := str.copy(&name, "jalapeño")
+        st.bind_text(1, &name[:k])
         st.bind_int(2, 800)
         st.bind_null(3)
         testing.eq_int(st.run(), 0)
@@ -43,28 +43,28 @@ fn test_insert_and_select() {
     }
     testing.eq_int(db.changes(), 1)
 
-    q := db.prepare_str("SELECT id, nome, preco, peso FROM item WHERE preco > ? ORDER BY id", &err)
+    q := db.prepare_str("SELECT id, name, price, weight FROM item WHERE price > ? ORDER BY id", &err)
     if q != nil {
         q.bind_int(1, 0)
         testing.eq_int(q.columns(), 4)
         var col [16]byte
         cn := q.column_name(1, &col)
-        testing.eq_str(&col[:cn], "nome")
-        var nome [64]byte
+        testing.eq_str(&col[:cn], "name")
+        var name [64]byte
         rows := 0
         for q.next() {
             rows++
-            n := q.text(1, &nome)
+            n := q.text(1, &name)
             if rows == 1 {
                 testing.eq_int(q.int(0), 1)
-                testing.eq_str(&nome[:n], "café")
+                testing.eq_str(&name[:n], "café")
                 testing.eq_int(q.int(2), 1250)
                 testing.eq_float(q.float(3), 0.5)
                 testing.eq_int(q.kind(3), sqlite.FLOAT)
                 testing.eq_int(q.text_len(1), 5)
             } else {
-                testing.eq_str(&nome[:n], "açúcar")
-                testing.check(q.is_null(3), "peso NULL")
+                testing.eq_str(&name[:n], "jalapeño")
+                testing.check(q.is_null(3), "weight NULL")
             }
         }
         testing.eq_int(rows, 2)
@@ -110,7 +110,7 @@ fn test_errors() {
     if bad != nil {
         bad.close()
     }
-    testing.eq_int(db.exec_str("INSERT INTO nada VALUES (1)"), sqlite.ERROR)
+    testing.eq_int(db.exec_str("INSERT INTO nothing VALUES (1)"), sqlite.ERROR)
     db.close()
 }
 
@@ -155,7 +155,7 @@ fn test_text_too_small() {
         return
     }
     err := 0
-    q := db.prepare_str("SELECT 'um texto comprido'", &err)
+    q := db.prepare_str("SELECT 'a long text'", &err)
     if q != nil {
         q.next()
         var small [4]byte

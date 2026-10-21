@@ -8,7 +8,7 @@ struct Item {
 }
 
 fn main() {
-    items := [3]Item{Item{name: "café", qty: 2, price: 7.5}, Item{name: "pão", qty: 12, price: 0.8}, Item{name: "milk", qty: 1, price: 4.99}}
+    items := [3]Item{Item{name: "café", qty: 2, price: 7.5}, Item{name: "née", qty: 12, price: 0.8}, Item{name: "milk", qty: 1, price: 4.99}}
     io.printf("{:<8} {:>4} {:>8}\n", "item", "qty", "price")
     for it in items {
         io.printf("{:<8} {:>4} {:>8.2}\n", it.name, it.qty, it.price)

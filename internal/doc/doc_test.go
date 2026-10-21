@@ -43,7 +43,7 @@ func TestStdModule(t *testing.T) {
 		t.Errorf("showed pub or a method that isn't pub:\n%s", out)
 	}
 	if render(t, nil, false, "std/http") != out {
-		t.Error("std/http e http deviam dar o mesmo")
+		t.Error("std/http and http should give the same result")
 	}
 }
 
@@ -74,46 +74,46 @@ func TestBuiltins(t *testing.T) {
 func TestUserModule(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "util"), 0o755)
-	os.WriteFile(filepath.Join(dir, "util", "texto.mlc"), []byte(`// Texto do projeto.
+	os.WriteFile(filepath.Join(dir, "util", "text.mlc"), []byte(`// The project's text.
 import "std/str"
 
-// Nome guarda um nome.
-pub struct Nome {
+// Name keeps a name.
+pub struct Name {
     buf [64]byte
     n int
 }
 
-// set copia s.
-pub fn (x &Nome) set(s string) {
+// set copies s.
+pub fn (x &Name) set(s string) {
     x.n = str.copy(&x.buf, s)
 }
 
-// grita escreve s em dst.
-pub fn grita(dst &[]byte, s string) int {
-    return interna(dst, s)
+// shout writes s into dst.
+pub fn shout(dst &[]byte, s string) int {
+    return internal_(dst, s)
 }
 
-// interna não é pub.
-fn interna(dst &[]byte, s string) int {
+// internal_ isn't pub.
+fn internal_(dst &[]byte, s string) int {
     return str.copy(dst, s)
 }
 `), 0o644)
 	dirs := []string{dir}
-	out := render(t, dirs, false, "util/texto")
-	contains(t, out, `import "util/texto"`, "    Texto do projeto.", "  struct Nome\n      fn (x &Nome) set(s string)", "  fn grita(")
-	if strings.Contains(out, "interna") {
+	out := render(t, dirs, false, "util/text")
+	contains(t, out, `import "util/text"`, "    The project's text.", "  struct Name\n      fn (x &Name) set(s string)", "  fn shout(")
+	if strings.Contains(out, "internal_") {
 		t.Errorf("showed a function that isn't pub:\n%s", out)
 	}
-	contains(t, render(t, dirs, false, "util/texto.grita"), "    grita escreve s em dst.")
-	if _, err := Lookup([]string{"util/texto.interna"}, dirs, false); err == nil {
-		t.Error("interna isn't pub and should give an error")
+	contains(t, render(t, dirs, false, "util/text.shout"), "    shout writes s into dst.")
+	if _, err := Lookup([]string{"util/text.internal_"}, dirs, false); err == nil {
+		t.Error("internal_ isn't pub and should give an error")
 	}
-	contains(t, render(t, dirs, true, "util/texto.interna"), "    interna não é pub.")
+	contains(t, render(t, dirs, true, "util/text.internal_"), "    internal_ isn't pub.")
 	// a file with nothing pub (a program) shows everything
 	main := filepath.Join(dir, "app.mlc")
-	os.WriteFile(main, []byte("// soma dois números.\nfn soma(a int, b int) int {\n    return a + b\n}\n\nfn main() {\n}\n"), 0o644)
-	contains(t, render(t, nil, false, main), "fn soma(a int, b int) int", "fn main()")
-	contains(t, render(t, nil, false, main, "soma"), "    soma dois números.")
+	os.WriteFile(main, []byte("// sum adds two numbers.\nfn sum(a int, b int) int {\n    return a + b\n}\n\nfn main() {\n}\n"), 0o644)
+	contains(t, render(t, nil, false, main), "fn sum(a int, b int) int", "fn main()")
+	contains(t, render(t, nil, false, main, "sum"), "    sum adds two numbers.")
 }
 
 func TestErrors(t *testing.T) {
@@ -121,9 +121,9 @@ func TestErrors(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"nada"}, `module "nada" not found`},
-		{[]string{"std/nada"}, `the standard library has no module "std/nada"`},
-		{[]string{"http.nada"}, `std/http has no "nada"`},
+		{[]string{"nothing"}, `module "nothing" not found`},
+		{[]string{"std/nothing"}, `the standard library has no module "std/nothing"`},
+		{[]string{"http.nothing"}, `std/http has no "nothing"`},
 		{[]string{"http.Message", "x"}, "usage: mlc doc"},
 	} {
 		_, err := Lookup(c.args, nil, false)
@@ -152,7 +152,7 @@ func TestStdDocumented(t *testing.T) {
 		}
 		for _, d := range m.File.Funcs {
 			if d.Pub && len(commentAt(text, d.P.Line)) == 0 {
-				t.Errorf("%s:%d: fn %s sem comentário", name, d.P.Line, d.Name)
+				t.Errorf("%s:%d: fn %s without a comment", name, d.P.Line, d.Name)
 			}
 		}
 		for _, d := range m.File.Structs {

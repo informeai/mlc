@@ -226,7 +226,7 @@ func (c *checker) noSliceCompare(e *ast.BinaryExpr, t Type) bool {
 // zeroed.
 func (c *checker) reallocCall(e *ast.CallExpr) Type {
 	if len(e.Args) != 2 {
-		c.errorf(e.Lparen, "realloc recebe o slice e o novo tamanho: s = realloc(s, n)")
+		c.errorf(e.Lparen, "realloc takes the slice and the new size: s = realloc(s, n)")
 		c.checkArgs(e)
 		return Invalid
 	}

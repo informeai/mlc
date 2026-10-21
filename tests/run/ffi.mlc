@@ -19,7 +19,7 @@ extern "C" fn fclose(f *FILE) int32
 extern "C" fn puts(s string) int32
 
 fn main() {
-    io.print(strlen("olá"), abs(-7), toupper(int32('a')), cbrt(27.0))
+    io.print(strlen("née"), abs(-7), toupper(int32('a')), cbrt(27.0))
     a := alloc([]byte, 3)
     b := alloc([]byte, 3)
     str.copy(&a, "abc")

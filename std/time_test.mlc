@@ -7,7 +7,7 @@ fn test_clocks() {
     a := time.mono_ns()
     time.sleep_ms(5)
     b := time.mono_ns()
-    testing.check(b - a >= 5_000_000, "sleep_ms(5) espera pelo menos 5 ms")
+    testing.check(b - a >= 5_000_000, "sleep_ms(5) waits at least 5 ms")
 }
 
 fn test_utc_known_dates() {
@@ -72,8 +72,8 @@ fn test_parse_iso_forms() {
     n = str.copy(&buf, "2000-13-01")
     testing.check(!time.parse_iso(&buf[:n], &ms), "month 13")
     n = str.copy(&buf, "2000-01-01T25:00:00Z")
-    testing.check(!time.parse_iso(&buf[:n], &ms), "hora 25")
-    n = str.copy(&buf, "ontem")
+    testing.check(!time.parse_iso(&buf[:n], &ms), "hour 25")
+    n = str.copy(&buf, "yesterday")
     testing.check(!time.parse_iso(&buf[:n], &ms), "arbitrary text")
 }
 

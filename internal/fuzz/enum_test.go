@@ -46,7 +46,7 @@ func compareSize(n int) *enumResult {
 				case err != nil && model != "":
 					r.agreeUnsafe++
 				case err == nil:
-					r.holes = append(r.holes, fmt.Sprintf("o modelo diz: %s\n%s", model, render(ss, 1)))
+					r.holes = append(r.holes, fmt.Sprintf("the model says: %s\n%s", model, render(ss, 1)))
 				default:
 					m := normalize.ReplaceAllString(strings.TrimPrefix(firstLine(err.Error()), "enum.mlc:"), "N")
 					r.fp[m] = append(r.fp[m], firstLine(err.Error())+"\n"+render(ss, 1))
@@ -110,7 +110,7 @@ func TestEnumerate(t *testing.T) {
 		fmt.Fprintf(&b, "%-8d %10d %10d %14d %16d %8d %16d\n", n, r.programs, r.skipped, r.agreeSafe, r.agreeUnsafe, len(r.holes), r.fpCount())
 		for _, h := range r.holes {
 			holes++
-			fmt.Fprintf(&holeText, "\nBURACO (tamanho %d): %s", n, h)
+			fmt.Fprintf(&holeText, "\nHOLE (size %d): %s", n, h)
 		}
 		for k, v := range r.fp {
 			fps[k] = append(fps[k], v...)
@@ -129,8 +129,8 @@ func TestEnumerate(t *testing.T) {
 			// the smallest example of each one
 			ex := fps[k]
 			sort.Slice(ex, func(a, c int) bool { return len(ex[a]) < len(ex[c]) })
-			fmt.Fprintf(&b, "       exemplo: %s\n", strings.ReplaceAll(strings.TrimSpace(ex[0]), "\n", "\n       "))
-			file := filepath.Join(out, fmt.Sprintf("falso_positivo_%02d.txt", i+1))
+			fmt.Fprintf(&b, "       example: %s\n", strings.ReplaceAll(strings.TrimSpace(ex[0]), "\n", "\n       "))
+			file := filepath.Join(out, fmt.Sprintf("false_positive_%02d.txt", i+1))
 			os.WriteFile(file, []byte(k+"\n\n"+strings.Join(ex, "\n---\n")), 0o644)
 		}
 	}

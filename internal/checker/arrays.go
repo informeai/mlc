@@ -157,7 +157,7 @@ func (c *checker) arrayLit(e *ast.ArrayLit) Type {
 		c.errorf(e.Lbrace, "the literal of %s has %d element(s): list all %d, or use %s{} for the zero value", a, n, a.Len, a)
 	}
 	for i, el := range e.Elems {
-		c.valueAs(el, a.Elem, fmt.Sprintf("elemento %d", i))
+		c.valueAs(el, a.Elem, fmt.Sprintf("element %d", i))
 	}
 	return a
 }

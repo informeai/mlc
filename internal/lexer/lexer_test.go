@@ -37,7 +37,7 @@ func TestSemicolonInsertion(t *testing.T) {
 		{"fn main() {\n}\n", "fn IDENT ( ) { } ;"},
 		{"return\n", "return ;"},
 		{"i++\n", "IDENT ++ ;"},
-		{"x // comentário\ny\n", "IDENT ; IDENT ;"},
+		{"x // comment\ny\n", "IDENT ; IDENT ;"},
 		{"\n\n\nx\n\n\n", "IDENT ;"},
 	}
 	for _, tt := range tests {
@@ -54,7 +54,7 @@ func TestStringEscapes(t *testing.T) {
 		t.Errorf("got %v %q", tok.Kind, tok.Lit)
 	}
 	if len(l.Errors()) != 0 {
-		t.Errorf("erros inesperados: %v", l.Errors())
+		t.Errorf("unexpected errors: %v", l.Errors())
 	}
 }
 
@@ -100,10 +100,10 @@ func TestCharLiterals(t *testing.T) {
 		l := New("t.mlc", []byte(tt.src))
 		tok := l.Next()
 		if tok.Kind != token.CHAR || tok.Lit[0] != tt.want || len(l.Errors()) > 0 {
-			t.Errorf("%s: got %v %q, erros %v", tt.src, tok.Kind, tok.Lit, l.Errors())
+			t.Errorf("%s: got %v %q, errs %v", tt.src, tok.Kind, tok.Lit, l.Errors())
 		}
 	}
-	for _, src := range []string{`''`, `'ab'`, `'á'`, `'a`} {
+	for _, src := range []string{`''`, `'ab'`, `'é'`, `'a`} {
 		l := New("t.mlc", []byte(src))
 		for l.Next().Kind != token.EOF {
 		}
@@ -118,7 +118,7 @@ func TestFloatLiterals(t *testing.T) {
 		l := New("t.mlc", []byte(src))
 		tok := l.Next()
 		if tok.Kind != token.FLOAT || tok.Lit != src || len(l.Errors()) > 0 {
-			t.Errorf("%s: got %v %q, erros %v", src, tok.Kind, tok.Lit, l.Errors())
+			t.Errorf("%s: got %v %q, errs %v", src, tok.Kind, tok.Lit, l.Errors())
 		}
 	}
 	// "1e" without digits isn't an exponent: it's the number 1 followed by a letter

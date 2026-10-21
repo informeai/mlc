@@ -20,8 +20,8 @@ impl auto io.Display for Shape
 
 fn test_display_builtin() {
     b := alloc([]byte, 128)
-    n := str.format(&b, "{} {} {} {} {}", -7, 2.5, true, "oi", byte(65))
-    testing.eq_str(&b[:n], "-7 2.5 true oi 65")
+    n := str.format(&b, "{} {} {} {} {}", -7, 2.5, true, "hi", byte(65))
+    testing.eq_str(&b[:n], "-7 2.5 true hi 65")
     n = str.format(&b, "{} {}", -9223372036854775807 - 1, uint64(18446744073709551615))
     testing.eq_str(&b[:n], "-9223372036854775808 18446744073709551615")
     n = str.format(&b, "{} {}", float32(0.1), 1e21)
@@ -77,10 +77,10 @@ fn test_precision() {
 
 fn test_text_spec() {
     name := alloc([]byte, 8)
-    k := str.copy(&name, "Ana")
+    k := str.copy(&name, "Ann")
     b := alloc([]byte, 64)
     n := str.format(&b, "[{:s}] [{:>5s}] [{:.<6s}] {}", &name[:k], &name[:k], &name[:k], &name[:2])
-    testing.eq_str(&b[:n], "[Ana] [  Ana] [Ana...] [65 110]")
+    testing.eq_str(&b[:n], "[Ann] [  Ann] [Ann...] [65 110]")
     free(b)
     free(name)
 }
@@ -116,15 +116,15 @@ fn test_long_output_crosses_buffer() {
 
 fn test_width_counts_characters() {
     b := alloc([]byte, 32)
-    n := str.format(&b, "[{:6}] [{:>6}] [{:^7}]", "café", "pão", "ção")
-    testing.eq_str(&b[:n], "[café  ] [   pão] [  ção  ]")
+    n := str.format(&b, "[{:6}] [{:>6}] [{:^7}]", "café", "née", "año")
+    testing.eq_str(&b[:n], "[café  ] [   née] [  año  ]")
     free(b)
 }
 
 fn bench_format(b &testing.B) {
     var out [64]byte
     for i := 0; i < b.n; i++ {
-        str.format(&out, "{} {:.2} {:>8} {:x}", i, 3.14159, "texto", 255)
+        str.format(&out, "{} {:.2} {:>8} {:x}", i, 3.14159, "text", 255)
     }
 }
 

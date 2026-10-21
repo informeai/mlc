@@ -39,7 +39,7 @@ func TestRepository(t *testing.T) {
 		files = append(files, m...)
 	}
 	if len(files) < 100 {
-		t.Fatalf("poucos arquivos encontrados: %d", len(files))
+		t.Fatalf("too few files found: %d", len(files))
 	}
 	for _, file := range files {
 		src, err := os.ReadFile(file)
@@ -64,7 +64,7 @@ func TestRepository(t *testing.T) {
 		}
 		again, _ := Source(file, out)
 		if string(again) != string(out) {
-			t.Errorf("%s: formatar duas vezes muda o resultado:\n%s\n---\n%s", file, out, again)
+			t.Errorf("%s: formatting twice changes the result:\n%s\n---\n%s", file, out, again)
 		}
 	}
 }
@@ -74,31 +74,31 @@ func TestCanonical(t *testing.T) {
 import    "std/str"
 
 
-// Ponto no plano
-struct Ponto {
+// Point on the plane
+struct Point {
   x int  // abscissa
-  y int // ordenada
+  y int // ordinate
 }
 
-pub fn (p &Ponto) soma()int{
+pub fn (p &Point) sum()int{
 	return p.x+p.y
 }
-fn grande[T ordered](a T,b T) T { if a>b { return a }; return b }
+fn larger[T ordered](a T,b T) T { if a>b { return a }; return b }
 
 fn main(){
   var a [3]int=[3]int{1,2,3}
   s:=alloc([]int,4)
-  p:=Ponto{x:1,y:-2}
-  var q ?*Ponto=nil
+  p:=Point{x:1,y:-2}
+  var q ?*Point=nil
 
 
-  io.print(a[0] * -a[1], len(s[1:3]), p.soma(), grande[int](1,2), q==nil)
-  if (p==Ponto{x: 1, y: -2})&&
+  io.print(a[0] * -a[1], len(s[1:3]), p.sum(), larger[int](1,2), q==nil)
+  if (p==Point{x: 1, y: -2})&&
   !false {
-    io.print("igual");
+    io.print("equal");
   }
   match a[0] {
-    1=>io.print("um") ; 2 => {}
+    1=>io.print("one") ; 2 => {}
     _ => {
       x := 1+
         2
@@ -111,30 +111,30 @@ fn main(){
 	want := `import "std/io"
 import "std/str"
 
-// Ponto no plano
-struct Ponto {
+// Point on the plane
+struct Point {
     x int // abscissa
-    y int // ordenada
+    y int // ordinate
 }
 
-pub fn (p &Ponto) soma() int {
+pub fn (p &Point) sum() int {
     return p.x + p.y
 }
-fn grande[T ordered](a T, b T) T { if a > b { return a }; return b }
+fn larger[T ordered](a T, b T) T { if a > b { return a }; return b }
 
 fn main() {
     var a [3]int = [3]int{1, 2, 3}
     s := alloc([]int, 4)
-    p := Ponto{x: 1, y: -2}
-    var q ?*Ponto = nil
+    p := Point{x: 1, y: -2}
+    var q ?*Point = nil
 
-    io.print(a[0] * -a[1], len(s[1:3]), p.soma(), grande[int](1, 2), q == nil)
-    if (p == Ponto{x: 1, y: -2}) &&
+    io.print(a[0] * -a[1], len(s[1:3]), p.sum(), larger[int](1, 2), q == nil)
+    if (p == Point{x: 1, y: -2}) &&
         !false {
-        io.print("igual")
+        io.print("equal")
     }
     match a[0] {
-        1 => io.print("um"); 2 => {}
+        1 => io.print("one"); 2 => {}
         _ => {
             x := 1 +
                 2
@@ -149,7 +149,7 @@ fn main() {
 		t.Fatal(errs)
 	}
 	if string(got) != want {
-		t.Errorf("resultado:\n%s\nesperado:\n%s", got, want)
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}
 }
 

@@ -4,7 +4,7 @@
 //
 //     # .env                          ; app.ini
 //     PORT=8080                       [db]
-//     DATABASE_URL="sqlite:loja.db"   path = loja.db
+//     DATABASE_URL="sqlite:shop.db"   path = shop.db
 //     export DEBUG=true               timeout = 5    ; seconds
 //
 //     var cfg config.Config

@@ -12,7 +12,7 @@ import (
 const completeSrc = `import "std/io"
 import "std/vec"
 
-// uma conta do banco
+// a bank account
 struct Account {
     owner []byte
     balance int

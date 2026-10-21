@@ -45,7 +45,7 @@ fn test_grow_wrapped() {
     q.push_back(5) // now: 2 3 | 4 5 wrapping around
     testing.eq_int(q.cap(), 4)
     q.push_back(6) // grows
-    testing.check(q.cap() > 4, "cresceu")
+    testing.check(q.cap() > 4, "grew")
     for i := 2; i <= 6; i++ {
         testing.eq_int(q.pop_front(), i)
     }

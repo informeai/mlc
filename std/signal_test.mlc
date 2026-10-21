@@ -6,17 +6,17 @@ fn test_listen_and_received() {
     signal.listen(signal.USR1)
     testing.check(!signal.received(signal.USR1), "hasn't arrived yet")
     signal.raise(signal.USR1)
-    testing.check(signal.received(signal.USR1), "chegou")
+    testing.check(signal.received(signal.USR1), "arrived")
     testing.check(signal.received(signal.USR1), "the mark stays until clear")
     signal.clear(signal.USR1)
-    testing.check(!signal.received(signal.USR1), "clear esquece")
+    testing.check(!signal.received(signal.USR1), "clear forgets")
 }
 
 // a recorded Ctrl+C doesn't end the program
 fn test_interrupt_does_not_kill() {
     signal.listen_shutdown()
     signal.raise(signal.INT)
-    testing.check(signal.received(signal.INT), "INT anotado")
+    testing.check(signal.received(signal.INT), "annotated INT")
     testing.check(!signal.received(signal.TERM), "TERM didn't arrive")
 }
 
@@ -24,7 +24,7 @@ fn test_wait() {
     signal.listen(signal.USR2)
     start := time.mono_ns()
     testing.eq_int(signal.wait(50), 0) // nothing arrived: returns by timeout
-    testing.check(time.mono_ns() - start >= 40000000, "esperou o tempo")
+    testing.check(time.mono_ns() - start >= 40000000, "waited the time")
     signal.raise(signal.USR2)
     testing.eq_int(signal.wait(-1), signal.USR2) // already arrived: returns at once
 }
@@ -32,7 +32,7 @@ fn test_wait() {
 fn test_ignore() {
     signal.ignore(signal.HUP)
     signal.raise(signal.HUP) // ignored: neither ends nor records
-    testing.check(!signal.received(signal.HUP), "ignorado")
+    testing.check(!signal.received(signal.HUP), "ignored")
     signal.restore(signal.HUP)
 }
 

@@ -3,6 +3,6 @@
 ok 42
 9
 12
-[{bia 12} {davi 20} {ana 30} {caio 45}] true
-[{davi 20} {caio 45} {bia 12} {ana 30}]
+[{bea 12} {dave 20} {ann 30} {carl 45}] true
+[{dave 20} {carl 45} {bea 12} {ann 30}]
 3

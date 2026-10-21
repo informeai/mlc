@@ -102,8 +102,8 @@ fn main() {
     free(zero)
 
     names := alloc([]string, 3)
-    names[0] = "ana"
-    names[1] = "bia"
+    names[0] = "ann"
+    names[1] = "bea"
     names[2] = "cris"
     n := 0
     for _ in names {
@@ -112,7 +112,7 @@ fn main() {
     io.print(names, n, names[2][0])
     free(names)
 
-    io.print(len("olá"), count_all("banana", 'a'))
+    io.print(len("née"), count_all("banana", 'a'))
 
     // the index with an effect is computed only once
     c := alloc([]int, 3)

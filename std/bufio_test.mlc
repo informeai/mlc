@@ -65,12 +65,12 @@ fn expect_err(r result.Result[int, int], want int) {
 }
 
 fn test_read_line_in_small_chunks() {
-    src := chunks("um\ndois\r\n\ntrês sem fim", 3, 0)
+    src := chunks("one\ntwo\r\n\nthree no end", 3, 0)
     br := bufio.new[Chunks]()
-    line(&br, &src, "um")
-    line(&br, &src, "dois")
+    line(&br, &src, "one")
+    line(&br, &src, "two")
     line(&br, &src, "")
-    line(&br, &src, "três sem fim")
+    line(&br, &src, "three no end")
     var buf [32]byte
     r1 := br.read_line(&src, &buf)
     expect_err(r1, io.EOF)
@@ -134,7 +134,7 @@ fn test_read_exact_and_byte() {
     r6 := br.read_exact(&src, &buf)
     expect_err(r6, io.EOF) // only 4 bytes left
     match br.read_byte(&src) {
-        Ok(_) => testing.fail("os dados acabaram")
+        Ok(_) => testing.fail("the data ran out")
         Err(code) => testing.eq_int(code, io.EOF)
     }
 }
@@ -163,7 +163,7 @@ fn test_file() {
     err := 0
     f := fs.open(&p[:n], fs.READ, &err)
     if f == nil {
-        testing.fail("open falhou")
+        testing.fail("open failed")
         return
     }
     br := bufio.new[fs.File]()
@@ -198,7 +198,7 @@ fn send_lines(l *net.Listener) int {
     c := l.accept(&err)
     if c != nil {
         var msg [64]byte
-        k := str.copy(&msg, "HELLO 1\r\nlinha dois\nsem quebra")
+        k := str.copy(&msg, "HELLO 1\r\nline two\nno break")
         c.write(&msg[:k])
         c.close()
     }
@@ -212,14 +212,14 @@ fn test_conn() {
     err := 0
     l := net.listen(&h[:hn], 0, &err)
     if l == nil {
-        testing.fail("listen falhou")
+        testing.fail("listen failed")
         return
     }
     port := l.port()
     t := thread.spawn(send_lines, l, thread.STACK_64KB)
     c := net.connect(&h[:hn], port, &err)
     if c == nil {
-        testing.fail("connect falhou")
+        testing.fail("connect failed")
         thread.join(t)
         return
     }
@@ -230,11 +230,11 @@ fn test_conn() {
         Err(code) => testing.eq_int(code, 0)
     }
     match br.read_line(&c, &buf) {
-        Ok(n) => testing.eq_str(&buf[:n], "linha dois")
+        Ok(n) => testing.eq_str(&buf[:n], "line two")
         Err(code) => testing.eq_int(code, 0)
     }
     match br.read_line(&c, &buf) {
-        Ok(n) => testing.eq_str(&buf[:n], "sem quebra")
+        Ok(n) => testing.eq_str(&buf[:n], "no break")
         Err(code) => testing.eq_int(code, 0)
     }
     match br.read_line(&c, &buf) {

@@ -14,7 +14,7 @@ fn test_push_get() {
         v.push(i * i)
     }
     testing.eq_int(v.len(), 100)
-    testing.check(v.cap() >= 100, "capacidade cresceu")
+    testing.check(v.cap() >= 100, "capacity grew")
     testing.eq_int(v.get(0), 0)
     testing.eq_int(v.get(99), 9801)
     testing.eq_int(*v.last(), 9801)
@@ -75,19 +75,19 @@ fn test_set_swap_clear() {
 
 fn test_owned_elements() {
     v := vec.new[[]byte](1)
-    v.push(text("um"))
-    v.push(text("dois"))
-    v.push(text("três"))
-    testing.eq_str(v.at(1), "dois")
+    v.push(text("one"))
+    v.push(text("two"))
+    v.push(text("three"))
+    testing.eq_str(v.at(1), "two")
     t := v.take(1) // ownership comes back; the zero value stays in place
-    testing.eq_str(&t, "dois")
+    testing.eq_str(&t, "two")
     testing.eq_int(len(*v.at(1)), 0)
     v.set(1, t) // back into the vector
     old := v.put(0, text("zero"))
-    testing.eq_str(&old, "um")
+    testing.eq_str(&old, "one")
     free(old)
     last := v.pop()
-    testing.eq_str(&last, "três")
+    testing.eq_str(&last, "three")
     free(last)
     testing.eq_str(v.at(0), "zero")
     v.free() // frees the remaining elements
@@ -115,11 +115,11 @@ fn longest(best &int, s &[]byte) {
 
 fn test_each_with() {
     v := vec.new[[]byte](2)
-    v.push(text("um"))
-    v.push(text("três"))
-    v.push(text("dois"))
+    v.push(text("one"))
+    v.push(text("three"))
+    v.push(text("two"))
     best := 0
     v.each_with(&best, longest)
-    testing.eq_int(best, 5) // "três" has 5 bytes
+    testing.eq_int(best, 5) // "three" has 5 bytes
     v.free()
 }

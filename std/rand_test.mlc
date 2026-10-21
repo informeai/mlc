@@ -65,7 +65,7 @@ fn test_secure_int_n() {
         seen[n] = true
     }
     for i := 0; i < 6; i++ {
-        testing.check(seen[i], "todos os valores aparecem")
+        testing.check(seen[i], "every value shows up")
     }
     testing.eq_int(rand.secure_int_n(1), 0)
 }
@@ -78,5 +78,5 @@ fn test_secure_int_n_zero() {
 fn test_seeded() {
     a := rand.seeded()
     b := rand.seeded()
-    testing.check(a.next() != b.next(), "sementes diferentes")
+    testing.check(a.next() != b.next(), "different seeds")
 }

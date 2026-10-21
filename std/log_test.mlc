@@ -16,7 +16,7 @@ fn open_file(p &[]byte, level int) *log.Logger {
     err := 0
     lg := log.open(p, level, &err)
     if lg == nil {
-        testing.fail("log.open falhou")
+        testing.fail("log.open failed")
         return log.new(log.STDERR, level)
     }
     lg.set_time(false)
@@ -35,21 +35,21 @@ fn test_levels_and_format() {
     var p [64]byte
     n := path(&p, "levels.log")
     lg := open_file(&p[:n], log.INFO)
-    lg.debug("não sai {}", 1)
-    lg.info("porta {}", 8080)
-    lg.warn("lento: {:.1} ms", 12.25)
+    lg.debug("not shown {}", 1)
+    lg.info("port {}", 8080)
+    lg.warn("slow: {:.1} ms", 12.25)
     var name [8]byte
     k := str.copy(&name, "x.txt")
-    lg.error("falha ao abrir {:s}: {}", &name[:k], 2)
-    testing.check(!lg.enabled(log.DEBUG), "DEBUG desligado")
+    lg.error("failed to open {:s}: {}", &name[:k], 2)
+    testing.check(!lg.enabled(log.DEBUG), "DEBUG off")
     lg.set_level(log.DEBUG)
-    lg.debug("agora sai")
+    lg.debug("now it shows")
     lg.write(log.WARN, &name[:k])
     testing.eq_int(lg.level(), log.DEBUG)
     lg.close()
     var buf [512]byte
     m := read_all(&p[:n], &buf)
-    testing.eq_str(&buf[:m], "INFO  porta 8080\nWARN  lento: 12.2 ms\nERROR falha ao abrir x.txt: 2\nDEBUG agora sai\nWARN  x.txt\n")
+    testing.eq_str(&buf[:m], "INFO  port 8080\nWARN  slow: 12.2 ms\nERROR failed to open x.txt: 2\nDEBUG now it shows\nWARN  x.txt\n")
     fs.remove_file(&p[:n])
 }
 
@@ -60,7 +60,7 @@ fn test_time_prefix() {
     err := 0
     lg := log.open(&p[:n], log.INFO, &err)
     if lg == nil {
-        testing.fail("log.open falhou")
+        testing.fail("log.open failed")
         return
     }
     lg.info("x")
@@ -92,7 +92,7 @@ fn test_long_line_is_cut() {
 
 fn writer(lg *log.Logger) {
     for i := 0; i < 200; i++ {
-        lg.info("linha da thread com um texto comprido para misturar se pudesse {:04}", i)
+        lg.info("a thread's line with a long text to mix if it could {:04}", i)
     }
     lg.close()
 }
@@ -115,7 +115,7 @@ fn test_threads() {
     }
     buf := alloc([]byte, size)
     m := read_all(&p[:n], &buf)
-    line := "INFO  linha da thread com um texto comprido para misturar se pudesse 0000"
+    line := "INFO  a thread's line with a long text to mix if it could 0000"
     testing.eq_int(m, 800 * (len(line) + 1))
     start := 0
     lines := 0

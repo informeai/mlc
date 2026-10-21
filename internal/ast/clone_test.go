@@ -17,6 +17,6 @@ func TestCloneIsDeep(t *testing.T) {
 		t.Fatal("the clone shares nodes with the original")
 	}
 	if ret.Value.(*Ident).Name != "x" || ret.Value.Pos().Line != 2 {
-		t.Fatalf("o clone perdeu dados: %+v", ret.Value)
+		t.Fatalf("the clone lost data: %+v", ret.Value)
 	}
 }

@@ -127,7 +127,7 @@ func TestMetamorphic(t *testing.T) {
 	if os.Getenv("MLC_META") != "" {
 		for _, k := range kinds {
 			for _, ex := range r.examples[k] {
-				t.Logf("exemplo (%s):\n%s", k, ex)
+				t.Logf("example (%s):\n%s", k, ex)
 			}
 		}
 	}

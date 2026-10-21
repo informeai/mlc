@@ -10,12 +10,12 @@ fn test_v4_format() {
     testing.eq_int(n, uuid.TEXT_LEN)
     testing.check(buf[8] == '-' && buf[13] == '-' && buf[18] == '-' && buf[23] == '-', "hyphens")
     testing.check(buf[14] == '4', "version in the text")
-    testing.check(buf[19] == '8' || buf[19] == '9' || buf[19] == 'a' || buf[19] == 'b', "variante RFC")
+    testing.check(buf[19] == '8' || buf[19] == '9' || buf[19] == 'a' || buf[19] == 'b', "RFC variant")
     var back uuid.UUID
     testing.check(uuid.parse(&buf, &back), "parse")
-    testing.check(back.equal(&id), "ida e volta")
+    testing.check(back.equal(&id), "round trip")
     other := uuid.v4()
-    testing.check(!other.equal(&id), "dois v4 diferentes")
+    testing.check(!other.equal(&id), "two different v4s")
 }
 
 fn test_v7_time_order() {
@@ -27,9 +27,9 @@ fn test_v7_time_order() {
     var tb [36]byte
     a.text(&ta)
     b.text(&tb)
-    testing.check(str.eq_bytes(&ta[:13], &ta[:13]), "prefixo")
+    testing.check(str.eq_bytes(&ta[:13], &ta[:13]), "prefix")
     // the text of a newer v7 sorts later
-    testing.check(ta[11] < tb[11] || ta[12] < tb[12], "ordem pelo tempo")
+    testing.check(ta[11] < tb[11] || ta[12] < tb[12], "order by time")
     testing.eq_str(&ta[:13], "018bcfe5-6800")
 }
 
@@ -42,7 +42,7 @@ fn test_parse_errors() {
     n = str.copy(&buf, "018bcfe5x6800-7abc-8def-0123456789ab")
     testing.check(!uuid.parse(&buf[:n], &u), "without a hyphen")
     n = str.copy(&buf, "018bcfe5-6800-7abc-8def-0123456789a")
-    testing.check(!uuid.parse(&buf[:n], &u), "curto")
+    testing.check(!uuid.parse(&buf[:n], &u), "short")
     n = str.copy(&buf, "018bcfe5-6800-7abc-8def-0123456789ag")
     testing.check(!uuid.parse(&buf[:n], &u), "invalid digit")
 }

@@ -59,7 +59,7 @@ fn main() {
     io.print(total)
     free(s)
 
-    var ps [4]Person = [4]Person{Person{name_: "ana", age: 30}, Person{name_: "bia", age: 12}, Person{name_: "caio", age: 45}, Person{name_: "davi", age: 20}}
+    var ps [4]Person = [4]Person{Person{name_: "ann", age: 30}, Person{name_: "bea", age: 12}, Person{name_: "carl", age: 45}, Person{name_: "dave", age: 20}}
     sort.sort_by(&ps, by_age)
     io.print(ps, sort.is_sorted_by(&ps, by_age))
     sort.sort_by(&ps, by_name_desc)

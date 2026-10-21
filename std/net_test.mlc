@@ -38,7 +38,7 @@ fn test_echo() {
     err := 0
     l := net.listen(&h[:hn], 0, &err)
     if l == nil {
-        testing.fail("listen falhou")
+        testing.fail("listen failed")
         return
     }
     port := l.port()
@@ -46,12 +46,12 @@ fn test_echo() {
     t := thread.spawn(echo_once, l, thread.STACK_64KB)
     c := net.connect(&h[:hn], port, &err)
     if c == nil {
-        testing.fail("connect falhou")
+        testing.fail("connect failed")
         thread.join(t)
         return
     }
     var msg [64]byte
-    k := str.copy(&msg, "uma mensagem maior que o buffer do servidor")
+    k := str.copy(&msg, "a message larger than the server's buffer")
     match c.write(&msg[:k]) {
         Ok(w) => testing.eq_int(w, k)
         Err(code) => testing.eq_int(code, 0)
@@ -81,7 +81,7 @@ fn test_refused() {
     err := 0
     l := net.listen(&h[:hn], 0, &err)
     if l == nil {
-        testing.fail("listen falhou")
+        testing.fail("listen failed")
         return
     }
     port := l.port()
@@ -100,7 +100,7 @@ fn test_port_in_use() {
     err := 0
     a := net.listen(&h[:hn], 0, &err)
     if a == nil {
-        testing.fail("listen falhou")
+        testing.fail("listen failed")
         return
     }
     b := net.listen(&h[:hn], a.port(), &err)
@@ -114,7 +114,7 @@ fn test_port_in_use() {
 
 fn test_no_host() {
     var h [64]byte
-    hn := str.copy(&h, "host-que-nao-existe.invalid")
+    hn := str.copy(&h, "host-that-does-not-exist.invalid")
     err := 0
     c := net.connect(&h[:hn], 80, &err)
     testing.check(c == nil, "nonexistent name")
@@ -142,7 +142,7 @@ fn test_timeout() {
     err := 0
     l := net.listen(&h[:hn], 0, &err)
     if l == nil {
-        testing.fail("listen falhou")
+        testing.fail("listen failed")
         return
     }
     port := l.port()
@@ -176,7 +176,7 @@ fn test_write_after_peer_closed() {
     err := 0
     l := net.listen(&h[:hn], 0, &err)
     if l == nil {
-        testing.fail("listen falhou")
+        testing.fail("listen failed")
         return
     }
     port := l.port()
@@ -206,7 +206,7 @@ fn test_accept_timeout() {
     err := 0
     l := net.listen(&h[:hn], 0, &err)
     if l == nil {
-        testing.fail("listen falhou")
+        testing.fail("listen failed")
         return
     }
     l.set_timeout(30)

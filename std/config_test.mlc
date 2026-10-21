@@ -15,39 +15,39 @@ fn parse(c &config.Config, text string) {
 
 fn test_env_file() {
     var c config.Config
-    parse(&c, "# comentário\nPORT=8080\n  NOME = Loja do Zé  \nexport DEBUG=true\nVAZIO=\nSENHA=\"a#b \\\"c\\\"\\nd\"\nRAW='sem \\n escape'\nCOM=valor # comentário\nPORT=9090\r\n")
+    parse(&c, "# comment\nPORT=8080\n  NAME = Joe's Shop  \nexport DEBUG=true\nEMPTY=\nSECRET=\"a#b \\\"c\\\"\\nd\"\nRAW='no \\n escape'\nWITH=value # comment\nPORT=9090\r\n")
     var v [64]byte
-    n := c.get("NOME", &v)
-    testing.eq_str(&v[:n], "Loja do Zé")
-    porta := 0
-    testing.check(c.int("PORT", &porta), "int")
-    testing.eq_int(porta, 9090) // the last one wins
+    n := c.get("NAME", &v)
+    testing.eq_str(&v[:n], "Joe's Shop")
+    port_ := 0
+    testing.check(c.int("PORT", &port_), "int")
+    testing.eq_int(port_, 9090) // the last one wins
     debug := false
     testing.check(c.bool("DEBUG", &debug), "bool")
     testing.check(debug, "true")
-    testing.eq_int(c.get("VAZIO", &v), 0)
-    n = c.get("SENHA", &v)
+    testing.eq_int(c.get("EMPTY", &v), 0)
+    n = c.get("SECRET", &v)
     testing.eq_str(&v[:n], "a#b \"c\"\nd")
     n = c.get("RAW", &v)
-    testing.eq_str(&v[:n], "sem \\n escape")
-    n = c.get("COM", &v)
-    testing.eq_str(&v[:n], "valor")
-    testing.eq_int(c.get("FALTA", &v), -1)
-    padrao := 42
-    testing.check(!c.int("FALTA", &padrao), "doesn't exist")
-    testing.eq_int(padrao, 42) // the default stays
-    testing.check(!c.int("NOME", &padrao), "isn't a number")
+    testing.eq_str(&v[:n], "no \\n escape")
+    n = c.get("WITH", &v)
+    testing.eq_str(&v[:n], "value")
+    testing.eq_int(c.get("MISSING", &v), -1)
+    fallback := 42
+    testing.check(!c.int("MISSING", &fallback), "doesn't exist")
+    testing.eq_int(fallback, 42) // the default stays
+    testing.check(!c.int("NAME", &fallback), "isn't a number")
     testing.check(c.is("DEBUG", "true"), "is")
 }
 
 fn test_ini_sections() {
     var c config.Config
-    parse(&c, "nome = app\n\n[db]\npath = loja.db\ntimeout = 5 ; segundos\n\n[ http ]\nport=80\n")
+    parse(&c, "name = app\n\n[db]\npath = shop.db\ntimeout = 5 ; seconds\n\n[ http ]\nport=80\n")
     var v [64]byte
-    n := c.get("nome", &v)
+    n := c.get("name", &v)
     testing.eq_str(&v[:n], "app")
     n = c.get("db.path", &v)
-    testing.eq_str(&v[:n], "loja.db")
+    testing.eq_str(&v[:n], "shop.db")
     t := 0
     testing.check(c.int("db.timeout", &t), "; at the end is a comment")
     testing.eq_int(t, 5)
@@ -62,15 +62,15 @@ fn test_ini_sections() {
 fn test_bad_lines() {
     var c config.Config
     var b [64]byte
-    n := str.copy(&b, "A=1\nsem igual\n")
+    n := str.copy(&b, "A=1\nno equals\n")
     match c.parse(&b[:n]) {
-        Ok(_) => testing.fail("devia falhar")
+        Ok(_) => testing.fail("should have failed")
         Err(code) => testing.eq_int(code, config.BAD_LINE)
     }
     testing.eq_int(c.bad_line, 2)
-    n = str.copy(&b, "A=\"sem fim\n")
+    n = str.copy(&b, "A=\"no end\n")
     match c.parse(&b[:n]) {
-        Ok(_) => testing.fail("aspas abertas")
+        Ok(_) => testing.fail("open quotes")
         Err(code) => testing.eq_int(code, config.BAD_LINE)
     }
     n = str.copy(&b, "[secao\n")
@@ -84,7 +84,7 @@ fn test_load_and_env() {
     var path [64]byte
     pn := str.copy(&path, "/tmp/mlc_config_test.env")
     var data [64]byte
-    dn := str.copy(&data, "APP_NOME=arquivo\nAPP_MODO=dev\n")
+    dn := str.copy(&data, "APP_NAME=file\nAPP_MODE=dev\n")
     fs.write_file(&path[:pn], &data[:dn])
     var c config.Config
     match config.load(&path[:pn], &c) {
@@ -92,11 +92,11 @@ fn test_load_and_env() {
         Err(code) => testing.eq_int(code, 0)
     }
     var v [64]byte
-    k := str.copy(&v, "ambiente")
-    os.setenv("APP_NOME", &v[:k])
-    n := c.env("APP_NOME", &v)
-    testing.eq_str(&v[:n], "ambiente") // the environment wins
-    n = c.env("APP_MODO", &v)
+    k := str.copy(&v, "environment")
+    os.setenv("APP_NAME", &v[:k])
+    n := c.env("APP_NAME", &v)
+    testing.eq_str(&v[:n], "environment") // the environment wins
+    n = c.env("APP_MODE", &v)
     testing.eq_str(&v[:n], "dev")
     fs.remove_file(&path[:pn])
     match config.load_str("/tmp/nao_existe_mlc.env", &c) {
@@ -112,6 +112,6 @@ fn test_parse_flag() {
     testing.check(config.parse_flag(&b[:n], &f) && f, "ON")
     n = str.copy(&b, "No")
     testing.check(config.parse_flag(&b[:n], &f) && !f, "No")
-    n = str.copy(&b, "talvez")
-    testing.check(!config.parse_flag(&b[:n], &f), "talvez")
+    n = str.copy(&b, "maybe")
+    testing.check(!config.parse_flag(&b[:n], &f), "maybe")
 }

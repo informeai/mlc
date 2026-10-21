@@ -98,18 +98,18 @@ fn text(s string) []byte {
 // owners: ownership goes in on push and out on pop; free frees the rest
 fn test_owners() {
     h := heap.new[[]byte](2)
-    h.push(text("pera"))
+    h.push(text("pear"))
     h.push(text("banana"))
-    h.push(text("uva"))
-    h.push(text("abacaxi"))
+    h.push(text("plum"))
+    h.push(text("apple"))
     a := h.pop()
-    testing.eq_str(&a, "abacaxi")
+    testing.eq_str(&a, "apple")
     free(a)
-    old := h.replace_top(text("caqui")) // out goes banana, in goes caqui
+    old := h.replace_top(text("cherry")) // out goes banana, in goes cherry
     testing.eq_str(&old, "banana")
     free(old)
-    testing.eq_str(h.peek(), "caqui")
-    h.free() // frees caqui, pera and uva
+    testing.eq_str(h.peek(), "cherry")
+    h.free() // frees cherry, pear and plum
 }
 
 fn test_clear() {
@@ -133,7 +133,7 @@ fn test_pop_empty() {
 // items with owners: the heap keeps the key and the index, and the owners stay in a vec
 fn test_keys_into_vec() {
     names := vec.new[[]byte](4)
-    names.push(text("relatório"))
+    names.push(text("report"))
     names.push(text("backup"))
     names.push(text("e-mail"))
     h := heap.new[Timer](4)

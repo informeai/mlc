@@ -44,31 +44,31 @@ fn want_record(r &csv.Reader[Text], src &Text, fields int) {
 }
 
 fn test_simple_and_quoted() {
-    src := text("nome,preco,obs\r\ncafé,1250,\"com, vírgula\"\n\n\"aspas \"\"dentro\"\"\",7,\"duas\nlinhas\"\nfim,,\n", 3)
+    src := text("name,price,notes\r\ncafé,1250,\"with, a comma\"\n\n\"quotes \"\"inside\"\"\",7,\"two\nlines\"\nend,,\n", 3)
     r := csv.new[Text]()
     var f [64]byte
     want_record(&r, &src, 3)
-    testing.check(r.is(0, "nome") && r.is(2, "obs"), "header")
+    testing.check(r.is(0, "name") && r.is(2, "notes"), "header")
     want_record(&r, &src, 3)
     n := r.field(0, &f)
     testing.eq_str(&f[:n], "café")
-    preco := 0
-    testing.check(r.int(1, &preco), "int")
-    testing.eq_int(preco, 1250)
+    price := 0
+    testing.check(r.int(1, &price), "int")
+    testing.eq_int(price, 1250)
     n = r.field(2, &f)
-    testing.eq_str(&f[:n], "com, vírgula")
+    testing.eq_str(&f[:n], "with, a comma")
     want_record(&r, &src, 3) // the empty line was skipped
     n = r.field(0, &f)
-    testing.eq_str(&f[:n], "aspas \"dentro\"")
+    testing.eq_str(&f[:n], "quotes \"inside\"")
     n = r.field(2, &f)
-    testing.eq_str(&f[:n], "duas\nlinhas")
+    testing.eq_str(&f[:n], "two\nlines")
     want_record(&r, &src, 3)
     testing.eq_int(r.line, 6) // the two-line record takes lines 4 and 5
     testing.eq_int(r.field(1, &f), 0)
     testing.eq_int(r.field(2, &f), 0)
     testing.eq_int(r.field(3, &f), -1)
     match r.next(&src) {
-        Ok(_) => testing.fail("devia acabar")
+        Ok(_) => testing.fail("should have ended")
         Err(code) => testing.eq_int(code, io.EOF)
     }
 }
@@ -80,17 +80,17 @@ fn test_semicolon_and_no_final_newline() {
     want_record(&r, &src, 3)
     testing.check(r.is(2, "3,5"), "a decimal comma stays in the text")
     want_record(&r, &src, 3)
-    testing.check(r.is(1, "y;z"), "separador entre aspas")
+    testing.check(r.is(1, "y;z"), "separator inside quotes")
     v := 0.0
     testing.check(r.float(2, &v), "float")
     testing.eq_float(v, 1.25)
 }
 
 fn test_bad_quotes() {
-    src := text("a,\"sem fim\n", 64)
+    src := text("a,\"no end\n", 64)
     r := csv.new[Text]()
     match r.next(&src) {
-        Ok(_) => testing.fail("aspas abertas")
+        Ok(_) => testing.fail("open quotes")
         Err(code) => testing.eq_int(code, csv.BAD_QUOTE)
     }
     src2 := text("a,\"x\"y\n", 64)
@@ -109,17 +109,17 @@ fn test_bad_quotes() {
 
 fn test_writer() {
     var w csv.Writer
-    w.add_str("nome")
-    w.add_str("descrição, com vírgula")
-    w.add_str("diz \"oi\"")
-    w.add_str(" espaço")
+    w.add_str("name")
+    w.add_str("description, with a comma")
+    w.add_str("says \"hi\"")
+    w.add_str(" space")
     w.add_int(-12)
     w.add_float(2.5)
     w.end()
     w.add_str("")
     w.add_str("x")
     w.end()
-    testing.eq_str(&w.buf[:w.n], "nome,\"descrição, com vírgula\",\"diz \"\"oi\"\"\",\" espaço\",-12,2.5\n,x\n")
+    testing.eq_str(&w.buf[:w.n], "name,\"description, with a comma\",\"says \"\"hi\"\"\",\" space\",-12,2.5\n,x\n")
     // and back through the reader
     src := Text{}
     src.n = str.copy_bytes(&src.data, &w.buf[:w.n])
@@ -128,9 +128,9 @@ fn test_writer() {
     want_record(&r, &src, 6)
     var f [64]byte
     n := r.field(2, &f)
-    testing.eq_str(&f[:n], "diz \"oi\"")
+    testing.eq_str(&f[:n], "says \"hi\"")
     n = r.field(3, &f)
-    testing.eq_str(&f[:n], " espaço")
+    testing.eq_str(&f[:n], " space")
     w.reset()
     w.sep = ';'
     w.crlf = true

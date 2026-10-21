@@ -13,7 +13,7 @@ fn test_write_read_remove() {
     p := alloc([]byte, 64)
     n := path(&p)
     data := alloc([]byte, 16)
-    k := str.copy(&data, "linha\n")
+    k := str.copy(&data, "a row\n")
     match fs.write_file(&p[:n], &data[:k]) {
         Ok(w) => testing.eq_int(w, 6)
         Err(code) => testing.eq_int(code, 0)
@@ -29,11 +29,11 @@ fn test_write_read_remove() {
     }
     buf := alloc([]byte, 32)
     match fs.read_file(&p[:n], &buf) {
-        Ok(r) => testing.eq_str(&buf[:r], "linha\nlinha\n")
+        Ok(r) => testing.eq_str(&buf[:r], "a row\na row\n")
         Err(code) => testing.eq_int(code, 0)
     }
     match fs.read_file(&p[:n], &buf[:4]) {
-        Ok(_) => testing.fail("buffer pequeno deveria dar TOO_BIG")
+        Ok(_) => testing.fail("a small buffer should give TOO_BIG")
         Err(code) => testing.eq_int(code, fs.TOO_BIG)
     }
     match fs.remove_file(&p[:n]) {
@@ -48,7 +48,7 @@ fn test_write_read_remove() {
 
 fn test_missing_file() {
     p := alloc([]byte, 64)
-    n := str.copy(&p, "/tmp/mlc-std-fs-test-nao-existe.txt")
+    n := str.copy(&p, "/tmp/mlc-std-fs-test-does-not-exist.txt")
     testing.check(!fs.exists(&p[:n]), "doesn't exist")
     match fs.file_size(&p[:n]) {
         Ok(_) => testing.fail("file_size of a file that doesn't exist")
@@ -132,7 +132,7 @@ fn test_append_and_seek() {
     }
     rw := fs.open(&p[:n], fs.READ_WRITE, &err)
     if rw == nil {
-        testing.fail("open READ_WRITE falhou")
+        testing.fail("open READ_WRITE failed")
         return
     }
     match rw.seek(-1) {
@@ -154,10 +154,10 @@ fn test_append_and_seek() {
 
 fn test_open_missing() {
     var p [128]byte
-    n := tmp(&p, "nao-existe.txt")
+    n := tmp(&p, "does-not-exist.txt")
     err := 0
     f := fs.open(&p[:n], fs.READ, &err)
-    testing.check(f == nil, "arquivo inexistente: nil")
+    testing.check(f == nil, "nonexistent file: nil")
     testing.eq_int(err, fs.NOT_FOUND)
     if f != nil {
         f.close()
@@ -172,14 +172,14 @@ fn test_dirs() {
         Err(code) => testing.eq_int(code, 0)
     }
     match fs.mkdir(&p[:n]) {
-        Ok(_) => testing.fail("mkdir duas vezes")
+        Ok(_) => testing.fail("mkdir twice")
         Err(code) => testing.eq_int(code, fs.EXISTS)
     }
     var f [160]byte
     k := str.copy_bytes(&f, &p[:n])
     k += str.copy(&f[k:], "/a.txt")
     var data [4]byte
-    dn := str.copy(&data, "oi")
+    dn := str.copy(&data, "hi")
     fs.write_file(&f[:k], &data[:dn])
     var info fs.Info
     match fs.stat(&p[:n], &info) {
@@ -217,7 +217,7 @@ fn test_dirs() {
     j := str.copy_bytes(&g, &p[:n])
     j += str.copy(&g[j:], "/b.txt")
     match fs.rename(&f[:k], &g[:j]) {
-        Ok(_) => testing.check(fs.exists(&g[:j]) && !fs.exists(&f[:k]), "renomeado")
+        Ok(_) => testing.check(fs.exists(&g[:j]) && !fs.exists(&f[:k]), "renamed")
         Err(code) => testing.eq_int(code, 0)
     }
     fs.remove_file(&g[:j])
@@ -255,11 +255,11 @@ fn make_tree(base &[]byte) {
         Err(code) => testing.eq_int(code, 0)
     }
     write(base, "a.json", "{}")
-    write(base, "b.txt", "texto")
+    write(base, "b.txt", "text")
     write(base, "src/main.mlc", "fn main() {}")
     write(base, "src/pkg/util.mlc", "x")
     write(base, "src/pkg/sub/deep.mlc", "y")
-    write(base, "src/pkg/sub/notas.md", "z")
+    write(base, "src/pkg/sub/notes.md", "z")
 }
 
 struct Count {
@@ -300,7 +300,7 @@ fn stop_first(c &Count, path &[]byte, info &fs.Info) int {
 
 fn test_walk_and_glob() {
     var base [256]byte
-    n := fs.temp_path("mlc-arvore-", &base)
+    n := fs.temp_path("mlc-tree-", &base)
     make_tree(&base[:n])
 
     var c Count
@@ -310,7 +310,7 @@ fn test_walk_and_glob() {
     }
     testing.eq_int(c.files, 6)
     testing.eq_int(c.dirs, 4) // the root, src, pkg, sub
-    testing.eq_int(c.bytes, 2 + 5 + 12 + 1 + 1 + 1)
+    testing.eq_int(c.bytes, 2 + 4 + 12 + 1 + 1 + 1)
 
     var g Count
     fs.glob(&base[:n], "**/*.mlc", &g, count_mlc)
@@ -334,7 +334,7 @@ fn test_walk_and_glob() {
         Ok(_) => {}
         Err(code) => testing.eq_int(code, 0)
     }
-    testing.check(!fs.exists(&base[:n]), "apagou tudo")
+    testing.check(!fs.exists(&base[:n]), "deleted everything")
     match fs.remove_all(&base[:n]) {
         Ok(_) => {} // what doesn't exist isn't an error
         Err(code) => testing.eq_int(code, 0)
@@ -344,14 +344,14 @@ fn test_walk_and_glob() {
 // remove_all and walk don't follow links: what the link points to stays
 fn test_links_not_followed() {
     var keep [256]byte
-    kn := fs.temp_path("mlc-alvo-", &keep)
+    kn := fs.temp_path("mlc-target-", &keep)
     make_tree(&keep[:kn])
     var base [256]byte
-    n := fs.temp_path("mlc-com-link-", &base)
+    n := fs.temp_path("mlc-with-link-", &base)
     fs.mkdir_all(&base[:n])
     var link [300]byte
     ln := str.copy_bytes(&link, &base[:n])
-    ln += str.copy(&link[ln:], "/atalho")
+    ln += str.copy(&link[ln:], "/shortcut")
     c := process.cmd("ln")
     c.arg("-s")
     c.arg_bytes(&keep[:kn])
@@ -378,15 +378,15 @@ fn test_links_not_followed() {
 fn test_glob_match() {
     var p [64]byte
     n := str.copy(&p, "src/pkg/util.mlc")
-    testing.check(fs.glob_match("src/pkg/util.mlc", &p[:n]), "igual")
+    testing.check(fs.glob_match("src/pkg/util.mlc", &p[:n]), "equal")
     testing.check(fs.glob_match("src/*/util.mlc", &p[:n]), "*")
     testing.check(!fs.glob_match("src/*.mlc", &p[:n]), "* doesn't go past /")
     testing.check(fs.glob_match("**/*.mlc", &p[:n]), "**")
     testing.check(fs.glob_match("src/**/util.mlc", &p[:n]), "**/ in the middle")
     testing.check(fs.glob_match("src/**", &p[:n]), "** at the end")
     testing.check(fs.glob_match("src/pkg/util.ml?", &p[:n]), "?")
-    testing.check(fs.glob_match("src/pkg/[tu]til.mlc", &p[:n]), "classe")
-    testing.check(fs.glob_match("src/pkg/[a-z]til.mlc", &p[:n]), "faixa")
+    testing.check(fs.glob_match("src/pkg/[tu]til.mlc", &p[:n]), "class")
+    testing.check(fs.glob_match("src/pkg/[a-z]til.mlc", &p[:n]), "range")
     testing.check(!fs.glob_match("src/pkg/[!u]til.mlc", &p[:n]), "negation")
     n = str.copy(&p, "util.mlc")
     testing.check(fs.glob_match("**/util.mlc", &p[:n]), "**/ matches nothing")
@@ -400,7 +400,7 @@ fn test_temp_path() {
     var b [256]byte
     n := fs.temp_path("x-", &a)
     m := fs.temp_path("x-", &b)
-    testing.check(!str.eq_bytes(&a[:n], &b[:m]), "nomes diferentes")
+    testing.check(!str.eq_bytes(&a[:n], &b[:m]), "different names")
     var d [256]byte
     k := fs.temp_dir(&d)
     testing.check(k > 0 && str.eq_bytes(&a[:k], &d[:k]), "in the temporary folder")

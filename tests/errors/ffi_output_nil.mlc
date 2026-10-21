@@ -1,4 +1,4 @@
-// error: h may be nil here, but o argumento 1 of h_close expects *H; check with if h != nil first
+// error: h may be nil here, but argument 1 of h_close expects *H; check with if h != nil first
 extern "C" type H
 extern "C" type G
 extern "C" fn h_open(n int32, out &?*H) int32

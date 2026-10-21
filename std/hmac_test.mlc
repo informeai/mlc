@@ -63,15 +63,15 @@ fn test_streaming() {
 
 fn test_verify_and_equal() {
     var key [16]byte
-    k := str.copy(&key, "segredo")
+    k := str.copy(&key, "secret")
     var body [32]byte
-    n := str.copy(&body, "{\"evento\":\"pago\"}")
+    n := str.copy(&body, "{\"event\":\"paid\"}")
     var mac [32]byte
     hmac.sha256(&key[:k], &body[:n], &mac)
-    testing.check(hmac.verify(&key[:k], &body[:n], &mac), "assinatura certa")
+    testing.check(hmac.verify(&key[:k], &body[:n], &mac), "right signature")
     mac[31] ^= 1
     testing.check(!hmac.verify(&key[:k], &body[:n], &mac), "one flipped bit")
-    testing.check(!hmac.verify(&key[:k], &body[:n], &mac[:16]), "tamanho errado")
+    testing.check(!hmac.verify(&key[:k], &body[:n], &mac[:16]), "wrong size")
     testing.check(hmac.equal(&body[:0], &key[:0]), "empty ones are equal")
 }
 

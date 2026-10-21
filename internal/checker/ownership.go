@@ -1040,7 +1040,7 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 		o.deferMoves(func() {
 			for i, a := range e.Args {
 				if i < len(v.Fields) && IsOwner(v.Fields[i].Type) {
-					o.consume(a, v.Fields[i].Type, "a variante "+v.Name) // the owner goes into the enum
+					o.consume(a, v.Fields[i].Type, "the variant "+v.Name) // the owner goes into the enum
 				} else {
 					o.read(a)
 				}
@@ -1139,7 +1139,7 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 // to right. The moves only apply after all of them (deferMoves).
 func (o *ownChecker) userArgs(e *ast.CallExpr, callee Callee, borrowedRoots map[*Local]bool, touched *[]pathKey, outs *[]pathKey) {
 	for i, a := range o.c.info.CallArgs(e) { // in a method, the receiver comes first
-		context := "o argumento " + itoa(i+1) + " of " + callee.Func.Name
+		context := "argument " + itoa(i+1) + " of " + callee.Func.Name
 		pt := callee.Func.Params[i].Type
 		switch {
 		case isOutHandle(pt):

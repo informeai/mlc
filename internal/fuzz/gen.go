@@ -825,7 +825,7 @@ func (g *gen) inject(e *env, atEnd bool) []*Node {
 		}
 	}
 	// leak: an allocation that's never freed
-	v := g.name("vaza")
+	v := g.name("leak")
 	return []*Node{bug(fmt.Sprintf("%s := alloc(Box{v: %d})", v, g.k())), line("acc += " + v + ".v")}
 }
 

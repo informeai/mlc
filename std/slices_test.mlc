@@ -20,9 +20,9 @@ fn test_equal() {
     a := [3]int{1, 2, 3}
     b := [3]int{1, 2, 3}
     c := [3]int{1, 2, 4}
-    testing.check(slices.equal(&a, &b), "iguais")
-    testing.check(!slices.equal(&a, &c), "diferentes")
-    testing.check(!slices.equal(&a, &b[:2]), "tamanhos diferentes")
+    testing.check(slices.equal(&a, &b), "equal")
+    testing.check(!slices.equal(&a, &c), "different")
+    testing.check(!slices.equal(&a, &b[:2]), "different sizes")
 }
 
 fn test_search() {
@@ -88,19 +88,19 @@ fn text(s string) []byte {
 
 fn test_owned_elements() {
     words := alloc([][]byte, 5)
-    names := [5]string{"pera", "uva", "pera", "abacaxi", "uva"}
+    names := [5]string{"pear", "plum", "pear", "apple", "plum"}
     for i := 0; i < len(words); i++ {
         old := replace(&words[i], text(names[i]))
         free(old)
     }
-    w := text("uva")
+    w := text("plum")
     testing.eq_int(slices.count(&words, &w), 2)
     sort.sort(&words)
     n := slices.dedup(&words) // the unique ones in words[:n]
     testing.eq_int(n, 3)
-    testing.eq_str(&words[0], "abacaxi")
-    testing.eq_str(&words[1], "pera")
-    testing.eq_str(&words[2], "uva")
+    testing.eq_str(&words[0], "apple")
+    testing.eq_str(&words[1], "pear")
+    testing.eq_str(&words[2], "plum")
     testing.eq_int(slices.binary_search(&words[:n], &w), 2)
     free(w)
     for x in drain(words) {
@@ -121,7 +121,7 @@ fn test_dedup() {
 fn test_fill() {
     var a [4]int
     slices.fill(&a, 7)
-    testing.check(a == [4]int{7, 7, 7, 7}, "preenchido")
+    testing.check(a == [4]int{7, 7, 7, 7}, "filled")
 }
 
 fn above(limit &int, x &int) bool {

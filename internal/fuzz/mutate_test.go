@@ -16,30 +16,30 @@ import (
 const small = `import "std/io"
 import "std/vec"
 
-struct No {
+struct Node {
     v int
 }
 
-fn soma(n &No) int {
+fn sum(n &Node) int {
     return n.v
 }
 
-fn guarda(v &vec.Vec[[]byte], n []byte) {
+fn store(v &vec.Vec[[]byte], n []byte) {
     v.push(n)
 }
 
 fn main() {
-    nos := vec.new[[]byte](4)
-    a := alloc(No{v: 1})
-    io.print(soma(&a))
+    nodes := vec.new[[]byte](4)
+    a := alloc(Node{v: 1})
+    io.print(sum(&a))
     free(a)
     b := alloc([]byte, 2)
-    guarda(&nos, b)
+    store(&nodes, b)
     buf := alloc([]byte, 8)
     buf[0] = 1
     io.print(len(buf))
     free(buf)
-    nos.free()
+    nodes.free()
 }
 `
 
@@ -55,12 +55,12 @@ func TestMutantsSmall(t *testing.T) {
 	for _, m := range ms {
 		kinds[m.Kind]++
 		if _, _, err := driver.Check("small.mlc", m.Src, read, driver.Options{}); err == nil {
-			t.Errorf("o verificador aceitou o mutante %q:\n%s", m.Desc, m.Src)
+			t.Errorf("the checker accepted the mutant %q:\n%s", m.Desc, m.Src)
 		}
 	}
 	for _, k := range []string{DropRelease, DupRelease, EarlyRelease, UseAfter, CondRelease, DupMove, BorrowToMove} {
 		if kinds[k] == 0 {
-			t.Errorf("nenhum mutante %q; gerados: %v", k, kinds)
+			t.Errorf("no mutant %q; generated: %v", k, kinds)
 		}
 	}
 }
@@ -85,7 +85,7 @@ func TestMutate(t *testing.T) {
 	var mu sync.Mutex
 	var all []Result
 	byTarget := map[string][]Result{}
-	t.Run("alvos", func(t *testing.T) {
+	t.Run("targets", func(t *testing.T) {
 		for _, tg := range targets {
 			t.Run(filepath.Base(tg.Path), func(t *testing.T) {
 				t.Parallel()
@@ -158,7 +158,7 @@ func report(t *testing.T, targets []*Target, byTarget map[string][]Result, all [
 				file := filepath.Join(out, fmt.Sprintf("hole%d_%s", holes, filepath.Base(p)))
 				os.MkdirAll(out, 0o755)
 				os.WriteFile(file, r.Src, 0o644)
-				fmt.Fprintf(&b, "\nBURACO %s:%d: %s\n    %s\n    mutante: %s\n", p, r.Line, r.Desc, r.Detail, file)
+				fmt.Fprintf(&b, "\nHOLE %s:%d: %s\n    %s\n    mutant: %s\n", p, r.Line, r.Desc, r.Detail, file)
 			}
 		}
 	}
@@ -230,7 +230,7 @@ func counterLib(t *testing.T) string {
 	dir := t.TempDir()
 	obj := filepath.Join(dir, "counter.o")
 	if out, err := exec.Command(cc, "-fsanitize=address,undefined", "-c", "-o", obj, filepath.Join(testsDir, "ffi", "counter.c")).CombinedOutput(); err != nil {
-		t.Fatalf("compilando counter.c: %v\n%s", err, out)
+		t.Fatalf("compiling counter.c: %v\n%s", err, out)
 	}
 	if out, err := exec.Command("ar", "rcs", filepath.Join(dir, "libcounter.a"), obj).CombinedOutput(); err != nil {
 		t.Fatalf("ar: %v\n%s", err, out)

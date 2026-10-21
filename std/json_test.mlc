@@ -38,7 +38,7 @@ fn test_scalars_at_top_level() {
     k := doc(&d, "  42  ")
     n := tokens(&d[:k], &out)
     testing.eq_str(&out[:n], "Number(2, 4) End ")
-    k = doc(&d, "\"oi\"")
+    k = doc(&d, "\"hi\"")
     n = tokens(&d[:k], &out)
     testing.eq_str(&out[:n], "String(1, 3) End ")
     k = doc(&d, "[]")
@@ -64,19 +64,19 @@ fn is_error(s string) bool {
 
 fn test_invalid_documents() {
     testing.check(is_error(""), "empty")
-    testing.check(is_error("{"), "objeto aberto")
+    testing.check(is_error("{"), "unclosed object")
     testing.check(is_error("[1,]"), "extra comma")
     testing.check(is_error("[1 2]"), "missing comma")
-    testing.check(is_error("{\"a\" 1}"), "falta dois-pontos")
+    testing.check(is_error("{\"a\" 1}"), "missing colon")
     testing.check(is_error("{1: 2}"), "key that isn't a string")
-    testing.check(is_error("[1}"), "fechamento trocado")
+    testing.check(is_error("[1}"), "mismatched closing")
     testing.check(is_error("01"), "leading zero")
     testing.check(is_error("1."), "point without decimals")
     testing.check(is_error("-"), "just the sign")
-    testing.check(is_error("tru"), "literal cortado")
-    testing.check(is_error("\"a\\x\""), "escape desconhecido")
+    testing.check(is_error("tru"), "truncated literal")
+    testing.check(is_error("\"a\\x\""), "unknown escape")
     testing.check(is_error("\"a\\u12g4\""), "\\u with an invalid letter")
-    testing.check(is_error("\"sem fim"), "unterminated string")
+    testing.check(is_error("\"no end"), "unterminated string")
     testing.check(is_error("1 2"), "two values at the top")
     testing.check(!is_error("[1, {\"a\": [true]}]"), "valid")
 }
@@ -135,7 +135,7 @@ fn test_skip_unwanted_values() {
             }
             ObjectEnd => break
             _ => {
-                testing.fail("token inesperado")
+                testing.fail("unexpected token")
                 break
             }
         }
@@ -159,11 +159,11 @@ fn test_unescape() {
 
 fn test_escape_round_trip() {
     var s [32]byte
-    k := doc(&s, "diz \"oi\"\n\ttab\\")
+    k := doc(&s, "says \"hi\"\n\ttab\\")
     var e [64]byte
     n := json.escape(&e, &s[:k])
     testing.eq_int(n, json.escape_len(&s[:k]))
-    testing.eq_str(&e[:n], "diz \\\"oi\\\"\\n\\ttab\\\\")
+    testing.eq_str(&e[:n], "says \\\"hi\\\"\\n\\ttab\\\\")
     var back [32]byte
     m := json.unescape(&back, &e[:n])
     testing.eq_bytes(&back[:m], &s[:k])
@@ -174,12 +174,12 @@ fn test_escape_round_trip() {
 
 fn test_build_document_with_format() {
     var name [16]byte
-    k := doc(&name, "Ana \"A\"")
+    k := doc(&name, "Ann \"A\"")
     var esc [32]byte
     n := json.escape(&esc, &name[:k])
     var out [64]byte
     m := str.format(&out, "{{\"name\": \"{:s}\", \"age\": {}}}", &esc[:n], 30)
-    testing.eq_str(&out[:m], "{\"name\": \"Ana \\\"A\\\"\", \"age\": 30}")
+    testing.eq_str(&out[:m], "{\"name\": \"Ann \\\"A\\\"\", \"age\": 30}")
     testing.check(!is_error_bytes(&out[:m]), "the assembled document is valid")
     io.print("") // uses io (the tokens' Display)
 }
@@ -190,10 +190,10 @@ fn test_writer_document() {
     w := json.writer(16) // small on purpose: it grows
     w.object()
     w.field_int("id", 7)
-    w.field_str("nome", "café \"forte\"\n")
+    w.field_str("name", "café \"strong\"\n")
     w.key("tags")
     w.array()
-    w.str("quente")
+    w.str("hot")
     w.int(-3)
     w.float(2.5)
     w.bool(false)
@@ -203,16 +203,16 @@ fn test_writer_document() {
     w.array()
     w.end()
     w.end()
-    w.field_bool("ativo", true)
-    w.field_null("dono")
+    w.field_bool("active", true)
+    w.field_null("owner")
     w.field_float("nan", math.sqrt(-1.0))
     var raw [16]byte
     k := str.copy(&raw, "{\"x\":1}")
-    w.key("bruto")
+    w.key("raw")
     w.raw(&raw[:k])
     w.end()
-    testing.check(w.done(), "documento completo")
-    testing.eq_str(&w.buf[:w.n], "{\"id\":7,\"nome\":\"café \\\"forte\\\"\\n\",\"tags\":[\"quente\",-3,2.5,false,null,{},[]],\"ativo\":true,\"dono\":null,\"nan\":null,\"bruto\":{\"x\":1}}")
+    testing.check(w.done(), "complete document")
+    testing.eq_str(&w.buf[:w.n], "{\"id\":7,\"name\":\"café \\\"strong\\\"\\n\",\"tags\":[\"hot\",-3,2.5,false,null,{},[]],\"active\":true,\"owner\":null,\"nan\":null,\"raw\":{\"x\":1}}")
     // what the Writer writes, the Reader reads
     var out [1024]byte
     n := tokens(&w.buf[:w.n], &out)

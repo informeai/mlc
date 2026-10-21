@@ -138,8 +138,8 @@ fn main() {
     }
     port := l.port()
     s := thread.spawn(serve, l, thread.STACK_64KB)
-    request(&host[:h], port, "{\"name\": \"Ana\", \"n\": 3}")
-    request(&host[:h], port, "{\"extra\": [1, {\"x\": null}], \"n\": 12, \"name\": \"Zé \\\"Z\\\"\"}")
+    request(&host[:h], port, "{\"name\": \"Ann\", \"n\": 3}")
+    request(&host[:h], port, "{\"extra\": [1, {\"x\": null}], \"n\": 12, \"name\": \"Zoë \\\"Z\\\"\"}")
     request(&host[:h], port, "{\"name\": oops}")
     io.print("served:", thread.join(s))
 }

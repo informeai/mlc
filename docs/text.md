@@ -31,7 +31,7 @@ fn main() {
 | `[]byte` | text buffer: an owner, created with `alloc([]byte, n)`, grown with `realloc`, released with `free`. |
 
 - `s[i]` on a `string` or a `[]byte` gives a `byte`.
-- `len(s)` gives the size in **bytes**: `len("olá")` is 4, because `á` takes two bytes in UTF-8.
+- `len(s)` gives the size in **bytes**: `len("née")` is 4, because `é` takes two bytes in UTF-8.
 - `byte` is an 8-bit unsigned integer: it does arithmetic with other `byte`s (overflow panics), and converts with `int(b)` and `byte(n)`, which panics if `n` is outside 0 to 255. See [types.md](types.md).
 - Bytes can be compared (`==`, `<`, ...) and used in `match` with literals: `'a', 'e' => ...`.
 

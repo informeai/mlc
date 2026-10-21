@@ -12,7 +12,7 @@ fn test_push_and_grow() {
         b.push_byte('x')
     }
     testing.eq_int(b.len, 1011)
-    testing.check(len(b.data) >= 1011, "a capacidade cresceu")
+    testing.check(len(b.data) >= 1011, "the capacity grew")
     b.free()
 }
 

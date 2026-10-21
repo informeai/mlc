@@ -15,49 +15,49 @@ const navMain = `import "std/io"
 import "std/vec"
 import "geo"
 
-// Forma do desenho
-enum Forma {
-    Circulo(raio float64)
-    Vazio
+// Shape of the drawing
+enum Shape {
+    Circle(radius float64)
+    Empty
 }
 
-struct Caixa {
-    largura int // em cm
+struct Crate {
+    width int // in cm
 }
 
-const LIMITE = 10
+const LIMIT = 10
 
-// area calcula a área
-fn area(f Forma) float64 {
+// area computes the area
+fn area(f Shape) float64 {
     match f {
-        Circulo(r) => return r * r
-        Vazio => return 0.0
+        Circle(r) => return r * r
+        Empty => return 0.0
     }
 }
 
-fn (c &Caixa) dobro() int {
-    return c.largura * 2
+fn (c &Crate) double() int {
+    return c.width * 2
 }
 
 fn main() {
-    c := Caixa{largura: LIMITE}
+    c := Crate{width: LIMIT}
     v := vec.new[int](2)
-    v.push(c.dobro())
-    p := geo.Ponto{x: 1, y: 2}
-    io.print(area(Forma.Circulo(1.5)), geo.soma(p), v.len(), len("ab"))
+    v.push(c.double())
+    p := geo.Point{x: 1, y: 2}
+    io.print(area(Shape.Circle(1.5)), geo.sum(p), v.len(), len("ab"))
     v.free()
 }
 `
 
-const navGeo = `// Geometria plana.
+const navGeo = `// Plane geometry.
 
-pub struct Ponto {
+pub struct Point {
     x int
     y int
 }
 
-// soma devolve x + y.
-pub fn soma(p Ponto) int {
+// sum returns x + y.
+pub fn sum(p Point) int {
     return p.x + p.y
 }
 `
@@ -76,31 +76,31 @@ func TestNavigation(t *testing.T) {
 		defLine int
 		hover   []string
 	}{
-		{"main", "io.print(«area(Forma", "main", 18, []string{"fn area(f Forma) float64", "area calcula a área"}},
-		{"main", "area(Forma.«Circulo(1.5)", "main", 7, []string{"Circulo(raio float64)", "variant of `Forma`"}},
-		{"main", "area(«Forma.Circulo", "main", 6, []string{"enum Forma {", "Vazio", "Forma do desenho"}},
+		{"main", "io.print(«area(Shape", "main", 18, []string{"fn area(f Shape) float64", "area computes the area"}},
+		{"main", "area(Shape.«Circle(1.5)", "main", 7, []string{"Circle(radius float64)", "variant of `Shape`"}},
+		{"main", "area(«Shape.Circle", "main", 6, []string{"enum Shape {", "Empty", "Shape of the drawing"}},
 		{"main", "return «r * r", "main", 20, []string{"var r float64"}},
-		{"main", "        «Circulo(r) =>", "main", 7, []string{"variant of `Forma`"}},
-		{"main", "return c.«largura * 2", "main", 12, []string{"largura int", "field of `Caixa`"}},
-		{"main", "Caixa{«largura: LIMITE", "main", 12, []string{"largura int"}},
-		{"main", "largura: «LIMITE}", "main", 15, []string{"const LIMITE = 10"}},
-		{"main", "v.push(c.«dobro())", "main", 25, []string{"fn (c &Caixa) dobro() int"}},
-		{"main", "c := «Caixa{", "main", 11, []string{"struct Caixa {", "largura int // em cm"}},
+		{"main", "        «Circle(r) =>", "main", 7, []string{"variant of `Shape`"}},
+		{"main", "return c.«width * 2", "main", 12, []string{"width int", "field of `Crate`"}},
+		{"main", "Crate{«width: LIMIT", "main", 12, []string{"width int"}},
+		{"main", "width: «LIMIT}", "main", 15, []string{"const LIMIT = 10"}},
+		{"main", "v.push(c.«double())", "main", 25, []string{"fn (c &Crate) double() int"}},
+		{"main", "c := «Crate{", "main", 11, []string{"struct Crate {", "width int // in cm"}},
 		{"main", "v := vec.«new[int]", "std/vec.mlc", 0, []string{"pub fn new[T owned](cap int) *Vec[T]", "instance: `vec.new[int]`"}},
 		{"main", "v.«push(c", "std/vec.mlc", 0, []string{"push(x T)"}},
-		{"main", "p := geo.«Ponto{", "geo", 3, []string{"pub struct Ponto {"}},
-		{"main", "geo.«soma(p)", "geo", 9, []string{"pub fn soma(p Ponto) int", "soma devolve x + y."}},
-		{"main", "geo.soma(«p)", "main", 33, []string{"var p geo.Ponto"}},
-		{"main", "p := «geo.Ponto", "geo", 1, []string{`import "geo"`, "Geometria plana."}},
+		{"main", "p := geo.«Point{", "geo", 3, []string{"pub struct Point {"}},
+		{"main", "geo.«sum(p)", "geo", 9, []string{"pub fn sum(p Point) int", "sum returns x + y."}},
+		{"main", "geo.sum(«p)", "main", 33, []string{"var p geo.Point"}},
+		{"main", "p := «geo.Point", "geo", 1, []string{`import "geo"`, "Plane geometry."}},
 		{"main", `import «"std/io"`, "std/io.mlc", 1, []string{`import "std/io"`, "Standard input and output"}},
 		{"main", "«io.print(area", "std/io.mlc", 1, []string{`import "std/io"`}},
 		{"main", "io.«print(area", "std/io.mlc", 1, []string{"io.print(a, b, ...)", "The compiler only rewrites the call"}},
 		{"main", "v.len(), «len(\"ab\")", "", 0, []string{"len(s) int"}},
 		{"main", "vec.new[«int](2)", "", 0, []string{"64-bit signed integer"}},
-		{"main", "fn «area(f Forma)", "main", 18, []string{"fn area(f Forma) float64"}},
-		{"main", "fn area(«f Forma)", "main", 18, []string{"f Forma", "parameter"}},
-		{"geo", "return p.«x + p.y", "geo", 4, []string{"x int", "field of `geo.Ponto`"}},
-		{"geo", "pub fn soma(p «Ponto)", "geo", 3, []string{"pub struct Ponto {"}},
+		{"main", "fn «area(f Shape)", "main", 18, []string{"fn area(f Shape) float64"}},
+		{"main", "fn area(«f Shape)", "main", 18, []string{"f Shape", "parameter"}},
+		{"geo", "return p.«x + p.y", "geo", 4, []string{"x int", "field of `geo.Point`"}},
+		{"geo", "pub fn sum(p «Point)", "geo", 3, []string{"pub struct Point {"}},
 	}
 	for _, tc := range cases {
 		path, src := mainPath, navMain
@@ -121,7 +121,7 @@ func TestNavigation(t *testing.T) {
 		nav := newNavigator(prog, read, []byte(src))
 		sym, _ := nav.resolve(off)
 		if sym == nil {
-			t.Errorf("%q: nada encontrado", tc.at)
+			t.Errorf("%q: nothing found", tc.at)
 			continue
 		}
 		hover := sym.code + "\n" + sym.doc
@@ -202,30 +202,30 @@ func TestNavigationEverywhere(t *testing.T) {
 
 const navIface = `import "std/io"
 
-// Medida dá um tamanho
-interface Medida {
-    fn tamanho(self &Self) int
+// Measure gives a size
+interface Measure {
+    fn size(self &Self) int
 }
 
-struct Caixa {
+struct Crate {
     l int
 }
 
-fn (c &Caixa) tamanho() int {
+fn (c &Crate) size() int {
     return c.l
 }
 
-impl Medida for Caixa
+impl Measure for Crate
 
-impl auto io.Display for Caixa
+impl auto io.Display for Crate
 
-fn maior[T Medida](a &T) int {
-    return a.tamanho()
+fn larger[T Measure](a &T) int {
+    return a.size()
 }
 
 fn main() {
-    c := Caixa{l: 2}
-    io.printf("{} {}\n", c, maior(&c))
+    c := Crate{l: 2}
+    io.printf("{} {}\n", c, larger(&c))
 }
 `
 
@@ -244,12 +244,12 @@ func TestNavigationInterfaces(t *testing.T) {
 		line     int
 		hover    string
 	}{
-		{"impl «Medida for Caixa", path, 4, "Medida dá um tamanho"},
-		{"fn maior[T «Medida]", path, 4, "interface Medida {"},
-		{"return a.«tamanho()", path, 5, "fn tamanho(self &Self) int"},
+		{"impl «Measure for Crate", path, 4, "Measure gives a size"},
+		{"fn larger[T «Measure]", path, 4, "interface Measure {"},
+		{"return a.«size()", path, 5, "fn size(self &Self) int"},
 		{"impl auto io.«Display for", "std/io.mlc", 0, "pub interface Display {"},
 		{"impl «auto io", "", 0, "impl auto io.Display for T"},
-		{"fn tamanho(self &«Self)", "", 0, "the type that implements it"},
+		{"fn size(self &«Self)", "", 0, "the type that implements it"},
 		{"io.«printf(", "std/io.mlc", 1, "replacing each `{}` with a value"},
 	}
 	for _, tc := range cases {
@@ -261,7 +261,7 @@ func TestNavigationInterfaces(t *testing.T) {
 		}
 		sym, _ := nav.resolve(pos + mark)
 		if sym == nil {
-			t.Errorf("%q: nada encontrado", tc.at)
+			t.Errorf("%q: nothing found", tc.at)
 			continue
 		}
 		if !strings.Contains(sym.code+"\n"+sym.doc, tc.hover) {
@@ -296,7 +296,7 @@ func TestNavigationFormat(t *testing.T) {
 		}
 		sym, _ := newNavigator(prog, read, []byte(src)).resolve(off)
 		if sym == nil {
-			t.Errorf("%q: nada encontrado", tc.at)
+			t.Errorf("%q: nothing found", tc.at)
 			continue
 		}
 		if !strings.Contains(sym.code+"\n"+sym.doc, tc.hover) {
@@ -328,7 +328,7 @@ func TestNavigationThreads(t *testing.T) {
 		}
 		sym, _ := newNavigator(prog, read, []byte(src)).resolve(off)
 		if sym == nil {
-			t.Errorf("%q: nada encontrado", tc.at)
+			t.Errorf("%q: nothing found", tc.at)
 			continue
 		}
 		if !strings.Contains(sym.code+"\n"+sym.doc, tc.hover) {
@@ -359,7 +359,7 @@ func TestNavigationChannels(t *testing.T) {
 		}
 		sym, _ := newNavigator(prog, read, []byte(src)).resolve(off)
 		if sym == nil {
-			t.Errorf("%q: nada encontrado", tc.at)
+			t.Errorf("%q: nothing found", tc.at)
 			continue
 		}
 		if !strings.Contains(sym.code+"\n"+sym.doc, tc.hover) {
@@ -389,7 +389,7 @@ func TestNavigationMutex(t *testing.T) {
 		}
 		sym, _ := newNavigator(prog, read, []byte(src)).resolve(off)
 		if sym == nil {
-			t.Errorf("%q: nada encontrado", tc.at)
+			t.Errorf("%q: nothing found", tc.at)
 			continue
 		}
 		if !strings.Contains(sym.code+"\n"+sym.doc, tc.hover) {

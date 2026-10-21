@@ -17,7 +17,7 @@ fn test_fnv_known_values() {
 }
 
 fn test_mix64() {
-    testing.check(hash.mix64(1) != hash.mix64(2), "valores diferentes espalham")
+    testing.check(hash.mix64(1) != hash.mix64(2), "different values spread out")
     testing.eq_uint(hash.mix64(12345), hash.mix64(12345))
 }
 
@@ -26,17 +26,17 @@ fn test_hash_interface() {
     b := 42
     testing.eq_uint(a.hash(), b.hash())
     testing.check(a.eq(&b), "int eq")
-    s := "texto"
-    t := "texto"
+    s := "text"
+    t := "text"
     testing.eq_uint(s.hash(), t.hash())
     buf := alloc([]byte, 5)
-    str.copy(&buf, "texto")
+    str.copy(&buf, "text")
     other := alloc([]byte, 5)
-    str.copy(&other, "texto")
+    str.copy(&other, "text")
     testing.eq_uint(buf.hash(), other.hash())
     testing.check(buf.eq(&other), "[]byte eq")
     other[0] = 'T'
-    testing.check(!buf.eq(&other), "[]byte diferente")
+    testing.check(!buf.eq(&other), "different []byte")
     free(buf)
     free(other)
 }

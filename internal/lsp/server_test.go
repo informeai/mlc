@@ -115,14 +115,14 @@ func TestSession(t *testing.T) {
 	resultInto(t, c.request("initialize", map[string]any{"capabilities": map[string]any{}}), &init)
 	for _, cap := range []string{"textDocumentSync", "documentFormattingProvider", "semanticTokensProvider"} {
 		if init.Capabilities[cap] == nil {
-			t.Errorf("falta a capacidade %s", cap)
+			t.Errorf("missing capability %s", cap)
 		}
 	}
 	c.notify("initialized", map[string]any{})
 
 	// type error on line 3 (position 2 in the LSP), not saved yet
 	uri := "file://" + filepath.Join(dir, "main.mlc")
-	bad := "import \"std/io\"\nfn main() {\n    x := \"olá\" + 1\n    io.print(x)\n}\n"
+	bad := "import \"std/io\"\nfn main() {\n    x := \"née\" + 1\n    io.print(x)\n}\n"
 	c.notify("textDocument/didOpen", map[string]any{"textDocument": map[string]any{"uri": uri, "languageId": "mlc", "version": 1, "text": bad}})
 	diags := c.diagnostics(uri)
 	if len(diags) != 1 || diags[0].Range.Start.Line != 2 {
@@ -159,16 +159,16 @@ func TestSession(t *testing.T) {
 	}
 	resultInto(t, c.request("textDocument/semanticTokens/full", map[string]any{"textDocument": map[string]any{"uri": uri}}), &toks)
 	if len(toks.Data) < 10 || toks.Data[3] != tKeyword || toks.Data[8] != tString {
-		t.Fatalf("semantic tokens inesperados: %v", toks.Data)
+		t.Fatalf("unexpected semantic tokens: %v", toks.Data)
 	}
 
 	// module: the error shows up in the module, which is checked through the main that imports it
 	modURI := "file://" + filepath.Join(dir, "geo.mlc")
-	main2 := "import \"std/io\"\nimport \"geo\"\nfn main() {\n    io.print(geo.dobro(2))\n}\n"
-	os.WriteFile(filepath.Join(dir, "geo.mlc"), []byte("pub fn dobro(x int) int {\n    return x * 2\n}\n"), 0o644)
+	main2 := "import \"std/io\"\nimport \"geo\"\nfn main() {\n    io.print(geo.double(2))\n}\n"
+	os.WriteFile(filepath.Join(dir, "geo.mlc"), []byte("pub fn double(x int) int {\n    return x * 2\n}\n"), 0o644)
 	c.notify("textDocument/didChange", map[string]any{"textDocument": map[string]any{"uri": uri, "version": 5}, "contentChanges": []any{map[string]any{"text": main2}}})
 	c.diagnostics(uri)
-	modBad := "pub fn dobro(x int) int {\n    return x * true\n}\n"
+	modBad := "pub fn double(x int) int {\n    return x * true\n}\n"
 	c.notify("textDocument/didOpen", map[string]any{"textDocument": map[string]any{"uri": modURI, "languageId": "mlc", "version": 1, "text": modBad}})
 	diags = c.diagnostics(modURI)
 	if len(diags) != 1 || diags[0].Range.Start.Line != 1 {
@@ -192,12 +192,12 @@ func TestSession(t *testing.T) {
 }
 
 func TestPositionsUTF16(t *testing.T) {
-	src := []byte("// ação 😀\nx\n")
+	src := []byte("// naïf 😀\nx\n")
 	l := newLineIndex(src)
-	if p := l.position(src, len("// ação 😀")); p.Line != 0 || p.Character != 10 {
+	if p := l.position(src, len("// naïf 😀")); p.Line != 0 || p.Character != 10 {
 		t.Fatalf("wrong UTF-16 position: %+v", p)
 	}
 	if p := l.end(src); p.Line != 2 || p.Character != 0 {
-		t.Fatalf("fim errado: %+v", p)
+		t.Fatalf("wrong end: %+v", p)
 	}
 }

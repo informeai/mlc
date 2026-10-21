@@ -91,7 +91,7 @@ fn uv(v uint64, want string) {
     hex_of(&b[:n], want)
     var back uint64 = 0
     testing.eq_int(binary.uvarint(&b[:n], &back), n)
-    testing.check(back == v, "uvarint ida e volta")
+    testing.check(back == v, "uvarint round trip")
 }
 
 fn test_uvarint() {

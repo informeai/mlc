@@ -4,9 +4,9 @@ import "std/testing"
 
 fn test_copy() {
     b := alloc([]byte, 8)
-    n := str.copy(&b, "olá")
-    testing.eq_int(n, 4) // "á" takes two bytes
-    testing.eq_str(&b[:n], "olá")
+    n := str.copy(&b, "née")
+    testing.eq_int(n, 4) // "é" takes two bytes
+    testing.eq_str(&b[:n], "née")
     free(b)
 }
 
@@ -67,7 +67,7 @@ fn test_parse_int() {
     testing.check(str.parse_int(&b[:n], &v), "the smallest int is valid")
     testing.eq_int(v, -9223372036854775807 - 1)
     n = str.copy(&b, "9223372036854775808")
-    testing.check(!str.parse_int(&b[:n], &v), "estoura int")
+    testing.check(!str.parse_int(&b[:n], &v), "overflows int")
     n = str.copy(&b, "12a")
     testing.check(!str.parse_int(&b[:n], &v), "12a is invalid")
     testing.check(!str.parse_int(&b[:0], &v), "empty is invalid")
@@ -92,8 +92,8 @@ fn test_eq() {
     n := str.copy(&b, "abc")
     testing.check(str.eq(&b[:n], "abc"), "abc == abc")
     testing.check(!str.eq(&b[:n], "abd"), "abc != abd")
-    testing.check(!str.eq(&b[:n], "ab"), "tamanhos diferentes")
-    testing.check(str.eq_bytes(&b[:2], &b[:2]), "mesmo buffer")
+    testing.check(!str.eq(&b[:n], "ab"), "different sizes")
+    testing.check(str.eq_bytes(&b[:2], &b[:2]), "same buffer")
     testing.check(!str.eq_bytes(&b[:2], &b[1:3]), "ab != bc")
     free(b)
 }
@@ -163,17 +163,17 @@ fn uint_of(s string, ok &bool) uint64 {
 fn test_parse_uint() {
     ok := false
     testing.eq_uint(uint_of("18446744073709551615", &ok), 18446744073709551615)
-    testing.check(ok, "o maior uint64")
+    testing.check(ok, "the largest uint64")
     testing.eq_uint(uint_of("0", &ok), 0)
     testing.check(ok, "zero")
     uint_of("18446744073709551616", &ok)
-    testing.check(!ok, "estoura")
+    testing.check(!ok, "overflows")
     uint_of("-1", &ok)
     testing.check(!ok, "unsigned")
     uint_of("", &ok)
     testing.check(!ok, "empty")
     uint_of("12a", &ok)
-    testing.check(!ok, "letra")
+    testing.check(!ok, "letter")
 }
 
 fn int_base(s string, base int, ok &bool) int {
@@ -216,11 +216,11 @@ fn test_parse_int_base_limits() {
     testing.eq_int(int_base("-8000000000000000", 16, &ok), -9223372036854775807 - 1)
     testing.check(ok, "the smallest int in hex")
     int_base("8000000000000000", 16, &ok)
-    testing.check(!ok, "o maior int + 1 estoura")
+    testing.check(!ok, "the largest int + 1 overflows")
     testing.eq_int(int_base("-1000000000000000000000000000000000000000000000000000000000000000", 2, &ok), -9223372036854775807 - 1)
     testing.check(ok, "the smallest int in binary")
     int_base("-1000000000000000000000000000000000000000000000000000000000000001", 2, &ok)
-    testing.check(!ok, "o menor int - 1 estoura")
+    testing.check(!ok, "the smallest int - 1 overflows")
     testing.eq_int(int_base("-9223372036854775808", 10, &ok), -9223372036854775807 - 1)
     testing.check(ok, "the smallest int in decimal")
 }

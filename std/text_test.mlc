@@ -6,7 +6,7 @@ fn test_classes() {
     testing.check(text.is_space(' ') && text.is_space('\t') && text.is_space('\n'), "spaces")
     testing.check(!text.is_space('a'), "a isn't a space")
     testing.check(text.is_digit('0') && text.is_digit('9') && !text.is_digit('a'), "digits")
-    testing.check(text.is_letter('a') && text.is_letter('Z') && !text.is_letter('1'), "letras")
+    testing.check(text.is_letter('a') && text.is_letter('Z') && !text.is_letter('1'), "letters")
 }
 
 fn test_search() {
@@ -30,11 +30,11 @@ fn test_search() {
 
 fn test_trim() {
     b := alloc([]byte, 16)
-    n := str.copy(&b, "  oi mundo \n")
+    n := str.copy(&b, "  hi world \n")
     s := &b[:n]
     start := text.trim_start(s)
     end := text.trim_end(s)
-    testing.eq_str(&b[start:end], "oi mundo")
+    testing.eq_str(&b[start:end], "hi world")
     m := str.copy(&b, " \t ")
     t := &b[:m]
     testing.eq_int(text.trim_start(t), 3)
@@ -63,11 +63,11 @@ fn test_fields() {
 
 fn test_case() {
     b := alloc([]byte, 16)
-    n := str.copy(&b, "Olá, MLC 1")
+    n := str.copy(&b, "Née, MLC 1")
     text.to_upper(&b[:n])
-    testing.eq_str(&b[:n], "OLá, MLC 1") // only ASCII changes
+    testing.eq_str(&b[:n], "NéE, MLC 1") // only ASCII changes
     text.to_lower(&b[:n])
-    testing.eq_str(&b[:n], "olá, mlc 1")
+    testing.eq_str(&b[:n], "née, mlc 1")
     free(b)
 }
 
@@ -92,7 +92,7 @@ fn test_split_next() {
 
 fn test_word_next() {
     b := alloc([]byte, 32)
-    n := str.copy(&b, "  um\tdois \n tres  ")
+    n := str.copy(&b, "  one\ttwo \n three  ")
     count := 0
     pos := 0
     for {
@@ -102,7 +102,7 @@ fn test_word_next() {
         }
         count++
         if count == 2 {
-            testing.eq_str(&b[w.start:w.end], "dois")
+            testing.eq_str(&b[w.start:w.end], "two")
         }
     }
     testing.eq_int(count, 3)

@@ -22,7 +22,7 @@ fn test_decode() {
 
 fn test_count_and_valid() {
     var b [16]byte
-    n := str.copy(&b, "maçã")
+    n := str.copy(&b, "café")
     testing.eq_int(utf8.count(&b[:n]), 4)
     testing.check(utf8.valid(&b[:n]), "valid")
     testing.check(!utf8.valid(&b[:n - 1]), "cut in the middle of a character")

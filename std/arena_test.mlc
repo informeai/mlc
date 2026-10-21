@@ -4,22 +4,22 @@ import "std/testing"
 
 fn test_pieces() {
     a := arena.new(16)
-    nome := a.copy_str("café")
+    name := a.copy_str("café")
     var src [8]byte
     k := str.copy(&src, "xyz")
-    outro := a.copy(&src[:k])
+    other := a.copy(&src[:k])
     zeros := a.alloc(4)
-    testing.check(a.eq(nome, "café"), "copy_str")
-    testing.check(a.eq(outro, "xyz"), "copy")
+    testing.check(a.eq(name, "café"), "copy_str")
+    testing.check(a.eq(other, "xyz"), "copy")
     testing.eq_int(a.len(zeros), 4)
     testing.eq_int(int(a.get(zeros, 3)), 0)
     a.set(zeros, 0, 'A')
     testing.eq_int(int(a.get(zeros, 0)), 65)
     var out [16]byte
-    n := a.text(nome, &out)
+    n := a.text(name, &out)
     testing.eq_str(&out[:n], "café")
-    a.check(outro)
-    testing.eq_str(&a.buf[outro.at:outro.at + outro.n], "xyz") // direct access
+    a.check(other)
+    testing.eq_str(&a.buf[other.at:other.at + other.n], "xyz") // direct access
     testing.eq_int(a.in_use(), 5 + 3 + 4)
     a.free()
 }
@@ -30,7 +30,7 @@ fn test_grows_and_keeps_spans() {
     for i := 0; i < 100; i++ {
         a.copy_str("0123456789")
     }
-    testing.check(a.capacity() >= 1003, "cresceu")
+    testing.check(a.capacity() >= 1003, "grew")
     testing.check(a.eq(first, "abc"), "the piece from before the growth is still valid")
     a.free()
 }
@@ -40,13 +40,13 @@ fn test_reserve_commit() {
     a.reserve(32)
     k := str.format(&a.buf[a.used:a.used + 32], "id={}", 42)
     s := a.commit(k)
-    testing.check(a.eq(s, "id=42"), "escrito direto")
+    testing.check(a.eq(s, "id=42"), "written directly")
     a.free()
 }
 
 fn test_reset_reuses() {
     a := arena.new(64)
-    a.copy_str("pedido 1")
+    a.copy_str("order 12")
     testing.eq_int(a.high_water(), 8)
     a.reset()
     testing.eq_int(a.in_use(), 0)

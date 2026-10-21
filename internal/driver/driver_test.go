@@ -30,7 +30,7 @@ func buildAndRun(t *testing.T, path string) (stdout, stderr string, code int) {
 	}
 	exe := filepath.Join(t.TempDir(), "prog")
 	if err := BuildOpts(filepath.Base(path), src, exe, dirLoader(path), Options{Sanitize: sanitize}); err != nil {
-		t.Fatalf("build falhou:\n%v", err)
+		t.Fatalf("build failed:\n%v", err)
 	}
 	var out, errOut bytes.Buffer
 	var args []string // x.args, if it exists: the arguments, one per line
@@ -99,7 +99,7 @@ func TestPanic(t *testing.T) {
 				t.Errorf("exit code %d, expected 2", code)
 			}
 			if want := readExpected(t, base+".out"); out != want {
-				t.Errorf("stdout:\n%q\nesperado:\n%q", out, want)
+				t.Errorf("stdout:\n%q\nexpected:\n%q", out, want)
 			}
 			if want := readExpected(t, base+".err"); errOut != want {
 				t.Errorf("stderr:\n%q\nesperado:\n%q", errOut, want)
@@ -138,11 +138,11 @@ func TestEvaluationOrderIsExplicit(t *testing.T) {
 	src := `import "std/io"
 fn a() int { return 1 }
 fn b() int { return 2 }
-fn soma(x int, y int) int { return x + y }
+fn sum(x int, y int) int { return x + y }
 fn main() {
-    io.print(soma(a(), b()), a() - b())
+    io.print(sum(a(), b()), a() - b())
 }`
-	csrc, err := Compile("ordem.mlc", []byte(src))
+	csrc, err := Compile("order.mlc", []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ fn main() {
 	})
 	for _, want := range []string{
 		// t1 is the io.Writer; the arguments go into t2 and t4, left to right
-		"t2 = (t3 = mlc_fn_a(), mlc_fn_soma(t3, mlc_fn_b()))",
+		"t2 = (t3 = mlc_fn_a(), mlc_fn_sum(t3, mlc_fn_b()))",
 		"t4 = (t5 = mlc_fn_a(), mlc_sub_i64(t5, mlc_fn_b(), __FILE__, __LINE__))",
 		// io.print computes every argument before writing
 		"t4 = (t5 = mlc_fn_a(), mlc_sub_i64(t5, mlc_fn_b(), __FILE__, __LINE__)), mlc_fn_m1_io__impl_Display__int__write(&t2, &t1)",
@@ -203,7 +203,7 @@ func TestLinkErrors(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "prog")
 	for _, src := range []string{
 		"import \"std/io\"\nlink \"naoexiste_mlc_123\"\nextern \"C\" fn abs(x int32) int32\nfn main() {\n    io.print(abs(1))\n}\n",
-		"import \"std/io\"\nextern \"C\" fn funcao_que_nao_existe_mlc(x int32) int32\nfn main() {\n    io.print(funcao_que_nao_existe_mlc(1))\n}\n",
+		"import \"std/io\"\nextern \"C\" fn function_that_does_not_exist_mlc(x int32) int32\nfn main() {\n    io.print(function_that_does_not_exist_mlc(1))\n}\n",
 	} {
 		err := Build("link.mlc", []byte(src), out)
 		var le *LinkError
@@ -227,21 +227,21 @@ func TestImportSearch(t *testing.T) {
 	}
 	write("proj/main.mlc", `import "std/io"
 import "util"
-import "texto"
+import "text"
 import "json/parse"
 import "dup"
 
 fn main() {
-    io.print(util.um(), texto.dois(), parse.tres(), dup.qual())
+    io.print(util.one(), text.two(), parse.three(), dup.which())
 }
 `)
-	write("proj/lib/util.mlc", "pub fn um() int {\n    return 1\n}\n")
-	write("proj/dup.mlc", "pub fn qual() string {\n    return \"projeto\"\n}\n")
-	write("extra/texto.mlc", "pub fn dois() int {\n    return 2\n}\n")
-	write("shared/json/parse.mlc", "import \"json/lexer\"\n\npub fn tres() int {\n    return lexer.um() + 2\n}\n")
-	write("shared/json/lexer.mlc", "pub fn um() int {\n    return 1\n}\n")
-	write("shared/dup.mlc", "pub fn qual() string {\n    return \"MLC_PATH\"\n}\n")
-	t.Setenv("MLC_PATH", filepath.Join(root, "nada")+string(os.PathListSeparator)+filepath.Join(root, "shared"))
+	write("proj/lib/util.mlc", "pub fn one() int {\n    return 1\n}\n")
+	write("proj/dup.mlc", "pub fn which() string {\n    return \"project\"\n}\n")
+	write("extra/text.mlc", "pub fn two() int {\n    return 2\n}\n")
+	write("shared/json/parse.mlc", "import \"json/lexer\"\n\npub fn three() int {\n    return lexer.one() + 2\n}\n")
+	write("shared/json/lexer.mlc", "pub fn one() int {\n    return 1\n}\n")
+	write("shared/dup.mlc", "pub fn which() string {\n    return \"MLC_PATH\"\n}\n")
+	t.Setenv("MLC_PATH", filepath.Join(root, "nothing")+string(os.PathListSeparator)+filepath.Join(root, "shared"))
 
 	mainPath := filepath.Join(root, "proj", "main.mlc")
 	src, _ := os.ReadFile(mainPath)
@@ -254,18 +254,18 @@ fn main() {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.TrimSpace(string(out)); got != "1 2 3 projeto" {
-		t.Errorf("output %q, expected \"1 2 3 projeto\"", got)
+	if got := strings.TrimSpace(string(out)); got != "1 2 3 project" {
+		t.Errorf("output %q, expected \"1 2 3 project\"", got)
 	}
 
-	// without -I, the module texto isn't found, and the message says where it looked
+	// without -I, the module text isn't found, and the message says where it looked
 	err = BuildOpts(mainPath, src, exe, os.ReadFile, Options{})
-	if err == nil || !strings.Contains(err.Error(), `file texto.mlc not found (searched in`) || !strings.Contains(err.Error(), "shared") {
+	if err == nil || !strings.Contains(err.Error(), `file text.mlc not found (searched in`) || !strings.Contains(err.Error(), "shared") {
 		t.Errorf("expected an unknown-module error with the folders, got %v", err)
 	}
 
 	// the editor's diagnostics find lib/ and MLC_PATH (-I is only for the command line)
-	write("proj/main2.mlc", "import \"std/io\"\nimport \"util\"\nimport \"json/parse\"\n\nfn main() {\n    io.print(util.um(), parse.tres())\n}\n")
+	write("proj/main2.mlc", "import \"std/io\"\nimport \"util\"\nimport \"json/parse\"\n\nfn main() {\n    io.print(util.one(), parse.three())\n}\n")
 	if errs := Diagnose(filepath.Join(root, "proj", "main2.mlc"), Overlay(nil)); len(errs) != 0 {
 		t.Errorf("the diagnostics didn't find the modules: %v", errs)
 	}
@@ -280,7 +280,7 @@ func TestTestRunner(t *testing.T) {
 	exe := filepath.Join(t.TempDir(), "prog")
 	prog, err := BuildTest(filepath.Base(path), src, exe, dirLoader(path), Options{})
 	if err != nil {
-		t.Fatalf("build falhou:\n%v", err)
+		t.Fatalf("build failed:\n%v", err)
 	}
 	names := prog.Tests
 	want := []struct {
@@ -330,7 +330,7 @@ func TestStdLibrary(t *testing.T) {
 	requireCC(t)
 	files, _ := filepath.Glob("../../std/*_test.mlc")
 	if len(files) == 0 {
-		t.Fatal("nenhum std/*_test.mlc")
+		t.Fatal("no std/*_test.mlc")
 	}
 	for _, path := range files {
 		t.Run(filepath.Base(path), func(t *testing.T) {
@@ -338,7 +338,7 @@ func TestStdLibrary(t *testing.T) {
 			exe := filepath.Join(t.TempDir(), "prog")
 			prog, err := BuildTest("std/"+filepath.Base(path), src, exe, os.ReadFile, Options{Sanitize: sanitize})
 			if err != nil {
-				t.Fatalf("build falhou:\n%v", err)
+				t.Fatalf("build failed:\n%v", err)
 			}
 			for i, name := range prog.Tests {
 				if r := RunTest(exe, i, name); r.Status != Passed {
@@ -357,7 +357,7 @@ func TestFFIOutHandle(t *testing.T) {
 	path := filepath.Join(testsDir, "ffi", "out_handle.mlc")
 	exe := filepath.Join(dir, "prog")
 	if err := BuildOpts(filepath.Base(path), []byte(readExpected(t, path)), exe, dirLoader(path), Options{LibDirs: []string{dir}, Sanitize: sanitize}); err != nil {
-		t.Fatalf("build falhou:\n%v", err)
+		t.Fatalf("build failed:\n%v", err)
 	}
 	out, err := exec.Command(exe).CombinedOutput()
 	if err != nil {
@@ -375,7 +375,7 @@ func TestBenchRunner(t *testing.T) {
 	exe := filepath.Join(t.TempDir(), "prog")
 	prog, err := BuildTest(filepath.Base(path), []byte(readExpected(t, path)), exe, dirLoader(path), Options{})
 	if err != nil {
-		t.Fatalf("build falhou:\n%v", err)
+		t.Fatalf("build failed:\n%v", err)
 	}
 	if fmt.Sprint(prog.Benches) != "[bench_sum bench_panics]" {
 		t.Fatalf("benchmarks: %v", prog.Benches)
@@ -403,7 +403,7 @@ func counterLib(t *testing.T) string {
 	dir := t.TempDir()
 	obj := filepath.Join(dir, "counter.o")
 	if out, err := exec.Command(cc, "-c", "-o", obj, filepath.Join(testsDir, "ffi", "counter.c")).CombinedOutput(); err != nil {
-		t.Fatalf("compilando counter.c: %v\n%s", err, out)
+		t.Fatalf("compiling counter.c: %v\n%s", err, out)
 	}
 	if out, err := exec.Command("ar", "rcs", filepath.Join(dir, "libcounter.a"), obj).CombinedOutput(); err != nil {
 		t.Fatalf("ar: %v\n%s", err, out)
@@ -431,20 +431,20 @@ func TestCCFlags(t *testing.T) {
 		t.Errorf("output %q", got)
 	}
 
-	err := BuildOpts("p.mlc", src, exe, os.ReadFile, Options{CFlags: []string{"-fnao-existe-mlc"}})
+	err := BuildOpts("p.mlc", src, exe, os.ReadFile, Options{CFlags: []string{"-fdoes-not-exist-mlc"}})
 	if err == nil || !strings.Contains(err.Error(), "refused the compilation with the flags") || strings.HasPrefix(err.Error(), "internal error:") {
 		t.Errorf("an invalid flag should point at the flag, not an internal error: %v", err)
 	}
 
-	err = BuildOpts("p.mlc", src, exe, os.ReadFile, Options{LDFlags: []string{"-lnao-existe-mlc"}})
+	err = BuildOpts("p.mlc", src, exe, os.ReadFile, Options{LDFlags: []string{"-ldoes-not-exist-mlc"}})
 	var le *LinkError
-	if !errors.As(err, &le) || !strings.Contains(err.Error(), "link flags (-lnao-existe-mlc)") {
+	if !errors.As(err, &le) || !strings.Contains(err.Error(), "link flags (-ldoes-not-exist-mlc)") {
 		t.Errorf("invalid ldflag: %v", err)
 	}
 
-	t.Setenv("CFLAGS", "-fnao-existe-ambiente")
+	t.Setenv("CFLAGS", "-fdoes-not-exist-env")
 	err = BuildOpts("p.mlc", src, exe, os.ReadFile, Options{})
-	if err == nil || !strings.Contains(err.Error(), "-fnao-existe-ambiente") {
+	if err == nil || !strings.Contains(err.Error(), "-fdoes-not-exist-env") {
 		t.Errorf("the environment's CFLAGS should apply: %v", err)
 	}
 	t.Setenv("CFLAGS", "")

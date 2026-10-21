@@ -8,7 +8,7 @@ import "std/testing"
 fn test_sort_small() {
     a := [5]int{5, 1, 4, 2, 3}
     sort.sort(&a)
-    testing.check(a == [5]int{1, 2, 3, 4, 5}, "ordenado")
+    testing.check(a == [5]int{1, 2, 3, 4, 5}, "sorted")
     testing.check(sort.is_sorted(&a), "is_sorted")
 }
 
@@ -73,7 +73,7 @@ fn test_sort_by() {
         p[i] = Person{name: "x", age: (i * 7) % 20}
     }
     sort.sort_by(&p, by_age)
-    testing.check(sort.is_sorted_by(&p, by_age), "por idade")
+    testing.check(sort.is_sorted_by(&p, by_age), "by age")
     testing.eq_int(p[0].age, 0)
     testing.eq_int(p[19].age, 19)
     free(p)
@@ -101,16 +101,16 @@ impl auto cmp.Ord for Item
 fn test_sort_structs() {
     items := [4]Item{Item{price: 30, name: "c"}, Item{price: 10, name: "b"}, Item{price: 10, name: "a"}, Item{price: 20, name: "d"}}
     sort.sort(&items)
-    testing.check(sort.is_sorted(&items), "ordenado")
+    testing.check(sort.is_sorted(&items), "sorted")
     testing.eq_int(items[0].price, 10)
     testing.check(items[0].name == "a" && items[1].name == "b", "tie on price: the name decides")
     testing.eq_int(items[3].price, 30)
 }
 
 fn test_sort_strings() {
-    w := [4]string{"pera", "abacaxi", "maçã", "banana"}
+    w := [4]string{"pear", "pineapple", "jalapeño", "banana"}
     sort.sort(&w)
-    testing.check(w == [4]string{"abacaxi", "banana", "maçã", "pera"}, "strings")
+    testing.check(w == [4]string{"banana", "jalapeño", "pear", "pineapple"}, "strings")
 }
 
 fn line(s string) []byte {
@@ -130,7 +130,7 @@ fn test_sort_owned_lines() {
         free(old)
     }
     sort.sort(&lines) // owners swapped by ownership (more than 16: uses quicksort)
-    testing.check(sort.is_sorted(&lines), "linhas ordenadas")
+    testing.check(sort.is_sorted(&lines), "sorted lines")
     testing.eq_str(&lines[0], "a0")
     testing.eq_str(&lines[39], "d9")
     sort.reverse(&lines)

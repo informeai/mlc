@@ -35,7 +35,7 @@ var (
 	Float64 = &Basic{"float64"}
 
 	UntypedInt   = &Basic{"integer constant"}
-	UntypedFloat = &Basic{"constante decimal"}
+	UntypedFloat = &Basic{"decimal constant"}
 )
 
 type intKind struct {

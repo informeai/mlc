@@ -18,8 +18,8 @@ fn test_int_ops() {
 fn test_bool_ops() {
     b := atomic.new_bool(false)
     testing.check(!b.load(), "starts false")
-    testing.check(!b.swap(true), "swap devolve o antigo")
-    testing.check(b.load(), "agora true")
+    testing.check(!b.swap(true), "swap returns the old one")
+    testing.check(b.load(), "now true")
     testing.check(b.compare_swap(true, false), "swaps from true to false")
     b.store(true)
     testing.check(b.load(), "store")

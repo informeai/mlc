@@ -28,7 +28,7 @@ fn test_ownership_round_trip() {
 
 fn nothing(n int) {
     if n < 0 {
-        testing.fail("nunca")
+        testing.fail("never")
     }
 }
 

@@ -80,7 +80,7 @@ fn serve_echo(e *Echo) int {
                 Ok(n) => {
                     got = n
                     var resp [80]byte
-                    k := str.copy(&resp, "eco: ")
+                    k := str.copy(&resp, "echo: ")
                     k += str.copy_bytes(&resp[k:], &buf[:n])
                     t.write(&resp[:k])
                 }
@@ -123,7 +123,7 @@ fn start(dir &[]byte, port &int) ?*thread.Thread[int] {
 // that need it don't run (make_cert returns -1)
 fn test_available() {
     if tls.available() {
-        testing.check(true, "a libssl foi achada")
+        testing.check(true, "libssl was found")
     }
 }
 
@@ -148,11 +148,11 @@ fn test_round_trip() {
     c := tls.connect_str("localhost", port, &err)
     if c != nil {
         var msg [16]byte
-        k := str.copy(&msg, "olá, tls")
+        k := str.copy(&msg, "née, tls")
         c.write(&msg[:k])
         var buf [64]byte
         match c.read(&buf) {
-            Ok(n) => testing.eq_str(&buf[:n], "eco: olá, tls")
+            Ok(n) => testing.eq_str(&buf[:n], "echo: née, tls")
             Err(code) => testing.eq_int(code, 0)
         }
         c.close()
@@ -227,7 +227,7 @@ fn test_server_files_missing() {
         return
     }
     err := 0
-    srv := tls.new_server_str("/nao/existe.pem", "/nao/existe.pem", &err)
+    srv := tls.new_server_str("/does/not/exist.pem", "/does/not/exist.pem", &err)
     testing.check(srv == nil, "without files")
     testing.eq_int(err, tls.SERVER_FILES)
     if srv != nil {
@@ -241,11 +241,11 @@ struct App {
     hits int
 }
 
-fn h_ola(c &tls.Conn, m &http.Message, p &http.Params, app &App) {
+fn h_hello(c &tls.Conn, m &http.Message, p &http.Params, app &App) {
     app.hits++
     var body [64]byte
-    n := str.copy(&body, "olá, ")
-    n += p.get("nome", &body[n:])
+    n := str.copy(&body, "née, ")
+    n += p.get("name", &body[n:])
     http.respond(c, 200, "text/plain", &body[:n])
 }
 
@@ -260,7 +260,7 @@ fn serve_https(s *Site) int {
     srv := s.srv
     free(s)
     var r http.Router[tls.Conn, App]
-    r.handle("GET", "/ola/{nome}", h_ola)
+    r.handle("GET", "/hello/{name}", h_hello)
     var app App
     err := 0
     c := l.accept(&err)
@@ -307,11 +307,11 @@ fn test_https_router_and_client() {
     port := l.port()
     t := thread.spawn(serve_https, alloc(Site{l: l, srv: srv}), thread.STACK_256KB)
     var addr [64]byte
-    n := str.format(&addr, "https://localhost:{}/ola/mundo", port)
+    n := str.format(&addr, "https://localhost:{}/hello/world", port)
     var m http.Message
     var body [64]byte
     match http.request("GET", &addr[:n], "", &addr[:0], &m, &body) {
-        Ok(k) => testing.eq_str(&body[:k], "olá, mundo")
+        Ok(k) => testing.eq_str(&body[:k], "née, world")
         Err(code) => testing.eq_int(code, 0)
     }
     testing.eq_int(m.status(), 200)

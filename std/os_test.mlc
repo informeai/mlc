@@ -18,7 +18,7 @@ fn test_args() {
 
 fn test_getenv() {
     buf := alloc([]byte, 4096)
-    match os.getenv("MLC_VARIAVEL_QUE_NAO_EXISTE", &buf) {
+    match os.getenv("MLC_VARIABLE_THAT_DOES_NOT_EXIST", &buf) {
         Ok(_) => testing.fail("the variable doesn't exist")
         Err(code) => testing.eq_int(code, os.NOT_FOUND)
     }
@@ -35,14 +35,14 @@ fn test_getenv() {
 
 fn test_setenv() {
     var v [16]byte
-    n := str.copy(&v, "valor-mlc")
+    n := str.copy(&v, "value-mlc")
     match os.setenv("MLC_TESTE_SETENV", &v[:n]) {
         Ok(_) => {}
         Err(code) => testing.eq_int(code, 0)
     }
     var out [32]byte
     match os.getenv("MLC_TESTE_SETENV", &out) {
-        Ok(k) => testing.eq_str(&out[:k], "valor-mlc")
+        Ok(k) => testing.eq_str(&out[:k], "value-mlc")
         Err(code) => testing.eq_int(code, 0)
     }
 }
@@ -56,7 +56,7 @@ fn test_cwd_chdir() {
     }
     var out [4096]byte
     match os.cwd(&out) {
-        Ok(k) => testing.check(k >= 4, "cwd tem o caminho") // on macOS, /tmp is /private/tmp
+        Ok(k) => testing.check(k >= 4, "cwd has the path") // on macOS, /tmp is /private/tmp
         Err(code) => testing.eq_int(code, 0)
     }
 }

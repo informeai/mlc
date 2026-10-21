@@ -212,7 +212,7 @@ func WriteIndex(w io.Writer) {
 		fmt.Fprintf(w, "  %-10s %s\n", n, short(summary(Header(text)), 66))
 	}
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Embutidos: alloc, free, realloc, len, take, replace, drain, drop, io.print,")
+	fmt.Fprintln(w, "Built-ins: alloc, free, realloc, len, take, replace, drain, drop, io.print,")
 	fmt.Fprintln(w, "io.printf, thread.spawn, the types (int, byte, string...) and the generic")
 	fmt.Fprintln(w, "constraints (any, owned, ref...): mlc doc builtin lists them all.")
 	fmt.Fprintln(w)
