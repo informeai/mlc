@@ -168,7 +168,7 @@ void mlc_check_slice(int64_t lo, int64_t hi, int64_t len, const char *file, int 
     }                                                                                  \
     static inline T mlc_shr_##S(T a, int64_t n, const char *file, int line) {         \
         if (n < 0 || n >= BITS) mlc_shift_panic(n, BITS, file, line);                \
-        if (SIGNED && a < 0) return (T)~((T)~a >> n);                                 \
+        if (SIGNED && ((UT)a >> (BITS - 1))) return (T)~((T)~a >> n);                \
         return (T)(a >> n);                                                            \
     }                                                                                  \
     static inline T mlc_addw_##S(T a, T b) { return (T)((UT)a + (UT)b); }             \

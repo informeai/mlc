@@ -3,6 +3,10 @@
 #ifndef MLC_SIM_FREERTOS_H
 #define MLC_SIM_FREERTOS_H
 #include <stdint.h>
+#include <time.h>
+
+/* newlib's struct tm (ESP-IDF's C library) has no tm_gmtoff */
+#define tm_gmtoff tm_gmtoff_is_not_in_newlib
 
 typedef int BaseType_t;
 typedef unsigned int UBaseType_t;

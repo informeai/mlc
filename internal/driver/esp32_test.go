@@ -2,6 +2,8 @@ package driver
 
 import (
 	"bytes"
+	"debug/elf"
+	"debug/macho"
 	"errors"
 	"io/fs"
 	"os"
@@ -81,13 +83,14 @@ func esp32Common(t *testing.T) []string {
 }
 
 // simCompile compiles a C file of the simulated component into obj, as ESP-IDF
-// would (ESP_PLATFORM), with -Werror like the other tests.
+// would (ESP_PLATFORM, and the _GNU_SOURCE and -Wtype-limits of its build), with
+// -Werror like the other tests.
 func simCompile(obj, src string, extra ...string) (string, error) {
 	cc := os.Getenv("CC")
 	if cc == "" {
 		cc = "cc"
 	}
-	args := append([]string{"-std=c11", "-O2", "-Wall", "-Werror", "-Wno-unused-function", "-DESP_PLATFORM", "-I", esp32Sim, "-I", filepath.Dir(src)}, extra...)
+	args := append([]string{"-std=c11", "-O2", "-Wall", "-Werror", "-Wno-unused-function", "-Wtype-limits", "-DESP_PLATFORM", "-D_GNU_SOURCE", "-I", esp32Sim, "-I", filepath.Dir(src)}, extra...)
 	args = append(args, "-c", "-o", obj, src)
 	out, err := exec.Command(cc, args...).CombinedOutput()
 	return src + ": " + string(out), err
@@ -180,11 +183,11 @@ var esp32Allowed = map[string]bool{
 	"atan2": true, "atoi": true, "atoll": true, "calloc": true, "ceil": true, "clock_gettime": true, "close": true,
 	"cos": true, "difftime": true, "exit": true, "exp": true, "ferror": true, "fflush": true, "floor": true,
 	"fprintf": true, "fputc": true, "fputs": true, "free": true, "fwrite": true, "getchar": true, "getenv": true,
-	"gmtime_r": true, "localtime_r": true, "log": true, "memcmp": true, "memcpy": true, "memmove": true,
-	"memset": true, "mktime": true, "nanosleep": true, "open": true, "pow": true, "putchar": true, "read": true,
+	"gmtime_r": true, "localtime_r": true, "log": true, "malloc": true, "memcmp": true, "memcpy": true, "memmove": true,
+	"memset": true, "mktime": true, "open": true, "pow": true, "putchar": true, "read": true,
 	"realloc": true, "round": true, "setenv": true, "sin": true, "snprintf": true, "sqrt": true, "strchr": true,
 	"strcmp": true, "strerror": true, "strftime": true, "strlen": true, "strtod": true, "tan": true,
-	"vfprintf": true, "write": true,
+	"usleep": true, "vfprintf": true, "write": true,
 	"esp_fill_random": true, "pxTaskGetStackStart": true,
 }
 
@@ -227,6 +230,50 @@ func TestESP32Symbols(t *testing.T) {
 	if len(bad) > 0 {
 		t.Errorf("the ESP32 runtime calls what ESP-IDF doesn't have (or what isn't in esp32Allowed yet): %s", strings.Join(bad, " "))
 	}
+}
+
+// TestESP32ThreadLocal: the runtime's _Thread_local variables stay small.
+// ESP-IDF reserves them in the stack of every FreeRTOS task, the system's
+// ones too (its main task has 3.5 KB): with the 6 KB of str.format and log
+// buffers there, the chip failed to start before app_main. Big per-thread
+// buffers come from the heap.
+func TestESP32ThreadLocal(t *testing.T) {
+	requireCC(t)
+	common := esp32Common(t)
+	size, err := threadLocalSize(common[0])
+	if err != nil {
+		t.Skip(err)
+	}
+	if size > 128 {
+		t.Errorf("the ESP32 runtime has %d bytes of _Thread_local variables; every FreeRTOS task pays them in its stack (keep them under 128, big buffers on the heap)", size)
+	}
+}
+
+// threadLocalSize is the size of the thread-local data of an object file
+// (ELF .tdata/.tbss, Mach-O __thread_data/__thread_bss).
+func threadLocalSize(obj string) (uint64, error) {
+	if f, err := elf.Open(obj); err == nil {
+		defer f.Close()
+		var n uint64
+		for _, s := range f.Sections {
+			if s.Flags&elf.SHF_TLS != 0 {
+				n += s.Size
+			}
+		}
+		return n, nil
+	}
+	f, err := macho.Open(obj)
+	if err != nil {
+		return 0, errors.New("object format not ELF nor Mach-O")
+	}
+	defer f.Close()
+	var n uint64
+	for _, s := range f.Sections {
+		if s.Name == "__thread_data" || s.Name == "__thread_bss" {
+			n += s.Size
+		}
+	}
+	return n, nil
 }
 
 // TestESP32Externs: every extern fn of a module the ESP32 has is defined in

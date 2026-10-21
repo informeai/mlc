@@ -3,7 +3,9 @@
 #define _POSIX_C_SOURCE 200809L
 #define _DEFAULT_SOURCE
 #define _DARWIN_C_SOURCE
+#ifndef _GNU_SOURCE /* ESP-IDF already defines it */
 #define _GNU_SOURCE /* pthread_getattr_np, to find the stack on Linux */
+#endif
 
 /* ESP-IDF (ESP32): the program runs in a FreeRTOS task, not in a process.
  * The modules that need a desktop system (fs, process, net, signal, sqlite
@@ -801,8 +803,19 @@ void mlc_std_time_sleep_ms(int64_t ms, const char *file, int line) {
     (void)file;
     (void)line;
     if (ms <= 0) return;
+#if defined(MLC_EMBEDDED)
+    /* ESP-IDF has no nanosleep; its usleep yields to FreeRTOS (vTaskDelay)
+     * for the whole ticks. One second at a time keeps the microseconds in
+     * usleep's 32 bits. */
+    while (ms > 0) {
+        int64_t part = ms < 1000 ? ms : 1000;
+        usleep((useconds_t)(part * 1000));
+        ms -= part;
+    }
+#else
     struct timespec ts = {(time_t)(ms / 1000), (long)(ms % 1000) * 1000000};
     nanosleep(&ts, NULL);
+#endif
 }
 
 /* std/vec */
@@ -845,13 +858,19 @@ typedef struct {
     int64_t cap, len, needed;
 } mlc_sink;
 
-/* Per thread: each thread has its own str.format calls in progress. */
-static _Thread_local mlc_sink mlc_sinks[64];
+/* Per thread: each thread has its own str.format calls in progress. The
+ * array comes from the heap at the thread's first str.format and goes back
+ * when the thread ends (mlc_thread_buffers_free): ESP-IDF reserves the
+ * _Thread_local variables in the stack of every FreeRTOS task, the system's
+ * too, and some of those have less than 2 KB. */
+#define MLC_SINK_MAX 64
+static _Thread_local mlc_sink *mlc_sinks = NULL;
 static _Thread_local int64_t mlc_sink_depth = 0;
 
 int64_t mlc_sink_push(mlc_sl_byte *dst, const char *file, int line) {
-    if (mlc_sink_depth == (int64_t)(sizeof mlc_sinks / sizeof mlc_sinks[0]))
-        mlc_panic(file, line, "str.format nested more than 64 levels deep");
+    if (mlc_sink_depth == MLC_SINK_MAX) mlc_panic(file, line, "str.format nested more than 64 levels deep");
+    if (mlc_sinks == NULL && (mlc_sinks = malloc(MLC_SINK_MAX * sizeof *mlc_sinks)) == NULL)
+        mlc_panic(file, line, "out of memory");
     mlc_sinks[mlc_sink_depth] = (mlc_sink){dst->ptr, dst->len, 0, 0};
     return mlc_sink_depth++;
 }
@@ -1104,10 +1123,13 @@ void mlc_std_testing_expect_panic(const char *file, int line) {
  * start) is allocated by the generated code with mlc_alloc and freed on join; the
  * stack is the system's (pthread), with the size asked for in spawn. */
 
+static void mlc_thread_buffers_free(void);
+
 static void *mlc_thread_entry(void *p) {
     mlc_thread *t = p;
     mlc_stack_init();
     t->run(t);
+    mlc_thread_buffers_free();
     t->done = 1;
     return NULL;
 }
@@ -1999,7 +2021,7 @@ void mlc_std_log_emit_raw(mlc_log *l, int64_t level, mlc_sl_byte *msg, const cha
         struct tm lt;
         localtime_r(&t, &lt);
         n += strftime(buf, 32, "%Y-%m-%dT%H:%M:%S", &lt);
-        long off = lt.tm_gmtoff / 60;
+        long off = (long)(mlc_std_time_local_offset((int64_t)t * 1000, file, line) / 60);
         char sign = off < 0 ? '-' : '+';
         if (off < 0) off = -off;
         n += (size_t)snprintf(buf + n, 32, ".%03ld%c%02ld:%02ld ", ts.tv_nsec / 1000000, sign, off / 60, off % 60);
@@ -2031,20 +2053,30 @@ void mlc_std_log_emit_raw(mlc_log *l, int64_t level, mlc_sl_byte *msg, const cha
  * something while it's written; whatever goes past LINE bytes is left out. */
 
 #define MLC_LOG_LINE 2048
-static _Thread_local uint8_t mlc_log_bufs[2][MLC_LOG_LINE];
+static _Thread_local uint8_t *mlc_log_bufs = NULL; /* 2 lines, from the heap like mlc_sinks */
 static _Thread_local int mlc_log_depth = 0;
+
+/* mlc_thread_buffers_free gives back, when a thread ends, what its
+ * str.format and log calls took from the heap. */
+static void mlc_thread_buffers_free(void) {
+    free(mlc_sinks);
+    mlc_sinks = NULL;
+    free(mlc_log_bufs);
+    mlc_log_bufs = NULL;
+}
 
 bool mlc_log_enabled(void *l, int64_t level) { return level >= ((mlc_log *)l)->level; }
 
 int64_t mlc_log_begin(const char *file, int line) {
     if (mlc_log_depth == 2) mlc_panic(file, line, "log: logging inside logging inside logging");
-    mlc_sl_byte d = {mlc_log_bufs[mlc_log_depth++], MLC_LOG_LINE};
+    if (mlc_log_bufs == NULL && (mlc_log_bufs = malloc(2 * MLC_LOG_LINE)) == NULL) mlc_panic(file, line, "out of memory");
+    mlc_sl_byte d = {mlc_log_bufs + mlc_log_depth++ * MLC_LOG_LINE, MLC_LOG_LINE};
     return mlc_sink_push(&d, file, line);
 }
 
 void mlc_log_end(void *l, int64_t level, int64_t sink, const char *file, int line) {
     int64_t n = mlc_sink_pop_trunc(sink, file, line);
-    mlc_sl_byte m = {mlc_log_bufs[--mlc_log_depth], n};
+    mlc_sl_byte m = {mlc_log_bufs + --mlc_log_depth * MLC_LOG_LINE, n};
     mlc_std_log_emit_raw((mlc_log *)l, level, &m, file, line);
 }
 

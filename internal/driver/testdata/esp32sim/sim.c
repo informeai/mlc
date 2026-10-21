@@ -2,7 +2,9 @@
  * asked stack, and main plays the role of the ESP-IDF startup (calls app_main;
  * the process ends when the last task does). */
 #define _DARWIN_C_SOURCE
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #include <pthread.h>
 #include <stdlib.h>
 
