@@ -102,7 +102,7 @@ func TestPanic(t *testing.T) {
 				t.Errorf("stdout:\n%q\nexpected:\n%q", out, want)
 			}
 			if want := readExpected(t, base+".err"); errOut != want {
-				t.Errorf("stderr:\n%q\nesperado:\n%q", errOut, want)
+				t.Errorf("stderr:\n%q\nexpected:\n%q", errOut, want)
 			}
 		})
 	}

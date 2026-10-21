@@ -5,36 +5,50 @@
 #define _DARWIN_C_SOURCE
 #define _GNU_SOURCE /* pthread_getattr_np, to find the stack on Linux */
 
+/* ESP-IDF (ESP32): the program runs in a FreeRTOS task, not in a process.
+ * The modules that need a desktop system (fs, process, net, signal, sqlite
+ * and tls) stay out, and mlc build -target esp32 refuses their import. See
+ * docs/esp32.md. */
+#if defined(ESP_PLATFORM)
+#define MLC_EMBEDDED 1
+#endif
+
 #include "mlc_runtime.h"
 
-#include <dirent.h>
-#include <dlfcn.h> /* std/sqlite: the library is loaded only when used */
 #include <errno.h>
 #include <fcntl.h>
-#include <spawn.h>
 #include <stdarg.h>
 #include <float.h>
 #include <inttypes.h>
 #include <math.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <stddef.h>
-#include <poll.h>
 #include <pthread.h>
-#include <signal.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <time.h>
+#include <unistd.h>
+#ifdef MLC_EMBEDDED
+#include "esp_random.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#else
+#include <dirent.h>
+#include <dlfcn.h> /* std/sqlite: the library is loaded only when used */
+#include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <poll.h>
+#include <signal.h>
+#include <spawn.h>
 #if defined(__APPLE__) || defined(__linux__)
 #include <sys/random.h> /* getentropy */
 #endif
 #include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/time.h>
 #include <sys/wait.h>
-#include <time.h>
-#include <unistd.h>
+#endif
 
 /* Atomics: tests and allocations can happen in several threads. */
 static _Atomic int64_t mlc_test_failures = 0;        /* checks that failed in the test */
@@ -388,6 +402,7 @@ void mlc_std_os_exit(int64_t code, const char *file, int line) {
     exit((int)code);
 }
 
+#ifndef MLC_EMBEDDED
 /* std/fs: the path comes from a []byte, without '\0' at the end; it's copied to the stack. */
 static int mlc_cpath(char *out, size_t cap, mlc_sl_byte *p) {
     if (p->len <= 0 || p->len >= (int64_t)cap) return 0;
@@ -627,6 +642,8 @@ int64_t mlc_std_fs_rename_raw(mlc_sl_byte *from, mlc_sl_byte *to, const char *fi
     return rename(a, b) == 0 ? 0 : mlc_fs_err(errno);
 }
 
+#endif /* !MLC_EMBEDDED */
+
 /* std/os: environment and current directory. */
 int64_t mlc_std_os_setenv_raw(mlc_str name, mlc_sl_byte *value, const char *file, int line) {
     (void)file;
@@ -640,6 +657,21 @@ int64_t mlc_std_os_setenv_raw(mlc_str name, mlc_sl_byte *value, const char *file
     return setenv(n, v, 1) == 0 ? 0 : -errno;
 }
 
+#ifdef MLC_EMBEDDED
+int64_t mlc_std_os_cwd_raw(mlc_sl_byte *dst, const char *file, int line) {
+    (void)dst;
+    (void)file;
+    (void)line;
+    return -ENOSYS;
+}
+
+int64_t mlc_std_os_chdir_raw(mlc_sl_byte *path, const char *file, int line) {
+    (void)path;
+    (void)file;
+    (void)line;
+    return -ENOSYS;
+}
+#else
 int64_t mlc_std_os_cwd_raw(mlc_sl_byte *dst, const char *file, int line) {
     (void)file;
     (void)line;
@@ -655,7 +687,9 @@ int64_t mlc_std_os_chdir_raw(mlc_sl_byte *path, const char *file, int line) {
     if (!mlc_cpath(p, sizeof p, path)) return -ENAMETOOLONG;
     return chdir(p) == 0 ? 0 : -errno;
 }
+#endif
 
+#ifndef MLC_EMBEDDED
 /* std/process: runs a program. args has the arguments separated by '\0'
  * (count of them, the first is the program, looked up in the PATH). With capture, the
  * program's standard output goes into out; what doesn't fit is read and
@@ -721,6 +755,8 @@ int64_t mlc_std_process_run_raw(mlc_sl_byte *args, int64_t count, mlc_sl_byte *o
     return overflow ? -1000 : got;
 }
 
+#endif /* !MLC_EMBEDDED */
+
 /* std/rand: random bytes from the operating system (getentropy, the kernel's
  * cryptographic source), in pieces of up to 256 bytes, its limit. If
  * the system doesn't deliver, it panics: there's no safe alternative. */
@@ -729,7 +765,11 @@ void mlc_std_rand_secure(mlc_sl_byte *dst, const char *file, int line) {
     while (done < dst->len) {
         size_t n = (size_t)(dst->len - done);
         if (n > 256) n = 256;
-#if defined(__APPLE__) || defined(__linux__)
+#if defined(MLC_EMBEDDED)
+        (void)file;
+        (void)line;
+        esp_fill_random(dst->ptr + done, n); /* the hardware generator (true random with the radio on) */
+#elif defined(__APPLE__) || defined(__linux__)
         if (getentropy(dst->ptr + done, n) != 0) mlc_panic(file, line, "rand.secure: the system didn't deliver random bytes");
 #else
         FILE *f = fopen("/dev/urandom", "rb");
@@ -866,7 +906,14 @@ _Thread_local uintptr_t mlc_stack_low = 0;
  * as the checker's (checker.StackReserve): 1/8 of the stack, between 4 KB and 32 KB. */
 void mlc_stack_init(void) {
     uintptr_t low = 0, size = 0;
-#if defined(__APPLE__)
+#if defined(MLC_EMBEDDED)
+    /* a FreeRTOS task: the stack starts (lowest address) at pxTaskGetStackStart
+     * and grows down; this is called at the task's start, so almost all of it is
+     * between here and there */
+    uint8_t here;
+    low = (uintptr_t)pxTaskGetStackStart(NULL);
+    size = (uintptr_t)&here - low;
+#elif defined(__APPLE__)
     pthread_t self = pthread_self();
     size = (uintptr_t)pthread_get_stacksize_np(self);
     low = (uintptr_t)pthread_get_stackaddr_np(self) - size; /* the address is the top */
@@ -1067,9 +1114,13 @@ static void *mlc_thread_entry(void *p) {
 
 void mlc_thread_start(mlc_thread *t, void (*run)(mlc_thread *), int64_t stack, const char *file, int line) {
     if (stack < 16384) mlc_panic(file, line, "thread.spawn: the stack must have at least 16 KB (thread.STACK_64KB, for example)");
+#ifdef MLC_EMBEDDED
+    size_t size = (size_t)stack; /* a FreeRTOS task: no pages */
+#else
     long page = sysconf(_SC_PAGESIZE);
     if (page <= 0) page = 4096;
     size_t size = (size_t)((stack + page - 1) / page * page); /* macOS requires a multiple of the page */
+#endif
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     if (pthread_attr_setstacksize(&attr, size) != 0) {
@@ -1090,7 +1141,11 @@ void mlc_thread_join(mlc_thread *t, const char *file, int line) {
 int64_t mlc_std_thread_cpu_count(const char *file, int line) {
     (void)file;
     (void)line;
-#ifdef _SC_NPROCESSORS_ONLN
+#if defined(MLC_EMBEDDED) && defined(configNUMBER_OF_CORES)
+    return configNUMBER_OF_CORES;
+#elif defined(MLC_EMBEDDED)
+    return portNUM_PROCESSORS;
+#elif defined(_SC_NPROCESSORS_ONLN)
     long n = sysconf(_SC_NPROCESSORS_ONLN);
     return n > 0 ? n : 1;
 #else
@@ -1349,6 +1404,7 @@ void mlc_std_args_fail(mlc_str msg, const char *file, int line) { mlc_std_proces
 
 void mlc_std_bytes_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
 
+#ifndef MLC_EMBEDDED
 /* std/net: TCP. Each handle keeps the socket's descriptor. The errors that change
  * between systems become MLC codes (see std/net.mlc); the others are
  * errno. Writing to a socket closed on the other side returns an error instead of
@@ -1586,6 +1642,8 @@ void mlc_std_net_close_raw(mlc_sock *s, const char *file, int line) {
 
 void mlc_std_net_close_listener(mlc_sock *s, const char *file, int line) { mlc_std_net_close_raw(s, file, line); }
 
+#endif /* !MLC_EMBEDDED */
+
 /* std/time: the local time zone's offset (seconds east of UTC) at the
  * instant ms. */
 int64_t mlc_std_time_local_offset(int64_t ms, const char *file, int line) {
@@ -1594,7 +1652,14 @@ int64_t mlc_std_time_local_offset(int64_t ms, const char *file, int line) {
     time_t t = (time_t)(ms / 1000);
     struct tm lt;
     if (localtime_r(&t, &lt) == NULL) return 0;
-#if defined(__APPLE__) || defined(__USE_MISC) || defined(_DEFAULT_SOURCE)
+#if defined(MLC_EMBEDDED)
+    /* newlib's struct tm has no tm_gmtoff: the UTC breakdown read back as
+     * local time is behind by exactly the offset */
+    struct tm g;
+    if (gmtime_r(&t, &g) == NULL) return 0;
+    g.tm_isdst = lt.tm_isdst;
+    return (int64_t)difftime(t, mktime(&g));
+#elif defined(__APPLE__) || defined(__USE_MISC) || defined(_DEFAULT_SOURCE)
     return (int64_t)lt.tm_gmtoff;
 #else
     return 0;
@@ -1703,6 +1768,7 @@ int64_t mlc_std_os_error_text_raw(int64_t code, mlc_sl_byte *dst, const char *fi
     return mlc_put_bytes(dst, t, (int64_t)strlen(t), "os.error_text", file, line);
 }
 
+#ifndef MLC_EMBEDDED
 /* std/signal: the handler only marks the signal (got) and writes a byte into a pipe,
  * to wake whoever waits in signal.wait; what to do is up to the program.
  * The codes are MLC's (std/signal.mlc), translated here into the
@@ -1837,6 +1903,8 @@ int64_t mlc_std_signal_wait(int64_t ms, const char *file, int line) {
         }
     }
 }
+
+#endif /* !MLC_EMBEDDED */
 
 /* std/log: the logger is a counted handle (clone for other threads, the
  * last close closes the file). Each line is assembled whole and written under
@@ -2045,6 +2113,7 @@ void mlc_std_sync_wait_raw(mlc_group *g, const char *file, int line) {
     mlc_free(g);
 }
 
+#ifndef MLC_EMBEDDED
 /* std/sqlite. The SQLite library is loaded on the first call
  * (dlopen), so only whoever uses the module needs it, and nobody needs
  * link flags. MLC_SQLITE_LIB picks the file; without it, it tries the
@@ -2698,3 +2767,5 @@ bool mlc_std_tls_available(const char *file, int line) {
 }
 
 void mlc_std_tls_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
+
+#endif /* !MLC_EMBEDDED */

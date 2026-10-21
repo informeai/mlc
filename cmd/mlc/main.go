@@ -26,6 +26,8 @@ const usage = `mlc — compiler for the MLC language (My Lang C)
 Usage:
   mlc build [-o out] [-emit-c] [-I dir] [-L dir] [-cflags "..."] [-ldflags "..."] [-sanitize address|thread] file.mlc
                                                compiles to an executable
+  mlc build -target esp32 [-o folder] [-I dir] file.mlc
+                                               writes an ESP-IDF component (docs/esp32.md)
   mlc run [-I dir] [-L dir] [-cflags "..."] [-ldflags "..."] file.mlc [arguments]
                                                compiles and runs
       -I: folder where to look for imports (besides the file's, lib/ and MLC_PATH)
@@ -98,12 +100,13 @@ func build(args []string) int {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
 	out := fs.String("o", "", "path of the executable (default: the file's name without .mlc)")
 	emitC := fs.Bool("emit-c", false, "prints the generated C instead of compiling")
+	target := fs.String("target", "", "esp32: writes an ESP-IDF component into the -o folder instead of an executable")
 	var libDirs, importDirs dirList
 	fs.Var(&libDirs, "L", "folder where to look for C libraries (can repeat)")
 	fs.Var(&importDirs, "I", "folder where to look for imports (can repeat)")
 	cflags, ldflags, sanitize := ccFlags(fs)
 	fs.Parse(args)
-	opts := driver.Options{LibDirs: libDirs, ImportDirs: importDirs, CFlags: driver.SplitFlags(*cflags), LDFlags: driver.SplitFlags(*ldflags), Sanitize: *sanitize}
+	opts := driver.Options{LibDirs: libDirs, ImportDirs: importDirs, CFlags: driver.SplitFlags(*cflags), LDFlags: driver.SplitFlags(*ldflags), Sanitize: *sanitize, Target: *target}
 	if fs.NArg() != 1 {
 		fmt.Fprint(os.Stderr, usage)
 		return 2
@@ -113,6 +116,25 @@ func build(args []string) int {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
+	}
+
+	if *target != "" && !*emitC {
+		if len(libDirs) > 0 || *cflags != "" || *ldflags != "" || *sanitize != "" {
+			fmt.Fprintln(os.Stderr, "mlc build -target: -L, -cflags, -ldflags and -sanitize don't apply; ESP-IDF compiles the component")
+			return 2
+		}
+		if *target != "esp32" {
+			fmt.Fprintf(os.Stderr, "-target %q: the only target is esp32 (without -target, this machine)\n", *target)
+			return 2
+		}
+		if *out == "" {
+			*out = strings.TrimSuffix(filepath.Base(path), ".mlc") + "-esp32"
+		}
+		if err := driver.BuildESP32(path, src, *out, os.ReadFile, opts); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		return 0
 	}
 
 	if *emitC {

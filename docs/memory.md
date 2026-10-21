@@ -259,7 +259,7 @@ The runtime counts live allocations. At the end of `main`, if any are left, the 
 
 ## Stack
 
-Arrays and structs with arrays live on the stack, and the stack is also memory with a known size: 8 MB on the main thread and the value written in `thread.spawn` on the others. In C, a function whose frame is larger than what's left of the stack doesn't fail on entry: the frame skips the guard page, and the writes land in something else's memory (another thread's stack, the heap). MLC closes that door in two layers:
+Arrays and structs with arrays live on the stack, and the stack is also memory with a known size: 8 MB on the main thread (32 KB in the task of `mlc build -target esp32`, see [esp32.md](esp32.md)) and the value written in `thread.spawn` on the others. In C, a function whose frame is larger than what's left of the stack doesn't fail on entry: the frame skips the guard page, and the writes land in something else's memory (another thread's stack, the heap). MLC closes that door in two layers:
 
 - **At compile time**, the checker estimates each function's stack: the frame (parameters, local variables and the large values C keeps in temporaries) plus the largest stack among the functions it calls directly. A `thread.spawn` with a constant size, `main` and the tests are checked against the stack they'll have, minus a reserve (1/8 of the stack, between 4 KB and 32 KB) for what C uses besides the variables and for the panic:
 

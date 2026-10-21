@@ -62,6 +62,12 @@ func compileInfo(file string, src []byte, read Loader, opts Options) (string, *c
 	if len(errs) > 0 {
 		return "", nil, Errors(errs)
 	}
+	if opts.Target != "" && opts.Target != "esp32" {
+		return "", nil, fmt.Errorf("-target %q: the only target is esp32 (without -target, this machine)", opts.Target)
+	}
+	if errs := checkTarget(srcs, opts.Target); len(errs) > 0 {
+		return "", nil, Errors(errs)
+	}
 	srcs[len(srcs)-1].Test = IsTestFile(file)
 	info, errs := checker.CheckProgram(srcs)
 	if len(errs) > 0 {
@@ -102,6 +108,7 @@ type Options struct {
 	CFlags     []string // -cflags: extra flags for compiling the C (after the environment's, CFLAGS)
 	LDFlags    []string // -ldflags: extra flags for linking (after the environment's, LDFLAGS)
 	Sanitize   string   // -sanitize: "address" (ASan + UBSan) or "thread" (TSan); "" without sanitizers
+	Target     string   // -target: "esp32" (an ESP-IDF component, see BuildESP32); "" for this machine
 }
 
 // SanitizeFlags returns a sanitizer's compile and link flags:
