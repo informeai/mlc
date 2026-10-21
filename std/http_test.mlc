@@ -441,10 +441,10 @@ fn test_router_and_client() {
     testing.eq_str(&ct[:k], "application/json")
 
     var data [16]byte
-    dn := str.copy(&data, "novo item")
+    dn := str.copy(&data, "new item")
     n = str.format(&addr, "http://127.0.0.1:{}/items", port)
     match http.request("POST", &addr[:n], "text/plain", &data[:dn], &m, &body) {
-        Ok(k2) => testing.eq_str(&body[:k2], "novo item")
+        Ok(k2) => testing.eq_str(&body[:k2], "new item")
         Err(code) => testing.eq_int(code, 0)
     }
     testing.eq_int(m.status(), 201)

@@ -36,12 +36,12 @@ fn test_getenv() {
 fn test_setenv() {
     var v [16]byte
     n := str.copy(&v, "value-mlc")
-    match os.setenv("MLC_TESTE_SETENV", &v[:n]) {
+    match os.setenv("MLC_TEST_SETENV", &v[:n]) {
         Ok(_) => {}
         Err(code) => testing.eq_int(code, 0)
     }
     var out [32]byte
-    match os.getenv("MLC_TESTE_SETENV", &out) {
+    match os.getenv("MLC_TEST_SETENV", &out) {
         Ok(k) => testing.eq_str(&out[:k], "value-mlc")
         Err(code) => testing.eq_int(code, 0)
     }

@@ -99,7 +99,7 @@ fn test_load_and_env() {
     n = c.env("APP_MODE", &v)
     testing.eq_str(&v[:n], "dev")
     fs.remove_file(&path[:pn])
-    match config.load_str("/tmp/nao_existe_mlc.env", &c) {
+    match config.load_str("/tmp/does_not_exist_mlc.env", &c) {
         Ok(_) => testing.fail("doesn't exist")
         Err(code) => testing.eq_int(code, fs.NOT_FOUND)
     }

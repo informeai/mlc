@@ -59,10 +59,10 @@ fn test_reset_reuses() {
 fn test_stale_span_panics() {
     testing.expect_panic()
     a := arena.new(64)
-    s := a.copy_str("velho")
+    s := a.copy_str("old!!")
     a.reset()
-    a.copy_str("novo!")
-    a.eq(s, "novo!") // the piece is from before the reset: panic
+    a.copy_str("new!!")
+    a.eq(s, "new!!") // the piece is from before the reset: panic
     a.free()
 }
 
