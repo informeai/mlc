@@ -27,6 +27,9 @@ func mangle(t checker.Type) string {
 	}
 	switch t := t.(type) {
 	case *checker.Struct:
+		if t.CStruct {
+			return "cs_" + strings.ReplaceAll(t.CName, "struct ", "tag_") // C's name ("struct x" for a tag)
+		}
 		return "st_" + t.CName
 	case *checker.Pointer:
 		return "p_" + mangle(t.Elem)

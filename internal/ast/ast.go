@@ -59,8 +59,10 @@ func (n *ImplDecl) Pos() token.Pos      { return n.P }
 type StructDecl struct {
 	Extern bool // extern "C" type Db: an opaque C type, only behind a pointer
 	// Header: in extern "C" struct T from "h.h", the C header with T; the
-	// generated C includes it and uses C's struct (Fields: the ones MLC uses)
+	// generated C includes it and uses C's struct (Fields: the ones MLC uses).
+	// Tag: extern "C" struct tag T, the C type is struct T (no typedef)
 	Header     string
+	Tag        bool
 	Name       string
 	TypeParams []*TypeParam // struct Pair[A any, B any] { ... }
 	Pub        bool
@@ -85,8 +87,10 @@ type ConstDecl struct {
 	Type  *TypeExpr // optional
 	Value Expr
 	// Header: extern "C" const N T from "h.h", a constant (macro or enum
-	// value) of a C header, which C gives the value of; Value is nil
+	// value) of a C header, which C gives the value of; Value is nil. Var:
+	// extern "C" var N T from "h.h", a global variable of the C library
 	Header string
+	Var    bool
 	P      token.Pos // position of the name
 }
 
@@ -102,8 +106,11 @@ type Import struct {
 }
 
 type FuncDecl struct {
-	Extern     bool // extern fn: implemented in the C runtime (only in the standard library), without a body
-	ExternC    bool // extern "C" fn: a real C function, called by name
+	Extern  bool // extern fn: implemented in the C runtime (only in the standard library), without a body
+	ExternC bool // extern "C" fn: a real C function, called by name
+	// Header: extern "C" fn f(...) from "h.h": the header's f, called by its name
+	// in C (a macro or a static inline function too), checked by C's prototype
+	Header     string
 	Name       string
 	TypeParams []*TypeParam // fn larger[T ordered](...)
 	Pub        bool         // visible to whoever imports the file

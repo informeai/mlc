@@ -1,0 +1,9 @@
+twice: 2 calls: 1
+square: 49
+noted: 42
+services: 1
+find: 0 handle: 2
+synced
+read 1 (battery): op 1 len 1
+read 2 (shared): op 1 len 1
+total: 121

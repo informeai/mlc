@@ -143,7 +143,7 @@ func (p *Parser) parseFile() *ast.File {
 				f.Structs = append(f.Structs, p.parseExternType())
 			case token.STRUCT:
 				f.Structs = append(f.Structs, p.parseExternStruct())
-			case token.CONST:
+			case token.CONST, token.VAR:
 				f.Consts = append(f.Consts, p.parseExternConst())
 			default:
 				f.Funcs = append(f.Funcs, p.parseExtern())
@@ -214,7 +214,8 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 		p.next()
 	}
 	p.expect(token.RPAREN)
-	if p.startsType() {
+	// in an extern fn without a result, "from" starts the header, not a type
+	if p.startsType() && !(fn.Extern && p.tok.Kind == token.IDENT && p.tok.Lit == "from") {
 		fn.Result = p.parseType()
 	}
 	if fn.Extern {
@@ -222,6 +223,9 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 			p.errorf(p.tok.Pos, "extern fn has no body: the implementation lives in the C runtime")
 			p.parseBlock()
 			return fn
+		}
+		if p.tok.Kind == token.IDENT && p.tok.Lit == "from" {
+			return fn // extern "C" fn ... from "h.h": parseExtern reads it
 		}
 		p.expectEOS()
 		return fn
@@ -250,6 +254,10 @@ func (p *Parser) parseExtern() *ast.FuncDecl {
 	defer func() { p.extern = false }()
 	fn := p.parseFunc()
 	fn.ExternC = externC
+	if externC && p.tok.Kind == token.IDENT && p.tok.Lit == "from" {
+		fn.Header = p.parseFrom()
+		p.expectEOS()
+	}
 	return fn
 }
 
@@ -278,7 +286,7 @@ func (p *Parser) externKind() token.Kind {
 	p.next()
 	k := p.tok.Kind
 	*p.lx, p.tok, p.peek = save, tok, peek
-	if k == token.STRUCT || k == token.CONST {
+	if k == token.STRUCT || k == token.CONST || k == token.VAR {
 		return k
 	}
 	return token.FN
@@ -308,8 +316,13 @@ func (p *Parser) parseExternStruct() *ast.StructDecl {
 	}
 	p.expect(token.STRING)
 	p.expect(token.STRUCT)
+	tag := false
+	if p.tok.Kind == token.IDENT && p.tok.Lit == "tag" && p.peek.Kind == token.IDENT {
+		tag = true // struct tag T: C's type is struct T
+		p.next()
+	}
 	name := p.expect(token.IDENT)
-	s := &ast.StructDecl{Name: name.Lit, P: pos}
+	s := &ast.StructDecl{Name: name.Lit, Tag: tag, P: pos}
 	s.Header = p.parseFrom()
 	s.Fields = p.parseCFields()
 	p.expectEOS()
@@ -346,15 +359,21 @@ func (p *Parser) parseCFields() []*ast.FieldDecl {
 }
 
 // parseExternConst reads extern "C" const N T from "h.h": a constant of a C
-// header, whose value C gives.
+// header, whose value C gives; or extern "C" var N T from "h.h", a global
+// variable of the C library.
 func (p *Parser) parseExternConst() *ast.ConstDecl {
 	p.expect(token.EXTERN)
 	p.expect(token.STRING)
-	p.expect(token.CONST)
+	isVar := p.tok.Kind == token.VAR
+	if isVar {
+		p.next()
+	} else {
+		p.expect(token.CONST)
+	}
 	name := p.expect(token.IDENT)
-	d := &ast.ConstDecl{Name: name.Lit, P: name.Pos}
+	d := &ast.ConstDecl{Name: name.Lit, Var: isVar, P: name.Pos}
 	if !p.startsType() {
-		p.unexpected("expected the constant's type: extern \"C\" const N int32 from \"h.h\"")
+		p.unexpected("expected the type: extern \"C\" const N int32 from \"h.h\"")
 		return d
 	}
 	d.Type = p.parseType()
@@ -939,7 +958,7 @@ func (p *Parser) parsePub(f *ast.File) {
 			s := p.parseExternStruct()
 			s.Pub = true
 			f.Structs = append(f.Structs, s)
-		case token.CONST:
+		case token.CONST, token.VAR:
 			c := p.parseExternConst()
 			c.Pub = true
 			f.Consts = append(f.Consts, c)

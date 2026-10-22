@@ -339,6 +339,109 @@ The value is only known when C compiles, so such a constant works where a value 
 - the refusals, in `tests/errors/cstruct_*.mlc` and `cconst_*.mlc`: `&` of a field, reading a string or a callback field, a fn variable in a callback field, an anonymous struct as a value or in a literal, a callback field without its `kept` context, a `kept` field no callback receives, a pointer field that isn't `kept`, `keep` of something that isn't an owner, the owner used after `keep`, and a C constant in a `const`, an array's size, an assignment and a pattern;
 - on the ESP32 (`tests/esp32`, in the simulation and on the chip): `timer.mlc`, with `esp_timer` calling an MLC function every 20 ms through `esp_timer_create_args_t`, and `pwm.mlc`, PWM on the LED with `ledc_timer_config_t`, `ledc_channel_config_t` and the LEDC enums' values from the header.
 
+## More of C's headers
+
+A Bluetooth LE peripheral in NimBLE, ESP-IDF's Bluetooth LE stack, needs five things more: structs named by their `struct` tag, the header's macros and inline functions, a global variable of the library, a table of services that the library keeps for good, and the pointer fields of the structs it hands to the callbacks.
+
+### 1. Structs without a typedef: `tag`
+
+NimBLE names its structs by tag (`struct ble_gap_event`, `struct ble_gatt_access_ctxt`), without a `typedef`. `tag` after `struct` says the C type is `struct name`:
+
+```
+extern "C" struct tag ble_gap_adv_params from "host/ble_gap.h" {
+    conn_mode byte
+    disc_mode byte
+}
+```
+
+In MLC the type is still `ble_gap_adv_params`; only the generated C changes.
+
+### 2. Functions and macros from the header: `fn ... from`
+
+`extern "C" fn` binds to a symbol, so a function-like macro (`OS_MBUF_PKTLEN(om)`) or a `static inline` function of a header can't be called: there's nothing to link. With `from`, the generated C calls the header's name as written, and **the C compiler checks the call against the header's prototype**:
+
+```
+extern "C" fn OS_MBUF_PKTLEN(om &os_mbuf) uint16 from "os/os_mbuf.h"
+extern "C" fn ble_gatts_count_cfg(defs &[]ble_gatt_svc_def) int32 from "host/ble_gatt.h"
+```
+
+An argument with effects (a call) is computed once, into a temporary, in order, so a macro that uses an argument twice doesn't evaluate it twice. The types follow the rules of `extern "C" fn`, plus C structs by value in the result; a pointer goes as `void *`, which C converts to the header's own type. Without `from`, nothing changes.
+
+### 3. A library's global variable: `extern "C" var`
+
+NimBLE is configured through a global struct (`extern struct ble_hs_cfg ble_hs_cfg`):
+
+```
+extern "C" struct tag ble_hs_cfg from "host/ble_hs.h" {
+    sync_cb fn()
+    reset_cb fn(int32)
+}
+extern "C" var ble_hs_cfg ble_hs_cfg from "host/ble_hs.h"
+
+ble_hs_cfg.sync_cb = on_sync
+```
+
+Its fields are read and written as those of any C struct (and the type can also be a number or `bool`). Its name may be its struct's tag, as in C (`struct ble_hs_cfg ble_hs_cfg`): the type and the value are in different places. MLC has no mutable global variables, so that two threads never reach the same memory; a C global is the library's memory, which MLC can't protect: it's written before starting the library and the program's threads, and the checker can't tell. It can't be borrowed as a whole or assigned as a whole (only its fields).
+
+### 4. Data the library keeps: `keep` of a C struct or array
+
+NimBLE's service table is an array of `struct ble_gatt_svc_def`, ended by a zeroed entry, each pointing to an array of characteristics, each pointing to its UUID; the library keeps it until the end. MLC has no global data, so the table is built on the heap and **moved to C with `keep`**, which already moves a callback's context:
+
+```
+chars := alloc([]ble_gatt_chr_def, 2)          // the last one stays zero: the end of the array
+chars[0].uuid = keep(alloc(ble_uuid16_t{u: ble_uuid_t{type: BLE_UUID_TYPE_16}, value: 0x2A19}))
+chars[0].access_cb = on_battery
+chars[0].arg = keep(alloc(Battery{level: 100}))
+chars[0].flags = BLE_GATT_CHR_F_READ
+svcs := alloc([]ble_gatt_svc_def, 2)
+svcs[0].type = BLE_GATT_SVC_TYPE_PRIMARY
+svcs[0].uuid = keep(alloc(ble_uuid16_t{u: ble_uuid_t{type: BLE_UUID_TYPE_16}, value: 0x180F}))
+svcs[0].characteristics = keep(chars)
+ble_gatts_add_svcs(keep(svcs))
+```
+
+- `keep` also takes a C struct (`keep(alloc(ble_uuid16_t{...}))`, a `kept *T`) and a slice of C structs (`keep(chars)`, a `kept []T`). After it, the program no longer reaches that memory: it's filled first, then kept. A function can't return a `kept` value: it returns the owner (`*ble_uuid16_t`), and the `keep` happens where the value is given.
+- A parameter `kept *T` or `kept []T` of a C struct takes what `keep` gave (`ble_gatts_add_svcs(table)`); a `kept *T` of the program's struct is still a context, moved by the call.
+- A C struct's pointer field to C's data is declared `kept *T` or `kept []T`, and only takes what `keep` gave. The C field's own type wins in C (`const ble_uuid_t *` receiving a `ble_uuid16_t *`, whose first member is the `ble_uuid_t`), converted as with callbacks.
+- A `kept` value can be copied: several characteristics may share one context.
+- The zeroed entry that ends C's arrays is the program's to leave: `alloc` gives zeroed memory, so allocating one more than the entries is enough.
+- What C writes back into the table (NimBLE's `val_handle`) isn't read by MLC, since the memory is C's after `keep`: the handle comes from a function, `ble_gatts_find_chr(svc, chr, nil, &handle)`.
+
+### 5. Pointer fields of what C hands over
+
+A callback receives a C struct whose fields point to more of C's data: `ctxt.om` is the `struct os_mbuf *` with the bytes read or written. A field of type `&X`, with `X` an `extern "C" type`, is read as a borrow of that C memory, valid while the struct is (during the callback), and passed to C's functions:
+
+```
+extern "C" struct tag ble_gatt_access_ctxt from "host/ble_gatt.h" {
+    op byte
+    om &os_mbuf
+}
+
+fn on_battery(conn uint16, attr uint16, ctxt &ble_gatt_access_ctxt, b &Battery) int32 {
+    level := byte(b.level)
+    return os_mbuf_append(ctxt.om, &level, 1)
+}
+```
+
+Only opaque types (`X`, which MLC never looks inside) in this version: a pointer field to a C struct, which MLC would read through, could be `NULL`. These fields are read, not written.
+
+### And the smaller ones
+
+- A string field whose C type is `const uint8_t *` (a device name in the advertising data) takes a literal too: the pointer is converted to the field's type.
+- The Bluetooth stack is turned on in ESP-IDF's configuration (`CONFIG_BT_ENABLED`, `CONFIG_BT_NIMBLE_ENABLED` in `sdkconfig.defaults` or `idf.py menuconfig`): MLC's component doesn't change the project's configuration.
+
+### What it doesn't do
+
+- reading or writing through a `kept` value after the `keep` (the memory is C's);
+- pointer fields to C structs that MLC reads through;
+- Classic Bluetooth (Bluedroid), which this proposal doesn't look at.
+
+### How it's tested
+
+- `TestFFIRegistry`, with `tests/ffi/registry.h` and `registry.c`, a library shaped like NimBLE: structs by tag, a function-like macro that uses its argument twice (and gets it computed once), a `static inline` function, a function without a result, a global configuration struct named like its tag, a table of services kept with `keep`, with pointers between its structs and a context shared by two characteristics, that the library walks later from a thread of its own, and an opaque pointer field read in the callbacks. It also runs under the sanitizers;
+- the refusals: a `kept` field given an owner instead of `keep(x)`, the memory reached after its `keep`, a C global struct read, borrowed or assigned as a whole, a C global of another type, a pointer field to a C struct, and a pointer field written;
+- on the ESP32: `tests/esp32ble/battery.mlc`, a BLE peripheral in MLC over NimBLE (the battery service, read and notified); see [esp32.md](esp32.md#bluetooth-le).
+
 ## Link errors
 
 If a library from `link "..."` or a C function doesn't exist, `mlc build` says the program couldn't be linked and shows the linker's message. That's an error in the program, not in the compiler.

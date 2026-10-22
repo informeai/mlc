@@ -10,17 +10,33 @@ import (
 // constant can only use the ones declared before it.
 func (c *checker) collectConsts(f *ast.File) {
 	for _, d := range f.Consts {
-		c.mod.pendingConsts[d.Name] = true
+		if !d.Var {
+			c.mod.pendingConsts[d.Name] = true
+		}
 	}
 	c.scope = c.mod.global
 	c.cnames = map[string]int{} // constants don't produce a C name, but declare counts the names
 	for _, d := range f.Consts {
 		delete(c.mod.pendingConsts, d.Name)
+		if d.Var {
+			continue // collectCVars, after the structs
+		}
 		if d.Header != "" {
 			c.cConstDecl(d)
 			continue
 		}
 		c.constDecl(d)
+	}
+	c.scope = nil
+}
+
+// collectCVars declares the file's C global variables (extern "C" var).
+func (c *checker) collectCVars(f *ast.File) {
+	c.scope = c.mod.global
+	for _, d := range f.Consts {
+		if d.Var {
+			c.cVarDecl(d)
+		}
 	}
 	c.scope = nil
 }

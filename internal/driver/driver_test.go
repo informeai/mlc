@@ -454,6 +454,31 @@ fn main() {
 	}
 }
 
+// TestFFIRegistry links tests/ffi/registry.mlc to tests/ffi/registry.c, a
+// library shaped like NimBLE: structs by tag, a function-like macro that uses
+// its argument twice (evaluated once) and an inline function from the header,
+// a global configuration struct, a table of services kept with keep that the
+// library walks later from a thread of its own, and an opaque pointer field
+// read in the callbacks.
+func TestFFIRegistry(t *testing.T) {
+	requireCC(t)
+	dir := ffiLib(t, "registry")
+	ffi := filepath.Join(testsDir, "ffi")
+	path := filepath.Join(ffi, "registry.mlc")
+	exe := filepath.Join(t.TempDir(), "prog")
+	opts := Options{LibDirs: []string{dir}, HeaderDirs: []string{ffi}, Sanitize: sanitize}
+	if err := BuildOpts("registry.mlc", []byte(readExpected(t, path)), exe, dirLoader(path), opts); err != nil {
+		t.Fatalf("build failed:\n%v", err)
+	}
+	out, err := exec.Command(exe).CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if want := readExpected(t, filepath.Join(ffi, "registry.out")); string(out) != want {
+		t.Errorf("output:\n%s\nexpected:\n%s", out, want)
+	}
+}
+
 // TestFFICallbacks links tests/ffi/callbacks.mlc and callback_overflow.mlc
 // to tests/ffi/callbacks.c, which calls back during a call and, later, from
 // threads it creates: the kept callback gets its context, the per-thread

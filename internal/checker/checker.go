@@ -59,6 +59,7 @@ type Local struct {
 	IsConst bool // constant: Const has the value (int64, string or bool)
 	Const   any
 	CConst  string // extern "C" const: the C name; the value is C's (Const is nil)
+	CVar    bool   // extern "C" var: a global variable of a C library (CName is C's)
 	Pub     bool   // public constant (pub const)
 }
 
@@ -80,6 +81,7 @@ type Func struct {
 	recv                         recvMode
 	queued                       bool   // generic instance: checked by checkInstances
 	CSym                         string // extern "C" fn: the symbol's name in C
+	CHeader                      string // extern "C" fn ... from "h.h": called by name, as the header declares it
 	// BorrowFrom: in a function that returns &T, the parameter (1 + index) the
 	// borrow comes from; 0 if it doesn't return a borrow
 	BorrowFrom int
@@ -203,7 +205,7 @@ type checker struct {
 	outHandles  map[*Pointer]*OutHandle
 	optArgs     map[Type]*OptArg
 	callbacks   map[*Func]bool // already in info.Callbacks
-	kepts       map[*Struct]*Kept
+	kepts       map[keptKey]*Kept
 	anonOK      bool             // checking the base of a selector: an anonymous C struct is allowed as a path
 	threads     map[Type]*Struct // thread.Thread[R], by R
 	spawnSites  []spawnSite      // the thread.spawn calls, to check the stack
@@ -282,7 +284,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 			BindBorrows:  map[*Local]bool{},
 		},
 		callbacks: map[*Func]bool{},
-		kepts:     map[*Struct]*Kept{},
+		kepts:     map[keptKey]*Kept{},
 		pointers:  map[ptrKey]*Pointer{},
 		borrows:   map[Type]*Borrow{},
 		slices:    map[Type]*Slice{},
@@ -311,6 +313,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 		c.collectEnumNames(src.AST)
 		c.collectInterfaces(src.AST) // before the structs: a generic struct can use an interface of the file as a constraint
 		c.collectStructs(src.AST)
+		c.collectCVars(src.AST) // after the structs: a C global's type is a C struct
 		c.collectEnumVariants(src.AST)
 		c.declareImpls(src.AST)
 		c.collectFuncs(src.AST)
@@ -679,6 +682,15 @@ func (c *checker) checkStmt(s ast.Stmt) {
 				c.errorf(sel.SelPos, "%s is an anonymous C struct: assign its fields (%s.%s.field = ...)", sel.Sel, exprName(sel.X), sel.Sel)
 				return
 			}
+			if isBorrow(lt) {
+				c.value(s.Rhs)
+				c.errorf(sel.SelPos, "%s is C's pointer, read from what C hands over: it isn't written", sel.Sel)
+				return
+			}
+			if k, ok := lt.(*Kept); ok && s.Op == token.ASSIGN {
+				c.keptValue(s.Rhs, k, "field "+sel.Sel)
+				return
+			}
 		}
 		if s.Op == token.ASSIGN {
 			c.noCopy(lt, s.OpPos)
@@ -994,6 +1006,9 @@ func (c *checker) targetVar(id *ast.Ident) Type {
 	case l != nil && isBorrow(l.Type):
 		c.errorf(id.P, "the borrow %s can't be reassigned", id.Name)
 		return Invalid
+	case l != nil && l.CVar && isCStruct(l.Type):
+		c.errorf(id.P, "%s is a C global struct: assign its fields (%s.field = ...), not the whole struct", id.Name, id.Name)
+		return Invalid
 	case l != nil:
 		c.info.Locals[id] = l
 		return l.Type
@@ -1091,6 +1106,9 @@ func (c *checker) ident(e *ast.Ident) Type {
 		l.Used = true
 		if c.cConstUse(e, l) {
 			return l.Type
+		}
+		if c.cVarWhole(e, l) {
+			return Invalid
 		}
 		if l.IsConst {
 			c.info.Values[e] = l.Const

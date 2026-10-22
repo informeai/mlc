@@ -69,6 +69,9 @@ func Generate(file string, f *ast.File, info *checker.Info) string {
 	// C functions (extern "C" fn): a local name bound to the C symbol by an
 	// assembly label, so as not to clash with what the headers already declare
 	for _, fn := range info.CExterns {
+		if fn.CHeader != "" {
+			continue // the header declares it (or it's a macro): called by its name
+		}
 		params := []string{}
 		for _, p := range fn.Params {
 			params = append(params, cFFIType(p.Type))
@@ -771,10 +774,14 @@ func (g *gen) expr(e ast.Expr) string {
 		return g.index(e)
 	case *ast.SelectorExpr:
 		f := fieldCName(g.info.Types[e.X], e.Sel)
+		access := g.expr(e.X) + "." + f
 		if isPointer(g.info.Types[e.X]) {
-			return g.expr(e.X) + "->" + f
+			access = g.expr(e.X) + "->" + f
 		}
-		return g.expr(e.X) + "." + f
+		if b, ok := g.info.Types[e].(*checker.Borrow); ok && isCStructBase(g.info.Types[e.X]) {
+			return fmt.Sprintf("((%s)(%s))", cType(b), access) // C's pointer, as the MLC handle type
+		}
+		return access
 	case *ast.CompositeLit:
 		return g.composite(e)
 	case *ast.ArrayLit:
@@ -816,7 +823,11 @@ func (g *gen) expr(e ast.Expr) string {
 		case checker.Take, checker.Replace:
 			return g.takeReplace(e, callee)
 		case checker.Keep:
-			return "mlc_keep(" + g.expr(e.Args[0]) + ")" // moved to C: never freed, out of the leak count
+			// moved to C: never freed, out of the leak count (a slice gives its array)
+			if _, ok := g.info.Types[e.Args[0]].(*checker.Slice); ok {
+				return "mlc_keep((" + g.expr(e.Args[0]) + ").ptr)"
+			}
+			return "mlc_keep(" + g.expr(e.Args[0]) + ")"
 		case checker.Convert:
 			return g.convert(e, callee)
 		case checker.Len:
@@ -978,6 +989,17 @@ func sliceBorrowElem(t checker.Type) checker.Type {
 // cCall translates the call of a C function, converting the arguments.
 func (g *gen) cCall(e *ast.CallExpr, fn *checker.Func) string {
 	pre, args := g.operands(e.Args)
+	if fn.CHeader != "" {
+		// the header's name may be a macro that uses an argument twice: an
+		// argument with effects is computed once, into a temporary, in order
+		for i, a := range e.Args {
+			if g.effectful(a) {
+				t := g.temp(g.info.Types[a])
+				pre = append(pre, t+" = "+args[i])
+				args[i] = t
+			}
+		}
+	}
 	for i, p := range fn.Params {
 		if i >= len(args) {
 			break
@@ -985,7 +1007,10 @@ func (g *gen) cCall(e *ast.CallExpr, fn *checker.Func) string {
 		switch {
 		case isFuncType(p.Type):
 			args[i] = callbackName(g.info.FuncRefs[e.Args[i]]) // the C wrapper, not the MLC function
-		case p.Kept:
+			if fn.CHeader != "" {
+				args[i] = "(void *)" + args[i] // the header's own function pointer type: the same pointer in the ABI
+			}
+		case p.Kept && !isKeptType(p.Type):
 			args[i] = "mlc_keep(" + args[i] + ")" // the context now belongs to C, until the end
 		case p.Type == checker.String:
 			args[i] = "(" + args[i] + ").ptr"
@@ -1000,7 +1025,38 @@ func (g *gen) cCall(e *ast.CallExpr, fn *checker.Func) string {
 			}
 		}
 	}
+	if fn.CHeader != "" {
+		// the header's name (a macro or an inline function too), with the
+		// arguments already in temporaries: a macro that uses one twice
+		// doesn't evaluate it twice. A pointer goes as void *, which C converts
+		// to the header's own type (MLC's opaque types have other C names).
+		for i, p := range fn.Params {
+			if i < len(args) && isCPointer(p.Type) {
+				args[i] = "(void *)(" + args[i] + ")"
+			}
+		}
+		call := fmt.Sprintf("%s(%s)", fn.CSym, strings.Join(args, ", "))
+		if isCPointer(fn.Result) {
+			call = fmt.Sprintf("((%s)%s)", cType(fn.Result), call)
+		}
+		return sequence(pre, call)
+	}
 	return sequence(pre, fmt.Sprintf("%s(%s)", fn.CName, strings.Join(args, ", ")))
+}
+
+func isKeptType(t checker.Type) bool {
+	_, ok := t.(*checker.Kept)
+	return ok
+}
+
+// isCPointer says whether t is an object pointer in C (a borrow, a handle,
+// an out parameter, a kept value or ?&T); a function pointer isn't.
+func isCPointer(t checker.Type) bool {
+	switch t.(type) {
+	case *checker.Borrow, *checker.Pointer, *checker.OutHandle, *checker.OptArg, *checker.Kept:
+		return true
+	}
+	return false
 }
 
 func isFuncType(t checker.Type) bool {

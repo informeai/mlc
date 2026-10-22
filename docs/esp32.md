@@ -169,6 +169,33 @@ What's particular to the chip:
 - **Never from an interrupt.** If ESP-IDF calls an MLC function in an ISR (`gpio_isr_handler_add`), the wrapper stops the chip with a message (through the ROM's `printf`), since the runtime can't run there. For the pins, `gpio.watch` does it the right way; for other interrupts, a C handler has to queue the event for an MLC thread.
 - **`size_t` is 32 bits on the ESP32:** a C parameter of type `size_t` is `uint32` there (`uint64` on a 64-bit desktop), as in `esp_event_post`'s data size.
 
+## Bluetooth LE
+
+ESP-IDF's Bluetooth LE stack, NimBLE, is used directly from MLC, with its own structs, constants, macros and global configuration ([More of C's headers](ffi.md#more-of-cs-headers)). `tests/esp32ble/battery.mlc` is a peripheral with the battery service (`0x180F`), whose level (`0x2A19`) a phone reads and gets notified of:
+
+- the service table is built on the heap and given to NimBLE with `keep`, which keeps it until the end; the level's callback has its context (an `atomic.Int` the main task updates) in the characteristic's `arg`;
+- `ble_hs_cfg.sync_cb = on_sync` configures NimBLE's global; advertising starts when the host syncs, and restarts at each disconnection;
+- the callbacks (`on_level`, `on_gap`, `on_sync`) run in NimBLE's host task, started by `nimble_port_freertos_init(host_task)`, whose function is MLC too.
+
+The project needs Bluetooth on in its configuration, which MLC's component doesn't change. In `sdkconfig.defaults`, before the first `idf.py set-target`:
+
+```
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+```
+
+With NimBLE the program has some 490 KB, a third of the large partition (1.5 MB). The program doesn't run in the simulation, which has no Bluetooth stack: it's in `tests/esp32ble`, apart from `tests/esp32`. The test suite only checks that it compiles (TestESP32Callbacks); `tools/esp32_ble.py` runs it on the chip and talks to it from this machine as a phone would, with [bleak](https://github.com/hbldh/bleak): it finds the device by name, connects, reads the level, gets three notifications, disconnects, and checks the chip's console (advertising, connected, disconnected, advertising again):
+
+```
+. ~/esp/esp-idf/export.sh
+python -m pip install bleak               # once, in ESP-IDF's Python
+python tools/esp32_ble.py --port /dev/cu.usbserial-0001
+```
+
+On macOS the terminal needs Bluetooth permission (System Settings, Privacy & Security, Bluetooth); without it, CoreBluetooth stays off and bleak reports "Bluetooth device is turned off". On an ESP32 with a Mac as the central, the run passes: the level read is 100, the three notifications 100, 99, 98, and the chip advertises again after the disconnection.
+
 ## The network
 
 `std/net` and `std/http` work over ESP-IDF's TCP/IP stack (lwIP), with the same API and error codes as on the desktop: lwIP has the BSD socket calls. The runtime starts lwIP (`esp_netif_init`) at the first `listen` or `connect`.

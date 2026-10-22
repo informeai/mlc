@@ -276,6 +276,18 @@ func TestESP32Callbacks(t *testing.T) {
 	if ran == 0 {
 		t.Error("no program in tests/esp32")
 	}
+	// tests/esp32ble needs the chip's Bluetooth stack, which the simulation
+	// doesn't have: the programs only have to be accepted and generated
+	// (tools/esp32_ble.py runs them on the chip)
+	for _, path := range programs("esp32ble") {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := BuildESP32(filepath.Base(path), src, filepath.Join(t.TempDir(), "ble"), dirLoader(path), Options{}); err != nil {
+			t.Errorf("%s: %v", path, err)
+		}
+	}
 
 	isr := `import "std/io"
 

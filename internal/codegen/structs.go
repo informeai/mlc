@@ -52,7 +52,7 @@ func (g *gen) cFieldValue(place string, ft checker.Type, v ast.Expr) string {
 		return fmt.Sprintf("(__typeof__(%s))%s", place, callbackName(g.info.FuncRefs[v]))
 	}
 	if ft == checker.String {
-		return "(" + g.expr(v) + ").ptr"
+		return fmt.Sprintf("(__typeof__(%s))(%s).ptr", place, g.expr(v)) // const char * or const uint8_t *
 	}
 	return g.expr(v)
 }
@@ -196,7 +196,8 @@ func (g *gen) composite(e *ast.CompositeLit) string {
 				place := fmt.Sprintf("((%s *)0)->%s", structCType(s), fi.Name) // only for __typeof__
 				inits[i] = "." + fi.Name + " = " + g.cFieldValue(place, ft, fi.Value)
 			case ft == checker.String:
-				inits[i] = "." + fi.Name + " = (" + vals[i] + ").ptr"
+				place := fmt.Sprintf("((%s *)0)->%s", structCType(s), fi.Name) // only for __typeof__
+				inits[i] = fmt.Sprintf(".%s = (__typeof__(%s))(%s).ptr", fi.Name, place, vals[i])
 			default:
 				inits[i] = "." + fi.Name + " = " + vals[i]
 			}

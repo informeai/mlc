@@ -1,0 +1,18 @@
+// error: chars was already freed or moved
+extern "C" struct tag chr_def from "reg.h" {
+    flags uint16
+}
+
+extern "C" struct tag svc_def from "reg.h" {
+    characteristics kept []chr_def
+}
+
+extern "C" fn add_svcs(svcs kept []svc_def) int32
+
+fn main() {
+    chars := alloc([]chr_def, 2)
+    svcs := alloc([]svc_def, 2)
+    svcs[0].characteristics = keep(chars)
+    chars[0].flags = 2
+    add_svcs(keep(svcs))
+}

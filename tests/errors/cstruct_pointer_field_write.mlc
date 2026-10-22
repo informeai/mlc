@@ -1,0 +1,13 @@
+// error: buf is C's pointer, read from what C hands over: it isn't written
+extern "C" type reg_buf
+
+extern "C" struct tag ctxt from "reg.h" {
+    buf &reg_buf
+}
+
+fn handle(c &ctxt, other &ctxt) {
+    c.buf = other.buf
+}
+
+fn main() {
+}

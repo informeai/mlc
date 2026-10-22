@@ -1,0 +1,11 @@
+// error: cfg is a C global struct: read and write its fields (cfg.field), not the whole struct
+extern "C" struct tag cfg from "lib.h" {
+    level int32
+}
+
+extern "C" var cfg cfg from "lib.h"
+
+fn main() {
+    c := cfg
+    c.level = 1
+}

@@ -99,6 +99,9 @@ func (c *checker) collectStructs(f *ast.File) {
 		}
 		if d.Header != "" {
 			s.CStruct, s.Header, s.CName = true, d.Header, d.Name // C's own name: the header declares it
+			if d.Tag {
+				s.CName = "struct " + d.Name // no typedef: C's type is struct T
+			}
 			c.addHeader(d.Header)
 		}
 		if len(d.TypeParams) > 0 {
@@ -280,6 +283,16 @@ func (c *checker) compositeOf(e *ast.CompositeLit, s *Struct, allowed bool) Type
 			if isAnonCStruct(f.Type) {
 				c.value(fi.Value)
 				c.errorf(fi.P, "%s is an anonymous C struct, which has no literal: set its fields after (x.%s.field = ...)", fi.Name, fi.Name)
+				continue
+			}
+			if isBorrow(f.Type) {
+				c.value(fi.Value)
+				c.errorf(fi.P, "%s is C's pointer, read from what C hands over: it isn't written", fi.Name)
+				continue
+			}
+			if k, ok := f.Type.(*Kept); ok {
+				given[fi.Name] = fi.P
+				c.keptValue(fi.Value, k, "field "+fi.Name)
 				continue
 			}
 		}

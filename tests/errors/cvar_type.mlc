@@ -1,0 +1,5 @@
+// error: a C global variable is a number, bool or a C struct (extern "C" struct)
+extern "C" var name string from "lib.h"
+
+fn main() {
+}

@@ -395,9 +395,19 @@ func (c *checker) collectExternC(fn *Func, d *ast.FuncDecl) {
 		return
 	}
 	contexts := callbackContexts(fn)
+	for _, p := range fn.Params {
+		// kept *T and kept []T of C structs take what keep(x) gave: the data
+		// the library keeps (a context of the program's moves, as before)
+		if k := c.keptOf(p.Type); p.Kept && k != nil && k.Elem.CStruct {
+			p.Type = k
+		}
+	}
 	for i, p := range fn.Params {
 		if p.Type == Invalid {
 			continue // the type already gave an error
+		}
+		if _, ok := p.Type.(*Kept); ok {
+			continue
 		}
 		if b, ok := p.Type.(*Borrow); ok && contexts[b.Elem] && !p.Kept {
 			continue // a callback's context: C only hands it back, without looking inside
@@ -412,6 +422,10 @@ func (c *checker) collectExternC(fn *Func, d *ast.FuncDecl) {
 	}
 	fn.CSym = d.Name
 	fn.CName = "mlc_c_" + d.Name
+	if d.Header != "" {
+		fn.CHeader = d.Header // called by its name, as the header declares it
+		c.addHeader(d.Header)
+	}
 	c.mod.funcs[d.Name] = fn
 	for _, prev := range c.info.CExterns {
 		if prev.CSym == d.Name {

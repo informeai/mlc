@@ -1,0 +1,20 @@
+// error: field arg: a kept field takes what C keeps for good, given with keep(
+struct Level {
+    value int
+    name string
+}
+
+extern "C" struct tag chr_def from "reg.h" {
+    access_cb fn(&Level)
+    arg kept *Level
+}
+
+fn on_read(lv &Level) {
+}
+
+fn main() {
+    chars := alloc([]chr_def, 2)
+    chars[0].access_cb = on_read
+    chars[0].arg = alloc(Level{value: 1, name: "a"})
+    free(chars)
+}

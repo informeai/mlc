@@ -1,0 +1,206 @@
+import "std/atomic"
+import "std/io"
+import "std/time"
+
+// A Bluetooth LE peripheral in MLC, over ESP-IDF's NimBLE: the battery
+// service (0x180F) with its level (0x2A19), read and notified. NimBLE's own
+// structs (by tag), its global configuration, its service table (kept with
+// keep), the macros and inline functions of its headers, and its callbacks,
+// which run in NimBLE's host task. It needs Bluetooth on in the project's
+// configuration (tools/esp32_ble.py writes the sdkconfig.defaults), and a
+// central to talk to: the same script, from the Mac.
+
+const NAME = "mlc-battery"
+
+extern "C" type os_mbuf
+extern "C" type Nothing // a void * that NimBLE passes and nobody reads
+
+extern "C" struct ble_uuid_t from "host/ble_uuid.h" {
+    type byte
+}
+
+extern "C" struct ble_uuid16_t from "host/ble_uuid.h" {
+    u ble_uuid_t
+    value uint16
+}
+
+extern "C" struct tag ble_gatt_access_ctxt from "host/ble_gatt.h" {
+    op byte
+    om &os_mbuf
+}
+
+// the level's context: an atomic the main task updates
+struct Battery {
+    level *atomic.Int
+}
+
+extern "C" struct tag ble_gatt_chr_def from "host/ble_gatt.h" {
+    uuid kept *ble_uuid16_t
+    access_cb fn(uint16, uint16, &ble_gatt_access_ctxt, &Battery) int32
+    arg kept *Battery
+    flags uint32
+}
+
+extern "C" struct tag ble_gatt_svc_def from "host/ble_gatt.h" {
+    type byte
+    uuid kept *ble_uuid16_t
+    characteristics kept []ble_gatt_chr_def
+}
+
+extern "C" struct tag ble_hs_cfg from "host/ble_hs.h" {
+    sync_cb fn()
+    reset_cb fn(int32)
+}
+
+extern "C" var ble_hs_cfg ble_hs_cfg from "host/ble_hs.h"
+
+extern "C" struct tag ble_hs_adv_fields from "host/ble_hs_adv.h" {
+    flags byte
+    name string
+    name_len byte
+    name_is_complete uint32
+}
+
+extern "C" struct tag ble_gap_adv_params from "host/ble_gap.h" {
+    conn_mode byte
+    disc_mode byte
+}
+
+extern "C" struct tag ble_gap_event from "host/ble_gap.h" {
+    type byte
+    connect {
+        status int32
+        conn_handle uint16
+    }
+}
+
+extern "C" const BLE_UUID_TYPE_16 byte from "host/ble_uuid.h"
+extern "C" const BLE_GATT_SVC_TYPE_PRIMARY byte from "host/ble_gatt.h"
+extern "C" const BLE_GATT_CHR_F_READ uint32 from "host/ble_gatt.h"
+extern "C" const BLE_GATT_CHR_F_NOTIFY uint32 from "host/ble_gatt.h"
+extern "C" const BLE_ATT_ERR_INSUFFICIENT_RES int32 from "host/ble_att.h"
+extern "C" const BLE_HS_ADV_F_DISC_GEN byte from "host/ble_hs_adv.h"
+extern "C" const BLE_HS_ADV_F_BREDR_UNSUP byte from "host/ble_hs_adv.h"
+extern "C" const BLE_GAP_CONN_MODE_UND byte from "host/ble_gap.h"
+extern "C" const BLE_GAP_DISC_MODE_GEN byte from "host/ble_gap.h"
+extern "C" const BLE_GAP_EVENT_CONNECT byte from "host/ble_gap.h"
+extern "C" const BLE_GAP_EVENT_DISCONNECT byte from "host/ble_gap.h"
+extern "C" const BLE_HS_FOREVER int32 from "host/ble_hs.h"
+
+extern "C" fn nimble_port_init() int32 from "nimble/nimble_port.h"
+extern "C" fn nimble_port_run() from "nimble/nimble_port.h"
+extern "C" fn nimble_port_freertos_init(f kept fn(&Nothing)) from "nimble/nimble_port_freertos.h"
+extern "C" fn nimble_port_freertos_deinit() from "nimble/nimble_port_freertos.h"
+extern "C" fn ble_svc_gap_init() from "services/gap/ble_svc_gap.h"
+extern "C" fn ble_svc_gatt_init() from "services/gatt/ble_svc_gatt.h"
+extern "C" fn ble_svc_gap_device_name_set(name string) int32 from "services/gap/ble_svc_gap.h"
+extern "C" fn ble_gatts_count_cfg(svcs kept []ble_gatt_svc_def) int32 from "host/ble_gatt.h"
+extern "C" fn ble_gatts_add_svcs(svcs kept []ble_gatt_svc_def) int32 from "host/ble_gatt.h"
+extern "C" fn ble_gatts_find_chr(svc &ble_uuid16_t, chr &ble_uuid16_t, def_handle ?&uint16, val_handle &uint16) int32 from "host/ble_gatt.h"
+extern "C" fn ble_gatts_chr_updated(handle uint16) from "host/ble_gatt.h"
+extern "C" fn ble_hs_util_ensure_addr(prefer_random int32) int32 from "host/util/util.h"
+extern "C" fn ble_hs_id_infer_auto(privacy int32, out &byte) int32 from "host/ble_hs.h"
+extern "C" fn ble_gap_adv_set_fields(f &ble_hs_adv_fields) int32 from "host/ble_gap.h"
+extern "C" fn ble_gap_adv_start(own byte, direct ?&byte, duration int32, params &ble_gap_adv_params, cb kept fn(&ble_gap_event, &Nothing) int32, arg ?&byte) int32 from "host/ble_gap.h"
+extern "C" fn os_mbuf_append(om &os_mbuf, data &[]byte, n uint16) int32 from "os/os_mbuf.h"
+
+fn uuid16(v uint16) *ble_uuid16_t {
+    return alloc(ble_uuid16_t{u: ble_uuid_t{type: BLE_UUID_TYPE_16}, value: v})
+}
+
+// a read of the level: one byte, the atomic's value
+fn on_level(conn uint16, attr uint16, ctxt &ble_gatt_access_ctxt, b &Battery) int32 {
+    var v [1]byte
+    v[0] = byte(b.level.load())
+    if os_mbuf_append(ctxt.om, &v, 1) != 0 {
+        return BLE_ATT_ERR_INSUFFICIENT_RES
+    }
+    return 0
+}
+
+fn advertise() {
+    addr := byte(0)
+    if ble_hs_id_infer_auto(0, &addr) != 0 {
+        io.print("no address")
+        return
+    }
+    var fields ble_hs_adv_fields
+    fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP
+    fields.name = NAME
+    fields.name_len = byte(len(NAME))
+    fields.name_is_complete = 1
+    rc := ble_gap_adv_set_fields(&fields)
+    params := ble_gap_adv_params{conn_mode: BLE_GAP_CONN_MODE_UND, disc_mode: BLE_GAP_DISC_MODE_GEN}
+    io.print("advertising:", rc, ble_gap_adv_start(addr, nil, BLE_HS_FOREVER, &params, on_gap, nil))
+}
+
+// connections and disconnections, in NimBLE's host task
+fn on_gap(ev &ble_gap_event, unused &Nothing) int32 {
+    if ev.type == BLE_GAP_EVENT_CONNECT {
+        io.print("connected:", ev.connect.status)
+        if ev.connect.status != 0 {
+            advertise()
+        }
+    } else if ev.type == BLE_GAP_EVENT_DISCONNECT {
+        io.print("disconnected")
+        advertise()
+    }
+    return 0
+}
+
+fn on_sync() {
+    ble_hs_util_ensure_addr(0)
+    advertise()
+}
+
+fn on_reset(reason int32) {
+    io.print("reset:", reason)
+}
+
+fn host_task(unused &Nothing) {
+    nimble_port_run() // returns when NimBLE stops
+    nimble_port_freertos_deinit()
+}
+
+fn main() {
+    level := atomic.new_int(100)
+    io.print("init:", nimble_port_init())
+    ble_hs_cfg.sync_cb = on_sync
+    ble_hs_cfg.reset_cb = on_reset
+    ble_svc_gap_init()
+    ble_svc_gatt_init()
+
+    // the table: one service with one characteristic; each array ends with a
+    // zeroed entry (alloc gives zeroed memory)
+    chars := alloc([]ble_gatt_chr_def, 2)
+    chars[0].uuid = keep(uuid16(0x2A19))
+    chars[0].access_cb = on_level
+    chars[0].arg = keep(alloc(Battery{level: level.clone()}))
+    chars[0].flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY
+    svcs := alloc([]ble_gatt_svc_def, 2)
+    svcs[0].type = BLE_GATT_SVC_TYPE_PRIMARY
+    svcs[0].uuid = keep(uuid16(0x180F))
+    svcs[0].characteristics = keep(chars)
+    table := keep(svcs)
+    io.print("services:", ble_gatts_count_cfg(table), ble_gatts_add_svcs(table))
+    ble_svc_gap_device_name_set(NAME)
+    nimble_port_freertos_init(host_task)
+
+    // the level drops one point a second, notified to whoever subscribed
+    svc := uuid16(0x180F)
+    chr := uuid16(0x2A19)
+    handle := uint16(0)
+    for i := 0; i < 600; i++ {
+        time.sleep_ms(1000)
+        level.store(100 - i % 100)
+        if handle == 0 && ble_gatts_find_chr(&svc, &chr, nil, &handle) == 0 {
+            io.print("handle:", handle)
+        }
+        if handle != 0 {
+            ble_gatts_chr_updated(handle)
+        }
+    }
+    free(svc)
+    free(chr)
+    level.close()
+}

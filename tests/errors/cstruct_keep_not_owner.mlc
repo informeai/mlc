@@ -1,4 +1,4 @@
-// error: keep moves an owner to C: it takes a *T, with T a struct of the program
+// error: keep moves an owner to C: it takes a *T (keep(alloc(T{...}))), with T a struct, or a []T of C structs
 struct Ctx {
     n int
 }

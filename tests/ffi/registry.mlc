@@ -1,0 +1,115 @@
+import "std/io"
+
+// A library shaped like NimBLE (TestFFIRegistry links tests/ffi/registry.c):
+// structs by tag, a macro and an inline function from the header, a global
+// configuration, a table of services the library keeps (moved to C with
+// keep), and an opaque pointer field read in the callback.
+
+link "registry"
+
+extern "C" type reg_buf
+
+extern "C" struct tag reg_uuid from "registry.h" {
+    type byte
+}
+
+extern "C" struct reg_uuid16_t from "registry.h" {
+    u reg_uuid
+    value uint16
+}
+
+extern "C" struct tag reg_ctxt from "registry.h" {
+    op byte
+    buf &reg_buf
+}
+
+// the characteristics' context, which the library keeps
+struct Level {
+    value int
+    name string
+}
+
+extern "C" struct tag reg_chr_def from "registry.h" {
+    uuid kept *reg_uuid16_t
+    access_cb fn(uint16, &reg_ctxt, &Level) int32
+    arg kept *Level
+    flags uint16
+}
+
+extern "C" struct tag reg_svc_def from "registry.h" {
+    type byte
+    uuid kept *reg_uuid16_t
+    characteristics kept []reg_chr_def
+}
+
+extern "C" struct tag reg_cfg from "registry.h" {
+    sync_cb fn()
+    level int32
+}
+
+extern "C" var reg_cfg reg_cfg from "registry.h"
+
+extern "C" const REG_UUID_16 byte from "registry.h"
+extern "C" const REG_SVC_PRIMARY byte from "registry.h"
+extern "C" const REG_F_READ uint16 from "registry.h"
+
+extern "C" fn reg_next() int32 from "registry.h"
+extern "C" fn reg_calls() int32 from "registry.h"
+extern "C" fn reg_note(v int32) from "registry.h"
+extern "C" fn reg_noted() int32 from "registry.h"
+extern "C" fn REG_TWICE(x int32) int32 from "registry.h"
+extern "C" fn reg_square(x int32) int32 from "registry.h"
+extern "C" fn reg_add_svcs(svcs kept []reg_svc_def) int32 from "registry.h"
+extern "C" fn reg_run() int32 from "registry.h"
+extern "C" fn reg_find(svc uint16, chr uint16, out &uint16) int32 from "registry.h"
+extern "C" fn reg_buf_append(b &reg_buf, data &[]byte, n uint16) int32 from "registry.h"
+extern "C" fn REG_BUF_LEN(b &reg_buf) uint16 from "registry.h"
+
+fn on_sync() {
+    io.print("synced")
+}
+
+// reads a characteristic: appends the level's value to C's buffer
+fn on_read(handle uint16, ctxt &reg_ctxt, lv &Level) int32 {
+    var b [1]byte
+    b[0] = byte(lv.value)
+    rc := reg_buf_append(ctxt.buf, &b, 1)
+    io.printf("read {} ({}): op {} len {}\n", handle, lv.name, ctxt.op, REG_BUF_LEN(ctxt.buf))
+    return rc
+}
+
+fn uuid(v uint16) *reg_uuid16_t {
+    return alloc(reg_uuid16_t{u: reg_uuid{type: REG_UUID_16}, value: v})
+}
+
+fn main() {
+    io.print("twice:", REG_TWICE(reg_next()), "calls:", reg_calls()) // the argument evaluated once
+    io.print("square:", reg_square(7))
+    reg_note(42) // without a result: from isn't read as a type
+    io.print("noted:", reg_noted())
+
+    reg_cfg.sync_cb = on_sync
+    reg_cfg.level = 3
+
+    // the table: one service with two characteristics, each array ended by a
+    // zeroed entry (alloc gives zeroed memory)
+    chars := alloc([]reg_chr_def, 3)
+    chars[0].uuid = keep(uuid(0x2A19))
+    chars[0].access_cb = on_read
+    chars[0].arg = keep(alloc(Level{value: 100, name: "battery"}))
+    chars[0].flags = REG_F_READ
+    shared := keep(alloc(Level{value: 21, name: "shared"}))
+    chars[1].uuid = keep(uuid(0x2A6E))
+    chars[1].access_cb = on_read
+    chars[1].arg = shared
+    chars[1].flags = REG_F_READ
+    svcs := alloc([]reg_svc_def, 2)
+    svcs[0].type = REG_SVC_PRIMARY
+    svcs[0].uuid = keep(uuid(0x180F))
+    svcs[0].characteristics = keep(chars)
+    io.print("services:", reg_add_svcs(keep(svcs)))
+
+    handle := uint16(0)
+    io.print("find:", reg_find(0x180F, 0x2A6E, &handle), "handle:", handle)
+    io.print("total:", reg_run())
+}

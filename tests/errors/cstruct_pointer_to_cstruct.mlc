@@ -1,0 +1,11 @@
+// error: a C struct's pointer field is &X, with X an opaque C type (extern "C" type X), read from what C hands over
+extern "C" struct tag chr_def from "reg.h" {
+    flags uint16
+}
+
+extern "C" struct tag ctxt from "reg.h" {
+    chr &chr_def
+}
+
+fn main() {
+}
