@@ -87,6 +87,20 @@ app.mlc:1:1: import "std/config": not available with -target esp32 (it uses std/
 
 ESP-IDF has a file system (SPIFFS, FAT), so `std/fs` may come later.
 
+## Callbacks: ESP-IDF calling MLC
+
+ESP-IDF's handlers (events, Wi-Fi, a task's function) are C callbacks, and an MLC function can be one: the parameter has a fn type, the argument is the function's name, and `kept` marks what ESP-IDF keeps to call later, with its context moved (see [ffi.md](ffi.md#callbacks-from-c)). `tests/esp32/events.mlc` registers a handler in the default event loop:
+
+```
+extern "C" fn esp_event_handler_instance_register(base ?&byte, id int32, h kept fn(&Watch, &EventBase, int32, &int32), arg kept *Watch, inst ?&?*Instance) int32
+```
+
+What's particular to the chip:
+
+- **The tasks that call back have small stacks:** the event task 2.3 KB, `esp_timer`'s 3.5 KB. The callback should do little and pass the rest on with `try_send`, which never blocks that task. A frame that doesn't fit is a panic, not a corruption: the wrapper finds the task's stack.
+- **Never from an interrupt.** If ESP-IDF calls an MLC function in an ISR (`gpio_isr_handler_add`), the wrapper stops the chip with a message (through the ROM's `printf`), since the runtime can't run there. Interrupts need a C handler that queues the event for an MLC thread.
+- **`size_t` is 32 bits on the ESP32:** a C parameter of type `size_t` is `uint32` there (`uint64` on a 64-bit desktop), as in `esp_event_post`'s data size.
+
 ## The network
 
 `std/net` and `std/http` work over ESP-IDF's TCP/IP stack (lwIP), with the same API and error codes as on the desktop: lwIP has the BSD socket calls. The runtime starts lwIP (`esp_netif_init`) at the first `listen` or `connect`.
@@ -146,6 +160,7 @@ There's no ESP32 in the test suite, so `internal/driver/esp32_test.go` simulates
 - **TestESP32ThreadLocal**: the runtime's `_Thread_local` variables stay under 128 bytes. With 6 KB there, the chip didn't start: ESP-IDF couldn't create its own main task.
 - **TestESP32Externs**: every `extern fn` of a module the ESP32 has is defined in the embedded runtime.
 - **TestESP32TLS**: `http.dial_tls` answers `tls.UNAVAILABLE` and the program goes on.
+- **TestESP32Callbacks**: the programs of `tests/esp32`, which only run on the chip, give their `.out` in the simulation (`events.mlc`: a kept callback that the simulated event loop calls from its own thread, as ESP-IDF's event task), and an MLC function called from a simulated interrupt stops with the message.
 - **TestESP32WiFi**: `std/wifi` against the networks of `sim_wifi.c`, which plays ESP-IDF's driver, NVS and event loop: a refused password (`AUTH`), a name nobody answers (`NOT_FOUND`), a silent network (`TIMEOUT`), two that connect (address and signal), connecting again over a connection, the names too long or empty, and the driver turned off and on again. The simulation delivers the events in order from one thread, as ESP-IDF's event task does, and writes `sim:` on stderr (which fails the test) when `mlc_wifi.c` uses ESP-IDF out of its order: the driver before NVS, a handler left registered at the end, the interface destroyed before the driver.
 - **TestESP32Target**: the component's files, the refused imports (and the allowed ones, `std/net` and `std/http`) and the folder that isn't mlc's.
 
@@ -153,7 +168,7 @@ With ESP-IDF's GCC in the `PATH` (after `export.sh`), TestESP32Sim also compiles
 
 The simulation also reproduces what ESP-IDF's build differs in: `_GNU_SOURCE` already defined, `-Wtype-limits`, and a `struct tm` without `tm_gmtoff`, as in newlib.
 
-**On the chip** (`tools/esp32_chip.py`, by hand, not in `make check`): each program of `tests/run` and `tests/panic` was built with ESP-IDF, flashed and run on an ESP32, and the console compared with the expected output (stdout, stderr and the panic message come through the same UART). 67 programs gave the same output; 10 weren't run (5 use the network or desktop C libraries, 5 read stdin or arguments). The other 3, `threads`, `channels` and `mutex`, start 64 KB threads (and one of 256 KB) at once: they panic in `thread.spawn` for lack of memory, and with the stacks changed to 16 KB they give the same output as on the desktop. Since `std/net` and `std/http` came to the ESP32, `http_loopback.mlc` and `server.mlc` (with 16 KB stacks) also give the desktop's output on the chip; the whole run hasn't been repeated since then. To run it again, with the board on USB:
+**On the chip** (`tools/esp32_chip.py`, by hand, not in `make check`): each program of `tests/run` and `tests/panic` was built with ESP-IDF, flashed and run on an ESP32, and the console compared with the expected output (stdout, stderr and the panic message come through the same UART). 67 programs gave the same output; 10 weren't run (5 use the network or desktop C libraries, 5 read stdin or arguments). The other 3, `threads`, `channels` and `mutex`, start 64 KB threads (and one of 256 KB) at once: they panic in `thread.spawn` for lack of memory, and with the stacks changed to 16 KB they give the same output as on the desktop. Since `std/net` and `std/http` came to the ESP32, `http_loopback.mlc` and `server.mlc` (with 16 KB stacks) also give the desktop's output on the chip; the whole run hasn't been repeated since then. The script also runs `tests/esp32` (`events.mlc` hasn't run on a chip yet, only in the simulation). To run it again, with the board on USB:
 
 ```
 . ~/esp/esp-idf/export.sh

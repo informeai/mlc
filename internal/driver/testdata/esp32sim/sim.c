@@ -6,9 +6,13 @@
 #define _GNU_SOURCE
 #endif
 #include <pthread.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "esp_random.h"
+#include "esp_rom_sys.h"
+#include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 void app_main(void);
@@ -64,6 +68,25 @@ uint8_t *pxTaskGetStackStart(TaskHandle_t t) {
 
 void esp_fill_random(void *buf, size_t len) {
     arc4random_buf(buf, len);
+}
+
+static _Thread_local BaseType_t in_isr;
+
+BaseType_t xPortInIsrContext(void) { return in_isr; }
+
+/* sim_isr_call calls fn as an interrupt handler would (TestESP32Callbacks) */
+void sim_isr_call(void (*fn)(void)) {
+    in_isr = 1;
+    fn();
+    in_isr = 0;
+}
+
+int esp_rom_printf(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    return n;
 }
 
 int main(void) {

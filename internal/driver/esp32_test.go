@@ -232,6 +232,81 @@ again: true true
 	}
 }
 
+// TestESP32Callbacks: the programs of tests/esp32, which only run on the
+// ESP32 (events.mlc: a kept callback that ESP-IDF's event loop calls in its
+// task), give their .out in the simulation; and an MLC function called from
+// an interrupt stops with the message, through the ROM's printf, instead of
+// running the runtime where it can't.
+func TestESP32Callbacks(t *testing.T) {
+	requireCC(t)
+	common := esp32Common(t)
+	espGCC, _ := exec.LookPath("xtensa-esp32-elf-gcc")
+	ran := 0
+	for _, path := range programs("esp32") {
+		ran++
+		t.Run(testName(path), func(t *testing.T) {
+			src, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			comp := filepath.Join(t.TempDir(), "comp")
+			if err := BuildESP32(filepath.Base(path), src, comp, dirLoader(path), Options{}); err != nil {
+				t.Fatal(err)
+			}
+			if espGCC != "" {
+				args := append(append([]string{}, esp32GCCFlags...), "-I", comp, "-c", "-o", filepath.Join(t.TempDir(), "app_xtensa.o"), filepath.Join(comp, "mlc_app.c"))
+				if out, err := exec.Command(espGCC, args...).CombinedOutput(); err != nil {
+					t.Fatalf("ESP-IDF's GCC: %v\n%s", err, out)
+				}
+			}
+			var out, errOut bytes.Buffer
+			cmd := exec.Command(simBuild(t, comp, common))
+			cmd.Stdout, cmd.Stderr = &out, &errOut
+			if err := cmd.Run(); err != nil {
+				t.Fatalf("%v\nstderr:\n%s", err, errOut.String())
+			}
+			if want := readExpected(t, strings.TrimSuffix(path, ".mlc")+".out"); out.String() != want {
+				t.Errorf("stdout:\n%s\nexpected:\n%s", out.String(), want)
+			}
+			if errOut.Len() > 0 {
+				t.Errorf("stderr:\n%s", errOut.String())
+			}
+		})
+	}
+	if ran == 0 {
+		t.Error("no program in tests/esp32")
+	}
+
+	isr := `import "std/io"
+
+extern "C" fn sim_isr_call(f fn())
+
+fn handler() {
+    io.print("not reached")
+}
+
+fn main() {
+    sim_isr_call(handler)
+}
+`
+	comp := filepath.Join(t.TempDir(), "comp")
+	if err := BuildESP32("isr.mlc", []byte(isr), comp, func(string) ([]byte, error) { return nil, os.ErrNotExist }, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	cmd := exec.Command(simBuild(t, comp, common))
+	cmd.Stdout, cmd.Stderr = &out, &errOut
+	if err := cmd.Run(); err == nil {
+		t.Fatal("the program went on after an MLC function ran in an interrupt")
+	}
+	if want := "panic: isr.mlc:5: an MLC function was called from an interrupt (ISR)"; !strings.HasPrefix(errOut.String(), want) {
+		t.Errorf("stderr:\n%s\nexpected it to start with %q", errOut.String(), want)
+	}
+	if out.Len() > 0 {
+		t.Errorf("stdout: %q", out.String())
+	}
+}
+
 // esp32GCCFlags compile the generated C as ESP-IDF does (-Og, -Wall with
 // -Werror=all, gnu17), with the component's options (rt/c/esp32/CMakeLists.txt).
 var esp32GCCFlags = []string{"-std=gnu17", "-Og", "-Wall", "-Werror=all", "-Wno-unused-function", "-Wno-missing-braces", "-Dmain=mlc_main"}
@@ -339,6 +414,8 @@ var esp32Allowed = map[string]bool{
 	"esp_wifi_init": true, "esp_wifi_deinit": true, "esp_wifi_set_mode": true, "esp_wifi_start": true,
 	"esp_wifi_stop": true, "esp_wifi_set_config": true, "esp_wifi_connect": true, "esp_wifi_disconnect": true,
 	"esp_wifi_sta_get_ap_info": true, "WIFI_EVENT": true, "IP_EVENT": true,
+	// C callbacks: the stop when C calls from an interrupt
+	"xPortInIsrContext": true, "esp_rom_printf": true, "abort": true,
 }
 
 // esp32Host is what this machine's compiler adds on its own (stack and

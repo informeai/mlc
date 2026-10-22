@@ -1,0 +1,21 @@
+import "std/io"
+
+// A kept callback with a frame larger than the stack of the thread C calls
+// it from: the wrapper found that stack, so it's a panic, not a corruption.
+
+link "callbacks"
+
+extern "C" fn cb_keep_plain(f kept fn(int32) int32)
+extern "C" fn cb_fire(from int32, n int32, stack_kb int32)
+
+fn big(v int32) int32 {
+    var buf [200000]byte
+    buf[int(v)] = 1
+    return int32(buf[int(v)])
+}
+
+fn main() {
+    cb_keep_plain(big)
+    cb_fire(1, 1, 64)
+    io.print("not reached")
+}

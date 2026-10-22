@@ -1,0 +1,9 @@
+// error: a kept context is moved, not lent
+struct Ctx {
+    tx *Ctx
+}
+
+extern "C" fn register(f kept fn(&Ctx), arg kept &Ctx)
+
+fn main() {
+}

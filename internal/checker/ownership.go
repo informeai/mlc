@@ -1501,9 +1501,9 @@ func (o *ownChecker) chanOp(e *ast.CallExpr) {
 	}
 	o.deferMoves(func() {
 		o.read(recv)
-		if plan.Op == "send" {
+		if plan.Op == "send" || plan.Op == "try_send" {
 			if IsOwner(plan.Elem) {
-				o.consume(e.Args[0], plan.Elem, "the value of send") // goes into the channel
+				o.consume(e.Args[0], plan.Elem, "the value of "+plan.Op) // goes into the channel (try_send may give it back in the result)
 			} else {
 				o.read(e.Args[0])
 			}

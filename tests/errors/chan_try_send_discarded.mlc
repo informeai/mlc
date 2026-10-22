@@ -1,0 +1,10 @@
+// error: leak: the owning pointer returned here is discarded
+import "std/chan"
+
+fn main() {
+    rx := chan.new[[]byte](1)
+    tx := rx.sender()
+    tx.try_send(alloc([]byte, 4)) // Full or Closed would bring the slice back
+    tx.close()
+    rx.close()
+}

@@ -41,6 +41,7 @@
 
 #include "esp_netif.h"
 #include "esp_random.h"
+#include "esp_rom_sys.h" /* esp_rom_printf: works in an interrupt */
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #else
@@ -71,6 +72,8 @@ void mlc_panic(const char *file, int line, const char *msg) {
 }
 
 static _Atomic int64_t mlc_live_allocs = 0;
+static _Atomic int64_t mlc_kept = 0;   /* contexts given to C with kept (mlc_keep) */
+static _Thread_local bool mlc_own_thread; /* main or a thread.spawn: MLC prepared its runtime */
 
 void *mlc_alloc(size_t size, const char *file, int line) {
     void *p = calloc(1, size);
@@ -85,8 +88,15 @@ void mlc_free(void *p) {
     free(p);
 }
 
+void *mlc_keep(void *p) {
+    mlc_kept++;
+    return p;
+}
+
 void mlc_check_allocs(void) {
-    if (mlc_live_allocs != 0) {
+    /* a kept context (and what it owns) stays with C until the end, out of
+     * the count: with one, the count says nothing */
+    if (mlc_live_allocs != 0 && mlc_kept == 0) {
         fflush(stdout);
         fprintf(stderr, "mlc: internal error: %" PRId64 " allocation(s) without free at the end of the program (the ownership checker should have prevented it)\n",
                 (int64_t)mlc_live_allocs);
@@ -290,6 +300,7 @@ static char **mlc_argv;
 
 void mlc_args_init(int argc, char **argv) {
     mlc_stack_init(); /* called at the start of main: the main thread's stack */
+    mlc_own_thread = true;
     mlc_argc = argc;
     mlc_argv = argv;
 }
@@ -960,10 +971,12 @@ void mlc_stack_init(void) {
 
 void mlc_stack_overflow(int64_t need, const char *file, int line) {
     char msg[256];
+    /* in a callback, the thread (and its stack) is C's: thread.spawn doesn't help */
+    const char *hint = mlc_own_thread ? "ask for a larger stack in thread.spawn, or put the large buffers on the heap with alloc"
+                                      : "the thread is C's, which called back: put the large buffers on the heap with alloc";
     snprintf(msg, sizeof msg,
-             "stack overflow: the function's frame (about %" PRId64
-             " KB) doesn't fit in what's left of this thread's stack (ask for a larger stack in thread.spawn, or put the large buffers on the heap with alloc)",
-             (need + 1023) / 1024);
+             "stack overflow: the function's frame (about %" PRId64 " KB) doesn't fit in what's left of this thread's stack (%s)",
+             (need + 1023) / 1024, hint);
     mlc_panic(file, line, msg);
 }
 
@@ -1131,6 +1144,7 @@ static void mlc_thread_buffers_free(void);
 static void *mlc_thread_entry(void *p) {
     mlc_thread *t = p;
     mlc_stack_init();
+    mlc_own_thread = true;
     t->run(t);
     mlc_thread_buffers_free();
     t->done = 1;
@@ -1252,6 +1266,21 @@ bool mlc_chan_send(mlc_chan *c, void *v) {
     pthread_cond_signal(&c->not_empty);
     pthread_mutex_unlock(&c->mu);
     return true;
+}
+
+/* try_send never waits: 0 the value went in, 1 the channel is full, 2 no
+ * Receiver is open. In 1 and 2 the value stays with the caller (it comes
+ * back in the result), so nothing is freed here. */
+int32_t mlc_chan_try_send(mlc_chan *c, void *v) {
+    pthread_mutex_lock(&c->mu);
+    int32_t r = c->receivers == 0 ? 2 : c->count == c->cap ? 1 : 0;
+    if (r == 0) {
+        memcpy(c->buf + (size_t)((c->head + c->count) % c->cap) * c->elem, v, c->elem);
+        c->count++;
+        pthread_cond_signal(&c->not_empty);
+    }
+    pthread_mutex_unlock(&c->mu);
+    return r;
 }
 
 bool mlc_chan_recv(mlc_chan *c, void *out) {
@@ -2084,6 +2113,38 @@ static void mlc_thread_buffers_free(void) {
     mlc_sinks = NULL;
     free(mlc_log_bufs);
     mlc_log_bufs = NULL;
+}
+
+/* C callbacks (see mlc_runtime.h). mlc_cb_depth counts the callbacks in
+ * progress in this thread: only the outermost one, in a thread MLC didn't
+ * create, prepares it and undoes it, so a callback that calls C that calls
+ * back doesn't free buffers still in use. */
+static _Thread_local int mlc_cb_depth;
+
+void mlc_cb_enter(mlc_cb_frame *f, const char *file, int line) {
+#ifdef MLC_EMBEDDED
+    if (xPortInIsrContext()) {
+        /* in an interrupt nothing of the runtime works (stdio, the stack
+         * check, the panic): only the ROM's printf */
+        esp_rom_printf("panic: %s:%d: an MLC function was called from an interrupt (ISR); handle the interrupt in C and pass the event on (see docs/ffi.md)\n",
+                       file, line);
+        abort();
+    }
+#else
+    (void)file;
+    (void)line;
+#endif
+    f->outer = !mlc_own_thread && mlc_cb_depth == 0;
+    mlc_cb_depth++;
+    if (f->outer) mlc_stack_init();
+}
+
+void mlc_cb_leave(mlc_cb_frame *f) {
+    mlc_cb_depth--;
+    if (f->outer) {
+        mlc_thread_buffers_free();
+        mlc_stack_low = 0;
+    }
 }
 
 bool mlc_log_enabled(void *l, int64_t level) { return level >= ((mlc_log *)l)->level; }

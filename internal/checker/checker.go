@@ -53,6 +53,7 @@ type Local struct {
 	Type  Type
 	Pos   token.Pos
 	Param bool
+	Kept  bool // a parameter of an extern "C" fn that C keeps after the call (kept)
 	Used  bool // read in some expression
 
 	IsConst bool // constant: Const has the value (int64, string or bool)
@@ -154,6 +155,7 @@ type Info struct {
 	DropOrder    []Type                       // the same, in the order they appeared
 	DropFree     map[*Struct]*Func            // the free method of each struct freed by drop
 	CExterns     []*Func                      // C functions (extern "C" fn), for the generator to declare
+	Callbacks    []*Func                      // MLC functions passed to C, which get a C wrapper (mlc_fn_x__cb)
 	MatchTakes   map[*ast.MatchStmt]bool      // a match that consumes an owning enum (takes the data out)
 	BindBorrows  map[*Local]bool              // a pattern name that borrows an owning field
 	Links        []string                     // C libraries asked for with link "name"
@@ -196,6 +198,7 @@ type checker struct {
 	funcTypes   map[string]*FuncType
 	outHandles  map[*Pointer]*OutHandle
 	optArgs     map[Type]*OptArg
+	callbacks   map[*Func]bool   // already in info.Callbacks
 	threads     map[Type]*Struct // thread.Thread[R], by R
 	spawnSites  []spawnSite      // the thread.spawn calls, to check the stack
 	chans       map[chanKey]*Struct
@@ -271,12 +274,13 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 			MatchTakes:   map[*ast.MatchStmt]bool{},
 			BindBorrows:  map[*Local]bool{},
 		},
-		pointers: map[ptrKey]*Pointer{},
-		borrows:  map[Type]*Borrow{},
-		slices:   map[Type]*Slice{},
-		arrays:   map[arrKey]*Array{},
-		building: map[*Struct]bool{},
-		breaks:   map[*ast.ForStmt]bool{},
+		callbacks: map[*Func]bool{},
+		pointers:  map[ptrKey]*Pointer{},
+		borrows:   map[Type]*Borrow{},
+		slices:    map[Type]*Slice{},
+		arrays:    map[arrKey]*Array{},
+		building:  map[*Struct]bool{},
+		breaks:    map[*ast.ForStmt]bool{},
 
 		paramIfaces: map[*ast.TypeParam]*Interface{},
 		funcTypes:   map[string]*FuncType{},

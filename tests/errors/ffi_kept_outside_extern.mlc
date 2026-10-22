@@ -1,0 +1,11 @@
+// error: kept only exists in the parameters of an extern "C" fn
+struct Ctx {
+    n int
+}
+
+fn register(arg kept *Ctx) {
+    free(arg)
+}
+
+fn main() {
+}

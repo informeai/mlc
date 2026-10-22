@@ -194,7 +194,15 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 	p.expect(token.LPAREN)
 	for p.tok.Kind != token.RPAREN {
 		name := p.expect(token.IDENT)
-		fn.Params = append(fn.Params, &ast.Param{Name: name.Lit, Type: p.parseType(), P: name.Pos})
+		param := &ast.Param{Name: name.Lit, P: name.Pos}
+		// "kept" is a word only here, before a type: a type named kept
+		// (f(x kept)) is still a type
+		if p.tok.Kind == token.IDENT && p.tok.Lit == "kept" && p.peek.Kind != token.COMMA && p.peek.Kind != token.RPAREN {
+			param.Kept = true
+			p.next()
+		}
+		param.Type = p.parseType()
+		fn.Params = append(fn.Params, param)
 		if p.tok.Kind != token.COMMA {
 			break
 		}

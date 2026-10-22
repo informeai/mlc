@@ -814,7 +814,7 @@ System threads: `thread.spawn(f, ctx, stack)` and `thread.join(t)` (built into t
 
 ### `std/chan`
 
-Fixed-capacity channels: `chan.new[T](n)`, the ends `chan.Sender[T]` (`send`, `clone`, `close`) and `chan.Receiver[T]` (`recv`, `sender`, `clone`, `close`), and the result `chan.Recv[T] { Got(value T); Closed }`. Values pass by ownership. See [concurrency.md](concurrency.md#channels-import-stdchan).
+Fixed-capacity channels: `chan.new[T](n)`, the ends `chan.Sender[T]` (`send`, `try_send`, `clone`, `close`) and `chan.Receiver[T]` (`recv`, `sender`, `clone`, `close`), and the results `chan.Recv[T] { Got(value T); Closed }` and `chan.Try[T] { Sent; Full(value T); Closed(value T) }` (`try_send` never waits; the value comes back when it doesn't go in). Values pass by ownership. See [concurrency.md](concurrency.md#channels-import-stdchan).
 
 ### `std/mutex` and `std/atomic`
 

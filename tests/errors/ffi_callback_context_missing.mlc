@@ -1,0 +1,9 @@
+// error: the callback f receives &Ctx, MLC memory that C only has if the call gives it
+struct Ctx {
+    name string
+}
+
+extern "C" fn each(n int32, f fn(&Ctx, int32))
+
+fn main() {
+}

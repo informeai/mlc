@@ -9,6 +9,7 @@ import (
 //	rx := chan.new[[]byte](16)   // allocates the channel (16 slots) and returns the receiving end
 //	tx := rx.sender()            // an end that sends, tied to the same channel
 //	tx.send(msg)                 // msg is moved into the channel (blocks if full)
+//	tx.try_send(msg)             // never blocks: Sent, or Full(msg) / Closed(msg) back
 //	match rx.recv() {            // blocks until something arrives or the channel closes
 //	    Got(m) => ...            // ownership arrives here
 //	    Closed => ...            // every Sender closed and the channel is empty
@@ -31,10 +32,10 @@ const (
 
 // ChanPlan is what the generator needs for a channel operation.
 type ChanPlan struct {
-	Op   string // new, send, recv, sender, clone, close
+	Op   string // new, send, try_send, recv, sender, clone, close
 	Elem Type
 	End  int  // the receiver's end (in methods)
-	Recv Type // recv: the chan.Recv[T] enum
+	Recv Type // recv: the chan.Recv[T] enum; try_send: chan.Try[T]
 }
 
 // chanEnd returns the type of a channel end (Sender or Receiver) for elem.
@@ -128,8 +129,13 @@ func (c *checker) chanNew(e *ast.CallExpr, targs []ast.Expr) Type {
 
 // recvEnum returns chan.Recv[elem], the result of recv.
 func (c *checker) recvEnum(elem Type, pos ast.Expr) *Enum {
+	return c.chanEnum("Recv", elem, pos)
+}
+
+// chanEnum returns chan.Recv[elem] or chan.Try[elem].
+func (c *checker) chanEnum(name string, elem Type, pos ast.Expr) *Enum {
 	m := c.modules["std/chan"]
-	en := m.enums["Recv"]
+	en := m.enums[name]
 	inst, _ := c.instEnum(en, []Type{elem}, pos.Pos()).(*Enum)
 	return inst
 }
@@ -145,6 +151,9 @@ func (c *checker) chanMethod(e *ast.CallExpr, sel *ast.SelectorExpr, t Type, s *
 	switch {
 	case sel.Sel == "send" && s.ChanEnd == ChanSender:
 		nargs, result = 1, Bool
+	case sel.Sel == "try_send" && s.ChanEnd == ChanSender:
+		en := c.chanEnum("Try", s.ChanElem, e)
+		nargs, plan.Recv, result = 1, en, en
 	case sel.Sel == "recv" && s.ChanEnd == ChanReceiver:
 		en := c.recvEnum(s.ChanElem, e)
 		plan.Recv, result = en, en
@@ -155,7 +164,7 @@ func (c *checker) chanMethod(e *ast.CallExpr, sel *ast.SelectorExpr, t Type, s *
 	case sel.Sel == "close":
 		result = Void
 	default:
-		c.errorf(sel.SelPos, "%s has no method %s (Sender: send, clone, close; Receiver: recv, sender, clone, close)", s.Name, sel.Sel)
+		c.errorf(sel.SelPos, "%s has no method %s (Sender: send, try_send, clone, close; Receiver: recv, sender, clone, close)", s.Name, sel.Sel)
 		c.checkArgs(e)
 		return Invalid
 	}
@@ -165,7 +174,7 @@ func (c *checker) chanMethod(e *ast.CallExpr, sel *ast.SelectorExpr, t Type, s *
 		return Invalid
 	}
 	if nargs == 1 {
-		c.valueAs(e.Args[0], s.ChanElem, "the value of send")
+		c.valueAs(e.Args[0], s.ChanElem, "the value of "+sel.Sel)
 	}
 	c.info.Chans[e] = plan
 	c.info.Calls[e] = Callee{Builtin: ChanOp}

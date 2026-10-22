@@ -1,0 +1,49 @@
+import "std/chan"
+import "std/io"
+
+// A kept C callback on the ESP32: ESP-IDF's default event loop calls the
+// handler in its own task (2.3 KB of stack), and the handler passes the
+// event on with try_send, which never blocks that task; main receives it.
+// It runs in the simulation (TestESP32Callbacks) and on the chip
+// (tools/esp32_chip.py).
+
+extern "C" type EventBase
+extern "C" type Instance
+
+// the handler's context, which ESP-IDF keeps
+struct Watch {
+    tx *chan.Sender[int]
+}
+
+const ANY_ID = -1 // ESP_EVENT_ANY_ID; the base nil is ESP_EVENT_ANY_BASE
+
+extern "C" fn esp_event_loop_create_default() int32
+extern "C" fn esp_event_handler_instance_register(base ?&byte, id int32, h kept fn(&Watch, &EventBase, int32, &int32), arg kept *Watch, inst ?&?*Instance) int32
+extern "C" fn esp_event_post(base string, id int32, data &int32, size uint32, ticks uint32) int32
+
+fn on_event(w &Watch, base &EventBase, id int32, value &int32) {
+    match w.tx.try_send(int(id) * 1000 + int(*value)) {
+        Sent => {}
+        Full(_) => {}
+        Closed(_) => {}
+    }
+}
+
+fn main() {
+    esp_event_loop_create_default()
+    rx := chan.new[int](8)
+    w := alloc(Watch{tx: rx.sender()})
+    io.print("register:", esp_event_handler_instance_register(nil, ANY_ID, on_event, w, nil))
+    for i := 1; i <= 3; i++ {
+        v := int32(i * 7)
+        esp_event_post("MLC_EVENT", int32(i), &v, 4, 1000)
+    }
+    for i := 0; i < 3; i++ {
+        match rx.recv() {
+            Got(x) => io.print("event", x)
+            Closed => break
+        }
+    }
+    rx.close()
+    io.print("done")
+}

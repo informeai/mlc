@@ -14,4 +14,8 @@ typedef void *TaskHandle_t;
 typedef void (*TaskFunction_t)(void *);
 #define pdPASS 1
 #define portNUM_PROCESSORS 2
+
+/* whether the code runs in an interrupt; in the simulation, inside
+ * sim_isr_call (sim.c), which plays one */
+BaseType_t xPortInIsrContext(void);
 #endif

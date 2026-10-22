@@ -1,0 +1,9 @@
+// error: kept context arg without a kept callback
+struct Ctx {
+    name string
+}
+
+extern "C" fn register(f fn(&Ctx), arg kept *Ctx)
+
+fn main() {
+}

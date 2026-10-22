@@ -107,6 +107,9 @@ type FuncDecl struct {
 type Param struct {
 	Name string
 	Type *TypeExpr
+	// Kept: "kept" before the type, in an extern "C" fn: C keeps the
+	// callback (fn type) or its context (*T) after the call returns
+	Kept bool
 	P    token.Pos
 }
 

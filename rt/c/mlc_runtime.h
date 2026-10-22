@@ -73,6 +73,21 @@ static inline void mlc_stack_need(int64_t need, const char *file, int line) {
 }
 #define MLC_STACK_NEED(n) mlc_stack_need((n), __FILE__, __LINE__)
 
+/* C callbacks. The compiler wraps each MLC function passed to C (an extern
+ * "C" fn parameter of fn type) in a C function that calls mlc_cb_enter and
+ * mlc_cb_leave around it: in a thread MLC didn't create, they find the
+ * stack (so a frame too large panics) and, when the outermost callback
+ * returns, free the thread's str.format and log buffers. On the ESP32,
+ * mlc_cb_enter stops the chip if C calls from an interrupt, where the
+ * runtime can't run. mlc_keep marks a callback's context that C keeps
+ * (kept *T): it is never freed, so the leak check at the end skips. */
+typedef struct {
+    bool outer; /* this callback prepared the thread, and undoes it */
+} mlc_cb_frame;
+void mlc_cb_enter(mlc_cb_frame *f, const char *file, int line);
+void mlc_cb_leave(mlc_cb_frame *f);
+void *mlc_keep(void *p);
+
 /* Memory. mlc_alloc returns zeroed memory and panics when memory runs out,
  * so a *T pointer is never null. The counter of live allocations is a
  * safety net: the compiler already guarantees every alloc has its free, and
@@ -227,6 +242,7 @@ mlc_chan *mlc_chan_new(int64_t cap, size_t elem, void (*drop)(void *), const cha
 mlc_chan *mlc_chan_add(mlc_chan *c, int end);
 void mlc_chan_close(mlc_chan *c, int end);
 bool mlc_chan_send(mlc_chan *c, void *v);
+int32_t mlc_chan_try_send(mlc_chan *c, void *v);
 bool mlc_chan_recv(mlc_chan *c, void *out);
 
 /* Mutex (std/mutex): the value lives inside the mutex, and the handles and guards

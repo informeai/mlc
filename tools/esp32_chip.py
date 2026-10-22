@@ -1,5 +1,6 @@
-"""Runs tests/run and tests/panic on an ESP32 and compares its console with
-the expected output: the check of the ESP32 target on a real chip, which
+"""Runs tests/run, tests/panic and tests/esp32 (the programs that only run on
+the chip, like a C callback from ESP-IDF's event loop) on an ESP32 and
+compares its console with the expected output: the check of the ESP32 target on a real chip, which
 `make check` can't do (it uses the simulation of TestESP32Sim). See
 docs/esp32.md.
 
@@ -272,7 +273,7 @@ def main():
     passed, failed, skipped = [], [], []
     if args.wifi:
         passed, failed = wifi_checks(args, mlc, proj, tmp)
-    for kind in ("run", "panic") if not args.wifi else ():
+    for kind in ("run", "panic", "esp32") if not args.wifi else ():
         d = os.path.join(REPO, "tests", kind)
         for name in sorted(os.listdir(d)):
             if not name.endswith(".mlc") or not any(o in name for o in only):

@@ -353,7 +353,7 @@ func TestStdLibrary(t *testing.T) {
 // on the spot (tests/ffi/counter.c), which returns handles through a pointer (&?*X).
 func TestFFIOutHandle(t *testing.T) {
 	requireCC(t)
-	dir := counterLib(t)
+	dir := ffiLib(t, "counter")
 	path := filepath.Join(testsDir, "ffi", "out_handle.mlc")
 	exe := filepath.Join(dir, "prog")
 	if err := BuildOpts(filepath.Base(path), []byte(readExpected(t, path)), exe, dirLoader(path), Options{LibDirs: []string{dir}, Sanitize: sanitize}); err != nil {
@@ -393,22 +393,62 @@ func TestBenchRunner(t *testing.T) {
 	}
 }
 
-// counterLib compiles tests/ffi/counter.c into a libcounter.a and returns the folder.
-func counterLib(t *testing.T) string {
+// ffiLib compiles tests/ffi/<name>.c into a lib<name>.a and returns the folder.
+func ffiLib(t *testing.T, name string) string {
 	t.Helper()
 	cc := os.Getenv("CC")
 	if cc == "" {
 		cc = "cc"
 	}
 	dir := t.TempDir()
-	obj := filepath.Join(dir, "counter.o")
-	if out, err := exec.Command(cc, "-c", "-o", obj, filepath.Join(testsDir, "ffi", "counter.c")).CombinedOutput(); err != nil {
-		t.Fatalf("compiling counter.c: %v\n%s", err, out)
+	obj := filepath.Join(dir, name+".o")
+	if out, err := exec.Command(cc, "-c", "-o", obj, filepath.Join(testsDir, "ffi", name+".c")).CombinedOutput(); err != nil {
+		t.Fatalf("compiling %s.c: %v\n%s", name, err, out)
 	}
-	if out, err := exec.Command("ar", "rcs", filepath.Join(dir, "libcounter.a"), obj).CombinedOutput(); err != nil {
+	if out, err := exec.Command("ar", "rcs", filepath.Join(dir, "lib"+name+".a"), obj).CombinedOutput(); err != nil {
 		t.Fatalf("ar: %v\n%s", err, out)
 	}
 	return dir
+}
+
+// TestFFICallbacks links tests/ffi/callbacks.mlc and callback_overflow.mlc
+// to tests/ffi/callbacks.c, which calls back during a call and, later, from
+// threads it creates: the kept callback gets its context, the per-thread
+// buffers are freed in each of C's threads, and a frame too large for C's
+// stack is a panic.
+func TestFFICallbacks(t *testing.T) {
+	requireCC(t)
+	dir := ffiLib(t, "callbacks")
+	build := func(name string) string {
+		path := filepath.Join(testsDir, "ffi", name)
+		exe := filepath.Join(t.TempDir(), "prog")
+		if err := BuildOpts(name, []byte(readExpected(t, path)), exe, dirLoader(path), Options{LibDirs: []string{dir}, Sanitize: sanitize}); err != nil {
+			t.Fatalf("%s: build failed:\n%v", name, err)
+		}
+		return exe
+	}
+	out, err := exec.Command(build("callbacks.mlc")).CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if want := readExpected(t, filepath.Join(testsDir, "ffi", "callbacks.out")); string(out) != want {
+		t.Errorf("output:\n%s\nexpected:\n%s", out, want)
+	}
+
+	var stdout, stderr bytes.Buffer
+	cmd := exec.Command(build("callback_overflow.mlc"))
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err = cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 2 {
+		t.Fatalf("callback_overflow: %v, expected the panic's exit code 2\nstderr:\n%s", err, stderr.String())
+	}
+	if want := "callback_overflow.mlc:11: stack overflow"; !strings.Contains(stderr.String(), want) || !strings.Contains(stderr.String(), "the thread is C's") {
+		t.Errorf("callback_overflow stderr:\n%s\nexpected %q and the hint for C's thread", stderr.String(), want)
+	}
+	if stdout.Len() > 0 {
+		t.Errorf("callback_overflow stdout: %q", stdout.String())
+	}
 }
 
 // TestCCFlags checks -cflags, -ldflags and the variables CFLAGS and LDFLAGS.
@@ -450,7 +490,7 @@ func TestCCFlags(t *testing.T) {
 	t.Setenv("CFLAGS", "")
 
 	// the library's folder through -ldflags, instead of -L
-	dir := counterLib(t)
+	dir := ffiLib(t, "counter")
 	path := filepath.Join(testsDir, "ffi", "out_handle.mlc")
 	if err := BuildOpts(filepath.Base(path), []byte(readExpected(t, path)), exe, dirLoader(path), Options{LDFlags: []string{"-L" + dir}}); err != nil {
 		t.Fatalf("-ldflags -L: %v", err)

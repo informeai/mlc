@@ -1,6 +1,7 @@
 package checker
 
 import (
+	"fmt"
 	"strings"
 
 	"mlc/internal/ast"
@@ -33,6 +34,15 @@ import (
 // int sqlite3_open(const char *, sqlite3 **): the caller passes &db, with db
 // a ?*X variable that holds no handle (nil or already closed), and after the
 // call db may hold a new handle, which the checker forces you to close.
+//
+// Callbacks: a parameter of fn type receives the name of an MLC function,
+// and the generator passes a C wrapper of it (mlc_fn_x__cb), which prepares
+// the runtime when C calls from a thread MLC didn't create. kept on a
+// parameter says C keeps it after the call: a kept callback's context is
+// moved (kept *T), because a borrow would be left dangling.
+//
+//	extern "C" fn qsort(base &[]P, n uint64, size uint64, cmp fn(&P, &P) int32)
+//	extern "C" fn on_event(h kept fn(&Ctx, int32), arg kept *Ctx)
 
 // OptArg is ?&T (or ?&?*X), a C function parameter that may be NULL:
 // the caller passes nil or the same as it would pass for &T (or &?*X).
@@ -132,20 +142,41 @@ func isExternStruct(t Type) bool {
 }
 
 // cParamOK explains why t can't be a parameter of a C function, or
-// returns "".
-func cParamOK(t Type) string {
+// returns "". kept: the parameter is marked kept (C keeps it).
+func cParamOK(t Type, kept bool) string {
+	if kept {
+		switch tt := t.(type) {
+		case *FuncType:
+			return cCallbackOK(tt)
+		case *Pointer:
+			if s, ok := tt.Elem.(*Struct); ok && !s.Extern && !tt.Nullable {
+				return "" // the callback's context, moved to C
+			}
+			if isExternStruct(tt.Elem) {
+				return "kept marks a callback or its context; a C handle given with *X already belongs to C"
+			}
+		case *Borrow:
+			return "a kept context is moved, not lent: C keeps it after the call, and a borrow would be left dangling when its owner frees it; declare kept *T and pass what alloc returned"
+		}
+		return "kept only marks a callback (a fn type) or its context (kept *T, with T a struct of the program)"
+	}
 	switch tt := t.(type) {
+	case *FuncType:
+		return cCallbackOK(tt)
 	case *OutHandle:
 		return ""
 	case *OptArg:
-		return cParamOK(tt.Inner)
+		return cParamOK(tt.Inner, false)
 	case *Borrow:
 		switch e := tt.Elem.(type) {
 		case *Slice:
 			if cScalar(e.Elem) {
 				return ""
 			}
-			return "a slice lent to C must have numeric or bool elements"
+			if s, ok := e.Elem.(*Struct); ok && cStructOK(s) {
+				return "" // an array of C structs with the same layout (qsort's)
+			}
+			return "a slice lent to C must have numeric or bool elements, or structs of scalar fields"
 		case *Struct:
 			if e.Extern || cStructOK(e) {
 				return ""
@@ -160,7 +191,7 @@ func cParamOK(t Type) string {
 		if isExternStruct(tt.Elem) {
 			return "" // the C function takes ownership of the handle
 		}
-		return "MLC memory can't be handed to C (it wouldn't know how to free it); lend it with &"
+		return "MLC memory can't be handed to C (it wouldn't know how to free it); lend it with &, or, as a callback's context that C keeps, move it with kept *T"
 	case *Slice:
 		return "an owning slice can't be handed to C; lend it with &[]T"
 	}
@@ -168,6 +199,165 @@ func cParamOK(t Type) string {
 		return ""
 	}
 	return "that type has no representation in C"
+}
+
+// cCallbackOK explains why ft can't be the type of a callback C calls, or
+// returns "". What C passes the callback follows the extern rules, but
+// nothing that owns: C can't hand MLC memory over.
+func cCallbackOK(ft *FuncType) string {
+	for _, p := range ft.Params {
+		switch pt := p.(type) {
+		case *Borrow:
+			switch e := pt.Elem.(type) {
+			case *Slice:
+				return "a callback can't receive a slice: C passes only the pointer (receive &T, for one element)"
+			case *Struct:
+				if e.ChanEnd != 0 || e.MutexKind != 0 {
+					return "a callback can't receive a channel end or a mutex: put it in the context struct"
+				}
+				continue // a C handle, a C struct or the context (paired in checkCallbacks)
+			}
+			if cScalar(pt.Elem) {
+				continue
+			}
+			return fmt.Sprintf("a callback can't receive %s: only numbers, bool, structs and C handles, borrowed", p)
+		case *OptArg:
+			return "a callback can't receive ?&T (MLC functions don't take it): for a C handle that C may pass as NULL, receive &X (MLC never looks inside it)"
+		}
+		if cScalar(p) {
+			continue
+		}
+		if IsOwner(p) {
+			return fmt.Sprintf("a callback can't receive an owner (%s): C can't hand MLC memory over", p)
+		}
+		return fmt.Sprintf("a callback's parameter %s has no representation in C", p)
+	}
+	if ft.Result != Void && !cScalar(ft.Result) {
+		return "a callback returns only a number or bool (or nothing)"
+	}
+	return ""
+}
+
+// callbackContexts is the structs of the program that the callbacks among
+// fn's parameters receive borrowed: lent with the call (&T), C passes them
+// back to the callback as an opaque pointer, so any struct goes, not only C's
+// layout.
+func callbackContexts(fn *Func) map[Type]bool {
+	m := map[Type]bool{}
+	for _, p := range fn.Params {
+		ft, ok := p.Type.(*FuncType)
+		if !ok {
+			continue
+		}
+		for _, cp := range ft.Params {
+			if b, ok := cp.(*Borrow); ok {
+				if s, ok := b.Elem.(*Struct); ok && !s.Extern {
+					m[s] = true
+				}
+			}
+		}
+	}
+	return m
+}
+
+// checkCallbacks pairs, in a C function's parameters, each callback with the
+// context it receives. A callback's &T, with T a struct of the program, is
+// MLC memory C only has because the call gave it: a borrow (&T, &[]T) for a
+// synchronous callback, or the kept *T for a kept one. A struct of scalar
+// fields only may also be C's own data (it has C's layout), so it goes
+// unpaired.
+func (c *checker) checkCallbacks(fn *Func, d *ast.FuncDecl) {
+	var keptCtx *Local
+	keptFns := 0
+	for i, p := range fn.Params {
+		if !p.Kept || p.Type == Invalid {
+			continue
+		}
+		switch p.Type.(type) {
+		case *FuncType:
+			keptFns++
+		case *Pointer:
+			if keptCtx != nil {
+				c.errorf(d.Params[i].P, "%s has two kept contexts: C passes one pointer back to the callback", d.Name)
+			}
+			keptCtx = p
+		}
+	}
+	if keptCtx != nil && keptFns == 0 {
+		c.errorf(keptCtx.Pos, "kept context %s without a kept callback: mark the callback C keeps with kept too", keptCtx.Name)
+	}
+	lent := func(s *Struct) bool {
+		for _, p := range fn.Params {
+			if p.Kept {
+				continue
+			}
+			t := p.Type
+			if o, ok := t.(*OptArg); ok {
+				t = o.Inner
+			}
+			if b, ok := t.(*Borrow); ok {
+				if b.Elem == s {
+					return true
+				}
+				if sl, ok := b.Elem.(*Slice); ok && sl.Elem == s {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	for i, p := range fn.Params {
+		ft, ok := p.Type.(*FuncType)
+		if !ok {
+			continue
+		}
+		for _, cp := range ft.Params {
+			b, ok := cp.(*Borrow)
+			if !ok {
+				continue
+			}
+			s, ok := b.Elem.(*Struct)
+			if !ok || s.Extern {
+				continue
+			}
+			kept := keptCtx != nil && keptCtx.Type.(*Pointer).Elem == s
+			switch {
+			case p.Kept && kept:
+			case p.Kept && lent(s):
+				c.errorf(d.Params[i].P, "the callback %s is kept, so the %s it receives must be kept too: declare the context kept *%s (a borrow would be left dangling)", p.Name, s.Name, s.Name)
+			case p.Kept && !cStructOK(s):
+				c.errorf(d.Params[i].P, "the kept callback %s receives &%s, MLC memory: declare its context as a parameter kept *%s", p.Name, s.Name, s.Name)
+			case !p.Kept && kept:
+				c.errorf(d.Params[i].P, "the context is kept, so the callback %s must be kept too", p.Name)
+			case !p.Kept && !lent(s) && !cStructOK(s):
+				c.errorf(d.Params[i].P, "the callback %s receives &%s, MLC memory that C only has if the call gives it: add the context as a parameter (&%s)", p.Name, s.Name, s.Name)
+			}
+		}
+	}
+}
+
+// callbackArg checks the argument of a C function's fn parameter: the name of
+// an MLC function (not a fn variable: the C wrapper is written at compile
+// time, for that function).
+func (c *checker) callbackArg(a ast.Expr, ft *FuncType, context string) {
+	before := len(c.errs)
+	c.valueAs(a, ft, context)
+	if len(c.errs) > before {
+		return
+	}
+	fn, ok := c.info.FuncRefs[a]
+	if !ok {
+		c.errorf(a.Pos(), "%s: pass the name of an MLC function; the compiler writes a C wrapper for it at compile time, so a fn variable isn't accepted", context)
+		return
+	}
+	if fn.CSym != "" {
+		c.errorf(a.Pos(), "%s: %s is a C function; pass an MLC function (or call the C one from it)", context, fn.Name)
+		return
+	}
+	if !c.callbacks[fn] {
+		c.callbacks[fn] = true
+		c.info.Callbacks = append(c.info.Callbacks, fn)
+	}
 }
 
 // cResultOK explains why t can't be the result of a C function, or
@@ -191,14 +381,19 @@ func (c *checker) collectExternC(fn *Func, d *ast.FuncDecl) {
 		c.errorf(d.P, "a C function can't be generic or a method")
 		return
 	}
+	contexts := callbackContexts(fn)
 	for i, p := range fn.Params {
 		if p.Type == Invalid {
 			continue // the type already gave an error
 		}
-		if why := cParamOK(p.Type); why != "" {
+		if b, ok := p.Type.(*Borrow); ok && contexts[b.Elem] && !p.Kept {
+			continue // a callback's context: C only hands it back, without looking inside
+		}
+		if why := cParamOK(p.Type, p.Kept); why != "" {
 			c.errorf(d.Params[i].P, "parameter %s of %s (%s): %s", p.Name, d.Name, p.Type, why)
 		}
 	}
+	c.checkCallbacks(fn, d)
 	if why := cResultOK(fn.Result); why != "" && fn.Result != Invalid {
 		c.errorf(d.P, "return of %s (%s): %s", d.Name, fn.Result, why)
 	}

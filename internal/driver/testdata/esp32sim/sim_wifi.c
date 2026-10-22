@@ -1,5 +1,5 @@
 /* ESP-IDF's Wi-Fi, NVS, default event loop and esp_netif in the simulation
- * (TestESP32WiFi). The networks around:
+ * (TestESP32WiFi, and TestESP32Callbacks for esp_event_post). The networks around:
  *
  *   mlc-sim, password "secret123": connects, 192.168.4.2, -48 dBm
  *   mlc-open, without a password:  connects, 192.168.4.3, -71 dBm
@@ -44,6 +44,7 @@ typedef struct sim_ev {
     union {
         wifi_event_sta_disconnected_t disc;
         ip_event_got_ip_t got;
+        unsigned char raw[64]; /* esp_event_post's copy of the data */
     } data;
 } sim_ev;
 
@@ -88,7 +89,8 @@ static void deliver(esp_event_base_t base, int32_t id, void *data) {
     int n = 0;
     pthread_mutex_lock(&mu);
     for (int i = 0; i < SIM_HANDLERS; i++) {
-        if (sim.handlers[i].used && sim.handlers[i].base == base && (sim.handlers[i].id == ESP_EVENT_ANY_ID || sim.handlers[i].id == id)) {
+        bool base_ok = sim.handlers[i].base == ESP_EVENT_ANY_BASE || sim.handlers[i].base == base;
+        if (sim.handlers[i].used && base_ok && (sim.handlers[i].id == ESP_EVENT_ANY_ID || sim.handlers[i].id == id)) {
             hs[n].h = sim.handlers[i].h;
             hs[n].arg = sim.handlers[i].arg;
             n++;
@@ -218,7 +220,7 @@ esp_err_t esp_event_handler_instance_register(esp_event_base_t base, int32_t id,
             sim.handlers[i].id = id;
             sim.handlers[i].h = h;
             sim.handlers[i].arg = arg;
-            *out = &sim.handlers[i];
+            if (out != NULL) *out = &sim.handlers[i]; /* NULL: no instance, never unregistered */
             pthread_mutex_unlock(&mu);
             return ESP_OK;
         }
@@ -240,6 +242,23 @@ esp_err_t esp_event_handler_instance_unregister(esp_event_base_t base, int32_t i
     pthread_mutex_unlock(&mu);
     misuse("unregister of a handler that isn't registered (or with another base or id)");
     return ESP_ERR_INVALID_ARG;
+}
+
+/* esp_event_post: the data is copied, and the handlers run later in the
+ * event thread, as in ESP-IDF's event task */
+esp_err_t esp_event_post(esp_event_base_t base, int32_t id, const void *data, uint32_t size, uint32_t ticks) {
+    (void)ticks;
+    if (base == NULL || size > sizeof ((sim_ev *)0)->data.raw) return ESP_ERR_INVALID_ARG;
+    pthread_mutex_lock(&mu);
+    if (!sim.loop) misuse("esp_event_post before esp_event_loop_create_default");
+    sim_ev *e = calloc(1, sizeof *e);
+    e->gen = -1;
+    e->base = base;
+    e->id = id;
+    if (size > 0) memcpy(e->data.raw, data, size);
+    post(e, 0);
+    pthread_mutex_unlock(&mu);
+    return ESP_OK;
 }
 
 esp_netif_t *esp_netif_create_default_wifi_sta(void) {

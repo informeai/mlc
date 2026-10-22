@@ -133,6 +133,7 @@ fn main() {
 | `rx.sender() *chan.Sender[T]` | a sending end | nothing (it only counts the end) | no |
 | `tx.clone()`, `rx.clone()` | another end on the same side (several producers or consumers) | nothing | no |
 | `tx.send(v) bool` | moves `v` into the channel | `v` passes to the channel | if it's full |
+| `tx.try_send(v) chan.Try[T]` | moves `v` into the channel if there's room: `Sent`, or `Full(v)` and `Closed(v)` with `v` back | `v` passes to the channel, or comes back in the result | never |
 | `rx.recv() chan.Recv[T]` | `Got(v)`, with ownership of `v`, or `Closed` | `v` passes to the receiver | if it's empty and a `Sender` is open |
 | `x.close()` | closes the end (consumes it) | the last `close` frees the channel and `drop`s what's left in it | no |
 
@@ -141,6 +142,7 @@ fn main() {
 - **`Closed`** arrives when every `Sender` was closed and the channel is empty, including when no `Sender` was created yet. Create the sending ends before you start receiving.
 - **`send` with no open `Receiver`** frees the value (`drop`) and returns `false`, so the producer stops. Nothing leaks.
 - **There's no unbounded channel.** A full channel makes `send` wait, which gives flow control. A channel that grew on its own would be hidden allocation.
+- **`try_send` never waits**, for code that must not block: a C callback, which runs in a task of the C library (see [ffi.md](ffi.md#channels-in-callbacks-try_send)). When the value comes back (`Full(v)`, `Closed(v)`), it's the caller's again, and an owner must be freed.
 
 ### Several workers
 

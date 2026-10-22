@@ -34,6 +34,10 @@
 //   send(v T) bool       moves v into the channel; waits if it's full.
 //                        With no Receiver open, frees v (drop) and
 //                        returns false
+//   try_send(v T) Try[T] moves v into the channel without ever waiting:
+//                        Sent, or Full(v) and Closed(v) with v given back
+//                        (for a C callback, which must not block the task
+//                        that called it)
 //   clone() *Sender[T]   another end that sends (several producers)
 //   close()
 //
@@ -43,4 +47,12 @@
 pub enum Recv[T owned] {
     Got(value T)
     Closed
+}
+
+// Try is the result of try_send: the value went in, or comes back because
+// the channel is full or nobody receives anymore.
+pub enum Try[T owned] {
+    Sent
+    Full(value T)
+    Closed(value T)
 }

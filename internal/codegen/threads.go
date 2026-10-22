@@ -146,6 +146,15 @@ func (g *gen) chanOp(e *ast.CallExpr) string {
 	case "send":
 		v := g.temp(p.Elem)
 		return fmt.Sprintf("(%s, %s = %s, mlc_chan_send(%s, &%s))", set, v, g.expr(e.Args[0]), end, v)
+	case "try_send":
+		// 0: it went in; 1: full and 2: no Receiver, with the value back in the variant
+		en := p.Recv.(*checker.Enum)
+		sent, full, closed := en.Variants[0], en.Variants[1], en.Variants[2]
+		v := g.temp(p.Elem)
+		r := g.temp(checker.Int32)
+		t := enumCType(en)
+		return fmt.Sprintf("(%s, %s = %s, %s = mlc_chan_try_send(%s, &%s), %s == 0 ? ((%s){.tag = %d}) : %s == 1 ? ((%s){.tag = %d, .u.v_%s = {.f_%s = %s}}) : ((%s){.tag = %d, .u.v_%s = {.f_%s = %s}}))",
+			set, v, g.expr(e.Args[0]), r, end, v, r, t, sent.Tag, r, t, full.Tag, full.Name, full.Fields[0].Name, v, t, closed.Tag, closed.Name, closed.Fields[0].Name, v)
 	case "recv":
 		en := p.Recv.(*checker.Enum)
 		got, closed := en.Variants[0], en.Variants[1]

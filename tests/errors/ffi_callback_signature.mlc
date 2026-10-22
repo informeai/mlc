@@ -1,0 +1,15 @@
+// error: argument 4 of qsort: expected fn(&P, &P) int32
+struct P {
+    n int
+}
+
+extern "C" fn qsort(base &[]P, n uint64, size uint64, cmp fn(&P, &P) int32)
+
+fn less(a &P, b &P) int {
+    return a.n - b.n
+}
+
+fn main() {
+    var ps [2]P
+    qsort(&ps, 2, 8, less)
+}

@@ -1,0 +1,7 @@
+// error: abs is a C function; pass an MLC function
+extern "C" fn abs(x int32) int32
+extern "C" fn apply(f fn(int32) int32, x int32) int32
+
+fn main() {
+    apply(abs, 3)
+}

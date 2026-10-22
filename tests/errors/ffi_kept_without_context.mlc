@@ -1,0 +1,9 @@
+// error: the kept callback f receives &Ctx, MLC memory: declare its context as a parameter kept *Ctx
+struct Ctx {
+    name string
+}
+
+extern "C" fn register(f kept fn(&Ctx))
+
+fn main() {
+}

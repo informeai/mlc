@@ -1,0 +1,9 @@
+// error: the callback f is kept, so the Ctx it receives must be kept too
+struct Ctx {
+    name string
+}
+
+extern "C" fn register(f kept fn(&Ctx), arg &Ctx)
+
+fn main() {
+}

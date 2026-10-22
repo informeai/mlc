@@ -138,3 +138,53 @@ fn test_zero_capacity() {
     rx := chan.new[int](0)
     rx.close()
 }
+
+fn test_try_send() {
+    rx := chan.new[int](1)
+    tx := rx.sender()
+    match tx.try_send(7) {
+        Sent => {}
+        Full(_) => testing.fail("the channel had room")
+        Closed(_) => testing.fail("the Receiver is open")
+    }
+    match tx.try_send(8) {
+        Sent => testing.fail("the channel was full")
+        Full(v) => testing.eq_int(v, 8) // the value comes back, without waiting
+        Closed(_) => testing.fail("the Receiver is open")
+    }
+    match rx.recv() {
+        Got(n) => testing.eq_int(n, 7)
+        Closed => testing.fail("closed too early")
+    }
+    tx.close()
+    rx.close()
+}
+
+fn test_try_send_gives_the_owner_back() {
+    rx := chan.new[[]byte](1)
+    tx := rx.sender()
+    first := alloc([]byte, 4)
+    match tx.try_send(first) {
+        Sent => {}
+        Full(v) => free(v)
+        Closed(v) => free(v)
+    }
+    match tx.try_send(alloc([]byte, 8)) {
+        Sent => testing.fail("the channel was full")
+        Full(v) => {
+            testing.eq_int(len(v), 8) // still ours: it has to be freed here
+            free(v)
+        }
+        Closed(v) => free(v)
+    }
+    rx.close()
+    match tx.try_send(alloc([]byte, 2)) {
+        Sent => testing.fail("no Receiver is open")
+        Full(v) => free(v)
+        Closed(v) => {
+            testing.eq_int(len(v), 2)
+            free(v)
+        }
+    }
+    tx.close() // the last end: frees the channel and the value left in it
+}

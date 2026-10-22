@@ -219,6 +219,8 @@ A `match` over `*e`, a field or a borrow **only reads**: the owning fields come 
 
 Function values don't capture variables. For a callback to keep state, the caller passes the context along (`m.each_with(&ctx, f)`, with `f fn(&C, &K, &V)`). The context is a borrow during the call: the function can change it but not keep it, and its memory belongs to the caller, with the usual rules. It's what a closure would do, with the state in plain sight. See [types.md](types.md#generic-methods-and-callbacks-with-a-context).
 
+A C callback follows the same idea: its context is lent with the call (`ctx &C`), or, when C keeps the callback to call later, **moved** to C (`ctx kept *C`). A kept context is never freed: it lives with the registration until the program ends, the `alloc` that made it is in the code, and with one the leak check at the end of the program is skipped, since what C keeps can't be counted. See [ffi.md](ffi.md#callbacks-from-c).
+
 ## Threads
 
 A thread receives its context **by ownership** (`thread.spawn(f, ctx, stack)` moves `ctx`) and returns its result by ownership at `thread.join`. The thread function doesn't receive borrows and there are no mutable global variables, so two threads never reach the same memory. The `*thread.Thread[R]` handle is an owner like a C handle: it must go to `thread.join`, and the checker requires it. The thread's record is allocated at the `spawn` and freed at the `join`, and the stack has the size written in the code.
@@ -271,7 +273,7 @@ Arrays and structs with arrays live on the stack, and the stack is also memory w
 
 - **At run time**, every function with an estimated frame of 2 KB or more gets an entry that checks, before the frame exists, whether it fits in what's left of the thread's stack. If it doesn't, it panics pointing at the function. This covers what compile time can't reach: recursion (the depth depends on the data), calls through `fn` values and a computed stack size. Functions with small frames pay nothing: an overflow from them always lands on the guard page.
 
-The estimate is the sum of the variables, as if they all lived at the same time, so it tends to overshoot. The run-time check uses the same estimate and the thread's real stack (`pthread_get_stackaddr_np` on macOS, `pthread_getattr_np` on Linux). A thread created by C code (a callback) has no check.
+The estimate is the sum of the variables, as if they all lived at the same time, so it tends to overshoot. The run-time check uses the same estimate and the thread's real stack (`pthread_get_stackaddr_np` on macOS, `pthread_getattr_np` on Linux). A thread created by C code runs MLC only through a callback, and the callback's wrapper finds that thread's stack the same way, so the check works there too (see [ffi.md](ffi.md#in-which-thread-the-callback-runs)).
 
 ## What MLC doesn't guarantee
 

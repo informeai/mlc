@@ -78,6 +78,9 @@ func Generate(file string, f *ast.File, info *checker.Info) string {
 	for _, fn := range info.Funcs {
 		g.raw("static MLC_MAYBE_UNUSED %s;\n", signature(fn)) // instances may go unused
 	}
+	for _, fn := range info.Callbacks {
+		g.callbackWrapper(fn)
+	}
 	g.dropHelpers()
 	g.chanDrops()
 	g.raw("\n")
@@ -934,6 +937,10 @@ func (g *gen) cCall(e *ast.CallExpr, fn *checker.Func) string {
 			break
 		}
 		switch {
+		case isFuncType(p.Type):
+			args[i] = callbackName(g.info.FuncRefs[e.Args[i]]) // the C wrapper, not the MLC function
+		case p.Kept:
+			args[i] = "mlc_keep(" + args[i] + ")" // the context now belongs to C, until the end
 		case p.Type == checker.String:
 			args[i] = "(" + args[i] + ").ptr"
 		case isSliceBorrow(p.Type):
@@ -948,6 +955,36 @@ func (g *gen) cCall(e *ast.CallExpr, fn *checker.Func) string {
 		}
 	}
 	return sequence(pre, fmt.Sprintf("%s(%s)", fn.CName, strings.Join(args, ", ")))
+}
+
+func isFuncType(t checker.Type) bool {
+	_, ok := t.(*checker.FuncType)
+	return ok
+}
+
+// callbackName is the C wrapper of an MLC function passed to C.
+func callbackName(fn *checker.Func) string { return fn.CName + "__cb" }
+
+// callbackWrapper writes the C wrapper of an MLC function passed to C: the
+// same signature (MLC's C types are C's), with the runtime prepared around
+// the call, since C may call from a thread MLC didn't create
+// (mlc_cb_enter/mlc_cb_leave). The #line points at the function, so a stop
+// in the wrapper (an interrupt) names it.
+func (g *gen) callbackWrapper(fn *checker.Func) {
+	g.file = fn.File
+	args := make([]string, len(fn.Params))
+	for i, p := range fn.Params {
+		args[i] = "l_" + p.Name
+	}
+	call := fmt.Sprintf("%s(%s)", fn.CName, strings.Join(args, ", "))
+	g.lineDirective(fn.Decl.P)
+	if fn.Result == checker.Void {
+		g.raw("static MLC_MAYBE_UNUSED %s { mlc_cb_frame mlc_cbf; mlc_cb_enter(&mlc_cbf, __FILE__, __LINE__); %s; mlc_cb_leave(&mlc_cbf); }\n",
+			signatureNamed(fn, callbackName(fn)), call)
+		return
+	}
+	g.raw("static MLC_MAYBE_UNUSED %s { mlc_cb_frame mlc_cbf; mlc_cb_enter(&mlc_cbf, __FILE__, __LINE__); %s mlc_cbr = %s; mlc_cb_leave(&mlc_cbf); return mlc_cbr; }\n",
+		signatureNamed(fn, callbackName(fn)), cType(fn.Result), call)
 }
 
 func isOptArgType(t checker.Type) bool {

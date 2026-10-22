@@ -1,0 +1,66 @@
+import "std/chan"
+import "std/io"
+import "std/str"
+
+// C callbacks: synchronous with a borrowed context, and kept, called later
+// from threads C creates (TestFFICallbacks links tests/ffi/callbacks.c).
+
+link "callbacks"
+
+// the synchronous callback's context: any struct, since C only hands it back
+struct Sum {
+    name string
+    total int
+    calls int
+}
+
+// the kept callback's context: C keeps it, and the values go out through a channel
+struct Watch {
+    tx *chan.Sender[int]
+    seen int
+}
+
+extern "C" fn cb_each(n int32, f fn(&Sum, int32), ctx &Sum) int32
+extern "C" fn cb_keep(f kept fn(&Watch, int32) int32, ctx kept *Watch)
+extern "C" fn cb_fire(from int32, n int32, stack_kb int32)
+extern "C" fn cb_fire_threads(from int32, k int32)
+extern "C" fn cb_returned() int32
+
+fn add(s &Sum, i int32) {
+    s.total += int(i)
+    s.calls++
+}
+
+// runs in C's threads: formats a line (the thread's buffers, freed when it
+// returns) and passes the value on without waiting
+fn seen(w &Watch, v int32) int32 {
+    w.seen++
+    var line [32]byte
+    n := str.format(&line, "event {}", v)
+    match w.tx.try_send(int(v)) {
+        Sent => {}
+        Full(_) => io.print("full")
+        Closed(_) => io.print("closed")
+    }
+    return int32(n)
+}
+
+fn main() {
+    s := Sum{name: "each", total: 0, calls: 0}
+    n := cb_each(4, add, &s)
+    io.print(s.name, n, s.total, s.calls)
+
+    rx := chan.new[int](16)
+    w := alloc(Watch{tx: rx.sender(), seen: 0})
+    cb_keep(seen, w) // w belongs to C now, until the end
+    cb_fire(10, 3, 256)
+    cb_fire_threads(100, 4)
+    for i := 0; i < 7; i++ {
+        match rx.recv() {
+            Got(v) => io.print("got", v)
+            Closed => break
+        }
+    }
+    io.print("returned:", cb_returned())
+    rx.close()
+}

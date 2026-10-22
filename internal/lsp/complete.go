@@ -417,7 +417,7 @@ func specialMembers(s *checker.Struct) []completionItem {
 	prefix := ""
 	switch {
 	case s.ChanEnd == checker.ChanSender:
-		names, prefix = []string{"send", "clone", "close"}, "chan."
+		names, prefix = []string{"send", "try_send", "clone", "close"}, "chan."
 	case s.ChanEnd == checker.ChanReceiver:
 		names, prefix = []string{"recv", "sender", "clone", "close"}, "chan."
 	case s.MutexKind == checker.MutexHandle:

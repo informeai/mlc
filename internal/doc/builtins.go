@@ -20,6 +20,7 @@ var Builtins = map[string][2]string{
 	"Receiver":         {"chan.Receiver[T]", "Channel end that receives (`recv`, `sender`, `clone`, `close`). It only exists behind a pointer; it needs a `close()` (the compiler checks)."},
 	"chan.new":         {"chan.new[T](cap int) *chan.Receiver[T]", "Allocates a channel with `cap` slots (at least 1) and returns the receiving end. Create the sending ends with `rx.sender()`. The channel is freed on the last `close`."},
 	"chan.send":        {"tx.send(v T) bool", "Moves `v` into the channel; waits if it's full. With no `Receiver` open, frees `v` and returns `false`."},
+	"chan.try_send":    {"tx.try_send(v T) chan.Try[T]", "Moves `v` into the channel without ever waiting: `Sent`, or `Full(v)` and `Closed(v)`, with `v` given back. For a C callback, which must not block the task that called it."},
 	"chan.recv":        {"rx.recv() chan.Recv[T]", "Waits for a value: `Got(v)`, with ownership of `v`, or `Closed`, when every `Sender` closed and the channel is empty."},
 	"chan.sender":      {"rx.sender() *chan.Sender[T]", "Creates an end that sends to this channel. It needs a `close()`."},
 	"chan.clone":       {"x.clone()", "Another end on the same side (several producers or several consumers). It needs a `close()`."},

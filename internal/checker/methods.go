@@ -44,8 +44,11 @@ func (c *checker) signature(fn *Func, d *ast.FuncDecl, recv *Local) {
 			c.errorf(p.P, "repeated parameter %s", p.Name)
 		}
 		seen[p.Name] = true
+		if p.Kept && !d.ExternC {
+			c.errorf(p.P, "kept only exists in the parameters of an extern \"C\" fn: it says C keeps the callback or its context after the call")
+		}
 		fn.Params = append(fn.Params, &Local{
-			Name: p.Name, CName: "l_" + p.Name, Type: c.resolveType(p.Type, ctxParam), Pos: p.P, Param: true,
+			Name: p.Name, CName: "l_" + p.Name, Type: c.resolveType(p.Type, ctxParam), Pos: p.P, Param: true, Kept: p.Kept,
 		})
 	}
 	if d.Result != nil {
@@ -251,6 +254,10 @@ func (c *checker) callArgs(e *ast.CallExpr, fn *Func, params []*Local) {
 		}
 		if oh, ok := params[i].Type.(*OutHandle); ok {
 			c.outArg(a, oh, context)
+			continue
+		}
+		if ft, ok := params[i].Type.(*FuncType); ok && fn.CSym != "" {
+			c.callbackArg(a, ft, context)
 			continue
 		}
 		if opt, ok := params[i].Type.(*OptArg); ok {

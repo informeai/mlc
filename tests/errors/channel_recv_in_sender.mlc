@@ -1,4 +1,4 @@
-// error: chan.Sender[int] has no method recv (Sender: send, clone, close; Receiver: recv, sender, clone, close)
+// error: chan.Sender[int] has no method recv (Sender: send, try_send, clone, close; Receiver: recv, sender, clone, close)
 import "std/chan"
 import "std/io"
 

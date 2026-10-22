@@ -29,7 +29,7 @@ check: build
 # and the std's tests) under AddressSanitizer + UndefinedBehaviorSanitizer and
 # then under ThreadSanitizer. Every program the checker accepts must run
 # clean (see docs/verification.md).
-SANITIZE_TESTS := 'TestRun|TestPanic|TestStdLibrary|TestFFIOutHandle'
+SANITIZE_TESTS := 'TestRun|TestPanic|TestStdLibrary|TestFFIOutHandle|TestFFICallbacks'
 
 sanitize:
 	MLC_SANITIZE=address go test ./internal/driver -run $(SANITIZE_TESTS) -count=1

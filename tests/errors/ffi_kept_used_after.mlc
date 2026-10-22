@@ -1,0 +1,16 @@
+// error: moved
+struct Ctx {
+    n int
+}
+
+extern "C" fn register(f kept fn(&Ctx), arg kept *Ctx)
+
+fn on(c &Ctx) {
+    c.n++
+}
+
+fn main() {
+    c := alloc(Ctx{n: 0})
+    register(on, c)
+    c.n = 1
+}

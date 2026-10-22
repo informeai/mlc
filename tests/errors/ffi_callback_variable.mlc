@@ -1,0 +1,16 @@
+// error: pass the name of an MLC function; the compiler writes a C wrapper for it at compile time
+struct P {
+    n int
+}
+
+extern "C" fn qsort(base &[]P, n uint64, size uint64, cmp fn(&P, &P) int32)
+
+fn less(a &P, b &P) int32 {
+    return int32(a.n - b.n)
+}
+
+fn main() {
+    var ps [2]P
+    f := less
+    qsort(&ps, 2, 8, f)
+}

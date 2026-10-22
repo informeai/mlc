@@ -1,0 +1,9 @@
+// error: a callback can't receive an owner (*P): C can't hand MLC memory over
+struct P {
+    n int
+}
+
+extern "C" fn each(f fn(*P))
+
+fn main() {
+}

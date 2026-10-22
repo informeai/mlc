@@ -1,0 +1,5 @@
+// error: a callback can't receive a slice: C passes only the pointer
+extern "C" fn each(f fn(&[]byte))
+
+fn main() {
+}
