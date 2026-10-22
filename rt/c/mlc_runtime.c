@@ -32,23 +32,26 @@
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <sys/socket.h>
 #ifdef MLC_EMBEDDED
+#include <sys/poll.h> /* ESP-IDF's poll (over lwIP's select) */
+
+#include "esp_netif.h"
 #include "esp_random.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #else
 #include <dirent.h>
 #include <dlfcn.h> /* std/sqlite: the library is loaded only when used */
-#include <netdb.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <poll.h>
 #include <signal.h>
 #include <spawn.h>
 #if defined(__APPLE__) || defined(__linux__)
 #include <sys/random.h> /* getentropy */
 #endif
-#include <sys/socket.h>
 #include <sys/wait.h>
 #endif
 
@@ -1426,11 +1429,11 @@ void mlc_std_args_fail(mlc_str msg, const char *file, int line) { mlc_std_proces
 
 void mlc_std_bytes_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
 
-#ifndef MLC_EMBEDDED
 /* std/net: TCP. Each handle keeps the socket's descriptor. The errors that change
  * between systems become MLC codes (see std/net.mlc); the others are
  * errno. Writing to a socket closed on the other side returns an error instead of
- * killing the program with SIGPIPE. */
+ * killing the program with SIGPIPE. On the ESP32 the sockets are lwIP's,
+ * with the same calls; without Wi-Fi only 127.0.0.1 answers. */
 
 typedef struct mlc_sock {
     int fd;
@@ -1472,8 +1475,19 @@ static mlc_sock *mlc_net_wrap(int fd, const char *file, int line) {
     return s;
 }
 
+#ifdef MLC_EMBEDDED
+/* lwIP's thread (tcpip) starts with esp_netif_init, which the Wi-Fi also
+ * calls and which does nothing the second time. Before it, a socket call
+ * stops the chip with an assert. */
+static pthread_once_t mlc_net_once = PTHREAD_ONCE_INIT;
+static void mlc_net_start_once(void) { esp_netif_init(); }
+#endif
+
 /* Resolves host:port (empty host: all interfaces, for listen). */
 static int mlc_net_resolve(mlc_sl_byte *host, int64_t port, bool passive, struct addrinfo **res, int64_t *err) {
+#ifdef MLC_EMBEDDED
+    pthread_once(&mlc_net_once, mlc_net_start_once);
+#endif
     char h[256], p[16];
     if (!mlc_net_host(h, sizeof h, host) || port < 0 || port > 65535) {
         *err = EINVAL;
@@ -1582,6 +1596,9 @@ static int mlc_tcp_dial(mlc_sl_byte *host, int64_t port, int64_t *err) {
         } while (r != 0 && errno == EINTR);
         if (r == 0) break;
         last = errno;
+        /* the RST that answers the SYN is a refusal; lwIP (ESP32) reports
+         * it as ECONNRESET, the desktops as ECONNREFUSED */
+        if (last == ECONNRESET) last = ECONNREFUSED;
         close(fd);
         fd = -1;
     }
@@ -1663,8 +1680,6 @@ void mlc_std_net_close_raw(mlc_sock *s, const char *file, int line) {
 }
 
 void mlc_std_net_close_listener(mlc_sock *s, const char *file, int line) { mlc_std_net_close_raw(s, file, line); }
-
-#endif /* !MLC_EMBEDDED */
 
 /* std/time: the local time zone's offset (seconds east of UTC) at the
  * instant ms. */
@@ -2801,3 +2816,88 @@ bool mlc_std_tls_available(const char *file, int line) {
 void mlc_std_tls_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
 
 #endif /* !MLC_EMBEDDED */
+
+#ifdef MLC_EMBEDDED
+/* std/tls on the ESP32: there's no OpenSSL to load, so it behaves as on a
+ * desktop without libssl (tls.available() is false and connect returns
+ * tls.UNAVAILABLE). Only std/http reaches it, for HTTPS: a program's own
+ * import "std/tls" is refused by mlc build -target esp32. The connections
+ * and servers are never created, so the functions that take one aren't
+ * called. */
+
+static const char mlc_tl_none[] = "TLS isn't available with -target esp32";
+
+void *mlc_std_tls_connect(mlc_sl_byte *host, int64_t port, int64_t *err, const char *file, int line) {
+    (void)host;
+    (void)port;
+    (void)file;
+    (void)line;
+    *err = 5003; /* tls.UNAVAILABLE */
+    return NULL;
+}
+
+void *mlc_std_tls_server_raw(mlc_sl_byte *cert, mlc_sl_byte *key, int64_t *err, const char *file, int line) {
+    (void)cert;
+    (void)key;
+    (void)file;
+    (void)line;
+    *err = 5003;
+    return NULL;
+}
+
+void *mlc_std_tls_accept_raw(mlc_sock *c, void *ctx, int64_t *err, const char *file, int line) {
+    (void)ctx;
+    mlc_std_net_close_raw(c, file, line); /* accept takes the connection */
+    *err = 5003;
+    return NULL;
+}
+
+static _Noreturn void mlc_tl_never(const char *file, int line) {
+    mlc_panic(file, line, "internal error: a TLS connection with -target esp32");
+}
+
+void mlc_std_tls_server_close(void *ctx, const char *file, int line) {
+    (void)ctx;
+    mlc_tl_never(file, line);
+}
+
+int64_t mlc_std_tls_read_raw(void *t, mlc_sl_byte *dst, const char *file, int line) {
+    (void)t;
+    (void)dst;
+    mlc_tl_never(file, line);
+}
+
+int64_t mlc_std_tls_write_raw(void *t, mlc_sl_byte *data, const char *file, int line) {
+    (void)t;
+    (void)data;
+    mlc_tl_never(file, line);
+}
+
+int64_t mlc_std_tls_timeout_raw(void *t, int64_t ms, const char *file, int line) {
+    (void)t;
+    (void)ms;
+    mlc_tl_never(file, line);
+}
+
+void mlc_std_tls_close_raw(void *t, const char *file, int line) {
+    (void)t;
+    mlc_tl_never(file, line);
+}
+
+int64_t mlc_std_tls_last_error(mlc_sl_byte *dst, const char *file, int line) {
+    (void)file;
+    (void)line;
+    int64_t n = (int64_t)(sizeof mlc_tl_none - 1);
+    if (n > dst->len) n = dst->len;
+    memcpy(dst->ptr, mlc_tl_none, (size_t)n);
+    return n;
+}
+
+bool mlc_std_tls_available(const char *file, int line) {
+    (void)file;
+    (void)line;
+    return false;
+}
+
+void mlc_std_tls_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
+#endif /* MLC_EMBEDDED */

@@ -96,12 +96,79 @@ func simCompile(obj, src string, extra ...string) (string, error) {
 	return src + ": " + string(out), err
 }
 
+// simBuild compiles the component's program (mlc_app.c) for the simulation
+// and links it with the runtime and sim.c; returns the executable.
+func simBuild(t *testing.T, comp string, common []string) string {
+	t.Helper()
+	dir := t.TempDir()
+	app := filepath.Join(dir, "app.o")
+	if out, err := simCompile(app, filepath.Join(comp, "mlc_app.c"), "-Dmain=mlc_main"); err != nil {
+		t.Fatal(out)
+	}
+	exe := filepath.Join(dir, "prog")
+	cc := os.Getenv("CC")
+	if cc == "" {
+		cc = "cc"
+	}
+	args := append([]string{"-pthread", "-o", exe, app}, common...)
+	if out, err := exec.Command(cc, append(args, "-lm")...).CombinedOutput(); err != nil {
+		t.Fatalf("link: %v\n%s", err, out)
+	}
+	return exe
+}
+
+// TestESP32TLS: std/http reaches std/tls, which on the ESP32 has no
+// OpenSSL: HTTPS answers tls.UNAVAILABLE (5003), with the explanation, and
+// the program goes on.
+func TestESP32TLS(t *testing.T) {
+	requireCC(t)
+	common := esp32Common(t)
+	src := `import "std/http"
+import "std/io"
+import "std/url"
+
+fn main() {
+    var u url.URL
+    if !url.parse_str("https://example.com/", &u) {
+        return
+    }
+    err := 0
+    c := http.dial_tls(&u, &err)
+    if c != nil {
+        io.print("connected")
+        c.close()
+        return
+    }
+    io.print("dial_tls:", err)
+}
+`
+	comp := filepath.Join(t.TempDir(), "comp")
+	if err := BuildESP32("app.mlc", []byte(src), comp, func(string) ([]byte, error) { return nil, os.ErrNotExist }, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(simBuild(t, comp, common)).CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if string(out) != "dial_tls: 5003\n" {
+		t.Errorf("output %q, expected tls.UNAVAILABLE (5003)", out)
+	}
+}
+
+// esp32GCCFlags compile the generated C as ESP-IDF does (-Og, -Wall with
+// -Werror=all, gnu17), with the component's options (rt/c/esp32/CMakeLists.txt).
+var esp32GCCFlags = []string{"-std=gnu17", "-Og", "-Wall", "-Werror=all", "-Wno-unused-function", "-Wno-missing-braces", "-Dmain=mlc_main"}
+
 // TestESP32Sim: each tests/run and tests/panic program that doesn't need what
 // the ESP32 lacks becomes a component, runs in the simulation and must give
-// the same output and exit code as on this machine.
+// the same output and exit code as on this machine. When ESP-IDF's GCC is in
+// the PATH (after export.sh), the generated C also compiles with it, without
+// warnings: ESP-IDF stops at any -Wall warning, and GCC gives some that
+// clang doesn't.
 func TestESP32Sim(t *testing.T) {
 	requireCC(t)
 	common := esp32Common(t)
+	espGCC, _ := exec.LookPath("xtensa-esp32-elf-gcc")
 	ran := 0
 	for _, kind := range []string{"run", "panic"} {
 		for _, path := range programs(kind) {
@@ -123,19 +190,12 @@ func TestESP32Sim(t *testing.T) {
 			}
 			ran++
 			t.Run(kind+"/"+testName(path), func(t *testing.T) {
-				dir := t.TempDir()
-				app := filepath.Join(dir, "app.o")
-				if out, err := simCompile(app, filepath.Join(comp, "mlc_app.c"), "-Dmain=mlc_main"); err != nil {
-					t.Fatal(out)
-				}
-				exe := filepath.Join(dir, "prog")
-				cc := os.Getenv("CC")
-				if cc == "" {
-					cc = "cc"
-				}
-				args := append([]string{"-pthread", "-o", exe, app}, common...)
-				if out, err := exec.Command(cc, append(args, "-lm")...).CombinedOutput(); err != nil {
-					t.Fatalf("link: %v\n%s", err, out)
+				exe := simBuild(t, comp, common)
+				if espGCC != "" {
+					args := append(append([]string{}, esp32GCCFlags...), "-I", comp, "-c", "-o", filepath.Join(t.TempDir(), "app_xtensa.o"), filepath.Join(comp, "mlc_app.c"))
+					if out, err := exec.Command(espGCC, args...).CombinedOutput(); err != nil {
+						t.Fatalf("ESP-IDF's GCC: %v\n%s", err, out)
+					}
 				}
 				var out, errOut bytes.Buffer
 				cmd := exec.Command(exe)
@@ -177,8 +237,9 @@ func TestESP32Sim(t *testing.T) {
 }
 
 // esp32Allowed is what the ESP32 runtime may call: newlib (ESP-IDF's C
-// library), its pthread (over FreeRTOS) and two ESP-IDF functions. A call
-// to something else (dlopen, socket, posix_spawn...) wouldn't link on the chip.
+// library), its pthread (over FreeRTOS), lwIP's sockets and three ESP-IDF
+// functions. A call to something else (dlopen, posix_spawn, nanosleep...)
+// wouldn't link on the chip.
 var esp32Allowed = map[string]bool{
 	"atan2": true, "atoi": true, "atoll": true, "calloc": true, "ceil": true, "clock_gettime": true, "close": true,
 	"cos": true, "difftime": true, "exit": true, "exp": true, "ferror": true, "fflush": true, "floor": true,
@@ -189,6 +250,11 @@ var esp32Allowed = map[string]bool{
 	"strcmp": true, "strerror": true, "strftime": true, "strlen": true, "strtod": true, "tan": true,
 	"usleep": true, "vfprintf": true, "write": true,
 	"esp_fill_random": true, "pxTaskGetStackStart": true,
+	// std/net, over lwIP (its socket calls have the BSD names), and the
+	// start of lwIP's thread
+	"accept": true, "bind": true, "connect": true, "freeaddrinfo": true, "getaddrinfo": true,
+	"getsockname": true, "listen": true, "poll": true, "recv": true, "send": true,
+	"setsockopt": true, "shutdown": true, "socket": true, "esp_netif_init": true,
 }
 
 // esp32Host is what this machine's compiler adds on its own (stack and
@@ -341,6 +407,13 @@ func TestESP32Target(t *testing.T) {
 			t.Error(err)
 		}
 	}
+	// std/net (lwIP) and std/http (without HTTPS: std/tls, which it imports,
+	// answers UNAVAILABLE) are available
+	for _, src := range []string{"import \"std/net\"\n\nfn main() {\n}\n", "import \"std/http\"\n\nfn main() {\n}\n"} {
+		if err := BuildESP32("app.mlc", []byte(src), filepath.Join(t.TempDir(), "n"), noFiles, Options{}); err != nil {
+			t.Errorf("%q: %v", src, err)
+		}
+	}
 	// generating again over its own folder works
 	if err := BuildESP32("app.mlc", []byte("fn main() {\n}\n"), dir, noFiles, Options{}); err != nil {
 		t.Errorf("generating again: %v", err)
@@ -348,7 +421,8 @@ func TestESP32Target(t *testing.T) {
 
 	for _, c := range []struct{ src, want string }{
 		{"import \"std/fs\"\n\nfn main() {\n}\n", `app.mlc:1:1: import "std/fs": not available with -target esp32: std/fs needs files and directories`},
-		{"import \"std/http\"\n\nfn main() {\n}\n", `import "std/http": not available with -target esp32 (it uses std/net): std/net needs BSD sockets`},
+		{"import \"std/tls\"\n\nfn main() {\n}\n", `import "std/tls": not available with -target esp32: std/tls needs dlopen and OpenSSL`},
+		{"import \"std/sqlite\"\n\nfn main() {\n}\n", `std/sqlite needs dlopen`},
 		{"import \"std/config\"\n\nfn main() {\n}\n", `(it uses std/fs)`},
 	} {
 		err := BuildESP32("app.mlc", []byte(c.src), filepath.Join(t.TempDir(), "x"), noFiles, Options{})

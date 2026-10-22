@@ -1,0 +1,157 @@
+import "std/http"
+import "std/io"
+import "std/net"
+import "std/str"
+import "std/thread"
+
+// HTTP over 127.0.0.1 in one program, without signals, so it also runs on
+// the ESP32, where the loopback answers without Wi-Fi (tools/esp32_chip.py):
+// the server handles the connections one at a time, and the client, in a
+// thread with a 32 KB stack (an http.Message has 8 KB), makes the requests.
+
+const CONNS = 2 // the client's connections that the server accepts
+
+fn handle(c &net.Conn, m &http.Message) {
+    if m.path_is("/health") {
+        http.respond_str(c, 200, "text/plain", "ok\n")
+        return
+    }
+    if m.method_is("GET") && m.path_has_prefix("/square/") {
+        var path [64]byte
+        n := m.path(&path)
+        x := 0
+        if n < 0 || !str.parse_int(&path[len("/square/"):n], &x) {
+            http.respond_str(c, 400, "text/plain", "not a number\n")
+            return
+        }
+        var body [64]byte
+        k := str.format(&body, "{{\"n\":{},\"square\":{}}}\n", x, x * x)
+        http.respond(c, 200, "application/json", &body[:k])
+        return
+    }
+    if m.method_is("POST") && m.path_is("/echo") {
+        var body [256]byte
+        match m.read_all(c, &body) {
+            Ok(n) => http.respond(c, 200, "text/plain", &body[:n])
+            Err(_) => http.respond_str(c, 413, "text/plain", "body too large\n")
+        }
+        return
+    }
+    http.respond_str(c, 404, "text/plain", "not found\n")
+}
+
+// serve_conn is a connection's keep-alive loop.
+fn serve_conn(c &net.Conn) {
+    var m http.Message
+    for {
+        match m.read_request(c) {
+            Ok(_) => {}
+            Err(_) => break // io.EOF: the client closed
+        }
+        handle(c, &m)
+        match m.skip_body(c) {
+            Ok(_) => {}
+            Err(_) => break
+        }
+        if !m.keep_alive() {
+            break
+        }
+    }
+}
+
+// ---------- the client ----------
+
+fn show(c &net.Conn) {
+    var m http.Message
+    match m.read_response(c) {
+        Ok(_) => {}
+        Err(code) => {
+            io.printf("error {}\n", code)
+            return
+        }
+    }
+    var out [256]byte
+    match m.read_all(c, &out) {
+        Ok(n) => io.printf("{} {:s}", m.status(), &out[:n])
+        Err(code) => io.printf("error {}\n", code)
+    }
+}
+
+fn call(c &net.Conn, method string, target string, body string) {
+    var b http.Builder
+    b.request(method, target)
+    b.header("Host", "localhost")
+    b.send_str(c, body)
+    io.printf("{} {}: ", method, target)
+    show(c)
+}
+
+fn connect(port int, err &int) ?*net.Conn {
+    var h [16]byte
+    hn := str.copy(&h, "127.0.0.1")
+    return net.connect(&h[:hn], port, err)
+}
+
+fn client(port int) {
+    // a port where nobody listens: the error is net.REFUSED, as on the desktop
+    err := 0
+    var h [16]byte
+    hn := str.copy(&h, "127.0.0.1")
+    closed := net.listen(&h[:hn], 0, &err)
+    if closed != nil {
+        free_port := closed.port()
+        closed.close()
+        none := connect(free_port, &err)
+        if none != nil {
+            io.print("connected to a closed port")
+            none.close()
+        } else {
+            io.print("closed port refused:", err == net.REFUSED)
+        }
+    }
+
+    c := connect(port, &err)
+    if c == nil {
+        io.printf("connect: {}\n", err)
+        return
+    }
+    // all on the same connection (keep-alive)
+    call(&c, "GET", "/health", "")
+    call(&c, "GET", "/square/12", "")
+    call(&c, "GET", "/square/x", "")
+    call(&c, "POST", "/echo", "hello over loopback\n")
+    call(&c, "GET", "/nothing", "")
+    c.close()
+
+    c2 := connect(port, &err)
+    if c2 == nil {
+        io.printf("connect: {}\n", err)
+        return
+    }
+    call(&c2, "GET", "/health", "")
+    c2.close()
+}
+
+fn main() {
+    var h [16]byte
+    hn := str.copy(&h, "127.0.0.1")
+    err := 0
+    l := net.listen(&h[:hn], 0, &err)
+    if l == nil {
+        io.printf("listen: {}\n", err)
+        return
+    }
+    cl := thread.spawn(client, l.port(), 32 * 1024)
+    for i := 0; i < CONNS; i++ {
+        c := l.accept(&err)
+        if c == nil {
+            io.printf("accept: {}\n", err)
+            break
+        }
+        serve_conn(&c)
+        c.close()
+    }
+    thread.join(cl)
+    l.close()
+    io.print("done")
+}

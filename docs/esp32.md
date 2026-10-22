@@ -70,34 +70,50 @@ The values of the C enums and macros (`GPIO_MODE_OUTPUT` is 2) come from ESP-IDF
 The modules that need a desktop system are refused at compile time, including through another module:
 
 ```
-app.mlc:1:1: import "std/http": not available with -target esp32 (it uses std/net): std/net needs BSD sockets, which the ESP32 runtime doesn't have
+app.mlc:1:1: import "std/config": not available with -target esp32 (it uses std/fs): std/fs needs files and directories, which the ESP32 runtime doesn't have
 ```
 
 | Module | Why |
 |---|---|
 | `std/fs` (and `std/config`, which reads files) | files and directories |
 | `std/process` | processes |
-| `std/net` (and `std/http`) | BSD sockets |
 | `std/signal` | Unix signals |
 | `std/sqlite`, `std/tls` | `dlopen` (and OpenSSL) |
 
-`os.cwd` and `os.chdir` return an error (there's no current directory). Everything else in the standard library works: `io`, `str`, `text`, `utf8`, `vec`, `map`, `deque`, `heap`, `sort`, `slices`, `arena`, `json`, `csv` (from text in memory), `time`, `rand`, `hash`, `hmac`, `thread`, `chan`, `mutex`, `atomic`, `sync`, `log` to the console.
+`std/tls` is refused only in the program's own imports: `std/http` imports it for HTTPS, and on the ESP32 its functions answer `tls.UNAVAILABLE` (as on a desktop without `libssl`), so `http.dial_tls` returns `nil` with that error and the rest of `std/http` works.
 
-ESP-IDF has a file system (SPIFFS, FAT) and sockets (lwIP), so `std/fs` and `std/net` may come later, once they're tested on a chip.
+`os.cwd` and `os.chdir` return an error (there's no current directory). Everything else in the standard library works: `io`, `str`, `text`, `utf8`, `vec`, `map`, `deque`, `heap`, `sort`, `slices`, `arena`, `json`, `csv` (from text in memory), `time`, `rand`, `hash`, `hmac`, `thread`, `chan`, `mutex`, `atomic`, `sync`, `log` to the console, `net` and `http` (see [The network](#the-network)).
+
+ESP-IDF has a file system (SPIFFS, FAT), so `std/fs` may come later.
+
+## The network
+
+`std/net` and `std/http` work over ESP-IDF's TCP/IP stack (lwIP), with the same API and error codes as on the desktop: lwIP has the BSD socket calls. The runtime starts lwIP (`esp_netif_init`) at the first `listen` or `connect`.
+
+**Without Wi-Fi only the loopback answers** (`127.0.0.1` and `localhost`): a server and a client in the same program work, as in `tests/run/http_loopback.mlc`. To reach the network, the Wi-Fi has to be connected first; there's no `std/wifi` yet, so for now it's done through the FFI, with ESP-IDF's functions (`esp_wifi_init`, `esp_wifi_connect`...), or in C in another component of the project.
+
+What changes from the desktop:
+
+- **Memory:** an `http.Message` has 8 KB, so the thread that reads one needs a stack of at least 32 KB (`32 * 1024`), and a server with a thread per connection serves few at a time. The Wi-Fi, when on, takes another 50 to 70 KB of the heap.
+- **HTTPS isn't available** (see above).
+- **A refused connection** is `net.REFUSED`, as on the desktop: lwIP reports the refusal as `ECONNRESET`, and `connect` translates it.
 
 ## How it's tested
 
 There's no ESP32 in the test suite, so `internal/driver/esp32_test.go` simulates ESP-IDF on the host. `testdata/esp32sim` has the few FreeRTOS and ESP-IDF declarations the runtime uses, with FreeRTOS tasks as pthreads of the asked stack and a `main` that calls `app_main`, like ESP-IDF's startup.
 
 - **TestESP32Sim**: every program in `tests/run` and `tests/panic` that doesn't import a missing module and doesn't take arguments becomes a component, is compiled with `ESP_PLATFORM` and `-Werror`, runs in the simulation and must give the same output and exit code as on the desktop. The only difference is expected: `stack_recursion.mlc` panics at its first recursion, because 100 calls of 4 KB don't fit in the task's 32 KB.
-- **TestESP32Symbols**: the runtime compiled for the ESP32 only calls what ESP-IDF has (newlib, pthread, `esp_fill_random`, `pxTaskGetStackStart`). A new call to something else (`dlopen`, `socket`, `posix_spawn`, `nanosleep`) fails the test. The list was checked against ESP-IDF 5.5.6's libraries.
+- **TestESP32Symbols**: the runtime compiled for the ESP32 only calls what ESP-IDF has (newlib, pthread, lwIP's sockets, `esp_fill_random`, `pxTaskGetStackStart`, `esp_netif_init`). A new call to something else (`dlopen`, `posix_spawn`, `nanosleep`) fails the test. The list was checked against ESP-IDF 5.5.6's libraries.
 - **TestESP32ThreadLocal**: the runtime's `_Thread_local` variables stay under 128 bytes. With 6 KB there, the chip didn't start: ESP-IDF couldn't create its own main task.
 - **TestESP32Externs**: every `extern fn` of a module the ESP32 has is defined in the embedded runtime.
-- **TestESP32Target**: the component's files, the refused imports and the folder that isn't mlc's.
+- **TestESP32TLS**: `http.dial_tls` answers `tls.UNAVAILABLE` and the program goes on.
+- **TestESP32Target**: the component's files, the refused imports (and the allowed ones, `std/net` and `std/http`) and the folder that isn't mlc's.
+
+With ESP-IDF's GCC in the `PATH` (after `export.sh`), TestESP32Sim also compiles each program's generated C with it, with ESP-IDF's `-Werror=all`: GCC gives warnings that clang doesn't (it wants inner braces in the `{0}` of an array inside a struct, which the component turns off), and `-Wno-error` doesn't undo `-Werror=all`, so one of them stops `idf.py build`.
 
 The simulation also reproduces what ESP-IDF's build differs in: `_GNU_SOURCE` already defined, `-Wtype-limits`, and a `struct tm` without `tm_gmtoff`, as in newlib.
 
-**On the chip** (`tools/esp32_chip.py`, by hand, not in `make check`): each program of `tests/run` and `tests/panic` was built with ESP-IDF, flashed and run on an ESP32, and the console compared with the expected output (stdout, stderr and the panic message come through the same UART). 67 programs gave the same output; 10 weren't run (5 use the network or desktop C libraries, 5 read stdin or arguments). The other 3, `threads`, `channels` and `mutex`, start 64 KB threads (and one of 256 KB) at once: they panic in `thread.spawn` for lack of memory, and with the stacks changed to 16 KB they give the same output as on the desktop. To run it again, with the board on USB:
+**On the chip** (`tools/esp32_chip.py`, by hand, not in `make check`): each program of `tests/run` and `tests/panic` was built with ESP-IDF, flashed and run on an ESP32, and the console compared with the expected output (stdout, stderr and the panic message come through the same UART). 67 programs gave the same output; 10 weren't run (5 use the network or desktop C libraries, 5 read stdin or arguments). The other 3, `threads`, `channels` and `mutex`, start 64 KB threads (and one of 256 KB) at once: they panic in `thread.spawn` for lack of memory, and with the stacks changed to 16 KB they give the same output as on the desktop. Since `std/net` and `std/http` came to the ESP32, `http_loopback.mlc` and `server.mlc` (with 16 KB stacks) also give the desktop's output on the chip; the whole run hasn't been repeated since then. To run it again, with the board on USB:
 
 ```
 . ~/esp/esp-idf/export.sh
@@ -105,6 +121,6 @@ python tools/esp32_chip.py --port /dev/cu.usbserial-0001                      # 
 python tools/esp32_chip.py --port /dev/cu.usbserial-0001 --only threads,division
 ```
 
-It builds `bin/mlc`, creates a temporary ESP-IDF project (or uses `--project`, which saves the first full build of ESP-IDF on later runs), and runs the thread tests with 16 KB stacks. It exits with 1 if a program fails.
+It builds `bin/mlc`, creates a temporary ESP-IDF project (or uses `--project`, which saves the first full build of ESP-IDF on later runs), and runs the thread and server tests with 16 KB stacks. It exits with 1 if a program fails.
 
 What isn't checked: the other chips (S3 is Xtensa like the ESP32; C3 and C6 are RISC-V), and runs in QEMU, which would put the chip in the test suite.

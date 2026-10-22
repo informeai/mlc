@@ -21,11 +21,16 @@ import (
 var esp32Missing = map[string]string{
 	"std/fs":      "files and directories",
 	"std/process": "processes",
-	"std/net":     "BSD sockets",
 	"std/signal":  "Unix signals",
 	"std/sqlite":  "dlopen",
 	"std/tls":     "dlopen and OpenSSL",
 }
+
+// esp32Stubs are the missing modules that another module may still import:
+// the ESP32 runtime answers their functions with an error (std/tls says
+// tls.UNAVAILABLE, as on a desktop without libssl), so std/http works
+// without HTTPS. Only the program's own import is refused.
+var esp32Stubs = map[string]bool{"std/tls": true}
 
 // checkTarget refuses, in the program's files, an import that reaches a
 // module the target doesn't have, directly or through another module.
@@ -39,10 +44,11 @@ func checkTarget(srcs []checker.Source, target string) []token.Error {
 			imports[s.Path] = append(imports[s.Path], imp.Path)
 		}
 	}
-	// reaches returns the first missing module that path leads to
-	var reaches func(path string, seen map[string]bool) string
-	reaches = func(path string, seen map[string]bool) string {
-		if _, ok := esp32Missing[path]; ok {
+	// reaches returns the first missing module that path leads to (a stub
+	// counts only when it's the program's own import, direct)
+	var reaches func(path string, direct bool, seen map[string]bool) string
+	reaches = func(path string, direct bool, seen map[string]bool) string {
+		if _, ok := esp32Missing[path]; ok && (direct || !esp32Stubs[path]) {
 			return path
 		}
 		if seen[path] {
@@ -50,7 +56,7 @@ func checkTarget(srcs []checker.Source, target string) []token.Error {
 		}
 		seen[path] = true
 		for _, p := range imports[path] {
-			if m := reaches(p, seen); m != "" {
+			if m := reaches(p, false, seen); m != "" {
 				return m
 			}
 		}
@@ -62,7 +68,7 @@ func checkTarget(srcs []checker.Source, target string) []token.Error {
 			continue // the error goes on the program's import, not inside the library
 		}
 		for _, imp := range s.AST.Imports {
-			m := reaches(imp.Path, map[string]bool{})
+			m := reaches(imp.Path, true, map[string]bool{})
 			if m == "" {
 				continue
 			}

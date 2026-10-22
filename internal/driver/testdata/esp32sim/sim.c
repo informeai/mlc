@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 
+#include "esp_netif.h"
 #include "esp_random.h"
 #include "freertos/task.h"
 
@@ -65,6 +66,8 @@ uint8_t *pxTaskGetStackStart(TaskHandle_t t) {
 void esp_fill_random(void *buf, size_t len) {
     arc4random_buf(buf, len);
 }
+
+esp_err_t esp_netif_init(void) { return 0; }
 
 int main(void) {
     app_main();

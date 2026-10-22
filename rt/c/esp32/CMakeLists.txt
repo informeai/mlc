@@ -7,6 +7,8 @@ idf_component_register(SRCS "mlc_app.c" "mlc_runtime.c" "mlc_main.c"
 # the program's main becomes mlc_main, which the task in mlc_main.c calls
 set_source_files_properties(mlc_app.c PROPERTIES COMPILE_DEFINITIONS "main=mlc_main")
 
-# the generated C is checked with clang -Wall -Werror on the host; a warning
-# that only GCC for the chip gives stays a warning instead of stopping the build
-target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-unused-function -Wno-error)
+# ESP-IDF compiles with -Werror=all, which -Wno-error doesn't undo: every
+# -Wall warning of GCC stops the build. The generated C is checked with it
+# (TestESP32Sim, when ESP-IDF's GCC is in the PATH); missing-braces is off
+# because GCC asks for inner braces in {0}, C's zero of an array in a struct.
+target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-unused-function -Wno-missing-braces -Wno-error)

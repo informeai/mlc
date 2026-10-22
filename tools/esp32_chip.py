@@ -16,7 +16,7 @@ What differs from the desktop is handled here:
   - a panic aborts and reboots the chip: the output ends there;
   - programs with .args or .in are skipped (argv is only the name, no stdin),
     and so are the ones whose imports the target refuses;
-  - the thread tests start several 64 KB threads at once, which don't fit
+  - the thread and server tests start several 64 KB threads at once, which don't fit
     in the ESP32's RAM: they run with 16 KB stacks (SMALL_STACKS);
   - stack_recursion.mlc panics at its first recursion in the 32 KB task, as
     TestESP32Sim expects too.
@@ -41,7 +41,7 @@ END = re.compile(r"abort\(\) was called|Rebooting\.\.\.|Guru Meditation|Backtrac
 # the stack_recursion difference that TestESP32Sim expects too
 EXPECTED_STDOUT = {"stack_recursion.mlc": ""}
 # the programs that run with their thread stacks changed to 16 KB
-SMALL_STACKS = {"threads.mlc", "channels.mlc", "mutex.mlc"}
+SMALL_STACKS = {"threads.mlc", "channels.mlc", "mutex.mlc", "server.mlc"}
 
 
 def run(args, **kw):

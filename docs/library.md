@@ -874,6 +874,8 @@ A connection is an `io.Reader`: `bufio.new[net.Conn]()` reads lines from it (tex
 
 Writing to a connection the other side closed returns `RESET`, instead of ending the program with `SIGPIPE`. `tests/run/server.mlc` has a complete service: one thread per connection, request and response in JSON.
 
+On the ESP32 (`mlc build -target esp32`) the sockets are ESP-IDF's (lwIP), with the same API and the same error codes; without Wi-Fi only `127.0.0.1` answers. See [esp32.md](esp32.md#the-network).
+
 ### `std/signal`
 
 System signals: Ctrl+C (`INT`), the stop request from Docker, systemd and Kubernetes (`TERM`), `HUP`, `QUIT`, `USR1` and `USR2`. Without `listen`, a signal does what it always did (`INT` and `TERM` end the program on the spot). With `listen`, it's only **recorded**: the program checks (`received`) or waits (`wait`) and decides, at the point it chooses, how to shut down (closing connections, saving what's left). The real handler, in C, only marks the signal and wakes whoever is in `wait`.
@@ -1039,7 +1041,7 @@ srv.close()
 | `c.read(&dst)`, `c.write(&data)`, `c.set_timeout(ms)`, `c.close()` | like `net.Conn`; `tls.Conn` implements `io.Reader` and `http.Stream` |
 | `last_error(&dst)` | why this thread's last error happened |
 
-The errors: `HANDSHAKE` (5001), `BAD_CERT` (5002), `UNAVAILABLE` (5003, no `libssl`), `BROKEN` (5004) and `SERVER_FILES` (5005), besides those of `net.connect`. The test (`std/tls_test.mlc`) generates a certificate for `localhost` with `openssl` and runs server and client, including the cases that must be refused (unknown authority and wrong name); against real servers, an expired certificate and one for another name are refused too.
+The errors: `HANDSHAKE` (5001), `BAD_CERT` (5002), `UNAVAILABLE` (5003, no `libssl`, and always on the ESP32), `BROKEN` (5004) and `SERVER_FILES` (5005), besides those of `net.connect`. The test (`std/tls_test.mlc`) generates a certificate for `localhost` with `openssl` and runs server and client, including the cases that must be refused (unknown authority and wrong name); against real servers, an expired certificate and one for another name are refused too.
 
 ### `std/http`
 

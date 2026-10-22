@@ -1,0 +1,8 @@
+closed port refused: true
+GET /health: 200 ok
+GET /square/12: 200 {"n":12,"square":144}
+GET /square/x: 400 not a number
+POST /echo: 200 hello over loopback
+GET /nothing: 404 not found
+GET /health: 200 ok
+done
