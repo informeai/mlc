@@ -20,7 +20,16 @@ struct Watch {
     seen int
 }
 
+// a buffer the callback receives: C's pointer and length become the slice
+struct Bytes {
+    sum int
+    calls int
+    last [16]byte
+    last_n int
+}
+
 extern "C" fn cb_each(n int32, f fn(&Sum, int32), ctx &Sum) int32
+extern "C" fn cb_bytes(f fn(&Bytes, &[]byte, int32), ctx &Bytes) int32
 extern "C" fn cb_keep(f kept fn(&Watch, int32) int32, ctx kept *Watch)
 extern "C" fn cb_fire(from int32, n int32, stack_kb int32)
 extern "C" fn cb_fire_threads(from int32, k int32)
@@ -29,6 +38,17 @@ extern "C" fn cb_returned() int32
 fn add(s &Sum, i int32) {
     s.total += int(i)
     s.calls++
+}
+
+fn got(b &Bytes, data &[]byte, n int32) {
+    b.calls++
+    for i := 0; i < len(data); i++ {
+        b.sum += int(data[i])
+    }
+    if len(data) > 0 {
+        b.last_n = str.copy_bytes(&b.last, data)
+    }
+    io.print("bytes:", len(data), n)
 }
 
 // runs in C's threads: formats a line (the thread's buffers, freed when it
@@ -49,6 +69,10 @@ fn main() {
     s := Sum{name: "each", total: 0, calls: 0}
     n := cb_each(4, add, &s)
     io.print(s.name, n, s.total, s.calls)
+
+    var b Bytes
+    cb_bytes(got, &b)
+    io.printf("{} calls, sum {}, last {:s}\n", b.calls, b.sum, &b.last[:b.last_n])
 
     rx := chan.new[int](16)
     w := alloc(Watch{tx: rx.sender(), seen: 0})

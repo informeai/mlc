@@ -1,4 +1,4 @@
-// error: a callback can't receive a slice: C passes only the pointer
+// error: a callback's slice must be followed by its length, as in C
 extern "C" fn each(f fn(&[]byte))
 
 fn main() {

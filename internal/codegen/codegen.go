@@ -926,7 +926,38 @@ func cFFIType(t checker.Type) string {
 	if opt, ok := t.(*checker.OptArg); ok {
 		return cFFIType(opt.Inner) // ?&T: the same pointer, which can be NULL
 	}
+	if ft, ok := t.(*checker.FuncType); ok {
+		return callbackCType(ft)
+	}
 	return cType(t)
+}
+
+// callbackCType is the C type of a callback parameter: the function pointer
+// in C's shape, where a slice is its pointer (the length is the next
+// parameter, which C passes too).
+func callbackCType(ft *checker.FuncType) string {
+	params := make([]string, len(ft.Params))
+	for i, p := range ft.Params {
+		params[i] = cType(p)
+		if el := sliceBorrowElem(p); el != nil {
+			params[i] = cType(el) + " *"
+		}
+	}
+	list := "void"
+	if len(params) > 0 {
+		list = strings.Join(params, ", ")
+	}
+	return fmt.Sprintf("%s (*)(%s)", cType(ft.Result), list)
+}
+
+// sliceBorrowElem is T in a &[]T, or nil.
+func sliceBorrowElem(t checker.Type) checker.Type {
+	if b, ok := t.(*checker.Borrow); ok {
+		if s, ok := b.Elem.(*checker.Slice); ok {
+			return s.Elem
+		}
+	}
+	return nil
 }
 
 // cCall translates the call of a C function, converting the arguments.
@@ -970,21 +1001,40 @@ func callbackName(fn *checker.Func) string { return fn.CName + "__cb" }
 // the call, since C may call from a thread MLC didn't create
 // (mlc_cb_enter/mlc_cb_leave). The #line points at the function, so a stop
 // in the wrapper (an interrupt) names it.
+//
+// A &[]T parameter arrives as C's pointer, with the length in the next
+// parameter: the wrapper joins them into the slice the function receives (a
+// negative length is an empty slice).
 func (g *gen) callbackWrapper(fn *checker.Func) {
 	g.file = fn.File
+	params := make([]string, len(fn.Params))
 	args := make([]string, len(fn.Params))
+	slices := ""
 	for i, p := range fn.Params {
+		params[i] = cType(p.Type) + " l_" + p.Name
 		args[i] = "l_" + p.Name
+		if el := sliceBorrowElem(p.Type); el != nil && i+1 < len(fn.Params) {
+			n := "l_" + fn.Params[i+1].Name
+			params[i] = cType(el) + " *l_" + p.Name + "__p"
+			slices += fmt.Sprintf(" %s l_%s__s = {.ptr = l_%s__p, .len = %s < 0 ? 0 : (int64_t)%s};",
+				cType(p.Type.(*checker.Borrow).Elem), p.Name, p.Name, n, n)
+			args[i] = "&l_" + p.Name + "__s"
+		}
 	}
+	list := "void"
+	if len(params) > 0 {
+		list = strings.Join(params, ", ")
+	}
+	sig := fmt.Sprintf("%s %s(%s)", cType(fn.Result), callbackName(fn), list)
 	call := fmt.Sprintf("%s(%s)", fn.CName, strings.Join(args, ", "))
 	g.lineDirective(fn.Decl.P)
 	if fn.Result == checker.Void {
-		g.raw("static MLC_MAYBE_UNUSED %s { mlc_cb_frame mlc_cbf; mlc_cb_enter(&mlc_cbf, __FILE__, __LINE__); %s; mlc_cb_leave(&mlc_cbf); }\n",
-			signatureNamed(fn, callbackName(fn)), call)
+		g.raw("static MLC_MAYBE_UNUSED %s {%s mlc_cb_frame mlc_cbf; mlc_cb_enter(&mlc_cbf, __FILE__, __LINE__); %s; mlc_cb_leave(&mlc_cbf); }\n",
+			sig, slices, call)
 		return
 	}
-	g.raw("static MLC_MAYBE_UNUSED %s { mlc_cb_frame mlc_cbf; mlc_cb_enter(&mlc_cbf, __FILE__, __LINE__); %s mlc_cbr = %s; mlc_cb_leave(&mlc_cbf); return mlc_cbr; }\n",
-		signatureNamed(fn, callbackName(fn)), cType(fn.Result), call)
+	g.raw("static MLC_MAYBE_UNUSED %s {%s mlc_cb_frame mlc_cbf; mlc_cb_enter(&mlc_cbf, __FILE__, __LINE__); %s mlc_cbr = %s; mlc_cb_leave(&mlc_cbf); return mlc_cbr; }\n",
+		sig, slices, cType(fn.Result), call)
 }
 
 func isOptArgType(t checker.Type) bool {

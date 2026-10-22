@@ -205,12 +205,22 @@ func cParamOK(t Type, kept bool) string {
 // returns "". What C passes the callback follows the extern rules, but
 // nothing that owns: C can't hand MLC memory over.
 func cCallbackOK(ft *FuncType) string {
-	for _, p := range ft.Params {
+	for i, p := range ft.Params {
 		switch pt := p.(type) {
 		case *Borrow:
 			switch e := pt.Elem.(type) {
 			case *Slice:
-				return "a callback can't receive a slice: C passes only the pointer (receive &T, for one element)"
+				// C passes the pointer and, right after it, the count: the wrapper
+				// joins them into the slice, and the callback also gets the count
+				if i+1 >= len(ft.Params) || !isInteger(ft.Params[i+1]) {
+					return "a callback's slice must be followed by its length, as in C (fn(&[]byte, int32) for const uint8_t *data, int len): C passes the pointer and the count"
+				}
+				if !cScalar(e.Elem) {
+					if s, ok := e.Elem.(*Struct); !ok || !cStructOK(s) {
+						return "a callback's slice must have numeric or bool elements, or structs of scalar fields"
+					}
+				}
+				continue
 			case *Struct:
 				if e.ChanEnd != 0 || e.MutexKind != 0 {
 					return "a callback can't receive a channel end or a mutex: put it in the context struct"

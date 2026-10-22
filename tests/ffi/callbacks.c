@@ -60,3 +60,13 @@ void cb_fire_threads(int32_t from, int32_t k) {
 }
 
 int32_t cb_returned(void) { return (int32_t)returned; }
+
+/* a buffer as ESP-NOW's receive callback passes it: the pointer and the
+ * length; also NULL with 0 and a negative length (an empty slice) */
+int32_t cb_bytes(void (*f)(void *, const uint8_t *, int32_t), void *ctx) {
+    static const uint8_t msg[] = "hello, mlc";
+    f(ctx, msg, (int32_t)(sizeof msg - 1));
+    f(ctx, NULL, 0);
+    f(ctx, msg, -3);
+    return 3;
+}

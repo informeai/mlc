@@ -1,4 +1,8 @@
 each 4 6 4
+bytes: 10 10
+bytes: 0 0
+bytes: 0 -3
+3 calls, sum 924, last hello, mlc
 got 10
 got 11
 got 12

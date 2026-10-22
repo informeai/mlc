@@ -1,0 +1,9 @@
+// error: a callback's slice must have numeric or bool elements, or structs of scalar fields
+struct Named {
+    name string
+}
+
+extern "C" fn each(f fn(&[]Named, int32))
+
+fn main() {
+}
