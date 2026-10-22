@@ -18,3 +18,9 @@ var ESP32Main string
 
 //go:embed c/esp32/CMakeLists.txt
 var ESP32CMake string
+
+// ESP32WiFi is std/wifi on the chip, a file of its own so that only a
+// program that calls it links ESP-IDF's Wi-Fi driver.
+//
+//go:embed c/esp32/mlc_wifi.c
+var ESP32WiFi string

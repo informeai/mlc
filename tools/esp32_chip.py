@@ -9,6 +9,13 @@ ESP-IDF's environment, with its Python (which has pyserial):
 
     . ~/esp/esp-idf/export.sh
     python tools/esp32_chip.py --port /dev/cu.usbserial-0001
+    python tools/esp32_chip.py --port /dev/cu.usbserial-0001 --wifi
+
+--wifi runs std/wifi's checks instead of the tests: a network that doesn't
+exist (NOT_FOUND) always, and, when MLC_WIFI_SSID and MLC_WIFI_PASSWORD are
+in the environment, a real connection and an HTTP GET to example.com. The
+password goes only into the temporary program flashed to the chip; it isn't
+printed.
 
 What differs from the desktop is handled here:
   - stdout, stderr and the panic message come through the same UART, so the
@@ -71,8 +78,9 @@ def set_target(proj, target):
         sys.exit("idf.py set-target failed:\n" + r.stdout[-2000:] + r.stderr)
 
 
-def run_on_chip(port, timeout=30.0, idle=3.0):
-    """resets the board and returns the program's console output"""
+def run_on_chip(port, timeout=30.0, idle=3.0, until=None):
+    """resets the board and returns the program's console output; with
+    until (a regex), waits for it instead of for silence"""
     s = serial.Serial(port, 115200, timeout=0.1)
     s.dtr = False
     s.rts = True
@@ -90,9 +98,10 @@ def run_on_chip(port, timeout=30.0, idle=3.0):
             text = buf.decode("utf-8", "replace")
             if started is None and "Calling app_main()" in text:
                 started = time.time()
-            if started is not None and END.search(text.split("Calling app_main()", 1)[-1]):
+            after = text.split("Calling app_main()", 1)[-1]
+            if started is not None and (END.search(after) or (until is not None and re.search(until, after))):
                 break
-        elif started is not None and time.time() - last > idle:
+        elif started is not None and until is None and time.time() - last > idle:
             break
     s.close()
     text = buf.decode("utf-8", "replace").replace("\r\n", "\n")
@@ -133,12 +142,119 @@ def read(path):
         return ""
 
 
+def flash_and_run(proj, port, target, mlc, src_dir, name, until=None):
+    """builds the program into the project, flashes it and returns
+    ("ok", console), ("skip", why) or ("fail", why)"""
+    r = run([mlc, "build", "-target", "esp32", "-o", os.path.join(proj, "main"), name], cwd=src_dir)
+    if r.returncode != 0:
+        if "not available with -target esp32" in r.stderr or "link " in r.stderr:
+            return "skip", "not available on the ESP32"
+        return "fail", "mlc build failed:\n" + r.stderr
+    set_target(proj, target)
+    r = run(["idf.py", "-C", proj, "build"])
+    if r.returncode != 0:
+        errs = [l for l in (r.stdout + r.stderr).splitlines() if "error" in l]
+        return "fail", "ESP-IDF build failed:\n" + "\n".join(errs[:10])
+    # 921600 baud is fast but sometimes too much for the cable or the
+    # USB-serial chip ("serial noise"): one more try at half
+    for baud in ("921600", "460800"):
+        r = run(["idf.py", "-C", proj, "-p", port, "-b", baud, "app-flash"])
+        if r.returncode == 0:
+            break
+    if r.returncode != 0:
+        return "fail", "flash failed:\n" + r.stdout[-500:] + r.stderr[-500:]
+    return "ok", run_on_chip(port, timeout=60.0, until=until) if until else run_on_chip(port)
+
+
+def mlc_literal(text):
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+WIFI_NOT_FOUND = """import "std/io"
+import "std/wifi"
+
+fn main() {
+    err := 0
+    ok := wifi.connect_str("mlc-no-such-network-7f3a", "", 10000, &err)
+    io.print("connect:", ok, err == wifi.NOT_FOUND)
+    wifi.disconnect()
+    io.print("connected:", wifi.connected())
+    io.print("done")
+}
+"""
+
+WIFI_REAL = """import "std/http"
+import "std/io"
+import "std/net"
+import "std/str"
+import "std/wifi"
+
+fn main() {
+    err := 0
+    ok := wifi.connect_str(SSID, PASSWORD, 20000, &err)
+    io.print("connect:", ok, err)
+    if ok {
+        var ip [16]byte
+        io.print("address:", wifi.ip(&ip) > 0, "signal:", wifi.rssi() < 0)
+        var host [16]byte
+        hn := str.copy(&host, "example.com")
+        c := net.connect(&host[:hn], 80, &err)
+        if c != nil {
+            var b http.Builder
+            b.request("GET", "/")
+            b.header("Host", "example.com")
+            b.header("Connection", "close")
+            b.send_str(&c, "")
+            var m http.Message
+            match m.read_response(&c) {
+                Ok(_) => io.print("http:", m.status())
+                Err(code) => io.print("http error:", code)
+            }
+            c.close()
+        } else {
+            io.print("net.connect:", err)
+        }
+        wifi.disconnect()
+        io.print("connected:", wifi.connected())
+    }
+    io.print("done")
+}
+"""
+
+
+def wifi_checks(args, mlc, proj, tmp):
+    """std/wifi on the chip: [(name, source, expected console)]"""
+    checks = [("wifi_not_found.mlc", WIFI_NOT_FOUND, "connect: false true\nconnected: false\ndone")]
+    ssid, password = os.environ.get("MLC_WIFI_SSID"), os.environ.get("MLC_WIFI_PASSWORD")
+    if ssid:
+        src = WIFI_REAL.replace("SSID", mlc_literal(ssid), 1).replace("PASSWORD", mlc_literal(password or ""), 1)
+        checks.append(("wifi_real.mlc", src, "connect: true 0\naddress: true signal: true\nhttp: 200\nconnected: false\ndone"))
+    else:
+        print("(MLC_WIFI_SSID isn't set: only the network that doesn't exist)", flush=True)
+    d = os.path.join(tmp, "wifi")
+    os.makedirs(d, exist_ok=True)
+    passed, failed = [], []
+    for name, src, want in checks:
+        with open(os.path.join(d, name), "w") as f:
+            f.write(src)
+        status, got = flash_and_run(proj, args.port, args.target, mlc, d, name, until=r"(?m)^done$")
+        os.remove(os.path.join(d, name)) # the password doesn't stay on disk
+        if status == "ok" and got == want:
+            passed.append(name)
+            print("ok  ", name, flush=True)
+        else:
+            failed.append((name, got if status != "ok" else f"got:\n{got}\nexpected:\n{want}"))
+            print("FAIL", name, flush=True)
+    return passed, failed
+
+
 def main():
     ap = argparse.ArgumentParser(description="runs tests/run and tests/panic on an ESP32")
     ap.add_argument("--port", required=True, help="the board's serial port, e.g. /dev/cu.usbserial-0001")
     ap.add_argument("--project", help="the ESP-IDF project to build in (default: a temporary one; reusing one saves the first full build)")
     ap.add_argument("--target", default="esp32", help="ESP-IDF's chip (default esp32)")
     ap.add_argument("--only", default="", help="comma-separated parts of program names to run")
+    ap.add_argument("--wifi", action="store_true", help="run std/wifi's checks instead of the tests (see above)")
     args = ap.parse_args()
 
     mlc = os.path.join(REPO, "bin", "mlc")
@@ -154,7 +270,9 @@ def main():
     only = args.only.split(",")
 
     passed, failed, skipped = [], [], []
-    for kind in ("run", "panic"):
+    if args.wifi:
+        passed, failed = wifi_checks(args, mlc, proj, tmp)
+    for kind in ("run", "panic") if not args.wifi else ():
         d = os.path.join(REPO, "tests", kind)
         for name in sorted(os.listdir(d)):
             if not name.endswith(".mlc") or not any(o in name for o in only):
@@ -172,32 +290,14 @@ def main():
                     src = f.read()
                 with open(os.path.join(src_dir, name), "w") as f:
                     f.write(re.sub(r"thread\.STACK_(64KB|256KB)", "thread.STACK_16KB", src))
-            r = run([mlc, "build", "-target", "esp32", "-o", os.path.join(proj, "main"), name], cwd=src_dir)
-            if r.returncode != 0:
-                if "not available with -target esp32" in r.stderr or "link " in r.stderr:
-                    skipped.append(f"{test} (not available on the ESP32)")
-                else:
-                    failed.append((test, "mlc build failed:\n" + r.stderr))
-                    print("FAIL", test, flush=True)
+            status, got = flash_and_run(proj, args.port, args.target, mlc, src_dir, name)
+            if status == "skip":
+                skipped.append(f"{test} ({got})")
                 continue
-            set_target(proj, args.target)
-            r = run(["idf.py", "-C", proj, "build"])
-            if r.returncode != 0:
-                errs = [l for l in (r.stdout + r.stderr).splitlines() if "error" in l]
-                failed.append((test, "ESP-IDF build failed:\n" + "\n".join(errs[:10])))
+            if status == "fail":
+                failed.append((test, got))
                 print("FAIL", test, flush=True)
                 continue
-            # 921600 baud is fast but sometimes too much for the cable or the
-            # USB-serial chip ("serial noise"): one more try at half
-            for baud in ("921600", "460800"):
-                r = run(["idf.py", "-C", proj, "-p", args.port, "-b", baud, "app-flash"])
-                if r.returncode == 0:
-                    break
-            if r.returncode != 0:
-                failed.append((test, "flash failed:\n" + r.stdout[-500:] + r.stderr[-500:]))
-                print("FAIL", test, flush=True)
-                continue
-            got = run_on_chip(args.port)
             want = EXPECTED_STDOUT.get(name, read(base + ".out"))
             if kind == "panic":
                 want += read(base + ".err")

@@ -15,13 +15,14 @@ idf.py set-target esp32             # or esp32s3, esp32c3, esp32c6...
 idf.py build flash monitor
 ```
 
-`-o` is the component's folder (by default `<name>-esp32`). Use it as the project's `main` component: ESP-IDF gives `main` access to every component (the GPIO driver, Wi-Fi...), so the FFI declarations link without `REQUIRES`. mlc writes five files, and generating again overwrites them; a folder with a `CMakeLists.txt` that mlc didn't write is refused. Generate the component before the project's first `idf.py set-target` or `build`: ESP-IDF finds the components when it configures, and a `main` folder without a `CMakeLists.txt` at that moment stays out of the build (the link then fails with `app_main` missing). If that happened, `idf.py fullclean` and build again.
+`-o` is the component's folder (by default `<name>-esp32`). Use it as the project's `main` component: ESP-IDF gives `main` access to every component (the GPIO driver, Wi-Fi...), so the FFI declarations link without `REQUIRES`. mlc writes six files, and generating again overwrites them; a folder with a `CMakeLists.txt` that mlc didn't write is refused. Generate the component before the project's first `idf.py set-target` or `build`: ESP-IDF finds the components when it configures, and a `main` folder without a `CMakeLists.txt` at that moment stays out of the build (the link then fails with `app_main` missing). If that happened, `idf.py fullclean` and build again.
 
 | File | What it is |
 |---|---|
 | `mlc_app.c` | the generated C of the program (its `main` is compiled as `mlc_main`) |
 | `mlc_runtime.c`, `mlc_runtime.h` | the runtime, the same as on the desktop, compiled with ESP-IDF's `ESP_PLATFORM` |
 | `mlc_main.c` | `app_main`: creates the task where `main` runs |
+| `mlc_wifi.c` | `std/wifi`; linked only when the program calls it, so the others don't carry the Wi-Fi driver |
 | `CMakeLists.txt` | the component's registration |
 
 ## The chip's functions: FFI
@@ -90,7 +91,45 @@ ESP-IDF has a file system (SPIFFS, FAT), so `std/fs` may come later.
 
 `std/net` and `std/http` work over ESP-IDF's TCP/IP stack (lwIP), with the same API and error codes as on the desktop: lwIP has the BSD socket calls. The runtime starts lwIP (`esp_netif_init`) at the first `listen` or `connect`.
 
-**Without Wi-Fi only the loopback answers** (`127.0.0.1` and `localhost`): a server and a client in the same program work, as in `tests/run/http_loopback.mlc`. To reach the network, the Wi-Fi has to be connected first; there's no `std/wifi` yet, so for now it's done through the FFI, with ESP-IDF's functions (`esp_wifi_init`, `esp_wifi_connect`...), or in C in another component of the project.
+**Without Wi-Fi only the loopback answers** (`127.0.0.1` and `localhost`): a server and a client in the same program work, as in `tests/run/http_loopback.mlc`. To reach the network, `std/wifi` joins one first:
+
+```
+import "std/io"
+import "std/net"
+import "std/os"
+import "std/str"
+import "std/wifi"
+
+fn main() {
+    err := 0
+    if !wifi.connect_str("my-network", "my-password", 15000, &err) {
+        var msg [160]byte
+        k := os.error_text(err, &msg)
+        io.eprintf("wifi: {:s}\n", &msg[:k])     // NOT_FOUND, AUTH, TIMEOUT...
+        return
+    }
+    var ip [16]byte
+    n := wifi.ip(&ip)
+    io.printf("address {:s}, signal {} dBm\n", &ip[:n], wifi.rssi())
+    var host [16]byte
+    hn := str.copy(&host, "example.com")
+    c := net.connect(&host[:hn], 80, &err)
+    ...
+}
+```
+
+`connect` turns the radio on (the first time), joins the network and waits for its address; a failure is retried until the time runs out, except a password refused twice. Once connected, a dropped connection is retried in the background, and `connected()` says whether there's an address now. `disconnect()` leaves the network and turns the driver off. Don't write the password in a file that goes to git: pass it from a file of your own, outside the repository, or from a build step.
+
+| Error | When |
+|---|---|
+| `wifi.NOT_FOUND` (6001) | no network with that name answered |
+| `wifi.AUTH` (6002) | the network refused the password |
+| `wifi.TIMEOUT` (6003) | no address came in time (a network that doesn't answer, a DHCP that doesn't give one) |
+| `wifi.UNAVAILABLE` (6004) | on a desktop: the system manages the network |
+| `wifi.FAILED` (6005) | ESP-IDF couldn't start the driver (its log, on the console, says why) |
+| `wifi.BAD_NAME` (6006) | the name is empty or has more than 32 bytes, or the password more than 64 |
+
+The driver's memory and flash are ESP-IDF's, outside MLC's allocations (like lwIP's sockets): 50 to 70 KB of the heap from the first `connect` to `disconnect`, and about 580 KB of flash. A program with Wi-Fi has some 760 KB, three quarters of the default app partition (1 MB); for more, pick the `Single factory app (large)` partition table in `idf.py menuconfig` (Partition Table) and the board's real flash size (Serial flasher config).
 
 What changes from the desktop:
 
@@ -103,10 +142,11 @@ What changes from the desktop:
 There's no ESP32 in the test suite, so `internal/driver/esp32_test.go` simulates ESP-IDF on the host. `testdata/esp32sim` has the few FreeRTOS and ESP-IDF declarations the runtime uses, with FreeRTOS tasks as pthreads of the asked stack and a `main` that calls `app_main`, like ESP-IDF's startup.
 
 - **TestESP32Sim**: every program in `tests/run` and `tests/panic` that doesn't import a missing module and doesn't take arguments becomes a component, is compiled with `ESP_PLATFORM` and `-Werror`, runs in the simulation and must give the same output and exit code as on the desktop. The only difference is expected: `stack_recursion.mlc` panics at its first recursion, because 100 calls of 4 KB don't fit in the task's 32 KB.
-- **TestESP32Symbols**: the runtime compiled for the ESP32 only calls what ESP-IDF has (newlib, pthread, lwIP's sockets, `esp_fill_random`, `pxTaskGetStackStart`, `esp_netif_init`). A new call to something else (`dlopen`, `posix_spawn`, `nanosleep`) fails the test. The list was checked against ESP-IDF 5.5.6's libraries.
+- **TestESP32Symbols**: the runtime compiled for the ESP32 only calls what ESP-IDF has (newlib, pthread, lwIP's sockets, `esp_fill_random`, `pxTaskGetStackStart`, `esp_netif_init`; and in `mlc_wifi.c`, the Wi-Fi driver, NVS and the event loop). A new call to something else (`dlopen`, `posix_spawn`, `nanosleep`) fails the test. The list was checked against ESP-IDF 5.5.6's libraries.
 - **TestESP32ThreadLocal**: the runtime's `_Thread_local` variables stay under 128 bytes. With 6 KB there, the chip didn't start: ESP-IDF couldn't create its own main task.
 - **TestESP32Externs**: every `extern fn` of a module the ESP32 has is defined in the embedded runtime.
 - **TestESP32TLS**: `http.dial_tls` answers `tls.UNAVAILABLE` and the program goes on.
+- **TestESP32WiFi**: `std/wifi` against the networks of `sim_wifi.c`, which plays ESP-IDF's driver, NVS and event loop: a refused password (`AUTH`), a name nobody answers (`NOT_FOUND`), a silent network (`TIMEOUT`), two that connect (address and signal), connecting again over a connection, the names too long or empty, and the driver turned off and on again. The simulation delivers the events in order from one thread, as ESP-IDF's event task does, and writes `sim:` on stderr (which fails the test) when `mlc_wifi.c` uses ESP-IDF out of its order: the driver before NVS, a handler left registered at the end, the interface destroyed before the driver.
 - **TestESP32Target**: the component's files, the refused imports (and the allowed ones, `std/net` and `std/http`) and the folder that isn't mlc's.
 
 With ESP-IDF's GCC in the `PATH` (after `export.sh`), TestESP32Sim also compiles each program's generated C with it, with ESP-IDF's `-Werror=all`: GCC gives warnings that clang doesn't (it wants inner braces in the `{0}` of an array inside a struct, which the component turns off), and `-Wno-error` doesn't undo `-Werror=all`, so one of them stops `idf.py build`.
@@ -122,5 +162,13 @@ python tools/esp32_chip.py --port /dev/cu.usbserial-0001 --only threads,division
 ```
 
 It builds `bin/mlc`, creates a temporary ESP-IDF project (or uses `--project`, which saves the first full build of ESP-IDF on later runs), and runs the thread and server tests with 16 KB stacks. It exits with 1 if a program fails.
+
+`--wifi` runs `std/wifi` on the chip instead of the tests: a network that doesn't exist must give `NOT_FOUND`, and, with `MLC_WIFI_SSID` and `MLC_WIFI_PASSWORD` in the environment, the chip joins that network, takes an address and makes an HTTP GET to `example.com`. The password only goes into the temporary program flashed to the chip, and the script doesn't print it:
+
+```
+export MLC_WIFI_SSID=my-network
+read -s MLC_WIFI_PASSWORD && export MLC_WIFI_PASSWORD   # typed without echo, outside the shell's history
+python tools/esp32_chip.py --port /dev/cu.usbserial-0001 --wifi
+```
 
 What isn't checked: the other chips (S3 is Xtensa like the ESP32; C3 and C6 are RISC-V), and runs in QEMU, which would put the chip in the test suite.

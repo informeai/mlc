@@ -1759,6 +1759,12 @@ static const char *mlc_error_text(int64_t code) {
     case 5003: return "the TLS library (OpenSSL) wasn't found on this system";
     case 5004: return "error in the TLS connection";
     case 5005: return "the server's certificate or key didn't load";
+    case 6001: return "no Wi-Fi network with that name answered";
+    case 6002: return "the Wi-Fi network refused the password";
+    case 6003: return "the Wi-Fi network gave no address in time";
+    case 6004: return "this system has no Wi-Fi to control (the system manages the network)";
+    case 6005: return "couldn't start the Wi-Fi (ESP-IDF's log says why)";
+    case 6006: return "the Wi-Fi network's name is empty or longer than 32 bytes, or the password longer than 64";
     case EPERM: return "operation not permitted";
     case ENOENT: return "doesn't exist";
     case EIO: return "input/output error";
@@ -2901,3 +2907,48 @@ bool mlc_std_tls_available(const char *file, int line) {
 
 void mlc_std_tls_fail(mlc_str msg, const char *file, int line) { mlc_std_process_fail(msg, file, line); }
 #endif /* MLC_EMBEDDED */
+
+#ifndef MLC_EMBEDDED
+/* std/wifi on a desktop: the system manages the network, so there's nothing
+ * to control (on the ESP32 it's rt/c/esp32/mlc_wifi.c). */
+bool mlc_std_wifi_available(const char *file, int line) {
+    (void)file;
+    (void)line;
+    return false;
+}
+
+bool mlc_std_wifi_connect(mlc_sl_byte *ssid, mlc_sl_byte *password, int64_t timeout_ms, int64_t *err, const char *file,
+                          int line) {
+    (void)ssid;
+    (void)password;
+    (void)timeout_ms;
+    (void)file;
+    (void)line;
+    *err = 6004; /* wifi.UNAVAILABLE */
+    return false;
+}
+
+bool mlc_std_wifi_connected(const char *file, int line) {
+    (void)file;
+    (void)line;
+    return false;
+}
+
+int64_t mlc_std_wifi_ip(mlc_sl_byte *dst, const char *file, int line) {
+    (void)dst;
+    (void)file;
+    (void)line;
+    return 0;
+}
+
+int64_t mlc_std_wifi_rssi(const char *file, int line) {
+    (void)file;
+    (void)line;
+    return 0;
+}
+
+void mlc_std_wifi_disconnect(const char *file, int line) {
+    (void)file;
+    (void)line;
+}
+#endif /* !MLC_EMBEDDED */

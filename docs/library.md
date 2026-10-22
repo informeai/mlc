@@ -38,6 +38,7 @@ Everything that comes with the language is here, including input and output (`st
   | 3101, 3201, 3301 | `url.BAD_URL`, `config.BAD_LINE`, `csv.BAD_QUOTE` |
   | 4001–4899, 4900 | `sqlite`: 4000 + SQLite's code (`ERROR` 4001, `BUSY` 4005, `CONSTRAINT` 4019...), `UNAVAILABLE` 4900 |
   | 5001–5005 | `tls`: `HANDSHAKE`, `BAD_CERT`, `UNAVAILABLE`, `BROKEN`, `SERVER_FILES` |
+  | 6001–6006 | `wifi`: `NOT_FOUND`, `AUTH`, `TIMEOUT`, `UNAVAILABLE`, `FAILED`, `BAD_NAME` |
 
   `os.error_text(code, &msg)` writes the text of any of them:
 
@@ -63,7 +64,7 @@ Everything that comes with the language is here, including input and output (`st
 | Errors | [`result`](#stdresult) | the value or the error, with match |
 | Files and system | [`fs`](#stdfs), [`path`](#stdpath), [`bufio`](#stdbufio), [`os`](#stdos), [`args`](#stdargs), [`process`](#stdprocess), [`signal`](#stdsignal), [`time`](#stdtime) | files, directories and trees, paths, buffered reading, environment, arguments, other programs, signals, clock and dates |
 | Data and configuration | [`json`](#stdjson), [`csv`](#stdcsv), [`config`](#stdconfig), [`sqlite`](#stdsqlite) | JSON (reading and writing), spreadsheets, dotenv and INI files, database |
-| Network | [`net`](#stdnet), [`http`](#stdhttp), [`url`](#stdurl), [`tls`](#stdtls) | TCP, HTTP/1.1 (server, client, router), URLs, HTTPS |
+| Network | [`net`](#stdnet), [`http`](#stdhttp), [`url`](#stdurl), [`tls`](#stdtls), [`wifi`](#stdwifi) | TCP, HTTP/1.1 (server, client, router), URLs, HTTPS, the ESP32's Wi-Fi |
 | Security | [`rand`](#stdrand), [`hash`](#stdhash), [`hmac`](#stdhmac), [`password`](#stdpassword), [`uuid`](#stduuid) | randomness (and secure randomness), hashes, signatures, passwords, identifiers |
 | Concurrency | [`thread`](#stdthread), [`chan`](#stdchan), [`mutex`](#stdmutex-and-stdatomic), [`atomic`](#stdmutex-and-stdatomic), [`sync`](#stdsync) | threads, channels, mutexes, atomics, groups (details in [concurrency.md](concurrency.md)) |
 | Observability and tests | [`log`](#stdlog), [`testing`](#stdtesting) | logging with level and time, tests and benchmarks |
@@ -874,7 +875,35 @@ A connection is an `io.Reader`: `bufio.new[net.Conn]()` reads lines from it (tex
 
 Writing to a connection the other side closed returns `RESET`, instead of ending the program with `SIGPIPE`. `tests/run/server.mlc` has a complete service: one thread per connection, request and response in JSON.
 
-On the ESP32 (`mlc build -target esp32`) the sockets are ESP-IDF's (lwIP), with the same API and the same error codes; without Wi-Fi only `127.0.0.1` answers. See [esp32.md](esp32.md#the-network).
+On the ESP32 (`mlc build -target esp32`) the sockets are ESP-IDF's (lwIP), with the same API and the same error codes; without Wi-Fi (`std/wifi`) only `127.0.0.1` answers. See [esp32.md](esp32.md#the-network).
+
+### `std/wifi`
+
+The ESP32's Wi-Fi, in station mode: joins a network so `std/net` and `std/http` reach beyond the chip. On a desktop the system manages the network: `available()` is false and `connect` returns `UNAVAILABLE`.
+
+```
+err := 0
+if !wifi.connect_str("my-network", "my-password", 15000, &err) {   // waits up to 15 s for the address
+    return
+}
+var ip [16]byte
+n := wifi.ip(&ip)                                                  // "192.168.0.42"
+...
+wifi.disconnect()
+```
+
+| Declaration | What it does |
+|---|---|
+| `available() bool` | whether this system has Wi-Fi to control (the ESP32) |
+| `connect(ssid, password, timeout_ms, &err) bool` | joins the network and waits for an address (-1: no limit); connecting again leaves the current network first |
+| `connect_str(ssid, password, timeout_ms, &err) bool` | the same, with the texts fixed in the program |
+| `connected() bool` | whether there's an address now (a dropped connection is retried in the background) |
+| `ip(&dst) int` | the address as text; 0 when not connected (a `[16]byte` is always enough) |
+| `rssi() int` | the signal in dBm (-30 excellent, -90 unusable); 0 when not connected |
+| `disconnect()` | leaves the network and turns the driver off |
+| `NOT_FOUND`, `AUTH`, `TIMEOUT`, `UNAVAILABLE`, `FAILED`, `BAD_NAME` | error codes (6001 to 6006) |
+
+The driver's memory (50 to 70 KB of the heap while it's on) is ESP-IDF's, outside MLC's allocations, like the sockets'. See [esp32.md](esp32.md#the-network).
 
 ### `std/signal`
 

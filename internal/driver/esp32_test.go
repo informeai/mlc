@@ -38,7 +38,8 @@ var esp32Stdout = map[string]string{
 }
 
 // esp32Objs compiles, once, what is the same in every program: the runtime,
-// mlc_main.c and the simulation.
+// mlc_main.c, mlc_wifi.c and the simulation (in that order: esp32Common()[0]
+// is the runtime, [2] std/wifi).
 var esp32Objs struct {
 	once sync.Once
 	dir  string
@@ -61,7 +62,7 @@ func esp32Common(t *testing.T) []string {
 			esp32Objs.err = err.Error()
 			return
 		}
-		for _, f := range []string{"mlc_runtime", "mlc_main"} {
+		for _, f := range []string{"mlc_runtime", "mlc_main", "mlc_wifi"} {
 			obj := filepath.Join(dir, f+".o")
 			if out, err := simCompile(obj, filepath.Join(comp, f+".c")); err != nil {
 				esp32Objs.err = out
@@ -69,12 +70,14 @@ func esp32Common(t *testing.T) []string {
 			}
 			esp32Objs.objs = append(esp32Objs.objs, obj)
 		}
-		obj := filepath.Join(dir, "sim.o")
-		if out, err := simCompile(obj, filepath.Join(esp32Sim, "sim.c")); err != nil {
-			esp32Objs.err = out
-			return
+		for _, f := range []string{"sim", "sim_wifi"} {
+			obj := filepath.Join(dir, f+".o")
+			if out, err := simCompile(obj, filepath.Join(esp32Sim, f+".c")); err != nil {
+				esp32Objs.err = out
+				return
+			}
+			esp32Objs.objs = append(esp32Objs.objs, obj)
 		}
-		esp32Objs.objs = append(esp32Objs.objs, obj)
 	})
 	if esp32Objs.err != "" {
 		t.Fatal(esp32Objs.err)
@@ -152,6 +155,80 @@ fn main() {
 	}
 	if string(out) != "dial_tls: 5003\n" {
 		t.Errorf("output %q, expected tls.UNAVAILABLE (5003)", out)
+	}
+}
+
+// TestESP32WiFi: std/wifi against the networks of sim_wifi.c (a refused
+// password, a name nobody answers, a silent network, two that connect),
+// connecting again over a connection, the name too long, and the driver
+// stopped and started again. The simulation writes "sim:" on stderr when
+// mlc_wifi.c uses ESP-IDF out of its order.
+func TestESP32WiFi(t *testing.T) {
+	requireCC(t)
+	common := esp32Common(t)
+	src := `import "std/io"
+import "std/wifi"
+
+fn main() {
+    io.print("available:", wifi.available())
+    err := 0
+    ok := wifi.connect_str("mlc-sim", "wrong", 5000, &err)
+    io.print("wrong password:", ok, err == wifi.AUTH)
+    ok = wifi.connect_str("nobody-here", "x", 200, &err)
+    io.print("unknown network:", ok, err == wifi.NOT_FOUND)
+    ok = wifi.connect_str("mlc-silent", "", 200, &err)
+    io.print("silent network:", ok, err == wifi.TIMEOUT)
+    var ip [16]byte
+    io.print("not connected:", wifi.connected(), wifi.ip(&ip), wifi.rssi())
+
+    ok = wifi.connect_str("mlc-sim", "secret123", 5000, &err)
+    n := wifi.ip(&ip)
+    io.printf("mlc-sim: {} {} {:s} {}\n", ok, err, &ip[:n], wifi.rssi())
+    ok = wifi.connect_str("mlc-open", "", 5000, &err)
+    n = wifi.ip(&ip)
+    io.printf("mlc-open: {} {:s} {}\n", ok, &ip[:n], wifi.rssi())
+
+    var long [40]byte
+    ok = wifi.connect(&long, &long[:0], 1000, &err)
+    io.print("long name:", ok, err == wifi.BAD_NAME, wifi.connected())
+    ok = wifi.connect(&long[:0], &long[:0], 1000, &err)
+    io.print("empty name:", ok, err == wifi.BAD_NAME)
+
+    wifi.disconnect()
+    io.print("disconnected:", wifi.connected(), wifi.ip(&ip), wifi.rssi())
+    wifi.disconnect()
+    ok = wifi.connect_str("mlc-sim", "secret123", 5000, &err)
+    io.print("again:", ok, wifi.connected())
+    wifi.disconnect()
+}
+`
+	want := `available: true
+wrong password: false true
+unknown network: false true
+silent network: false true
+not connected: false 0 0
+mlc-sim: true 0 192.168.4.2 -48
+mlc-open: true 192.168.4.3 -71
+long name: false true true
+empty name: false true
+disconnected: false 0 0
+again: true true
+`
+	comp := filepath.Join(t.TempDir(), "comp")
+	if err := BuildESP32("app.mlc", []byte(src), comp, func(string) ([]byte, error) { return nil, os.ErrNotExist }, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	cmd := exec.Command(simBuild(t, comp, common))
+	cmd.Stdout, cmd.Stderr = &out, &errOut
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("%v\nstderr:\n%s", err, errOut.String())
+	}
+	if out.String() != want {
+		t.Errorf("stdout:\n%s\nexpected:\n%s", out.String(), want)
+	}
+	if errOut.Len() > 0 {
+		t.Errorf("stderr:\n%s", errOut.String())
 	}
 }
 
@@ -237,8 +314,8 @@ func TestESP32Sim(t *testing.T) {
 }
 
 // esp32Allowed is what the ESP32 runtime may call: newlib (ESP-IDF's C
-// library), its pthread (over FreeRTOS), lwIP's sockets and three ESP-IDF
-// functions. A call to something else (dlopen, posix_spawn, nanosleep...)
+// library), its pthread (over FreeRTOS), lwIP's sockets, a few ESP-IDF
+// functions and, in mlc_wifi.c, the Wi-Fi driver. A call to something else (dlopen, posix_spawn, nanosleep...)
 // wouldn't link on the chip.
 var esp32Allowed = map[string]bool{
 	"atan2": true, "atoi": true, "atoll": true, "calloc": true, "ceil": true, "clock_gettime": true, "close": true,
@@ -255,6 +332,13 @@ var esp32Allowed = map[string]bool{
 	"accept": true, "bind": true, "connect": true, "freeaddrinfo": true, "getaddrinfo": true,
 	"getsockname": true, "listen": true, "poll": true, "recv": true, "send": true,
 	"setsockopt": true, "shutdown": true, "socket": true, "esp_netif_init": true,
+	// std/wifi (mlc_wifi.c): NVS, the default event loop and the driver
+	"nvs_flash_init": true, "nvs_flash_erase": true, "esp_event_loop_create_default": true,
+	"esp_event_handler_instance_register": true, "esp_event_handler_instance_unregister": true,
+	"esp_netif_create_default_wifi_sta": true, "esp_netif_destroy_default_wifi": true,
+	"esp_wifi_init": true, "esp_wifi_deinit": true, "esp_wifi_set_mode": true, "esp_wifi_start": true,
+	"esp_wifi_stop": true, "esp_wifi_set_config": true, "esp_wifi_connect": true, "esp_wifi_disconnect": true,
+	"esp_wifi_sta_get_ap_info": true, "WIFI_EVENT": true, "IP_EVENT": true,
 }
 
 // esp32Host is what this machine's compiler adds on its own (stack and
@@ -267,30 +351,33 @@ func esp32Host(name string) bool {
 	return strings.HasPrefix(name, "_")
 }
 
-// TestESP32Symbols: the runtime compiled for the ESP32 only calls what
-// ESP-IDF has.
+// TestESP32Symbols: the runtime and mlc_wifi.c compiled for the ESP32 only
+// call what ESP-IDF has (mlc_wifi.c may also call the runtime).
 func TestESP32Symbols(t *testing.T) {
 	requireCC(t)
 	if _, err := exec.LookPath("nm"); err != nil {
 		t.Skip("nm not found")
 	}
 	common := esp32Common(t)
-	out, err := exec.Command("nm", "-u", common[0]).Output()
-	if err != nil {
-		t.Fatal(err)
-	}
+	inRuntime := definedSymbols(t, common[0])
 	var bad []string
-	for _, f := range strings.Fields(string(out)) {
-		if f == "U" {
-			continue
+	for _, obj := range []string{common[0], common[2]} {
+		out, err := exec.Command("nm", "-u", obj).Output()
+		if err != nil {
+			t.Fatal(err)
 		}
-		if runtime.GOOS == "darwin" {
-			f = strings.TrimPrefix(f, "_")
+		for _, f := range strings.Fields(string(out)) {
+			if f == "U" {
+				continue
+			}
+			if runtime.GOOS == "darwin" {
+				f = strings.TrimPrefix(f, "_")
+			}
+			if esp32Host(f) || esp32Allowed[f] || strings.HasPrefix(f, "pthread_") || inRuntime[f] {
+				continue
+			}
+			bad = append(bad, filepath.Base(obj)+": "+f)
 		}
-		if esp32Host(f) || esp32Allowed[f] || strings.HasPrefix(f, "pthread_") {
-			continue
-		}
-		bad = append(bad, f)
 	}
 	sort.Strings(bad)
 	if len(bad) > 0 {
@@ -310,6 +397,11 @@ func TestESP32ThreadLocal(t *testing.T) {
 	if err != nil {
 		t.Skip(err)
 	}
+	wifi, err := threadLocalSize(common[2])
+	if err != nil {
+		t.Fatal(err)
+	}
+	size += wifi
 	if size > 128 {
 		t.Errorf("the ESP32 runtime has %d bytes of _Thread_local variables; every FreeRTOS task pays them in its stack (keep them under 128, big buffers on the heap)", size)
 	}
@@ -350,16 +442,9 @@ func TestESP32Externs(t *testing.T) {
 		t.Skip("nm not found")
 	}
 	common := esp32Common(t)
-	out, err := exec.Command("nm", "-g", common[0]).Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defined := map[string]bool{}
-	for _, line := range strings.Split(string(out), "\n") {
-		f := strings.Fields(line)
-		if len(f) == 3 && f[1] == "T" {
-			defined[strings.TrimPrefix(f[2], "_")] = true
-		}
+	defined := definedSymbols(t, common[0])
+	for f := range definedSymbols(t, common[2]) {
+		defined[f] = true
 	}
 	files, _ := fs.Glob(std.FS, "*.mlc")
 	ext := regexp.MustCompile(`(?m)^(?:pub )?extern fn ([a-z_0-9]+)`)
@@ -385,6 +470,24 @@ func TestESP32Externs(t *testing.T) {
 	}
 }
 
+// definedSymbols is the functions an object file defines (nm's T), without
+// the underscore that macOS puts in front.
+func definedSymbols(t *testing.T, obj string) map[string]bool {
+	t.Helper()
+	out, err := exec.Command("nm", "-g", obj).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defined := map[string]bool{}
+	for _, line := range strings.Split(string(out), "\n") {
+		f := strings.Fields(line)
+		if len(f) == 3 && f[1] == "T" {
+			defined[strings.TrimPrefix(f[2], "_")] = true
+		}
+	}
+	return defined
+}
+
 // esp32Probe is the sources of a program that imports std/mod, for checkTarget.
 func esp32Probe(mod string) []checker.Source {
 	srcs, errs := load("probe.mlc", []byte("import \"std/"+mod+"\"\n\nfn main() {\n}\n"), func(string) ([]byte, error) { return nil, os.ErrNotExist })
@@ -402,7 +505,7 @@ func TestESP32Target(t *testing.T) {
 	if err := BuildESP32("app.mlc", []byte("import \"std/io\"\n\nfn main() {\n    io.print(1)\n}\n"), dir, noFiles, Options{}); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range []string{"mlc_app.c", "mlc_runtime.c", "mlc_runtime.h", "mlc_main.c", "CMakeLists.txt"} {
+	for _, f := range []string{"mlc_app.c", "mlc_runtime.c", "mlc_runtime.h", "mlc_main.c", "mlc_wifi.c", "CMakeLists.txt"} {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 			t.Error(err)
 		}

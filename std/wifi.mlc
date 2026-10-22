@@ -1,0 +1,69 @@
+// Wi-Fi on the ESP32: joins a network (station mode) so that std/net and
+// std/http reach beyond 127.0.0.1. connect waits until the network gives the
+// chip an address, or the time runs out:
+//
+//     err := 0
+//     if !wifi.connect_str("my-network", "my-password", 15000, &err) {
+//         var msg [160]byte
+//         k := os.error_text(err, &msg)  // NOT_FOUND, AUTH, TIMEOUT...
+//         io.eprintf("wifi: {:s}\n", &msg[:k])
+//         return
+//     }
+//     var ip [16]byte
+//     n := wifi.ip(&ip)                    // "192.168.0.42"
+//     var host [16]byte
+//     hn := str.copy(&host, "example.com")
+//     c := net.connect(&host[:hn], 80, &err)
+//     ...
+//     wifi.disconnect()
+//
+// Once connected, a dropped connection is retried in the background:
+// connected() says whether the chip has an address right now. disconnect
+// leaves the network and stops the radio.
+//
+// The memory: ESP-IDF's Wi-Fi driver takes 50 to 70 KB of the heap at the
+// first connect (outside MLC's allocations, like lwIP's sockets) and gives
+// it back at disconnect. On a desktop the system manages the network:
+// available() is false and connect returns UNAVAILABLE.
+import "std/str"
+
+// error codes
+pub const NOT_FOUND = 6001   // no network with that name answered
+pub const AUTH = 6002        // the network refused the password
+pub const TIMEOUT = 6003     // no address came in time
+pub const UNAVAILABLE = 6004 // this system has no Wi-Fi (the desktop)
+pub const FAILED = 6005      // ESP-IDF couldn't start the Wi-Fi (its log says why)
+pub const BAD_NAME = 6006    // the name is empty or longer than 32 bytes, or the password longer than 64
+
+// available says whether this system has Wi-Fi to control (the ESP32).
+pub extern fn available() bool
+
+// connect joins the network ssid (up to 32 bytes) with the password (up to
+// 64; empty for an open network) and waits up to timeout_ms (-1: no limit)
+// for an address. If it doesn't get one, returns false and puts the code in
+// err. Connecting again first leaves the current network.
+pub extern fn connect(ssid &[]byte, password &[]byte, timeout_ms int, err &int) bool
+
+// connected says whether the chip has an address now.
+pub extern fn connected() bool
+
+// ip writes the address (as text, "192.168.0.42") into dst and returns how
+// many bytes it used; 0 when not connected. A [16]byte is always enough.
+pub extern fn ip(dst &[]byte) int
+
+// rssi is the strength of the network's signal in dBm (from -30, excellent,
+// to -90, unusable); 0 when not connected.
+pub extern fn rssi() int
+
+// disconnect leaves the network and stops the radio (the driver's memory
+// goes back to the heap). Without a connection, it does nothing.
+pub extern fn disconnect()
+
+// connect_str is connect with the name and the password fixed in the program.
+pub fn connect_str(ssid string, password string, timeout_ms int, err &int) bool {
+    var s [256]byte // larger than the limits: a name too long is BAD_NAME, not a panic of str.copy
+    var p [256]byte
+    sn := str.copy(&s, ssid)
+    pn := str.copy(&p, password)
+    return connect(&s[:sn], &p[:pn], timeout_ms, err)
+}

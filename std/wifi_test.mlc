@@ -1,0 +1,25 @@
+import "std/os"
+import "std/testing"
+import "std/wifi"
+
+// On a desktop the system manages the network: std/wifi has nothing to
+// control (TestESP32WiFi tests it in the ESP32 simulation).
+fn test_desktop() {
+    testing.eq_bool(wifi.available(), false)
+    err := 0
+    testing.eq_bool(wifi.connect_str("my-network", "my-password", 1000, &err), false)
+    testing.eq_int(err, wifi.UNAVAILABLE)
+    testing.eq_bool(wifi.connected(), false)
+    var ip [16]byte
+    testing.eq_int(wifi.ip(&ip), 0)
+    testing.eq_int(wifi.rssi(), 0)
+    wifi.disconnect()
+}
+
+fn test_error_text() {
+    var msg [160]byte
+    n := os.error_text(wifi.AUTH, &msg)
+    testing.eq_str(&msg[:n], "the Wi-Fi network refused the password")
+    n = os.error_text(wifi.BAD_NAME, &msg)
+    testing.eq_str(&msg[:n], "the Wi-Fi network's name is empty or longer than 32 bytes, or the password longer than 64")
+}
