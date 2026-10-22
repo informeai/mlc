@@ -141,6 +141,9 @@ func (c *checker) moduleConst(e *ast.SelectorExpr, m *module) Type {
 	case l != nil && !l.Pub:
 		c.errorf(e.SelPos, "%s.%s isn't public (declare it with pub const)", m.name, e.Sel)
 	case l != nil:
+		if c.cConstUse(e, l) {
+			return l.Type
+		}
 		c.info.Values[e] = l.Const
 		return l.Type
 	case m.funcs[e.Sel] != nil && !m.funcs[e.Sel].Pub:

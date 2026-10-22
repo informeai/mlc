@@ -1,0 +1,13 @@
+// error: pass the name of an MLC function; the compiler writes a C wrapper for it at compile time
+extern "C" struct cfg_t from "cfg.h" {
+    on fn(int32)
+}
+
+fn tick(n int32) {
+}
+
+fn main() {
+    f := tick
+    c := cfg_t{on: f}
+    c.on = tick
+}

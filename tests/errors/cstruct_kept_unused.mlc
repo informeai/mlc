@@ -1,0 +1,11 @@
+// error: the kept context arg isn't received by any callback of timer_t
+struct Ctx {
+    name string
+}
+
+extern "C" struct timer_t from "timer.h" {
+    arg kept *Ctx
+}
+
+fn main() {
+}

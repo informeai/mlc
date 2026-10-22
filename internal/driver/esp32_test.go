@@ -253,7 +253,7 @@ func TestESP32Callbacks(t *testing.T) {
 			if err := BuildESP32(filepath.Base(path), src, comp, dirLoader(path), Options{}); err != nil {
 				t.Fatal(err)
 			}
-			if espGCC != "" {
+			if espGCC != "" && !usesCHeaders(t, comp) {
 				args := append(append([]string{}, esp32GCCFlags...), "-I", comp, "-c", "-o", filepath.Join(t.TempDir(), "app_xtensa.o"), filepath.Join(comp, "mlc_app.c"))
 				if out, err := exec.Command(espGCC, args...).CombinedOutput(); err != nil {
 					t.Fatalf("ESP-IDF's GCC: %v\n%s", err, out)
@@ -305,6 +305,18 @@ fn main() {
 	if out.Len() > 0 {
 		t.Errorf("stdout: %q", out.String())
 	}
+}
+
+// usesCHeaders says whether the component's program includes C headers
+// (extern "C" struct or const): ESP-IDF's GCC alone, without the include
+// folders of ESP-IDF's build, can't find them, so the simulation's headers
+// check that program (and the chip, tools/esp32_chip.py).
+func usesCHeaders(t *testing.T, comp string) bool {
+	src, err := os.ReadFile(filepath.Join(comp, "mlc_app.c"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Count(string(src), "#include ") > 1
 }
 
 // esp32GCCFlags compile the generated C as ESP-IDF does (-Og, -Wall with

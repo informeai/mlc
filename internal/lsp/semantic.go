@@ -49,7 +49,7 @@ var basicTypes = map[string]bool{
 
 var builtins = map[string]bool{
 	"alloc": true, "free": true, "realloc": true, "len": true,
-	"take": true, "replace": true, "drain": true, "drop": true,
+	"take": true, "replace": true, "drain": true, "drop": true, "keep": true,
 }
 
 // semanticTokens returns the tokens of src in the LSP format: for each one,

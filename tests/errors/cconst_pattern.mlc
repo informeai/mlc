@@ -1,0 +1,12 @@
+// error: MODE is a C constant, whose value only C knows: compare it with == instead of a pattern
+import "std/io"
+
+extern "C" const MODE int32 from "modes.h"
+
+fn main() {
+    x := int32(2)
+    match x {
+        MODE => io.print("mode")
+        _ => {}
+    }
+}

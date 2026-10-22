@@ -57,7 +57,10 @@ func (n *InterfaceDecl) Pos() token.Pos { return n.P }
 func (n *ImplDecl) Pos() token.Pos      { return n.P }
 
 type StructDecl struct {
-	Extern     bool // extern "C" type Db: an opaque C type, only behind a pointer
+	Extern bool // extern "C" type Db: an opaque C type, only behind a pointer
+	// Header: in extern "C" struct T from "h.h", the C header with T; the
+	// generated C includes it and uses C's struct (Fields: the ones MLC uses)
+	Header     string
 	Name       string
 	TypeParams []*TypeParam // struct Pair[A any, B any] { ... }
 	Pub        bool
@@ -68,7 +71,11 @@ type StructDecl struct {
 type FieldDecl struct {
 	Name string
 	Type *TypeExpr
-	P    token.Pos
+	// in an extern "C" struct: Kept for a callback's context (arg kept *T),
+	// and Inner for an anonymous nested struct (flags { ... }), with Type nil
+	Kept  bool
+	Inner []*FieldDecl
+	P     token.Pos
 }
 
 // ConstDecl is "const N T = v", at the top of the file or inside a block.
@@ -77,7 +84,10 @@ type ConstDecl struct {
 	Pub   bool
 	Type  *TypeExpr // optional
 	Value Expr
-	P     token.Pos // position of the name
+	// Header: extern "C" const N T from "h.h", a constant (macro or enum
+	// value) of a C header, which C gives the value of; Value is nil
+	Header string
+	P      token.Pos // position of the name
 }
 
 func (n *StructDecl) Pos() token.Pos { return n.P }

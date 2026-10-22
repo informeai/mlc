@@ -1,0 +1,11 @@
+// error: flags is an anonymous C struct: use its fields (c.flags.field)
+extern "C" struct cfg_t from "cfg.h" {
+    flags {
+        pullup uint32
+    }
+}
+
+fn main() {
+    var c cfg_t
+    f := c.flags
+}

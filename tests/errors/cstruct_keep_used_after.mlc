@@ -1,0 +1,22 @@
+// error: c was already freed or moved
+struct Ctx {
+    n int
+}
+
+extern "C" struct timer_t from "timer.h" {
+    on fn(&Ctx)
+    arg kept *Ctx
+}
+
+extern "C" fn start(t &timer_t) int32
+
+fn tick(c &Ctx) {
+    c.n++
+}
+
+fn main() {
+    c := alloc(Ctx{n: 0})
+    t := timer_t{on: tick, arg: keep(c)}
+    start(&t)
+    c.n = 5
+}

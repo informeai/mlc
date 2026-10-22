@@ -246,6 +246,99 @@ For interrupts, the way is a handler written in C that only puts the event in a 
 - the checker's refusals in `tests/errors/ffi_callback_*.mlc` and `ffi_kept_*.mlc`: a `fn` variable or a C function as the argument, a signature that doesn't match, an owner in a callback's parameters, a slice without its length or with elements C can't lay out, a borrow as a `kept` context, a kept callback with a lent context or without one, a kept context without a kept callback, a context that comes from nowhere, `kept` outside an `extern "C" fn`, and the context used after it was moved;
 - on the ESP32 (`TestESP32Callbacks`, in the simulation, and `tools/esp32_chip.py` on the chip): `tests/esp32/events.mlc`, a handler registered with `esp_event_handler_instance_register` that receives the events posted with `esp_event_post` in ESP-IDF's event task and passes them on with `try_send`; and an MLC function called from an interrupt, which stops with the message.
 
+## C structs from headers
+
+A struct of the program crosses the boundary only when MLC can write its exact layout: scalar fields, in C's order (`&T` with `T` a struct of numbers). The configuration structs of real drivers don't fit. ESP-IDF's `i2c_master_bus_config_t` has a member inside an anonymous `union`, bitfields inside a nested anonymous `struct`, a field that only exists on some chips (`#if SOC_LP_I2C_SUPPORTED`) and a `size_t`, whose size changes between the chip and a desktop. `esp_timer_create_args_t` has the callback, its `void *` context and a `const char *`. Copying those layouts into MLC by hand would break from one chip (or ESP-IDF version) to the next, silently.
+
+### The header's struct, with the fields you use
+
+MLC doesn't copy the layout: MLC compiles to C, so the generated C **includes the header and uses the real struct**. The MLC declaration only names the C type, the header it comes from, and the fields the program uses, with MLC types for the checker:
+
+```
+extern "C" struct i2c_master_bus_config_t from "driver/i2c_master.h" {
+    i2c_port int32
+    sda_io_num int32
+    scl_io_num int32
+    clk_source int32                  // a member of the anonymous union, written as a field
+    glitch_ignore_cnt byte
+    flags {                           // the nested anonymous struct
+        enable_internal_pullup uint32 // a bitfield
+    }
+}
+
+var cfg i2c_master_bus_config_t      // every field zero, the ones MLC doesn't see too
+cfg.i2c_port = -1
+cfg.sda_io_num = 21
+cfg.scl_io_num = 22
+cfg.glitch_ignore_cnt = 7
+cfg.flags.enable_internal_pullup = 1
+i2c_new_master_bus(&cfg, &bus)
+```
+
+- `cfg.sda_io_num` in MLC is `cfg.sda_io_num` in C. **The C compiler checks the names**: a misspelled field, or one that doesn't exist on this chip, is a compile error (mlc says the C compiler refused the program because of a header, and C's message points at the MLC line).
+- **Where C finds the header:** in the system's folders (`stdio.h`), in the main `.mlc` file's folder, and in the `-I` of `-cflags`. On the ESP32 the component sees every ESP-IDF component's headers (`driver/ledc.h`, `esp_timer.h`). The layout is the header's, on every chip, with its unions, bitfields and conditional fields.
+- MLC declares a **subset** of the fields; the rest are zero. `var cfg T` and `T{}` zero the whole struct, and a literal may leave fields out (`T{sda_io_num: 21}`): unlike MLC's own structs, the program never sees all of a C struct's fields.
+- An anonymous inner struct is a block in the declaration (`flags { ... }`); a member of an anonymous union is a field like the others (the program writes one member, as in C). A named struct inside another is a field of that type (also declared with `extern "C" struct`).
+- The field types are numbers, `bool`, `[N]T` of numbers, other C structs (by value), `string`, callbacks and their contexts (below). The values are converted by C as in an assignment, so the MLC type should be C's (`int32` for an `int` or a C enum, `uint32` for a `size_t` on the ESP32): the checker uses it, C converts what doesn't match.
+- A C struct is a value, copied like an MLC struct of scalars, with no owner. It crosses the boundary **lent** (`&T`, the pointer, as the configuration functions take it) and also **by value** (`T`): with the real type, the C compiler passes it by the platform's rules, which is what "structs by value" needed.
+- Its fields are read and written, but not borrowed (`&cfg.flags` is refused): a bitfield has no address, and lending the inside of a C struct gains little. Borrow the whole struct.
+- A callback can receive one (`fn(&esp_now_recv_info_t, &[]byte, int32)`): an event's struct, read in the callback.
+
+### Strings, callbacks and contexts in fields
+
+```
+struct Blink {
+    on bool
+}
+
+extern "C" type esp_timer                        // esp_timer_handle_t is struct esp_timer *
+extern "C" struct esp_timer_create_args_t from "esp_timer.h" {
+    callback fn(&Blink)
+    arg kept *Blink
+    name string
+}
+
+extern "C" fn esp_timer_create(args &esp_timer_create_args_t, out &?*esp_timer) int32
+extern "C" fn esp_timer_start_periodic(t &esp_timer, period_us uint64) int32
+
+fn tick(b &Blink) {
+    b.on = !b.on
+    gpio.write(LED, b.on)
+}
+
+args := esp_timer_create_args_t{callback: tick, arg: keep(alloc(Blink{on: false})), name: "blink"}
+var t ?*esp_timer = nil
+esp_timer_create(&args, &t)
+```
+
+- **`string`** is a `const char *` field (written as `cfg.name = "bus0"` or in the literal). MLC's strings are the program's literals, which live as long as the program, so C may keep the pointer (ESP-IDF keeps the timer's name). In this version string fields are only written by MLC: reading a `const char *` that C filled would need its length and its lifetime.
+- **A callback field** (`callback fn(&Blink)`) takes the name of an MLC function, as a callback parameter does, and gets the C wrapper (converted to the field's own type: C's `void (*)(void *)` and the wrapper's `void (*)(Blink *)` are the same pointer in the ABI). Since C may keep a struct it receives, a callback in a field follows the `kept` rules: its context must be a `kept` field of the same struct, and a `kept` field must be received by some callback of the struct.
+- **A context field** has type `kept *T`, and its value comes from **`keep(x)`**: it moves `x` (an owner from `alloc`) to C for good and gives the pointer C keeps. It's the `kept *T` parameter's move, written where it happens, so the struct stays a plain value: copying it doesn't copy an owner. The kept memory lives until the program ends, and with it the leak check at the end is skipped, as with a `kept` parameter.
+
+### Constants from headers
+
+The numbers of C's enums and macros (`GPIO_MODE_OUTPUT`, `LEDC_TIMER_13_BIT`) don't need to be copied by hand: with the header included, MLC names them and C gives the value:
+
+```
+extern "C" const GPIO_MODE_OUTPUT int32 from "driver/gpio.h"
+extern "C" const LEDC_LOW_SPEED_MODE int32 from "driver/ledc.h"
+```
+
+The value is only known when C compiles, so such a constant works where a value goes (arguments, fields, comparisons), and not where MLC needs the number itself (an array's size, a `match` pattern, a `const` computed from it), which the checker refuses. It's a number or `bool`, and it can't be assigned or borrowed.
+
+### What it doesn't do
+
+- reading a `string` or a pointer field that C filled (`char *topic; int topic_len` in an MQTT event): a pointer and length field pair as a slice is a later step;
+- handles (`?*X`) and borrows as fields;
+- C's `union` as a type of its own (only the members of an anonymous union, as fields), and `struct tag` without a `typedef`;
+- getting a `keep`'s memory back.
+
+### How it's tested
+
+- `TestFFICStructs`, with `tests/ffi/cstructs.h` and `cstructs.c`: an anonymous union, bitfields in a nested struct, a field MLC doesn't declare (C checks it stayed zero), a `size_t`, a `const char *`, a callback with its kept context called from a thread of C's, a struct by value, one a callback receives, and constants from a `#define` and an `enum`; and a field the header doesn't have, which is C's error at the MLC line. It also runs under the sanitizers;
+- the refusals, in `tests/errors/cstruct_*.mlc` and `cconst_*.mlc`: `&` of a field, reading a string or a callback field, a fn variable in a callback field, an anonymous struct as a value or in a literal, a callback field without its `kept` context, a `kept` field no callback receives, a pointer field that isn't `kept`, `keep` of something that isn't an owner, the owner used after `keep`, and a C constant in a `const`, an array's size, an assignment and a pattern;
+- on the ESP32 (`tests/esp32`, in the simulation and on the chip): `timer.mlc`, with `esp_timer` calling an MLC function every 20 ms through `esp_timer_create_args_t`, and `pwm.mlc`, PWM on the LED with `ledc_timer_config_t`, `ledc_channel_config_t` and the LEDC enums' values from the header.
+
 ## Link errors
 
 If a library from `link "..."` or a C function doesn't exist, `mlc build` says the program couldn't be linked and shows the linker's message. That's an error in the program, not in the compiler.
@@ -254,4 +347,4 @@ If a library from `link "..."` or a C function doesn't exist, `mlc build` says t
 
 - Pointers returned by C to memory MLC would free (`char *` from `strdup`): use an opaque handle and the C function that frees it. (The standard library's `std/sqlite` and `std/tls` solve this with a small adapter in the runtime that copies the data into the caller's buffers.)
 - A callback parameter that always receives `NULL` can still be declared as `?&byte` (only the `NULL` crosses); for real callbacks, see [Callbacks from C](#callbacks-from-c).
-- Structs by value across the boundary, and variadic functions.
+- A program's own struct by value across the boundary (a C struct from a header crosses by value: see [C structs](#c-structs-from-headers)), and variadic functions.

@@ -1,0 +1,8 @@
+check: 0 port 3 pullup 1
+add: 11 22
+points: 9 12
+constants: 7 4 true
+start: 0 name: 1
+tick 1
+tick 2
+tick 3

@@ -343,9 +343,9 @@ fn test_walk_and_glob() {
 
 // remove_all and walk don't follow links: what the link points to stays
 fn test_links_not_followed() {
-    var keep [256]byte
-    kn := fs.temp_path("mlc-target-", &keep)
-    make_tree(&keep[:kn])
+    var kept_dir [256]byte
+    kn := fs.temp_path("mlc-target-", &kept_dir)
+    make_tree(&kept_dir[:kn])
     var base [256]byte
     n := fs.temp_path("mlc-with-link-", &base)
     fs.mkdir_all(&base[:n])
@@ -354,7 +354,7 @@ fn test_links_not_followed() {
     ln += str.copy(&link[ln:], "/shortcut")
     c := process.cmd("ln")
     c.arg("-s")
-    c.arg_bytes(&keep[:kn])
+    c.arg_bytes(&kept_dir[:kn])
     c.arg_bytes(&link[:ln])
     status := 0
     var out [64]byte
@@ -369,10 +369,10 @@ fn test_links_not_followed() {
     fs.remove_all(&base[:n])
     testing.check(!fs.exists(&base[:n]), "deleted the directory with the link")
     var probe [300]byte
-    pn := str.copy_bytes(&probe, &keep[:kn])
+    pn := str.copy_bytes(&probe, &kept_dir[:kn])
     pn += str.copy(&probe[pn:], "/src/main.mlc")
     testing.check(fs.exists(&probe[:pn]), "the link's target was left intact")
-    fs.remove_all(&keep[:kn])
+    fs.remove_all(&kept_dir[:kn])
 }
 
 fn test_glob_match() {

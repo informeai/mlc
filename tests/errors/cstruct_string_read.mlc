@@ -1,0 +1,12 @@
+// error: name is a C string (const char *): MLC writes it, but reading it would need its length and its lifetime
+import "std/io"
+
+extern "C" struct cfg_t from "cfg.h" {
+    name string
+}
+
+fn main() {
+    var c cfg_t
+    c.name = "bus0"
+    io.print(c.name)
+}

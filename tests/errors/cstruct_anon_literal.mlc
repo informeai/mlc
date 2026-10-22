@@ -1,0 +1,12 @@
+// error: flags is an anonymous C struct, which has no literal
+extern "C" struct cfg_t from "cfg.h" {
+    port int32
+    flags {
+        pullup uint32
+    }
+}
+
+fn main() {
+    var d cfg_t
+    c := cfg_t{port: 1, flags: d}
+}

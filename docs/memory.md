@@ -219,7 +219,7 @@ A `match` over `*e`, a field or a borrow **only reads**: the owning fields come 
 
 Function values don't capture variables. For a callback to keep state, the caller passes the context along (`m.each_with(&ctx, f)`, with `f fn(&C, &K, &V)`). The context is a borrow during the call: the function can change it but not keep it, and its memory belongs to the caller, with the usual rules. It's what a closure would do, with the state in plain sight. See [types.md](types.md#generic-methods-and-callbacks-with-a-context).
 
-A C callback follows the same idea: its context is lent with the call (`ctx &C`), or, when C keeps the callback to call later, **moved** to C (`ctx kept *C`). A kept context is never freed: it lives with the registration until the program ends, the `alloc` that made it is in the code, and with one the leak check at the end of the program is skipped, since what C keeps can't be counted. See [ffi.md](ffi.md#callbacks-from-c).
+A C callback follows the same idea: its context is lent with the call (`ctx &C`), or, when C keeps the callback to call later, **moved** to C (`ctx kept *C`). A kept context is never freed: it lives with the registration until the program ends, the `alloc` that made it is in the code, and with one the leak check at the end of the program is skipped, since what C keeps can't be counted. See [ffi.md](ffi.md#callbacks-from-c). Inside a C struct (a timer's arguments), the context goes with `keep(x)`: the move to C is written where it happens, and the struct stays a plain value with no owner.
 
 ## Threads
 

@@ -1,0 +1,61 @@
+import "std/io"
+import "std/time"
+
+// PWM on the LED with ESP-IDF's LEDC driver: its configuration structs and
+// its enums' values come from the header (extern "C" struct and const), so
+// nothing of the layout or the numbers is written by hand. It runs in the
+// simulation (TestESP32Callbacks) and on the chip, where the LED dims.
+
+const LED = 2
+
+extern "C" struct ledc_timer_config_t from "driver/ledc.h" {
+    speed_mode int32
+    duty_resolution int32
+    timer_num int32
+    freq_hz uint32
+    clk_cfg int32
+}
+
+extern "C" struct ledc_channel_config_t from "driver/ledc.h" {
+    gpio_num int32
+    speed_mode int32
+    channel int32
+    timer_sel int32
+    duty uint32
+}
+
+extern "C" const LEDC_LOW_SPEED_MODE int32 from "driver/ledc.h"
+extern "C" const LEDC_TIMER_0 int32 from "driver/ledc.h"
+extern "C" const LEDC_TIMER_10_BIT int32 from "driver/ledc.h"
+extern "C" const LEDC_CHANNEL_0 int32 from "driver/ledc.h"
+extern "C" const LEDC_AUTO_CLK int32 from "driver/ledc.h"
+
+extern "C" fn ledc_timer_config(c &ledc_timer_config_t) int32
+extern "C" fn ledc_channel_config(c &ledc_channel_config_t) int32
+extern "C" fn ledc_set_duty(mode int32, channel int32, duty uint32) int32
+extern "C" fn ledc_update_duty(mode int32, channel int32) int32
+extern "C" fn ledc_get_duty(mode int32, channel int32) uint32
+extern "C" fn ledc_get_freq(mode int32, timer int32) uint32
+
+fn main() {
+    timer := ledc_timer_config_t{
+        speed_mode: LEDC_LOW_SPEED_MODE,
+        duty_resolution: LEDC_TIMER_10_BIT,
+        timer_num: LEDC_TIMER_0,
+        freq_hz: 5000,
+        clk_cfg: LEDC_AUTO_CLK,
+    }
+    io.print("timer:", ledc_timer_config(&timer), "freq:", ledc_get_freq(LEDC_LOW_SPEED_MODE, LEDC_TIMER_0))
+    channel := ledc_channel_config_t{gpio_num: LED, speed_mode: LEDC_LOW_SPEED_MODE, channel: LEDC_CHANNEL_0, timer_sel: LEDC_TIMER_0, duty: 0}
+    io.print("channel:", ledc_channel_config(&channel))
+    for i := 0; i < 5; i++ {
+        duty := uint32(i * 256) // 0, 25%, 50%, 75% and 100% of 1024
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, duty)
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0)
+        time.sleep_ms(200)
+        // the new duty takes effect at the start of the next PWM period (200 us
+        // at 5 kHz): read before it, the chip still gives the old one
+        io.print("duty:", ledc_get_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0))
+    }
+    io.print("done")
+}

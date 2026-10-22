@@ -26,6 +26,13 @@ type Struct struct {
 	// exists behind a pointer, as a handle
 	Extern bool
 
+	// CStruct: extern "C" struct T from "h.h", C's struct (CName is C's
+	// name, Header the header), with the fields MLC uses; Anon in one of its
+	// anonymous nested structs (flags { ... }), which has no name in C
+	CStruct bool
+	Anon    bool
+	Header  string
+
 	// ThreadResult: in a thread.Thread[R], the result's type (Void if it
 	// has none); nil in the other structs
 	ThreadResult Type
@@ -90,6 +97,10 @@ func (c *checker) collectStructs(f *ast.File) {
 			Name: c.qualify(d.Name), Methods: map[string]*Func{}, CName: c.mod.prefix + d.Name, File: c.mod.file, Pub: d.Pub, Decl: d,
 			mod: c.mod, Extern: d.Extern,
 		}
+		if d.Header != "" {
+			s.CStruct, s.Header, s.CName = true, d.Header, d.Name // C's own name: the header declares it
+			c.addHeader(d.Header)
+		}
 		if len(d.TypeParams) > 0 {
 			// generic: the fields are resolved in each instance
 			c.typeVars(d.TypeParams)
@@ -102,6 +113,10 @@ func (c *checker) collectStructs(f *ast.File) {
 	for _, d := range f.Structs {
 		s := c.mod.structs[d.Name]
 		if s == nil || s.Decl != d {
+			continue
+		}
+		if s.CStruct {
+			c.cStructFields(s, d.Fields)
 			continue
 		}
 		seen := map[string]bool{}
@@ -255,6 +270,19 @@ func (c *checker) compositeOf(e *ast.CompositeLit, s *Struct, allowed bool) Type
 	given := map[string]token.Pos{}
 	for _, fi := range e.Fields {
 		f := s.Field(fi.Name)
+		if f != nil && s.CStruct {
+			// a callback field takes a function's name; an anonymous struct has no literal
+			if ft, ok := f.Type.(*FuncType); ok {
+				given[fi.Name] = fi.P
+				c.callbackArg(fi.Value, ft, "field "+fi.Name)
+				continue
+			}
+			if isAnonCStruct(f.Type) {
+				c.value(fi.Value)
+				c.errorf(fi.P, "%s is an anonymous C struct, which has no literal: set its fields after (x.%s.field = ...)", fi.Name, fi.Name)
+				continue
+			}
+		}
 		var vt Type
 		if _, isLit := fi.Value.(*ast.CompositeLit); isLit && f != nil && isResource(f.Type) {
 			c.litOK = true // a literal nested inside alloc's literal
@@ -278,7 +306,7 @@ func (c *checker) compositeOf(e *ast.CompositeLit, s *Struct, allowed bool) Type
 		given[fi.Name] = fi.P
 		c.assignable(vt, f.Type, fi.Value.Pos(), "field "+fi.Name)
 	}
-	if len(e.Fields) > 0 {
+	if len(e.Fields) > 0 && !s.CStruct { // C's struct has fields MLC doesn't see: the ones left out are zero
 		for _, f := range s.Fields {
 			if _, ok := given[f.Name]; !ok {
 				c.errorf(e.Lbrace, "field %s not initialized (list every field, or use %s{} for the zero value)", f.Name, s.Name)
@@ -296,7 +324,11 @@ func (c *checker) selector(e *ast.SelectorExpr) Type {
 	if m := c.userModule(e.X); m != nil {
 		return c.moduleConst(e, m)
 	}
-	return c.field(c.value(e.X), e)
+	saved := c.anonOK
+	c.anonOK = true // x.flags.f: the anonymous struct is a path here
+	xt := c.value(e.X)
+	c.anonOK = saved
+	return c.cFieldRead(e, c.field(xt, e))
 }
 
 func (c *checker) field(t Type, e *ast.SelectorExpr) Type {

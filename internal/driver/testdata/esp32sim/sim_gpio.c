@@ -189,3 +189,153 @@ esp_err_t gpio_isr_handler_remove(gpio_num_t pin) {
     pthread_mutex_unlock(&mu);
     return ESP_OK;
 }
+
+/* ---------- esp_timer ---------- */
+
+#include <unistd.h>
+
+#include "driver/ledc.h"
+
+struct esp_timer {
+    esp_timer_create_args_t args;
+    uint64_t period_us;
+    pthread_t th;
+    bool running;
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+};
+
+/* the timer's thread plays esp_timer's task: it calls the callback every
+ * period until the timer stops */
+static void *timer_run(void *p) {
+    esp_timer_handle_t t = p;
+    pthread_mutex_lock(&t->mu);
+    while (t->running) {
+        struct timespec until;
+        clock_gettime(CLOCK_REALTIME, &until);
+        until.tv_sec += (time_t)(t->period_us / 1000000);
+        until.tv_nsec += (long)(t->period_us % 1000000) * 1000;
+        if (until.tv_nsec >= 1000000000) {
+            until.tv_sec++;
+            until.tv_nsec -= 1000000000;
+        }
+        if (pthread_cond_timedwait(&t->cv, &t->mu, &until) == ETIMEDOUT && t->running) {
+            pthread_mutex_unlock(&t->mu);
+            t->args.callback(t->args.arg);
+            pthread_mutex_lock(&t->mu);
+        }
+    }
+    pthread_mutex_unlock(&t->mu);
+    return NULL;
+}
+
+esp_err_t esp_timer_create(const esp_timer_create_args_t *args, esp_timer_handle_t *out) {
+    if (args == NULL || args->callback == NULL || out == NULL) return ESP_ERR_INVALID_ARG;
+    esp_timer_handle_t t = calloc(1, sizeof *t);
+    t->args = *args; /* esp_timer copies the arguments */
+    pthread_mutex_init(&t->mu, NULL);
+    pthread_cond_init(&t->cv, NULL);
+    *out = t;
+    return ESP_OK;
+}
+
+esp_err_t esp_timer_start_periodic(esp_timer_handle_t t, uint64_t period_us) {
+    if (t->running) return ESP_ERR_INVALID_STATE;
+    t->period_us = period_us;
+    t->running = true;
+    pthread_create(&t->th, NULL, timer_run, t);
+    return ESP_OK;
+}
+
+esp_err_t esp_timer_stop(esp_timer_handle_t t) {
+    pthread_mutex_lock(&t->mu);
+    bool was = t->running;
+    t->running = false;
+    pthread_cond_signal(&t->cv);
+    pthread_mutex_unlock(&t->mu);
+    if (!was) return ESP_ERR_INVALID_STATE;
+    pthread_join(t->th, NULL);
+    return ESP_OK;
+}
+
+esp_err_t esp_timer_delete(esp_timer_handle_t t) {
+    if (t->running) {
+        misuse("esp_timer_delete of a running timer");
+        return ESP_ERR_INVALID_STATE;
+    }
+    pthread_mutex_destroy(&t->mu);
+    pthread_cond_destroy(&t->cv);
+    free(t);
+    return ESP_OK;
+}
+
+/* ---------- LEDC ---------- */
+
+static struct {
+    bool configured;
+    uint32_t freq, resolution;
+} ledc_timers[LEDC_TIMER_MAX];
+/* as on the chip, ledc_update_duty's duty takes effect at the start of the
+ * next PWM period: updated is when, and ledc_get_duty gives the old duty
+ * before the period ends */
+static struct {
+    bool configured;
+    ledc_timer_t timer;
+    uint32_t duty, pending, next;
+    int64_t updated;
+} ledc_channels[LEDC_CHANNEL_MAX];
+
+static uint32_t ledc_duty_now(ledc_channel_t ch) {
+    uint32_t freq = ledc_timers[ledc_channels[ch].timer].freq;
+    int64_t period_us = freq > 0 ? 1000000 / freq : 0;
+    if (ledc_channels[ch].updated != 0 && esp_timer_get_time() - ledc_channels[ch].updated >= period_us) {
+        ledc_channels[ch].duty = ledc_channels[ch].next;
+        ledc_channels[ch].updated = 0;
+    }
+    return ledc_channels[ch].duty;
+}
+
+esp_err_t ledc_timer_config(const ledc_timer_config_t *c) {
+    if (c->timer_num >= LEDC_TIMER_MAX || c->freq_hz == 0 || c->duty_resolution < 1 || c->duty_resolution > 20) return ESP_ERR_INVALID_ARG;
+    ledc_timers[c->timer_num].configured = true;
+    ledc_timers[c->timer_num].freq = c->freq_hz;
+    ledc_timers[c->timer_num].resolution = c->duty_resolution;
+    return ESP_OK;
+}
+
+esp_err_t ledc_channel_config(const ledc_channel_config_t *c) {
+    if (c->channel >= LEDC_CHANNEL_MAX || c->timer_sel >= LEDC_TIMER_MAX || !GPIO_IS_VALID_OUTPUT_GPIO(c->gpio_num)) return ESP_ERR_INVALID_ARG;
+    if (!ledc_timers[c->timer_sel].configured) misuse("ledc_channel_config before ledc_timer_config of its timer");
+    ledc_channels[c->channel].configured = true;
+    ledc_channels[c->channel].timer = c->timer_sel;
+    ledc_channels[c->channel].duty = ledc_channels[c->channel].pending = ledc_channels[c->channel].next = c->duty;
+    ledc_channels[c->channel].updated = 0;
+    return ESP_OK;
+}
+
+esp_err_t ledc_set_duty(ledc_mode_t mode, ledc_channel_t ch, uint32_t duty) {
+    (void)mode;
+    if (ch >= LEDC_CHANNEL_MAX || !ledc_channels[ch].configured) return ESP_ERR_INVALID_STATE;
+    if (duty > (1u << ledc_timers[ledc_channels[ch].timer].resolution)) return ESP_ERR_INVALID_ARG;
+    ledc_channels[ch].pending = duty; /* takes effect at ledc_update_duty, as on the chip */
+    return ESP_OK;
+}
+
+esp_err_t ledc_update_duty(ledc_mode_t mode, ledc_channel_t ch) {
+    (void)mode;
+    if (ch >= LEDC_CHANNEL_MAX || !ledc_channels[ch].configured) return ESP_ERR_INVALID_STATE;
+    ledc_duty_now(ch);
+    ledc_channels[ch].next = ledc_channels[ch].pending;
+    ledc_channels[ch].updated = esp_timer_get_time();
+    return ESP_OK;
+}
+
+uint32_t ledc_get_duty(ledc_mode_t mode, ledc_channel_t ch) {
+    (void)mode;
+    return ch < LEDC_CHANNEL_MAX ? ledc_duty_now(ch) : 0;
+}
+
+uint32_t ledc_get_freq(ledc_mode_t mode, ledc_timer_t timer) {
+    (void)mode;
+    return timer < LEDC_TIMER_MAX ? ledc_timers[timer].freq : 0;
+}

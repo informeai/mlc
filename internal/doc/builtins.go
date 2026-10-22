@@ -9,6 +9,7 @@ var Builtins = map[string][2]string{
 	"free":             {"free(p)", "Frees an owning pointer or slice. After that the variable can't be used anymore."},
 	"realloc":          {"realloc(s []T, n int) []T", "Changes the size of an owning slice: consumes `s` and returns another; the new positions come zeroed."},
 	"len":              {"len(s) int", "Length of a slice, array or string (in bytes)."},
+	"keep":             {"keep(x *T) kept *T", "Moves `x` (an owner from `alloc`) to C for good and gives the pointer C keeps, for a callback's context in a C struct field (`arg kept *T`). The memory lives until the program ends."},
 	"take":             {"take(&s[i]) ?*T", "Takes the owner out of position `i` of a slice of owners, leaving `nil` in its place."},
 	"replace":          {"replace(&s[i], v) ?*T", "Puts `v` at position `i` and returns the owner that was there."},
 	"drain":            {"for x in drain(s)", "Walks a slice of owners taking out each element; each `x` must be freed or moved."},

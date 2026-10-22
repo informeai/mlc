@@ -335,6 +335,8 @@ func (c *checker) builtinCall(e *ast.CallExpr, name string) (Type, bool) {
 		return c.reallocCall(e), true
 	case "take":
 		return c.takeCall(e), true
+	case "keep":
+		return c.keepCall(e), true
 	case "replace":
 		return c.replaceCall(e), true
 	case "drain":
@@ -517,7 +519,7 @@ func (c *checker) borrowArg(a ast.Expr, want *Borrow, context string) {
 		return
 	}
 	t := c.borrowPlace(u.X)
-	if t == Invalid {
+	if t == Invalid || c.cFieldBorrow(u.X) {
 		c.info.Types[a] = Invalid
 		return
 	}

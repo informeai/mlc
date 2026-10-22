@@ -138,11 +138,16 @@ func (p *Parser) parseFile() *ast.File {
 		case token.FN:
 			f.Funcs = append(f.Funcs, p.parseFunc())
 		case token.EXTERN:
-			if p.isExternType() {
+			switch p.externKind() {
+			case token.IDENT:
 				f.Structs = append(f.Structs, p.parseExternType())
-				continue
+			case token.STRUCT:
+				f.Structs = append(f.Structs, p.parseExternStruct())
+			case token.CONST:
+				f.Consts = append(f.Consts, p.parseExternConst())
+			default:
+				f.Funcs = append(f.Funcs, p.parseExtern())
 			}
-			f.Funcs = append(f.Funcs, p.parseExtern())
 		case token.STRUCT:
 			f.Structs = append(f.Structs, p.parseStruct())
 		case token.ENUM:
@@ -256,6 +261,106 @@ func (p *Parser) parseExternType() *ast.StructDecl {
 	name := p.expect(token.IDENT)
 	p.expectEOS()
 	return &ast.StructDecl{Extern: true, Name: name.Lit, P: pos}
+}
+
+// externKind says what comes after extern "C": IDENT for type Name (an
+// opaque type), STRUCT, CONST, or FN (also for extern without "C").
+func (p *Parser) externKind() token.Kind {
+	if p.tok.Kind != token.EXTERN || p.peek.Kind != token.STRING {
+		return token.FN
+	}
+	if p.isExternType() {
+		return token.IDENT
+	}
+	save := *p.lx
+	tok, peek := p.tok, p.peek
+	p.next()
+	p.next()
+	k := p.tok.Kind
+	*p.lx, p.tok, p.peek = save, tok, peek
+	if k == token.STRUCT || k == token.CONST {
+		return k
+	}
+	return token.FN
+}
+
+// parseFrom reads the from "header.h" of an extern "C" struct or const.
+func (p *Parser) parseFrom() string {
+	if p.tok.Kind != token.IDENT || p.tok.Lit != "from" {
+		p.unexpected("expected from \"header.h\": the C header that declares it")
+		return ""
+	}
+	p.next()
+	pos := p.tok.Pos
+	h := p.expect(token.STRING).Lit
+	if h == "" {
+		p.errorf(pos, "the header's name is empty")
+	}
+	return h
+}
+
+// parseExternStruct reads extern "C" struct T from "h.h" { fields }: C's
+// struct, with the fields the program uses.
+func (p *Parser) parseExternStruct() *ast.StructDecl {
+	pos := p.expect(token.EXTERN).Pos
+	if p.tok.Lit != "C" {
+		p.errorf(p.tok.Pos, "the only calling convention is \"C\": extern \"C\" struct")
+	}
+	p.expect(token.STRING)
+	p.expect(token.STRUCT)
+	name := p.expect(token.IDENT)
+	s := &ast.StructDecl{Name: name.Lit, P: pos}
+	s.Header = p.parseFrom()
+	s.Fields = p.parseCFields()
+	p.expectEOS()
+	return s
+}
+
+// parseCFields reads the { ... } of an extern "C" struct: name type,
+// name kept *T, or name { ... } for an anonymous nested struct.
+func (p *Parser) parseCFields() []*ast.FieldDecl {
+	var fields []*ast.FieldDecl
+	p.expect(token.LBRACE)
+	for p.tok.Kind != token.RBRACE && p.tok.Kind != token.EOF {
+		if p.tok.Kind == token.SEMICOLON {
+			p.next()
+			continue
+		}
+		name := p.expect(token.IDENT)
+		fd := &ast.FieldDecl{Name: name.Lit, P: name.Pos}
+		switch {
+		case p.tok.Kind == token.LBRACE:
+			fd.Inner = p.parseCFields()
+		case p.tok.Kind == token.IDENT && p.tok.Lit == "kept" && p.peek.Kind != token.SEMICOLON && p.peek.Kind != token.RBRACE:
+			fd.Kept = true
+			p.next()
+			fd.Type = p.parseType()
+		default:
+			fd.Type = p.parseType()
+		}
+		fields = append(fields, fd)
+		p.expectEOS()
+	}
+	p.expect(token.RBRACE)
+	return fields
+}
+
+// parseExternConst reads extern "C" const N T from "h.h": a constant of a C
+// header, whose value C gives.
+func (p *Parser) parseExternConst() *ast.ConstDecl {
+	p.expect(token.EXTERN)
+	p.expect(token.STRING)
+	p.expect(token.CONST)
+	name := p.expect(token.IDENT)
+	d := &ast.ConstDecl{Name: name.Lit, P: name.Pos}
+	if !p.startsType() {
+		p.unexpected("expected the constant's type: extern \"C\" const N int32 from \"h.h\"")
+		return d
+	}
+	d.Type = p.parseType()
+	d.Header = p.parseFrom()
+	p.expectEOS()
+	return d
 }
 
 // isExternType says whether what comes is extern "C" type Name.
@@ -825,15 +930,24 @@ func (p *Parser) parsePub(f *ast.File) {
 	pos := p.expect(token.PUB).Pos
 	switch p.tok.Kind {
 	case token.EXTERN:
-		if p.isExternType() {
+		switch p.externKind() {
+		case token.IDENT:
 			s := p.parseExternType()
 			s.Pub = true
 			f.Structs = append(f.Structs, s)
-			break
+		case token.STRUCT:
+			s := p.parseExternStruct()
+			s.Pub = true
+			f.Structs = append(f.Structs, s)
+		case token.CONST:
+			c := p.parseExternConst()
+			c.Pub = true
+			f.Consts = append(f.Consts, c)
+		default:
+			fn := p.parseExtern()
+			fn.Pub = true
+			f.Funcs = append(f.Funcs, fn)
 		}
-		fn := p.parseExtern()
-		fn.Pub = true
-		f.Funcs = append(f.Funcs, fn)
 	case token.FN:
 		fn := p.parseFunc()
 		fn.Pub = true

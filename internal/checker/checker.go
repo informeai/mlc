@@ -44,7 +44,7 @@ var predeclared = map[string]bool{
 	"float32": true, "float64": true,
 	"true": true, "false": true, "nil": true,
 	"alloc": true, "free": true, "len": true, "realloc": true,
-	"take": true, "replace": true, "drain": true, "drop": true,
+	"take": true, "replace": true, "drain": true, "drop": true, "keep": true,
 }
 
 type Local struct {
@@ -58,7 +58,8 @@ type Local struct {
 
 	IsConst bool // constant: Const has the value (int64, string or bool)
 	Const   any
-	Pub     bool // public constant (pub const)
+	CConst  string // extern "C" const: the C name; the value is C's (Const is nil)
+	Pub     bool   // public constant (pub const)
 }
 
 type Func struct {
@@ -97,6 +98,7 @@ const (
 	Len                 // len(s)
 	Realloc             // realloc(s, n)
 	Take                // take(&s[i])
+	Keep                // keep(x): x moves to C for good (a kept *T)
 	Replace             // replace(&s[i], v)
 	Convert             // int(x), byte(x)
 	Drop                // drop(x): frees x if it's an owner (generic code)
@@ -156,6 +158,8 @@ type Info struct {
 	DropFree     map[*Struct]*Func            // the free method of each struct freed by drop
 	CExterns     []*Func                      // C functions (extern "C" fn), for the generator to declare
 	Callbacks    []*Func                      // MLC functions passed to C, which get a C wrapper (mlc_fn_x__cb)
+	CHeaders     []string                     // C headers to include (extern "C" struct and const ... from)
+	CConsts      map[ast.Expr]*Local          // uses of C constants (extern "C" const), named in the C
 	MatchTakes   map[*ast.MatchStmt]bool      // a match that consumes an owning enum (takes the data out)
 	BindBorrows  map[*Local]bool              // a pattern name that borrows an owning field
 	Links        []string                     // C libraries asked for with link "name"
@@ -198,7 +202,9 @@ type checker struct {
 	funcTypes   map[string]*FuncType
 	outHandles  map[*Pointer]*OutHandle
 	optArgs     map[Type]*OptArg
-	callbacks   map[*Func]bool   // already in info.Callbacks
+	callbacks   map[*Func]bool // already in info.Callbacks
+	kepts       map[*Struct]*Kept
+	anonOK      bool             // checking the base of a selector: an anonymous C struct is allowed as a path
 	threads     map[Type]*Struct // thread.Thread[R], by R
 	spawnSites  []spawnSite      // the thread.spawn calls, to check the stack
 	chans       map[chanKey]*Struct
@@ -266,6 +272,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 			Chans:        map[*ast.CallExpr]*ChanPlan{},
 			Mutexes:      map[*ast.CallExpr]*MutexPlan{},
 			FuncRefs:     map[ast.Expr]*Func{},
+			CConsts:      map[ast.Expr]*Local{},
 			BorrowSrc:    map[*Local]*Local{},
 			BorrowView:   map[*Local]bool{},
 			BorrowParent: map[*Local]*Local{},
@@ -275,6 +282,7 @@ func CheckProgram(srcs []Source) (*Info, []token.Error) {
 			BindBorrows:  map[*Local]bool{},
 		},
 		callbacks: map[*Func]bool{},
+		kepts:     map[*Struct]*Kept{},
 		pointers:  map[ptrKey]*Pointer{},
 		borrows:   map[Type]*Borrow{},
 		slices:    map[Type]*Slice{},
@@ -660,6 +668,18 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		}
 	case *ast.AssignStmt:
 		lt := c.target(s.Lhs)
+		if sel, ok := s.Lhs.(*ast.SelectorExpr); ok && isCStruct(c.structBase(sel.X)) {
+			// a C struct's callback field takes a function's name; an anonymous struct only its fields
+			if ft, ok := lt.(*FuncType); ok && s.Op == token.ASSIGN {
+				c.callbackArg(s.Rhs, ft, "field "+sel.Sel)
+				return
+			}
+			if isAnonCStruct(lt) {
+				c.value(s.Rhs)
+				c.errorf(sel.SelPos, "%s is an anonymous C struct: assign its fields (%s.%s.field = ...)", sel.Sel, exprName(sel.X), sel.Sel)
+				return
+			}
+		}
 		if s.Op == token.ASSIGN {
 			c.noCopy(lt, s.OpPos)
 			c.valueAs(s.Rhs, lt, "assignment")
@@ -867,6 +887,10 @@ func (c *checker) patternValue(p *ast.Pattern, subject Type) (any, Type) {
 			c.errorf(p.P, "%s isn't a constant: a pattern must be a literal, a constant or _", lit.Name)
 			return nil, Invalid
 		}
+		if l := c.scope.lookup(lit.Name); l != nil && l.CConst != "" {
+			c.errorf(p.P, "%s is a C constant, whose value only C knows: compare it with == instead of a pattern", lit.Name)
+			return nil, Invalid
+		}
 	case *ast.SelectorExpr:
 		if c.userModule(lit.X) == nil {
 			c.errorf(p.P, "a pattern must be a literal, a constant or _")
@@ -1065,6 +1089,9 @@ func (c *checker) expr0(e ast.Expr) Type {
 func (c *checker) ident(e *ast.Ident) Type {
 	if l := c.scope.lookup(e.Name); l != nil {
 		l.Used = true
+		if c.cConstUse(e, l) {
+			return l.Type
+		}
 		if l.IsConst {
 			c.info.Values[e] = l.Const
 		} else {
@@ -1078,7 +1105,7 @@ func (c *checker) ident(e *ast.Ident) Type {
 		return Bool
 	case "nil":
 		return NilType
-	case "alloc", "free", "len", "realloc", "take", "replace":
+	case "alloc", "free", "len", "realloc", "take", "replace", "keep":
 		c.errorf(e.P, "%s must be called: %s(...)", e.Name, e.Name)
 		return Invalid
 	}

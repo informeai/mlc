@@ -1,0 +1,4 @@
+// error: the name "keep" is reserved
+fn main() {
+    keep := 1
+}

@@ -1,0 +1,11 @@
+// error: a pointer to the program's memory in a C struct is a callback's context: declare it kept *Ctx and give it with keep(x)
+struct Ctx {
+    n int
+}
+
+extern "C" struct timer_t from "timer.h" {
+    arg *Ctx
+}
+
+fn main() {
+}

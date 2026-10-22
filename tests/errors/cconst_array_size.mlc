@@ -1,0 +1,6 @@
+// error: an array's size must be an integer constant
+extern "C" const MODE int32 from "modes.h"
+
+fn main() {
+    var a [MODE]byte
+}

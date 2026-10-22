@@ -411,6 +411,49 @@ func ffiLib(t *testing.T, name string) string {
 	return dir
 }
 
+// TestFFICStructs links tests/ffi/cstructs.mlc to tests/ffi/cstructs.c:
+// C's own structs, from tests/ffi/cstructs.h, with an anonymous union,
+// bitfields, a field MLC doesn't declare, a string, a callback with its kept
+// context, a struct by value and one a callback receives, and constants from
+// the header. A field the header doesn't have is C's error, pointed at the MLC
+// line.
+func TestFFICStructs(t *testing.T) {
+	requireCC(t)
+	dir := ffiLib(t, "cstructs")
+	ffi := filepath.Join(testsDir, "ffi")
+	path := filepath.Join(ffi, "cstructs.mlc")
+	exe := filepath.Join(t.TempDir(), "prog")
+	opts := Options{LibDirs: []string{dir}, HeaderDirs: []string{ffi}, Sanitize: sanitize}
+	if err := BuildOpts("cstructs.mlc", []byte(readExpected(t, path)), exe, dirLoader(path), opts); err != nil {
+		t.Fatalf("build failed:\n%v", err)
+	}
+	out, err := exec.Command(exe).CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if want := readExpected(t, filepath.Join(ffi, "cstructs.out")); string(out) != want {
+		t.Errorf("output:\n%s\nexpected:\n%s", out, want)
+	}
+
+	wrong := `import "std/io"
+
+extern "C" struct cs_point_t from "cstructs.h" {
+    x int32
+    z int32
+}
+
+fn main() {
+    var p cs_point_t
+    p.z = 1
+    io.print(p.x)
+}
+`
+	err = BuildOpts("wrong.mlc", []byte(wrong), filepath.Join(t.TempDir(), "w"), dirLoader(path), opts)
+	if err == nil || !strings.Contains(err.Error(), "the C compiler refused the program") || !strings.Contains(err.Error(), "wrong.mlc:10") {
+		t.Errorf("a field the header doesn't have: %v", err)
+	}
+}
+
 // TestFFICallbacks links tests/ffi/callbacks.mlc and callback_overflow.mlc
 // to tests/ffi/callbacks.c, which calls back during a call and, later, from
 // threads it creates: the kept callback gets its context, the per-thread

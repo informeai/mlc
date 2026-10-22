@@ -366,7 +366,7 @@ func topLevelItems(n *navigator) []completionItem {
 var keywords = []string{"fn", "struct", "enum", "interface", "impl", "import", "pub", "const", "var", "if", "else", "for", "in",
 	"match", "return", "break", "continue", "extern", "link", "nil", "true", "false"}
 
-var builtinFuncs = []string{"alloc", "free", "realloc", "len", "take", "replace", "drop", "drain"}
+var builtinFuncs = []string{"alloc", "free", "realloc", "len", "take", "replace", "drop", "drain", "keep"}
 
 var basicTypeNames = []string{"int", "int8", "int16", "int32", "int64", "byte", "uint16", "uint32", "uint64", "float32", "float64", "bool", "string"}
 

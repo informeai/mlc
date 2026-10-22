@@ -1,0 +1,8 @@
+timer: 0 freq: 5000
+channel: 0
+duty: 0
+duty: 256
+duty: 512
+duty: 768
+duty: 1024
+done

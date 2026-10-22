@@ -1,0 +1,11 @@
+// error: the callback on receives &Ctx, MLC memory that C keeps with the struct: declare its context as a field kept *Ctx
+struct Ctx {
+    name string
+}
+
+extern "C" struct timer_t from "timer.h" {
+    on fn(&Ctx)
+}
+
+fn main() {
+}

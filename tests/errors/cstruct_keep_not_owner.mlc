@@ -1,0 +1,16 @@
+// error: keep moves an owner to C: it takes a *T, with T a struct of the program
+struct Ctx {
+    n int
+}
+
+extern "C" struct timer_t from "timer.h" {
+    on fn(&Ctx)
+    arg kept *Ctx
+}
+
+fn tick(c &Ctx) {
+}
+
+fn main() {
+    t := timer_t{on: tick, arg: keep(3)}
+}

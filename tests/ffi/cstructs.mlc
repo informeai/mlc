@@ -1,0 +1,98 @@
+import "std/chan"
+import "std/io"
+
+// C's own structs and constants, from a header (TestFFICStructs links
+// tests/ffi/cstructs.c): the fields the program uses, the layout C's.
+
+link "cstructs"
+
+extern "C" struct cs_config_t from "cstructs.h" {
+    port int32
+    clock int32 // a member of the anonymous union
+    glitch byte
+    depth uint64
+    flags {
+        pullup uint32 // bitfields
+        sleep uint32
+    }
+    name string
+}
+
+extern "C" struct cs_point_t from "cstructs.h" {
+    x int32
+    y int32
+}
+
+// the timer's context, which C keeps with the struct
+struct Ticks {
+    tx *chan.Sender[int]
+    n int
+}
+
+extern "C" struct cs_timer_args_t from "cstructs.h" {
+    callback fn(&Ticks)
+    arg kept *Ticks
+    name string
+    times int32
+}
+
+struct Sum {
+    x int
+    y int
+}
+
+extern "C" const CS_MODE_FAST int32 from "cstructs.h"
+extern "C" const CS_BLUE int32 from "cstructs.h"
+
+extern "C" fn cs_check(c &cs_config_t) int32
+extern "C" fn cs_add(a cs_point_t, b cs_point_t) cs_point_t
+extern "C" fn cs_timer_start(a &cs_timer_args_t) int32
+extern "C" fn cs_timer_wait()
+extern "C" fn cs_timer_name_is(expected string) int32
+extern "C" fn cs_each_point(f fn(&Sum, &cs_point_t), ctx &Sum)
+
+fn tick(t &Ticks) {
+    t.n++
+    match t.tx.try_send(t.n) {
+        Sent => {}
+        Full(_) => {}
+        Closed(_) => {}
+    }
+}
+
+fn add_point(s &Sum, p &cs_point_t) {
+    s.x += int(p.x)
+    s.y += int(p.y)
+}
+
+fn main() {
+    var cfg cs_config_t // every field zero, the hidden one too
+    cfg.port = 3
+    cfg.clock = 400000
+    cfg.glitch = 7
+    cfg.depth = 16
+    cfg.flags.pullup = 1
+    cfg.name = "bus0"
+    io.print("check:", cs_check(&cfg), "port", cfg.port, "pullup", cfg.flags.pullup)
+
+    r := cs_add(cs_point_t{x: 1, y: 2}, cs_point_t{x: 10, y: 20})
+    io.print("add:", r.x, r.y)
+
+    var s Sum
+    cs_each_point(add_point, &s)
+    io.print("points:", s.x, s.y)
+
+    io.print("constants:", CS_MODE_FAST, CS_BLUE, CS_BLUE == 4)
+
+    rx := chan.new[int](8)
+    args := cs_timer_args_t{callback: tick, arg: keep(alloc(Ticks{tx: rx.sender(), n: 0})), name: "ticker", times: 3}
+    io.print("start:", cs_timer_start(&args), "name:", cs_timer_name_is("ticker"))
+    cs_timer_wait()
+    for i := 0; i < 3; i++ {
+        match rx.recv() {
+            Got(v) => io.print("tick", v)
+            Closed => break
+        }
+    }
+    rx.close()
+}

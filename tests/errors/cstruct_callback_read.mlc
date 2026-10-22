@@ -1,0 +1,14 @@
+// error: on is a field C may keep: it's written, not read
+extern "C" struct cfg_t from "cfg.h" {
+    on fn(int32)
+}
+
+fn tick(n int32) {
+}
+
+fn main() {
+    var c cfg_t
+    c.on = tick
+    f := c.on
+    f(1)
+}

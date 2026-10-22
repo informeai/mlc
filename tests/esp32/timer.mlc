@@ -1,0 +1,55 @@
+import "std/chan"
+import "std/io"
+
+// esp_timer calls an MLC function periodically: the callback and its context
+// go in ESP-IDF's own esp_timer_create_args_t (a C struct from the header),
+// and the callback runs in esp_timer's task, passing the count on with
+// try_send. It runs in the simulation (TestESP32Callbacks) and on the chip.
+
+extern "C" type esp_timer // esp_timer_handle_t is struct esp_timer *
+
+// the timer's context, which ESP-IDF keeps
+struct Ticks {
+    tx *chan.Sender[int]
+    n int
+}
+
+extern "C" struct esp_timer_create_args_t from "esp_timer.h" {
+    callback fn(&Ticks)
+    arg kept *Ticks
+    name string
+}
+
+extern "C" fn esp_timer_create(args &esp_timer_create_args_t, out &?*esp_timer) int32
+extern "C" fn esp_timer_start_periodic(t &esp_timer, period_us uint64) int32
+extern "C" fn esp_timer_stop(t &esp_timer) int32
+extern "C" fn esp_timer_delete(t *esp_timer) int32
+
+fn tick(t &Ticks) {
+    t.n++
+    match t.tx.try_send(t.n) {
+        Sent => {}
+        Full(_) => {}
+        Closed(_) => {}
+    }
+}
+
+fn main() {
+    rx := chan.new[int](16)
+    args := esp_timer_create_args_t{callback: tick, arg: keep(alloc(Ticks{tx: rx.sender(), n: 0})), name: "mlc"}
+    var t ?*esp_timer = nil
+    io.print("create:", esp_timer_create(&args, &t))
+    if t != nil {
+        io.print("start:", esp_timer_start_periodic(&t, 20000)) // every 20 ms
+        for i := 0; i < 5; i++ {
+            match rx.recv() {
+                Got(v) => io.print("tick", v)
+                Closed => break
+            }
+        }
+        io.print("stop:", esp_timer_stop(&t))
+        esp_timer_delete(t)
+    }
+    rx.close()
+    io.print("done")
+}

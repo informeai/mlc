@@ -1,0 +1,5 @@
+// error: a C constant is a number or bool (from a #define or an enum)
+extern "C" const NAME string from "names.h"
+
+fn main() {
+}

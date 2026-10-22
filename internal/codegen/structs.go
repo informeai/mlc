@@ -13,10 +13,55 @@ import (
 // For each struct, mlc_eq_<Name> (==) is also generated, in
 // dependency order: a struct only uses the ones already defined.
 
-func structCType(s *checker.Struct) string { return "mlc_st_" + s.CName }
+func structCType(s *checker.Struct) string {
+	if s.CStruct {
+		return s.CName // extern "C" struct: the header's type
+	}
+	return "mlc_st_" + s.CName
+}
+
+// fieldCName is the C name of the field name of a value of type t (a struct,
+// or a pointer or borrow of one): f_name, or C's own name in a C struct.
+func fieldCName(t checker.Type, name string) string {
+	if isCStructBase(t) {
+		return name
+	}
+	return "f_" + name
+}
+
+// isCStructBase says whether t is (a pointer or borrow of) a C struct.
+func isCStructBase(t checker.Type) bool {
+	switch tt := t.(type) {
+	case *checker.Pointer:
+		t = tt.Elem
+	case *checker.Borrow:
+		t = tt.Elem
+	}
+	s, ok := t.(*checker.Struct)
+	return ok && s.CStruct
+}
+
+// cFieldValue is the value written into the C struct field place (an lvalue)
+// of type ft: a string's pointer (a literal, which lives as long as the
+// program), a callback's C wrapper, or the value itself. The wrapper takes
+// the context as the MLC type (Ticks *) where C's field says void *: the
+// same pointer in the ABI, converted to the field's own type.
+func (g *gen) cFieldValue(place string, ft checker.Type, v ast.Expr) string {
+	switch ft.(type) {
+	case *checker.FuncType:
+		return fmt.Sprintf("(__typeof__(%s))%s", place, callbackName(g.info.FuncRefs[v]))
+	}
+	if ft == checker.String {
+		return "(" + g.expr(v) + ").ptr"
+	}
+	return g.expr(v)
+}
 
 func (g *gen) structs() {
 	for _, s := range g.info.Structs {
+		if s.CStruct {
+			continue // declared by its header
+		}
 		g.raw("typedef struct %s %s;\n", structCType(s), structCType(s))
 	}
 	for _, a := range g.info.Arrays {
@@ -54,6 +99,9 @@ func (g *gen) valueType(t checker.Type, done map[checker.Type]bool) {
 	done[t] = true
 	switch t := t.(type) {
 	case *checker.Struct:
+		if t.CStruct {
+			return // the header defines it
+		}
 		for _, f := range t.Fields {
 			if isValueType(f.Type) {
 				g.valueType(f.Type, done)
@@ -133,6 +181,27 @@ func (g *gen) composite(e *ast.CompositeLit) string {
 	s := g.info.Types[e].(*checker.Struct)
 	if len(e.Fields) == 0 {
 		return zeroValue(s)
+	}
+	if s.CStruct {
+		// C's struct: the fields named, the others zero
+		values := make([]ast.Expr, len(e.Fields))
+		for i, fi := range e.Fields {
+			values[i] = fi.Value
+		}
+		pre, vals := g.operands(values)
+		inits := make([]string, len(e.Fields))
+		for i, fi := range e.Fields {
+			switch ft := s.Field(fi.Name).Type; {
+			case isFuncType(ft):
+				place := fmt.Sprintf("((%s *)0)->%s", structCType(s), fi.Name) // only for __typeof__
+				inits[i] = "." + fi.Name + " = " + g.cFieldValue(place, ft, fi.Value)
+			case ft == checker.String:
+				inits[i] = "." + fi.Name + " = (" + vals[i] + ").ptr"
+			default:
+				inits[i] = "." + fi.Name + " = " + vals[i]
+			}
+		}
+		return sequence(pre, fmt.Sprintf("((%s){%s})", structCType(s), strings.Join(inits, ", ")))
 	}
 	values := make([]ast.Expr, len(e.Fields))
 	for i, fi := range e.Fields {

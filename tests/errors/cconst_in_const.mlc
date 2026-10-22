@@ -1,0 +1,7 @@
+// error: a const's value must be a constant expression
+extern "C" const MODE int32 from "modes.h"
+
+const NEXT = MODE + 1
+
+fn main() {
+}

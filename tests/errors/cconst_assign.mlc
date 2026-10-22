@@ -1,0 +1,6 @@
+// error: can't assign to the constant MODE
+extern "C" const MODE int32 from "modes.h"
+
+fn main() {
+    MODE = 3
+}

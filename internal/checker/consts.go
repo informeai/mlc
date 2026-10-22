@@ -16,6 +16,10 @@ func (c *checker) collectConsts(f *ast.File) {
 	c.cnames = map[string]int{} // constants don't produce a C name, but declare counts the names
 	for _, d := range f.Consts {
 		delete(c.mod.pendingConsts, d.Name)
+		if d.Header != "" {
+			c.cConstDecl(d)
+			continue
+		}
 		c.constDecl(d)
 	}
 	c.scope = nil

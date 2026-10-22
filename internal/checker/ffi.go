@@ -178,10 +178,10 @@ func cParamOK(t Type, kept bool) string {
 			}
 			return "a slice lent to C must have numeric or bool elements, or structs of scalar fields"
 		case *Struct:
-			if e.Extern || cStructOK(e) {
+			if e.Extern || e.CStruct || cStructOK(e) {
 				return ""
 			}
-			return "a struct lent to C can only have numeric or bool fields"
+			return "a struct lent to C can only have numeric or bool fields (or be a C struct: extern \"C\" struct T from \"h.h\")"
 		}
 		if cScalar(tt.Elem) {
 			return ""
@@ -197,6 +197,9 @@ func cParamOK(t Type, kept bool) string {
 	}
 	if cScalar(t) || t == String {
 		return ""
+	}
+	if isCStruct(t) && !isAnonCStruct(t) {
+		return "" // by value: C knows the struct, and passes it by the platform's rules
 	}
 	return "that type has no representation in C"
 }
@@ -234,7 +237,7 @@ func cCallbackOK(ft *FuncType) string {
 		case *OptArg:
 			return "a callback can't receive ?&T (MLC functions don't take it): for a C handle that C may pass as NULL, receive &X (MLC never looks inside it)"
 		}
-		if cScalar(p) {
+		if cScalar(p) || isCStruct(p) && !isAnonCStruct(p) {
 			continue
 		}
 		if IsOwner(p) {
@@ -327,8 +330,8 @@ func (c *checker) checkCallbacks(fn *Func, d *ast.FuncDecl) {
 				continue
 			}
 			s, ok := b.Elem.(*Struct)
-			if !ok || s.Extern {
-				continue
+			if !ok || s.Extern || s.CStruct {
+				continue // C's data
 			}
 			kept := keptCtx != nil && keptCtx.Type.(*Pointer).Elem == s
 			switch {
@@ -373,7 +376,7 @@ func (c *checker) callbackArg(a ast.Expr, ft *FuncType, context string) {
 // cResultOK explains why t can't be the result of a C function, or
 // returns "".
 func cResultOK(t Type) string {
-	if t == Void || cScalar(t) {
+	if t == Void || cScalar(t) || isCStruct(t) && !isAnonCStruct(t) {
 		return ""
 	}
 	if p, ok := t.(*Pointer); ok && isExternStruct(p.Elem) {

@@ -109,6 +109,10 @@ type Options struct {
 	LDFlags    []string // -ldflags: extra flags for linking (after the environment's, LDFLAGS)
 	Sanitize   string   // -sanitize: "address" (ASan + UBSan) or "thread" (TSan); "" without sanitizers
 	Target     string   // -target: "esp32" (an ESP-IDF component, see BuildESP32); "" for this machine
+	// HeaderDirs: folders where C looks for the headers of extern "C" struct
+	// and const ... from "h.h", besides the main file's folder and the
+	// system's (and the -I of -cflags)
+	HeaderDirs []string
 }
 
 // SanitizeFlags returns a sanitizer's compile and link flags:
@@ -173,7 +177,17 @@ func BuildOpts(file string, src []byte, out string, read Loader, opts Options) e
 	if err != nil {
 		return err
 	}
-	return buildC(csrc, info.Links, out, opts)
+	return buildC(csrc, info, headerDirs(file, opts), out, opts)
+}
+
+// headerDirs is where C looks for the program's headers: the main file's
+// folder, then HeaderDirs.
+func headerDirs(file string, opts Options) []string {
+	dirs := []string{}
+	if abs, err := filepath.Abs(filepath.Dir(file)); err == nil {
+		dirs = append(dirs, abs)
+	}
+	return append(dirs, opts.HeaderDirs...)
 }
 
 // TestProgram is the names of the tests and benchmarks of a test
@@ -195,7 +209,7 @@ func BuildTest(file string, src []byte, out string, read Loader, opts Options) (
 	if err != nil {
 		return p, err
 	}
-	if err := buildC(csrc, info.Links, out, opts); err != nil {
+	if err := buildC(csrc, info, headerDirs(file, opts), out, opts); err != nil {
 		return p, err
 	}
 	for _, fn := range info.Tests {
@@ -208,7 +222,8 @@ func BuildTest(file string, src []byte, out string, read Loader, opts Options) (
 }
 
 // buildC compiles and links the generated C with the runtime.
-func buildC(csrc string, links []string, out string, opts Options) error {
+func buildC(csrc string, info *checker.Info, hdirs []string, out string, opts Options) error {
+	links := info.Links
 
 	dir, err := os.MkdirTemp("", "mlc-build-")
 	if err != nil {
@@ -245,9 +260,21 @@ func buildC(csrc string, links []string, out string, opts Options) error {
 		obj := filepath.Join(dir, name+".o")
 		args := append([]string{"-std=c11", "-O2", "-Wall", "-Wno-unused-function", "-pthread"}, extraCFlags...)
 		args = append(args, userC...)
-		args = append(args, "-I", dir, "-c", "-o", obj, filepath.Join(dir, name+".c"))
+		args = append(args, "-I", dir)
+		if name == "program" {
+			for _, h := range hdirs {
+				args = append(args, "-I", h)
+			}
+		}
+		args = append(args, "-c", "-o", obj, filepath.Join(dir, name+".c"))
 		output, err := exec.Command(cc, args...).CombinedOutput()
 		if err != nil {
+			if name == "program" && len(info.CHeaders) > 0 {
+				// with C's own headers, C checks what MLC can't: the names of the
+				// fields and constants, and that the header exists
+				return fmt.Errorf("the C compiler refused the program: a header of extern \"C\" struct or const (%s) wasn't found, or doesn't have a field or a constant the program names (C's message points at the MLC line)\n%s",
+					strings.Join(info.CHeaders, ", "), output)
+			}
 			if len(userC) > 0 {
 				// with the compiler user's flags, the failure may be theirs
 				return fmt.Errorf("the C compiler (%s) refused the compilation with the flags %q (from CFLAGS and -cflags): check that they exist in this compiler; without them, it would be an internal mlc error\n%s", cc, strings.Join(userC, " "), output)

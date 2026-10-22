@@ -1075,6 +1075,10 @@ func (o *ownChecker) call(e *ast.CallExpr) {
 	case Take, Replace:
 		o.deferMoves(func() { o.takeReplace(e, callee) })
 		return
+	case Keep:
+		p := o.c.info.Types[e.Args[0]].(*Pointer)
+		o.deferMoves(func() { o.consume(e.Args[0], p, "keep") }) // goes to C, for good
+		return
 	case Convert:
 		o.read(e.Args[0])
 		return

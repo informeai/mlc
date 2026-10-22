@@ -1,0 +1,11 @@
+// error: the fields of a C struct aren't borrowed (a bitfield has no address)
+extern "C" struct cfg_t from "cfg.h" {
+    port int32
+}
+
+extern "C" fn set(p &int32)
+
+fn main() {
+    var c cfg_t
+    set(&c.port)
+}
