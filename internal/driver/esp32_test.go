@@ -38,8 +38,8 @@ var esp32Stdout = map[string]string{
 }
 
 // esp32Objs compiles, once, what is the same in every program: the runtime,
-// mlc_main.c, mlc_wifi.c and the simulation (in that order: esp32Common()[0]
-// is the runtime, [2] std/wifi).
+// mlc_main.c, mlc_wifi.c, mlc_gpio.c and the simulation (in that order:
+// esp32Common()[0] is the runtime, [2] std/wifi, [3] std/gpio).
 var esp32Objs struct {
 	once sync.Once
 	dir  string
@@ -62,7 +62,7 @@ func esp32Common(t *testing.T) []string {
 			esp32Objs.err = err.Error()
 			return
 		}
-		for _, f := range []string{"mlc_runtime", "mlc_main", "mlc_wifi"} {
+		for _, f := range []string{"mlc_runtime", "mlc_main", "mlc_wifi", "mlc_gpio"} {
 			obj := filepath.Join(dir, f+".o")
 			if out, err := simCompile(obj, filepath.Join(comp, f+".c")); err != nil {
 				esp32Objs.err = out
@@ -70,7 +70,7 @@ func esp32Common(t *testing.T) []string {
 			}
 			esp32Objs.objs = append(esp32Objs.objs, obj)
 		}
-		for _, f := range []string{"sim", "sim_wifi"} {
+		for _, f := range []string{"sim", "sim_wifi", "sim_gpio"} {
 			obj := filepath.Join(dir, f+".o")
 			if out, err := simCompile(obj, filepath.Join(esp32Sim, f+".c")); err != nil {
 				esp32Objs.err = out
@@ -416,6 +416,11 @@ var esp32Allowed = map[string]bool{
 	"esp_wifi_sta_get_ap_info": true, "WIFI_EVENT": true, "IP_EVENT": true,
 	// C callbacks: the stop when C calls from an interrupt
 	"xPortInIsrContext": true, "esp_rom_printf": true, "abort": true,
+	// std/gpio (mlc_gpio.c): the GPIO driver, its ISR service, FreeRTOS's queues and esp_timer
+	"gpio_config": true, "gpio_set_level": true, "gpio_get_level": true, "gpio_intr_disable": true,
+	"gpio_install_isr_service": true, "gpio_isr_handler_add": true, "gpio_isr_handler_remove": true,
+	"xQueueCreate": true, "vQueueDelete": true, "xQueueSendFromISR": true, "xQueueReceive": true,
+	"esp_timer_get_time": true,
 }
 
 // esp32Host is what this machine's compiler adds on its own (stack and
@@ -428,8 +433,8 @@ func esp32Host(name string) bool {
 	return strings.HasPrefix(name, "_")
 }
 
-// TestESP32Symbols: the runtime and mlc_wifi.c compiled for the ESP32 only
-// call what ESP-IDF has (mlc_wifi.c may also call the runtime).
+// TestESP32Symbols: the runtime, mlc_wifi.c and mlc_gpio.c compiled for the
+// ESP32 only call what ESP-IDF has (the last two may also call the runtime).
 func TestESP32Symbols(t *testing.T) {
 	requireCC(t)
 	if _, err := exec.LookPath("nm"); err != nil {
@@ -438,7 +443,7 @@ func TestESP32Symbols(t *testing.T) {
 	common := esp32Common(t)
 	inRuntime := definedSymbols(t, common[0])
 	var bad []string
-	for _, obj := range []string{common[0], common[2]} {
+	for _, obj := range []string{common[0], common[2], common[3]} {
 		out, err := exec.Command("nm", "-u", obj).Output()
 		if err != nil {
 			t.Fatal(err)
@@ -474,11 +479,13 @@ func TestESP32ThreadLocal(t *testing.T) {
 	if err != nil {
 		t.Skip(err)
 	}
-	wifi, err := threadLocalSize(common[2])
-	if err != nil {
-		t.Fatal(err)
+	for _, obj := range common[2:4] {
+		n, err := threadLocalSize(obj)
+		if err != nil {
+			t.Fatal(err)
+		}
+		size += n
 	}
-	size += wifi
 	if size > 128 {
 		t.Errorf("the ESP32 runtime has %d bytes of _Thread_local variables; every FreeRTOS task pays them in its stack (keep them under 128, big buffers on the heap)", size)
 	}
@@ -520,8 +527,10 @@ func TestESP32Externs(t *testing.T) {
 	}
 	common := esp32Common(t)
 	defined := definedSymbols(t, common[0])
-	for f := range definedSymbols(t, common[2]) {
-		defined[f] = true
+	for _, obj := range common[2:4] {
+		for f := range definedSymbols(t, obj) {
+			defined[f] = true
+		}
 	}
 	files, _ := fs.Glob(std.FS, "*.mlc")
 	ext := regexp.MustCompile(`(?m)^(?:pub )?extern fn ([a-z_0-9]+)`)
@@ -582,7 +591,7 @@ func TestESP32Target(t *testing.T) {
 	if err := BuildESP32("app.mlc", []byte("import \"std/io\"\n\nfn main() {\n    io.print(1)\n}\n"), dir, noFiles, Options{}); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range []string{"mlc_app.c", "mlc_runtime.c", "mlc_runtime.h", "mlc_main.c", "mlc_wifi.c", "CMakeLists.txt"} {
+	for _, f := range []string{"mlc_app.c", "mlc_runtime.c", "mlc_runtime.h", "mlc_main.c", "mlc_wifi.c", "mlc_gpio.c", "CMakeLists.txt"} {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 			t.Error(err)
 		}

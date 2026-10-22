@@ -15,7 +15,7 @@ idf.py set-target esp32             # or esp32s3, esp32c3, esp32c6...
 idf.py build flash monitor
 ```
 
-`-o` is the component's folder (by default `<name>-esp32`). Use it as the project's `main` component: ESP-IDF gives `main` access to every component (the GPIO driver, Wi-Fi...), so the FFI declarations link without `REQUIRES`. mlc writes six files, and generating again overwrites them; a folder with a `CMakeLists.txt` that mlc didn't write is refused. Generate the component before the project's first `idf.py set-target` or `build`: ESP-IDF finds the components when it configures, and a `main` folder without a `CMakeLists.txt` at that moment stays out of the build (the link then fails with `app_main` missing). If that happened, `idf.py fullclean` and build again.
+`-o` is the component's folder (by default `<name>-esp32`). Use it as the project's `main` component: ESP-IDF gives `main` access to every component (the GPIO driver, Wi-Fi...), so the FFI declarations link without `REQUIRES`. mlc writes seven files, and generating again overwrites them; a folder with a `CMakeLists.txt` that mlc didn't write is refused. Generate the component before the project's first `idf.py set-target` or `build`: ESP-IDF finds the components when it configures, and a `main` folder without a `CMakeLists.txt` at that moment stays out of the build (the link then fails with `app_main` missing). If that happened, `idf.py fullclean` and build again.
 
 | File | What it is |
 |---|---|
@@ -23,11 +23,59 @@ idf.py build flash monitor
 | `mlc_runtime.c`, `mlc_runtime.h` | the runtime, the same as on the desktop, compiled with ESP-IDF's `ESP_PLATFORM` |
 | `mlc_main.c` | `app_main`: creates the task where `main` runs |
 | `mlc_wifi.c` | `std/wifi`; linked only when the program calls it, so the others don't carry the Wi-Fi driver |
+| `mlc_gpio.c` | `std/gpio`, linked the same way |
 | `CMakeLists.txt` | the component's registration |
+
+## Pins: `std/gpio`
+
+Digital pins come in a module, without the FFI:
+
+```
+import "std/gpio"
+import "std/io"
+import "std/time"
+
+const LED = 2    // the on-board LED of many ESP32 DevKit boards
+const BUTTON = 0 // the BOOT button, which pulls the pin to ground
+
+fn main() {
+    err := 0
+    gpio.output(LED, &err)
+    w := gpio.watch(BUTTON, gpio.FALLING, gpio.UP, 50, &err)   // 50 ms of debounce
+    if w == nil {
+        return
+    }
+    on := false
+    for {
+        match w.next(-1) {                   // waits for a press, without polling
+            Edge(_, at_us) => {
+                on = !on
+                gpio.write(LED, on)
+                io.print("pressed at", at_us / 1000, "ms")
+            }
+            Timeout => {}
+        }
+    }
+}
+```
+
+| Declaration | What it does |
+|---|---|
+| `output(pin, &err) bool` | makes the pin a digital output (low) |
+| `input(pin, pull, &err) bool` | makes it an input, with a pull resistor (`NONE`, `UP`, `DOWN`) |
+| `write(pin, high)`, `read(pin) bool` | sets an output's level, reads a pin's |
+| `watch(pin, edge, pull, debounce_ms, &err) ?*Watch` | delivers the pin's edges (`RISING`, `FALLING`, `ANY`); edges closer than `debounce_ms` to the last one are ignored |
+| `w.next(timeout_ms) Wait` | waits for the next edge: `Edge(high, at_us)` or `Timeout` (-1: no limit) |
+| `w.missed() int` | the edges dropped with the queue full |
+| `w.close()` | stops watching (the pin keeps its mode); the checker requires it |
+
+**How the interrupt works.** No MLC code runs in it (see [ffi.md](ffi.md#interrupts-not-with-callbacks)): the pin's handler, written in C in the runtime (`mlc_gpio.c`), takes the time (`esp_timer_get_time`), applies the debounce and puts the edge in the watch's queue (`xQueueSendFromISR`); `next` reads the queue in the program's task. There's no hidden task. The queue holds `gpio.QUEUE` (16) edges: with it full, an edge is dropped and counted in `missed`. Edges closer than the interrupt's latency (a few microseconds) are merged by the hardware into one, so a `RISING` or `FALLING` watch reports its own level and an `ANY` watch reads the pin in the interrupt.
+
+An output that is watched (`output` first, then `watch`) stays an output and delivers the edges the program writes: `tests/esp32/gpio.mlc` tests the whole path that way, without wiring. The pins 34 to 39 are input only, and a pin that doesn't exist is `gpio.BAD_PIN`.
 
 ## The chip's functions: FFI
 
-The hardware is reached with `extern "C" fn` (see [ffi.md](ffi.md)). The C enums of ESP-IDF (`gpio_num_t`, `gpio_mode_t`) are `int`-sized, so they're `int32`, and `esp_err_t` is `int32`:
+The rest of the hardware (PWM, I2C, SPI, ADC...) is reached with `extern "C" fn` (see [ffi.md](ffi.md)); the pins could be too, as below. The C enums of ESP-IDF (`gpio_num_t`, `gpio_mode_t`) are `int`-sized, so they're `int32`, and `esp_err_t` is `int32`:
 
 ```
 import "std/io"
@@ -98,7 +146,7 @@ extern "C" fn esp_event_handler_instance_register(base ?&byte, id int32, h kept 
 What's particular to the chip:
 
 - **The tasks that call back have small stacks:** the event task 2.3 KB, `esp_timer`'s 3.5 KB. The callback should do little and pass the rest on with `try_send`, which never blocks that task. A frame that doesn't fit is a panic, not a corruption: the wrapper finds the task's stack.
-- **Never from an interrupt.** If ESP-IDF calls an MLC function in an ISR (`gpio_isr_handler_add`), the wrapper stops the chip with a message (through the ROM's `printf`), since the runtime can't run there. Interrupts need a C handler that queues the event for an MLC thread.
+- **Never from an interrupt.** If ESP-IDF calls an MLC function in an ISR (`gpio_isr_handler_add`), the wrapper stops the chip with a message (through the ROM's `printf`), since the runtime can't run there. For the pins, `gpio.watch` does it the right way; for other interrupts, a C handler has to queue the event for an MLC thread.
 - **`size_t` is 32 bits on the ESP32:** a C parameter of type `size_t` is `uint32` there (`uint64` on a 64-bit desktop), as in `esp_event_post`'s data size.
 
 ## The network
@@ -160,7 +208,7 @@ There's no ESP32 in the test suite, so `internal/driver/esp32_test.go` simulates
 - **TestESP32ThreadLocal**: the runtime's `_Thread_local` variables stay under 128 bytes. With 6 KB there, the chip didn't start: ESP-IDF couldn't create its own main task.
 - **TestESP32Externs**: every `extern fn` of a module the ESP32 has is defined in the embedded runtime.
 - **TestESP32TLS**: `http.dial_tls` answers `tls.UNAVAILABLE` and the program goes on.
-- **TestESP32Callbacks**: the programs of `tests/esp32`, which only run on the chip, give their `.out` in the simulation (`events.mlc`: a kept callback that the simulated event loop calls from its own thread, as ESP-IDF's event task), and an MLC function called from a simulated interrupt stops with the message.
+- **TestESP32Callbacks**: the programs of `tests/esp32`, which only run on the chip, give their `.out` in the simulation (`events.mlc`: a kept callback that the simulated event loop calls from its own thread, as ESP-IDF's event task; `gpio.mlc`: a watched output whose edges come back through the simulated interrupt, the queue full, the debounce, the pins that don't exist or are input only), and an MLC function called from a simulated interrupt stops with the message. `sim_gpio.c` runs a pin's handler in a simulated interrupt when the level changes, and writes `sim:` on stderr if a queue is received from in an interrupt or sent to from a task.
 - **TestESP32WiFi**: `std/wifi` against the networks of `sim_wifi.c`, which plays ESP-IDF's driver, NVS and event loop: a refused password (`AUTH`), a name nobody answers (`NOT_FOUND`), a silent network (`TIMEOUT`), two that connect (address and signal), connecting again over a connection, the names too long or empty, and the driver turned off and on again. The simulation delivers the events in order from one thread, as ESP-IDF's event task does, and writes `sim:` on stderr (which fails the test) when `mlc_wifi.c` uses ESP-IDF out of its order: the driver before NVS, a handler left registered at the end, the interface destroyed before the driver.
 - **TestESP32Target**: the component's files, the refused imports (and the allowed ones, `std/net` and `std/http`) and the folder that isn't mlc's.
 
@@ -168,7 +216,7 @@ With ESP-IDF's GCC in the `PATH` (after `export.sh`), TestESP32Sim also compiles
 
 The simulation also reproduces what ESP-IDF's build differs in: `_GNU_SOURCE` already defined, `-Wtype-limits`, and a `struct tm` without `tm_gmtoff`, as in newlib.
 
-**On the chip** (`tools/esp32_chip.py`, by hand, not in `make check`): each program of `tests/run` and `tests/panic` was built with ESP-IDF, flashed and run on an ESP32, and the console compared with the expected output (stdout, stderr and the panic message come through the same UART). 67 programs gave the same output; 10 weren't run (5 use the network or desktop C libraries, 5 read stdin or arguments). The other 3, `threads`, `channels` and `mutex`, start 64 KB threads (and one of 256 KB) at once: they panic in `thread.spawn` for lack of memory, and with the stacks changed to 16 KB they give the same output as on the desktop. Since `std/net` and `std/http` came to the ESP32, `http_loopback.mlc` and `server.mlc` (with 16 KB stacks) also give the desktop's output on the chip; the whole run hasn't been repeated since then. The script also runs `tests/esp32` (`events.mlc` hasn't run on a chip yet, only in the simulation). To run it again, with the board on USB:
+**On the chip** (`tools/esp32_chip.py`, by hand, not in `make check`): each program of `tests/run` and `tests/panic` was built with ESP-IDF, flashed and run on an ESP32, and the console compared with the expected output (stdout, stderr and the panic message come through the same UART). 67 programs gave the same output; 10 weren't run (5 use the network or desktop C libraries, 5 read stdin or arguments). The other 3, `threads`, `channels` and `mutex`, start 64 KB threads (and one of 256 KB) at once: they panic in `thread.spawn` for lack of memory, and with the stacks changed to 16 KB they give the same output as on the desktop. Since `std/net` and `std/http` came to the ESP32, `http_loopback.mlc` and `server.mlc` (with 16 KB stacks) also give the desktop's output on the chip; the whole run hasn't been repeated since then. The script also runs `tests/esp32`: `events.mlc` (a kept callback called by ESP-IDF's event task) and `gpio.mlc` (the edges through the pin's real interrupt, the queue full, the debounce) give the same output on the chip as in the simulation. To run it again, with the board on USB:
 
 ```
 . ~/esp/esp-idf/export.sh

@@ -39,6 +39,7 @@ Everything that comes with the language is here, including input and output (`st
   | 4001–4899, 4900 | `sqlite`: 4000 + SQLite's code (`ERROR` 4001, `BUSY` 4005, `CONSTRAINT` 4019...), `UNAVAILABLE` 4900 |
   | 5001–5005 | `tls`: `HANDSHAKE`, `BAD_CERT`, `UNAVAILABLE`, `BROKEN`, `SERVER_FILES` |
   | 6001–6006 | `wifi`: `NOT_FOUND`, `AUTH`, `TIMEOUT`, `UNAVAILABLE`, `FAILED`, `BAD_NAME` |
+  | 6101–6104 | `gpio`: `UNAVAILABLE`, `BAD_PIN`, `FAILED`, `IN_USE` |
 
   `os.error_text(code, &msg)` writes the text of any of them:
 
@@ -68,6 +69,7 @@ Everything that comes with the language is here, including input and output (`st
 | Security | [`rand`](#stdrand), [`hash`](#stdhash), [`hmac`](#stdhmac), [`password`](#stdpassword), [`uuid`](#stduuid) | randomness (and secure randomness), hashes, signatures, passwords, identifiers |
 | Concurrency | [`thread`](#stdthread), [`chan`](#stdchan), [`mutex`](#stdmutex-and-stdatomic), [`atomic`](#stdmutex-and-stdatomic), [`sync`](#stdsync) | threads, channels, mutexes, atomics, groups (details in [concurrency.md](concurrency.md)) |
 | Observability and tests | [`log`](#stdlog), [`testing`](#stdtesting) | logging with level and time, tests and benchmarks |
+| Hardware (ESP32) | [`gpio`](#stdgpio), [`wifi`](#stdwifi) | digital pins and their edges, Wi-Fi |
 
 The details of each function are also in the code itself, and `mlc doc` shows them in the terminal (`mlc doc http`, `mlc doc http.Router`).
 
@@ -904,6 +906,10 @@ wifi.disconnect()
 | `NOT_FOUND`, `AUTH`, `TIMEOUT`, `UNAVAILABLE`, `FAILED`, `BAD_NAME` | error codes (6001 to 6006) |
 
 The driver's memory (50 to 70 KB of the heap while it's on) is ESP-IDF's, outside MLC's allocations, like the sockets'. See [esp32.md](esp32.md#the-network).
+
+### `std/gpio`
+
+The ESP32's digital pins: `output`, `input` (with a pull resistor), `write`, `read`, and `watch`, which delivers an input's edges without polling: the interrupt handler, in C in the runtime, queues each edge, and `w.next(timeout_ms)` returns `Edge(high, at_us)` or `Timeout`. A `debounce_ms` keeps a button's bounces out; `w.missed()` counts the edges dropped with the queue full (16). The watch is a handle the checker requires to close. On a desktop there are no pins: `available()` is false and the functions return `UNAVAILABLE`. See [esp32.md](esp32.md#pins-stdgpio).
 
 ### `std/signal`
 

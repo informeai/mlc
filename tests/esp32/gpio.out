@@ -1,0 +1,13 @@
+available: true
+input only: false true
+no pin: false true
+output: true false
+second watch: true
+edge true true
+edge false true
+timeout
+read: false
+queued: 16 missed: 24
+edge true true
+timeout
+done

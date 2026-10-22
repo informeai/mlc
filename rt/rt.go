@@ -24,3 +24,8 @@ var ESP32CMake string
 //
 //go:embed c/esp32/mlc_wifi.c
 var ESP32WiFi string
+
+// ESP32GPIO is std/gpio on the chip, a file of its own like mlc_wifi.c.
+//
+//go:embed c/esp32/mlc_gpio.c
+var ESP32GPIO string

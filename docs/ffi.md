@@ -225,7 +225,7 @@ An interrupt handler (ESP-IDF's `gpio_isr_handler_add`, a timer's ISR) can't all
 panic: app.mlc:5: an MLC function was called from an interrupt (ISR); handle the interrupt in C and pass the event on (see docs/ffi.md)
 ```
 
-For interrupts, the way is a handler written in C that only puts the event in a queue an MLC thread reads, as ESP-IDF itself recommends; a standard module for GPIO interrupts (`gpio.on_edge`, which delivers each edge in a channel) is the next step.
+For interrupts, the way is a handler written in C that only puts the event in a queue an MLC thread reads, as ESP-IDF itself recommends. That's what `std/gpio` does for the pins: `gpio.watch` registers the handler in the runtime, and `w.next()` reads the edges in the program's thread (see [esp32.md](esp32.md#pins-stdgpio)).
 
 ### Channels in callbacks: `try_send`
 

@@ -1,0 +1,33 @@
+import "std/gpio"
+import "std/os"
+import "std/testing"
+
+// A desktop has no pins (TestESP32Callbacks runs tests/esp32/gpio.mlc in the
+// ESP32 simulation).
+fn test_desktop() {
+    testing.eq_bool(gpio.available(), false)
+    err := 0
+    testing.eq_bool(gpio.output(2, &err), false)
+    testing.eq_int(err, gpio.UNAVAILABLE)
+    err = 0
+    testing.eq_bool(gpio.input(0, gpio.UP, &err), false)
+    testing.eq_int(err, gpio.UNAVAILABLE)
+    err = 0
+    w := gpio.watch(0, gpio.FALLING, gpio.UP, 50, &err)
+    testing.check(w == nil, "no pins: no watch")
+    if w != nil {
+        w.close()
+    }
+    testing.eq_int(err, gpio.UNAVAILABLE)
+}
+
+fn test_write_panics() {
+    testing.expect_panic()
+    gpio.write(2, true)
+}
+
+fn test_error_text() {
+    var msg [160]byte
+    n := os.error_text(gpio.IN_USE, &msg)
+    testing.eq_str(&msg[:n], "the pin already has a watch")
+}

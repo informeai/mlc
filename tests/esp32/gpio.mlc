@@ -1,0 +1,73 @@
+import "std/gpio"
+import "std/io"
+import "std/time"
+
+// std/gpio on the chip, without wiring: PIN is an output that is also
+// watched, so the edges the program writes come back through the pin's
+// interrupt and the watch's queue. It runs in the simulation
+// (TestESP32Callbacks) and on the chip (tools/esp32_chip.py).
+
+const PIN = 4
+
+fn show(w &gpio.Watch, timeout_ms int) {
+    match w.next(timeout_ms) {
+        Edge(high, at_us) => io.print("edge", high, at_us > 0)
+        Timeout => io.print("timeout")
+    }
+}
+
+fn main() {
+    io.print("available:", gpio.available())
+    err := 0
+    io.print("input only:", gpio.output(34, &err), err == gpio.BAD_PIN)
+    io.print("no pin:", gpio.output(24, &err), err == gpio.BAD_PIN)
+    io.print("output:", gpio.output(PIN, &err), gpio.read(PIN))
+
+    w := gpio.watch(PIN, gpio.ANY, gpio.NONE, 0, &err)
+    if w == nil {
+        io.print("watch:", err)
+        return
+    }
+    again := gpio.watch(PIN, gpio.ANY, gpio.NONE, 0, &err)
+    if again != nil {
+        again.close()
+    }
+    io.print("second watch:", err == gpio.IN_USE)
+    gpio.write(PIN, true)
+    time.sleep_ms(20) // edges apart, so the interrupt reads each level
+    gpio.write(PIN, false)
+    show(&w, 100)
+    show(&w, 100)
+    show(&w, 50)
+    io.print("read:", gpio.read(PIN))
+
+    // 40 edges without reading: the queue keeps 16, the rest are missed
+    for i := 0; i < 40; i++ {
+        gpio.write(PIN, i % 2 == 0)
+        time.sleep_ms(1)
+    }
+    queued := 0
+    for {
+        match w.next(0) {
+            Edge(_, _) => queued++
+            Timeout => break
+        }
+    }
+    io.print("queued:", queued, "missed:", w.missed())
+    w.close()
+
+    // rising edges with 50 ms of debounce: a burst of bounces is one edge
+    d := gpio.watch(PIN, gpio.RISING, gpio.NONE, 50, &err)
+    if d == nil {
+        io.print("watch:", err)
+        return
+    }
+    for i := 0; i < 5; i++ {
+        gpio.write(PIN, true)
+        gpio.write(PIN, false)
+    }
+    show(&d, 100)
+    show(&d, 100)
+    d.close()
+    io.print("done")
+}

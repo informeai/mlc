@@ -1,0 +1,101 @@
+// The ESP32's pins: digital output and input, and the edges of an input
+// (a button, a sensor's pulse) delivered without polling.
+//
+//     err := 0
+//     gpio.output(LED, &err)
+//     gpio.write(LED, true)
+//
+//     // the BOOT button (GPIO 0) pulls to ground when pressed
+//     w := gpio.watch(0, gpio.FALLING, gpio.UP, 50, &err)   // 50 ms of debounce
+//     if w == nil { return }
+//     for {
+//         match w.next(-1) {                    // waits for the next edge
+//             Edge(high, at_us) => io.print("pressed at", at_us)
+//             Timeout => {}
+//         }
+//     }
+//     w.close()
+//
+// watch's interrupt handler is C, in the runtime: an interrupt can't run MLC
+// (see docs/ffi.md), so the handler only puts the edge (its level and time)
+// in a queue of the watch, and next reads it in the program's thread. There's
+// no hidden task: the queue holds QUEUE edges, and the ones that arrive with
+// it full are counted (missed) and dropped. On a desktop there are no pins:
+// available() is false and the functions return UNAVAILABLE.
+
+// pull resistors of an input
+pub const NONE = 0
+pub const UP = 1
+pub const DOWN = 2
+
+// edges to watch
+pub const RISING = 1
+pub const FALLING = 2
+pub const ANY = 3
+
+pub const QUEUE = 16 // the edges a watch holds until next reads them
+
+// error codes
+pub const UNAVAILABLE = 6101 // this system has no pins (the desktop)
+pub const BAD_PIN = 6102     // the pin doesn't exist or can't do that (34 to 39 are input only)
+pub const FAILED = 6103      // ESP-IDF refused the configuration (its log says why)
+pub const IN_USE = 6104      // the pin already has a watch
+
+// Watch receives the edges of an input pin (a handle): it needs a close().
+pub extern "C" type Watch
+
+// the result of next
+pub enum Wait {
+    // the level after the edge (RISING: true, FALLING: false, ANY: read in the
+    // interrupt), and when (microseconds since the boot)
+    Edge(high bool, at_us int)
+    Timeout
+}
+
+// available says whether this system has pins (the ESP32).
+pub extern fn available() bool
+
+// output makes pin a digital output (low). Returns false with the code in err
+// if it can't.
+pub extern fn output(pin int, err &int) bool
+
+// input makes pin a digital input, with the pull resistor (NONE, UP, DOWN).
+pub extern fn input(pin int, pull int, err &int) bool
+
+// write sets an output's level (true: high).
+pub extern fn write(pin int, high bool)
+
+// read returns a pin's level (true: high); an output reads what it wrote.
+pub extern fn read(pin int) bool
+
+// watch delivers the edges (RISING, FALLING or ANY) of pin, an input with the
+// pull resistor; an output stays an output and also delivers the edges it
+// writes. Edges closer than debounce_ms to the last one delivered are ignored
+// (0: all of them), which keeps a button's bounces out. Edges closer than the
+// interrupt's latency (a few microseconds) are merged by the hardware into
+// one. If it can't, returns nil with the code in err.
+pub extern fn watch(pin int, edge int, pull int, debounce_ms int, err &int) ?*Watch
+
+extern fn next_raw(w &Watch, timeout_ms int, high &bool, at_us &int) bool
+extern fn missed_raw(w &Watch) int
+extern fn close_raw(w *Watch)
+
+// next waits up to timeout_ms (-1: no limit) for the next edge.
+pub fn (w &Watch) next(timeout_ms int) Wait {
+    high := false
+    at := 0
+    if next_raw(w, timeout_ms, &high, &at) {
+        return Wait.Edge(high, at)
+    }
+    return Wait.Timeout
+}
+
+// missed counts the edges dropped because the queue was full.
+pub fn (w &Watch) missed() int {
+    return missed_raw(w)
+}
+
+// close stops watching (the pin keeps its mode) and frees the watch.
+pub fn (w *Watch) close() {
+    close_raw(w)
+}

@@ -81,6 +81,13 @@ void sim_isr_call(void (*fn)(void)) {
     in_isr = 0;
 }
 
+/* sim_isr_run runs a pin's interrupt handler (sim_gpio.c) */
+void sim_isr_run(void (*fn)(void *), void *arg) {
+    in_isr = 1;
+    fn(arg);
+    in_isr = 0;
+}
+
 int esp_rom_printf(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);

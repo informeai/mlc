@@ -14,6 +14,13 @@ typedef void *TaskHandle_t;
 typedef void (*TaskFunction_t)(void *);
 #define pdPASS 1
 #define portNUM_PROCESSORS 2
+#define pdTRUE 1
+#define pdFALSE 0
+
+typedef uint32_t TickType_t;
+#define portMAX_DELAY ((TickType_t)0xffffffffu)
+#define pdMS_TO_TICKS(ms) ((TickType_t)(ms)) /* a tick is a millisecond here */
+#define portYIELD_FROM_ISR(...) ((void)0)
 
 /* whether the code runs in an interrupt; in the simulation, inside
  * sim_isr_call (sim.c), which plays one */

@@ -1794,6 +1794,10 @@ static const char *mlc_error_text(int64_t code) {
     case 6004: return "this system has no Wi-Fi to control (the system manages the network)";
     case 6005: return "couldn't start the Wi-Fi (ESP-IDF's log says why)";
     case 6006: return "the Wi-Fi network's name is empty or longer than 32 bytes, or the password longer than 64";
+    case 6101: return "this system has no pins to control (gpio is for the ESP32)";
+    case 6102: return "the pin doesn't exist or can't do that (on the ESP32, 34 to 39 are input only)";
+    case 6103: return "ESP-IDF refused the pin's configuration (its log says why)";
+    case 6104: return "the pin already has a watch";
     case EPERM: return "operation not permitted";
     case ENOENT: return "doesn't exist";
     case EIO: return "input/output error";
@@ -3011,5 +3015,78 @@ int64_t mlc_std_wifi_rssi(const char *file, int line) {
 void mlc_std_wifi_disconnect(const char *file, int line) {
     (void)file;
     (void)line;
+}
+#endif /* !MLC_EMBEDDED */
+
+#ifndef MLC_EMBEDDED
+/* std/gpio on a desktop: there are no pins (on the ESP32 it's
+ * rt/c/esp32/mlc_gpio.c). watch never returns a handle, so the functions
+ * that take one aren't called. */
+bool mlc_std_gpio_available(const char *file, int line) {
+    (void)file;
+    (void)line;
+    return false;
+}
+
+bool mlc_std_gpio_output(int64_t pin, int64_t *err, const char *file, int line) {
+    (void)pin;
+    (void)file;
+    (void)line;
+    *err = 6101; /* gpio.UNAVAILABLE */
+    return false;
+}
+
+bool mlc_std_gpio_input(int64_t pin, int64_t pull, int64_t *err, const char *file, int line) {
+    (void)pin;
+    (void)pull;
+    (void)file;
+    (void)line;
+    *err = 6101;
+    return false;
+}
+
+void mlc_std_gpio_write(int64_t pin, bool high, const char *file, int line) {
+    (void)pin;
+    (void)high;
+    mlc_panic(file, line, "gpio.write: this system has no pins (gpio.available() is false)");
+}
+
+bool mlc_std_gpio_read(int64_t pin, const char *file, int line) {
+    (void)pin;
+    mlc_panic(file, line, "gpio.read: this system has no pins (gpio.available() is false)");
+}
+
+void *mlc_std_gpio_watch(int64_t pin, int64_t edge, int64_t pull, int64_t debounce_ms, int64_t *err, const char *file,
+                         int line) {
+    (void)pin;
+    (void)edge;
+    (void)pull;
+    (void)debounce_ms;
+    (void)file;
+    (void)line;
+    *err = 6101;
+    return NULL;
+}
+
+static _Noreturn void mlc_gp_never(const char *file, int line) {
+    mlc_panic(file, line, "internal error: a gpio.Watch on a system without pins");
+}
+
+bool mlc_std_gpio_next_raw(void *w, int64_t timeout_ms, bool *high, int64_t *at_us, const char *file, int line) {
+    (void)w;
+    (void)timeout_ms;
+    (void)high;
+    (void)at_us;
+    mlc_gp_never(file, line);
+}
+
+int64_t mlc_std_gpio_missed_raw(void *w, const char *file, int line) {
+    (void)w;
+    mlc_gp_never(file, line);
+}
+
+void mlc_std_gpio_close_raw(void *w, const char *file, int line) {
+    (void)w;
+    mlc_gp_never(file, line);
 }
 #endif /* !MLC_EMBEDDED */
